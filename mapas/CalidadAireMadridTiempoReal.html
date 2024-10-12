@@ -1,59 +1,65 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-    <title>Visualizador base</title>
+      <title>Visualizador base</title>
 
-    <!-- fichero estilos -->
-    <link href="https://componentes.cnig.es/api-core/assets/css/apiign.ol.min.css" rel="stylesheet" />
+      <!-- fichero estilos -->
+      <link href="https://componentes.cnig.es/api-core/assets/css/apiign.ol.min.css" rel="stylesheet" />
 
-    <!-- Ficheros javascript de la API -->
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>          
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>        
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>         
-    <!-- estilo básico -->
-    <style>
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-        }
-    </style>
-</head>
-<body>
-  <!-- Contenedor principal del mapa -->
-    <div id="mapa"></div>
+      <!-- Ficheros javascript de la API -->
+      <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>          
+      <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>        
+      <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>         
+     
+      <!-- estilo básico -->
+      <style>
+          html,
+          body {
+              margin: 0;
+              padding: 0;
+              height: 100%;
+          }
+      </style>
 
-    <script type="text/javascript">
+  </head>
+  <body>
 
-      M.proxy(false)
+      <!-- Contenedor principal del mapa -->
+      <div id="mapa"></div>
 
-      mapajs = M.map({
-        container: "mapa"
-      });
+      <script type="text/javascript">
 
-      M.proxy(true)
-      M.remote.get("https://datos.madrid.es/egob/catalogo/212531-10515086-calidad-aire-tiempo-real.csv",
-        {}
-      ).then(function (res) {
-        // Muestra un diálogo informativo con el resultado de la petición get
-        console.log(res.text);
         M.proxy(false)
-      });
 
-      M.proxy(true)
-      M.remote.get("https://datos.madrid.es/egob/catalogo/212629-1-estaciones-control-aire.csv",
-        {}
-      ).then(function (res) {
-        // Muestra un diálogo informativo con el resultado de la petición get
-        console.log(res.text);
-        M.proxy(false)
-      });
+        mapajs = M.map({
+          container: "mapa"
+        });
 
-    </script>
-</body>
+
+        // Para hacerlo mejor: https://www.w3schools.com/js/js_async.asp
+        M.proxy(true)
+        M.remote.get("https://datos.madrid.es/egob/catalogo/212531-10515086-calidad-aire-tiempo-real.csv",
+          {}
+        ).then(function (res) {
+          // Muestra un diálogo informativo con el resultado de la petición get
+          console.log(res.text);
+          M.proxy(false)
+        });
+
+        M.proxy(true)
+        M.remote.get("https://datos.madrid.es/egob/catalogo/212629-1-estaciones-control-aire.csv",
+          {}
+        ).then(function (res) {
+          // Muestra un diálogo informativo con el resultado de la petición get
+          console.log(res.text);
+          M.proxy(false)
+        });
+
+        // Funciones necesarias para el visualizador
+      </script>
+  </body>
 </html>
