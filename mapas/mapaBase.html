@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <title>Visualizador base</title>
+
+    <!-- fichero estilos -->
+    <link href="https://componentes.cnig.es/api-core/assets/css/apiign.ol.min.css" rel="stylesheet" />
+
+    <!-- Ficheros javascript de la API -->
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>          
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>        
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>         
+    <!-- estilo básico -->
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+  <!-- Contenedor principal del mapa -->
+    <div id="mapa"></div>
+
+    <script type="text/javascript">
+
+      mapajs = M.map({
+        container: "mapa"
+      });
+
+    </script>
+</body>
+</html>
