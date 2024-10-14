@@ -1,1 +1,1 @@
-# GaleriaEjemplos.APICNIG
+# Galeria de mapas
