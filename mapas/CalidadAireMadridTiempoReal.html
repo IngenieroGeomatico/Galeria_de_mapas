@@ -39,27 +39,103 @@
           container: "mapa"
         });
 
-
         // Para hacerlo mejor: https://www.w3schools.com/js/js_async.asp
-        M.proxy(true)
-        M.remote.get("https://datos.madrid.es/egob/catalogo/212531-10515086-calidad-aire-tiempo-real.csv",
-          {}
-        ).then(function (res) {
-          // Muestra un diálogo informativo con el resultado de la petición get
-          console.log(res.text);
-          M.proxy(false)
-        });
+        // M.proxy(true)
+        // M.remote.get("https://datos.madrid.es/egob/catalogo/212531-10515086-calidad-aire-tiempo-real.csv",
+        //   {}
+        // ).then(function (res) {
+        //   // Muestra un diálogo informativo con el resultado de la petición get
+        //   console.log(res.text);
+        //   M.proxy(false)
+        // });
 
-        M.proxy(true)
-        M.remote.get("https://datos.madrid.es/egob/catalogo/212629-1-estaciones-control-aire.csv",
-          {}
-        ).then(function (res) {
-          // Muestra un diálogo informativo con el resultado de la petición get
-          console.log(res.text);
-          M.proxy(false)
-        });
+        // M.proxy(true)
+        // M.remote.get("https://datos.madrid.es/egob/catalogo/212629-1-estaciones-control-aire.csv",
+        //   {}
+        // ).then(function (res) {
+        //   // Muestra un diálogo informativo con el resultado de la petición get
+        //   console.log(res.text);
+        //   M.proxy(false)
+        // });
 
         // Funciones necesarias para el visualizador
+        myFunction_JoinData() 
+
+
+
+
+        async function myFunction_JoinData() {
+
+          let myPromise = new Promise(function(resolve) {
+
+            M.proxy(true)
+            M.remote.get("https://datos.madrid.es/egob/catalogo/212629-1-estaciones-control-aire.csv",).then(
+                function (res) {
+                  // Muestra un diálogo informativo con el resultado de la petición get
+                  // console.log(res.text);
+                  M.proxy(false)
+                  resolve(res.text)
+                });
+            });
+            value1_estaciones = await myPromise;
+            console.log(csvToJson(value1_estaciones))
+
+
+            let myPromise2 = new Promise(function(resolve) {
+
+                M.proxy(true)
+                M.remote.get("https://datos.madrid.es/egob/catalogo/212531-10515086-calidad-aire-tiempo-real.csv",).then(
+                    function (res) {
+                      // Muestra un diálogo informativo con el resultado de la petición get
+                      // console.log(res.text);
+                      M.proxy(false)
+                      resolve(res.text)
+                    });
+            });
+            value2_datos = await myPromise2;
+
+            console.log(csvToJson(value2_datos))
+
+
+
+
+
+          }
+
+
+
+        function csvToJson(csvString) {
+            const rows = csvString
+                .split("\n");
+
+            const headers = rows[0]
+                .split(";");
+
+            const jsonData = [];
+            for (let i = 1; i < rows.length; i++) {
+
+                const values = rows[i]
+                    .split(";");
+
+                const obj = {};
+
+                for (let j = 0; j < headers.length; j++) {
+
+                    const key = headers[j]
+                        .trim();
+                    const value = values[j]
+                        .trim();
+
+                    obj[key] = value;
+                }
+
+                jsonData.push(obj);
+            }
+            return JSON.stringify(jsonData);
+        }
+
+
+  
       </script>
   </body>
 </html>
