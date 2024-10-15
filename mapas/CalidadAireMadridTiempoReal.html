@@ -15,6 +15,10 @@
       <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>        
       <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>         
      
+      <!-- Importación librerías propias -->
+      <script type="text/javascript" src="../js/lib/transforms/formats.js"></script> 
+      <script type="text/javascript" src="../js/lib/thematics/join.js"></script>          
+     
       <!-- estilo básico -->
       <style>
           html,
@@ -78,7 +82,7 @@
                 });
             });
             value1_estaciones = await myPromise;
-            console.log(csvToJson(value1_estaciones))
+            geojsonEstaciones = csvToGeoJson(value1_estaciones,long="LONGITUD",lat="LATITUD")
 
 
             let myPromise2 = new Promise(function(resolve) {
@@ -94,48 +98,24 @@
             });
             value2_datos = await myPromise2;
 
-            console.log(csvToJson(value2_datos))
+            jsonEstaciones = csvToJson(value2_datos)
 
 
+            geojsonJoin = joinGeoJsonWithJson(geojsonEstaciones, jsonEstaciones, 'CODIGO_CORTO', 'ESTACION');
+
+            console.log(geojsonJoin)
 
 
+            // creamos la capa
+            const capa = new M.layer.GeoJSON({
+                name: "capaJson",
+                source: geojsonJoin
+            })
 
+            // y la añadimos al mapa
+            mapajs.addLayers(capa);
           }
-
-
-
-        function csvToJson(csvString) {
-            const rows = csvString
-                .split("\n");
-
-            const headers = rows[0]
-                .split(";");
-
-            const jsonData = [];
-            for (let i = 1; i < rows.length; i++) {
-
-                const values = rows[i]
-                    .split(";");
-
-                const obj = {};
-
-                for (let j = 0; j < headers.length; j++) {
-
-                    const key = headers[j]
-                        .trim();
-                    const value = values[j]
-                        .trim();
-
-                    obj[key] = value;
-                }
-
-                jsonData.push(obj);
-            }
-            return JSON.stringify(jsonData);
-        }
-
-
-  
+ 
       </script>
   </body>
 </html>
