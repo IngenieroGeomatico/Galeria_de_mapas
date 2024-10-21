@@ -40,8 +40,20 @@
         M.proxy(false)
 
         mapajs = M.map({
-          container: "mapa"
+          container: "mapa",
+          zoom:11,
+          center:{ x: -409357.1616789646, y: 4929016.309020255 },
+          controls:['attributions'],
+          layers:[]
         });
+
+        mapajs.addAttribution({ 
+                name:"Autor:",
+                description:" <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
+        })
+
+        mapajs.addQuickLayers('Base_IGNBaseTodo_TMS') 
+        
 
         // Para hacerlo mejor: https://www.w3schools.com/js/js_async.asp
         // M.proxy(true)
@@ -62,12 +74,27 @@
         //   M.proxy(false)
         // });
 
+        
+        geojsonJoin = myFunction_JoinData() 
+        geojsonJoin.then(()=>{
+          // creamos la capa
+          const capaEstaciones = new M.layer.GeoJSON({
+              name: "Estaciones calidad del aire",
+              source: geojsonJoin,
+              extract:true,
+              legend:"Estaciones calidad del aire",
+              attribution:{ 
+                name:"Estaciones:",
+                description:" <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
+              }
+          })
+
+          // y la añadimos al mapa
+          mapajs.addLayers(capaEstaciones);
+        })
+
+
         // Funciones necesarias para el visualizador
-        myFunction_JoinData() 
-
-
-
-
         async function myFunction_JoinData() {
 
           let myPromise = new Promise(function(resolve) {
@@ -106,14 +133,7 @@
             console.log(geojsonJoin)
 
 
-            // creamos la capa
-            const capa = new M.layer.GeoJSON({
-                name: "capaJson",
-                source: geojsonJoin
-            })
-
-            // y la añadimos al mapa
-            mapajs.addLayers(capa);
+            return geojsonJoin
           }
  
       </script>
