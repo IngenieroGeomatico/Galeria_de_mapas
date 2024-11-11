@@ -1,0 +1,97 @@
+
+.g-herramienta .m-tools:before {
+  content: "\1F3F3";
+  font-size: 22px;
+  font-family: none
+}
+
+
+/* Abrir y cerrar panel */
+.m-panel.m-plugin-herramienta.collapsed {
+  height: 40px;
+}
+
+
+.opened .g-cartografia-flecha-izquierda {
+  position: absolute !important;
+  right: -40px !important;
+
+  color: #71a7d3 !important;
+  background-color: #fff !important;
+}
+
+
+/* Contenedor del plugin */
+.m-control.m-container.m-herramienta {
+  display: flex !important;
+  flex-direction: column;
+}
+
+
+/* Título */
+.m-herramienta-header {
+  background-color: #71a7d3;
+  color: white;
+  display: block;
+  font-size: 15px;
+  height: 40px;
+  line-height: 40px;
+  padding: 0 5px;
+  text-align: center;
+  width: 100%;
+}
+
+/* Contenedor botones controles */
+.m-herramienta-previews {
+    display: inline-grid;
+    justify-content: safe;
+    align-items: center;
+    gap: 6px;
+    background-color: white;    
+    margin:5px;
+}
+
+/* Botones controles */
+.g-herramienta .m-panel-controls button {
+  font-family: 'Times New Roman', Times, serif !important;
+  font-size: 16px;  
+  font-weight: 700 !important;
+  -webkit-font-smoothing: antialiased;
+  cursor: pointer;
+  background-color: #71a7d3;
+  color:whitesmoke;
+}
+
+
+#controlToast::before{
+  content: "▱";
+  font-weight: bold;
+  color:rgb(118, 118, 118)
+}
+#controlToast.activated::before{
+  content: "▱";
+  color:rgb(122, 239, 255)
+}
+.m-controlToast{
+  color:rgb(118, 118, 118)
+}
+
+
+#cargaSVG {
+    height: 100%;
+    background-color: #dd61ff82;
+    position: absolute;
+    z-index: 9999;
+    width: 100%;
+  }
+#cargaSVG img{
+    height: 30vh;
+  position: unset;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: auto;
+  margin-bottom: auto;
+  top: 30%;
+  position: sticky;
+}

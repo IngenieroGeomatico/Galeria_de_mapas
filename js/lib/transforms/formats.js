@@ -135,7 +135,6 @@ function csvToGeoJson(csvString, long = "long", lat = "lat", WKT = false) {
     return geojsonData;
 }
 
-
 /**
  * Convierte una cadena en formato WKT a un objeto GeoJSON.
  * 
@@ -214,3 +213,112 @@ function WKTToGeoJson(wktString) {
             throw new Error(`Tipo de geometría no soportado: ${geometryType}`);
     }
 }
+
+/**
+ * Convierte un array de objetos JSON a un objeto GeoJSON de tipo FeatureCollection.
+ *
+ * @param {Array<Object>} jsonArray - Array de objetos JSON que contiene los datos a convertir a GeoJSON.
+ * @param {string} latKey - Nombre de la propiedad en los objetos JSON que contiene la latitud.
+ * @param {string} lonKey - Nombre de la propiedad en los objetos JSON que contiene la longitud.
+ * @returns {Object} Un objeto GeoJSON de tipo FeatureCollection con cada elemento del array como una Feature.
+ *
+ * @example
+ * const jsonArray = [
+ *   { id: "A", name: "Location1", latitude: 0, longitude: 0, population: 500 },
+ *   { id: "B", name: "Location2", latitude: 1, longitude: 1, population: 1000 }
+ * ];
+ * 
+ * const geoJson = jsonToGeoJson(jsonArray, 'latitude', 'longitude');
+ * // Resultado esperado:
+ * // {
+ * //   type: "FeatureCollection",
+ * //   features: [
+ * //     { type: "Feature", properties: { id: "A", name: "Location1", population: 500 }, geometry: { type: "Point", coordinates: [0, 0] } },
+ * //     { type: "Feature", properties: { id: "B", name: "Location2", population: 1000 }, geometry: { type: "Point", coordinates: [1, 1] } }
+ * //   ]
+ * // }
+ */
+function jsonToGeoJson(jsonArray, geometryField) {
+    return {
+      type: "FeatureCollection",
+      features: jsonArray.map(item => {
+        const geometryGJSON = item[geometryField]
+        // Desestructuramos item y excluimos geometry
+        const { geometry: _, ...properties } = item; // _ se usa para ignorar la propiedad geometry
+        return {
+          type: "Feature",
+          properties: properties, // Solo las propiedades sin geometry
+          geometry: geometryGJSON // Se asigna el geometry que se pasa como argumento
+        };
+      })
+    };
+  }
+
+/**
+ * Convierte un SVG en formato de texto en un objeto GeoJSON.
+ *
+ * @param {string} svgText - El SVG en formato de texto.
+ * @param {Array} bbox - La extensión geográfica [minLng, minLat, maxLng, maxLat].
+ * @returns {Object} - El objeto en formato GeoJSON.
+ */
+function svgToGeoJSON(svgText, bbox) {
+    const [minLng, minLat, maxLng, maxLat] = bbox;
+
+    // Crear un contenedor SVG temporal para analizarlo
+    const svgElement = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
+    const svgWidth = svgElement.viewBox.baseVal.width;
+    const svgHeight = svgElement.viewBox.baseVal.height;
+
+    // Función de escala para convertir coordenadas de SVG a coordenadas geográficas
+    const scaleX = x => minLng + (x / svgWidth) * (maxLng - minLng);
+    const scaleY = y => maxLat - (y / svgHeight) * (maxLat - minLat);
+
+    // Recorrer todos los elementos 'path' y construir los datos de GeoJSON
+    const features = [];
+    const paths = svgElement.querySelectorAll('path');
+
+    paths.forEach(pathElement => {
+        const pathData = pathElement.getAttribute('d');
+        const points = [];
+        const commands = pathData.match(/[MLHVCSQTAZ][^MLHVCSQTAZ]*/ig);
+
+        let x = 0, y = 0;
+        commands.forEach(command => {
+            const type = command[0];
+            const coords = command.slice(1).trim().split(/[\s,]+/).map(Number);
+
+            switch (type) {
+                case 'M':
+                case 'L':
+                    x = coords[0];
+                    y = coords[1];
+                    points.push([scaleX(x), scaleY(y)]);
+                    break;
+                case 'Z':
+                    if (points.length > 0) points.push(points[0]); // Cerrar el polígono
+                    break;
+                default:
+                    console.warn(`Comando ${type} no soportado en esta función.`);
+            }
+        });
+
+        // Crear el feature de tipo 'Polygon' para el GeoJSON
+        if (points.length > 0) {
+            features.push({
+                type: 'Feature',
+                geometry: {
+                    type: 'Polygon',
+                    coordinates: [points]
+                },
+                properties: {}
+            });
+        }
+    });
+
+    return {
+        type: 'FeatureCollection',
+        features: features
+    };
+}
+
+

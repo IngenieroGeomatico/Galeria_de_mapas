@@ -110,3 +110,72 @@ function joinGeoJsonWithJson(geoJsonData, jsonData, geoJsonIdField, jsonIdField 
 
     return updatedGeoJson;
 }
+
+
+/**
+ * Combina datos de un array JSON (`jsonData`) con datos de un objeto GeoJSON (`geoJson`), 
+ * añadiendo todas las propiedades y la geometría de `geoJson` a cada elemento de `jsonData` 
+ * cuando se cumple una coincidencia en los campos especificados.
+ * 
+ * @param {Array<Object>} jsonData - Array de objetos JSON que contiene los datos a los que se 
+ * desea añadir información del GeoJSON. 
+ * @param {Object} geoJson - Objeto GeoJSON en formato FeatureCollection, que contiene las 
+ * propiedades y geometría a agregar a `jsonData`.
+ * @param {string} jsonKey - Nombre de la propiedad en cada objeto de `jsonData` que se usará 
+ * para la coincidencia con el `geoJson`.
+ * @param {string} geoJsonKey - Nombre de la propiedad en `geoJson.features` que se usará para 
+ * la coincidencia con `jsonData`.
+ * 
+ * @returns {Array<Object>} Un nuevo array de objetos donde cada objeto de `jsonData` tiene 
+ * añadidas las propiedades y la geometría del objeto correspondiente en `geoJson`.
+ * 
+ * @example
+const geoJson = {
+  type: "FeatureCollection",
+  features: [
+    { type: "Feature", properties: { id: "A", name: "Location1" }, geometry: { type: "Point", coordinates: [0, 0] } },
+    { type: "Feature", properties: { id: "B", name: "Location2" }, geometry: { type: "Point", coordinates: [1, 1] } }
+  ]
+};
+
+const jsonData = [
+  { code: "A", population: 500, area: 25 },
+  { code: "A", population: 500, area: 250 },
+  { code: "A", population: 500, area: 2 },
+  { code: "A", population: 500, area: 252 },
+  { code: "B", population: 1000, area: 540 },
+  { code: "B", population: 1000, area: 508 },
+  { code: "B", population: 1000, area: 520 },
+  { code: "B", population: 1000, area: 150 }
+];
+ * 
+ * const result = joinJsonAndGeoJson(jsonData, geoJson, 'code', 'id');
+ * // Resultado esperado:
+ * // [
+ * //   { code: "A", population: 500, area: 25, id: "A", name: "Location1", geometry: { type: "Point", coordinates: [0, 0] } },
+ * //   { code: "B", population: 1000, area: 540, id: "B", name: "Location2", geometry: { type: "Point", coordinates: [1, 1] } }
+ * // ]
+ */
+function joinJsonAndGeoJson(jsonData, geoJson, jsonKey, geoJsonKey) {
+    // Crear un mapa para buscar rápidamente los features de geoJson por el campo especificado
+    const geoJsonMap = new Map(
+      geoJson.features.map(feature => [feature.properties[geoJsonKey], feature])
+    );
+  
+    // Hacer el join: recorrer cada elemento en jsonData y buscar su feature correspondiente en geoJsonMap
+    return jsonData.map(item => {
+      const geoFeature = geoJsonMap.get(item[jsonKey]);
+  
+      // Si encontramos el feature correspondiente, unimos los datos
+      if (geoFeature) {
+        return {
+          ...item,
+          ...geoFeature.properties, // Añadimos todas las propiedades del geoJson
+          geometry: geoFeature.geometry // Añadimos la geometría del geoJson
+        };
+      }
+  
+      // Si no se encuentra, devolver el item original sin cambios
+      return item;
+    });
+  }
