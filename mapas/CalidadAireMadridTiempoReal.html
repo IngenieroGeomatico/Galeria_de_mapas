@@ -109,6 +109,63 @@
 
           }
         });
+      
+      let estiloMuncipio = new M.style.Generic({
+          polygon: {
+            fill: {
+              opacity: 0.2,
+            },
+            stroke: {
+              color: '#ff3c00',
+              width: 4
+            }
+          }
+        });
+
+      let estiloEstacionesMedidas_1 = new M.style.Generic({
+          polygon: {
+            fill: {
+              opacity: 0.7,
+              color: function(feature) {
+
+                if(true){
+                  return ;
+
+                }else if(false) {
+
+                }else{
+
+                }
+                        
+              },
+            },
+            stroke: {
+              color: '#ff3c00',
+              width: 4
+            }
+          },
+          point:{
+            label: {
+              // Texto a escribir
+              text: 'SO2',
+              // Fuente y características
+              font: 'bold 19px Comic Sans MS',
+              // Color de la fuente. Hexadecimal, nominal
+              color: '#FF0000' || 'red',
+              // Factor de escala de la fuente
+              scale: 0.9,
+              // Halo de la fuente
+              stroke: {
+                // Color de relleno del halo. Hexadecimal, nominal
+                color: 'yellow' || '#FFF000',
+                // Grosor en píxeles del halo
+                width: 2,
+              },
+              align: M.style.align.CENTER,
+              baseline: M.style.baseline.MIDDLE,
+            }
+          }
+      });
 
       // creamos la capa
       const capaEstaciones = new M.layer.GeoJSON({
@@ -122,7 +179,6 @@
             }
           },{
             style:estiloEstacion
-
       })
 
       const capaMunicipio = new M.layer.GeoJSON({
@@ -131,11 +187,11 @@
             extract: true,
             legend: "Municipio Madrid",
             attribution: {
-              name: "Estaciones:",
-              description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
+              name: "Municipio:",
+              description: " <a style='color: #0000FF' href='https://api-features.ign.es//collections/administrativeunit/items?limit=1&nameunit=Madrid&nationallevelname=Municipio' target='_blank'>IGN</a> "
             }
           },{
-
+            style: estiloMuncipio
       })
 
       
@@ -144,10 +200,14 @@
         source: geojsonJoin.Medida_1,
         extract: true,
         legend: "Dióxido de Azufre",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
+      },{
+        visibility:false,
+        style: estiloEstacionesMedidas_1
       })
      
       // const capaEstacionesMedidas_1_interpolate = new M.layer.GeoJSON({
@@ -170,100 +230,108 @@
         source: geojsonJoin.Medida_6,
         extract: true,
         legend: "Monóxido de Carbono ",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_7 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_7",
         source: geojsonJoin.Medida_7,
         extract: true,
         legend: "Monóxido de Nitrógeno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
-
+      },{visibility:false})
 
       const capaEstacionesMedidas_8 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_8",
         source: geojsonJoin.Medida_8,
         extract: true,
         legend: "Dióxido de Nitrógeno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_9 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_9",
         source: geojsonJoin.Medida_9,
         extract: true,
         legend: "Partículas < 2.5 μm ",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_10 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_10",
         source: geojsonJoin.Medida_10,
         extract: true,
         legend: "Partículas < 10 μm",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_12 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_12",
         source: geojsonJoin.Medida_12,
         extract: true,
         legend: "Óxidos de Nitrógeno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_14 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_14",
         source: geojsonJoin.Medida_14,
         extract: true,
         legend: "Ozono",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_20 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_20",
         source: geojsonJoin.Medida_20,
         extract: true,
         legend: "Tolueno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_30 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_30",
         source: geojsonJoin.Medida_30,
         extract: true,
         legend: "Benceno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
 
       const capaEstacionesMedidas_35 = new M.layer.GeoJSON({
@@ -271,11 +339,12 @@
         source: geojsonJoin.Medida_35,
         extract: true,
         legend: "Etilbenceno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
 
       const capaEstacionesMedidas_37 = new M.layer.GeoJSON({
@@ -283,33 +352,36 @@
         source: geojsonJoin.Medida_37,
         extract: true,
         legend: "Metaxileno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_38 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_38",
         source: geojsonJoin.Medida_38,
         extract: true,
         legend: "Paraxileno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_39 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_39",
         source: geojsonJoin.Medida_39,
         extract: true,
         legend: "Ortoxileno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
 
       const capaEstacionesMedidas_42 = new M.layer.GeoJSON({
@@ -317,51 +389,56 @@
         source: geojsonJoin.Medida_42,
         extract: true,
         legend: "Hidrocarburos totales (hexano)",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_43 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_43",
         source: geojsonJoin.Medida_43,
         extract: true,
         legend: "Metano",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_44 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_44",
         source: geojsonJoin.Medida_44,
         extract: true,
         legend: "Hidrocarburos no metánicos (hexano)",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
       const capaEstacionesMedidas_431 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_431",
         source: geojsonJoin.Medida_431,
         extract: true,
         legend: "Metaparaxileno",
+        visibility:false,
         // attribution: {
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      })
+      },{visibility:false})
 
 
 
 
       arrayLayers = [
+                    capaEstaciones,
                     capaMunicipio,      
-                    capaEstaciones, capaEstacionesMedidas_1, capaEstacionesMedidas_6, 
+                    capaEstacionesMedidas_1, capaEstacionesMedidas_6, 
                     capaEstacionesMedidas_7, capaEstacionesMedidas_8, capaEstacionesMedidas_9,
                     capaEstacionesMedidas_10, capaEstacionesMedidas_12, capaEstacionesMedidas_14,
                     capaEstacionesMedidas_20, capaEstacionesMedidas_30, capaEstacionesMedidas_35,
@@ -411,7 +488,7 @@
 
       let myPromise3 = new Promise(function (resolve) {
         M.proxy(true)
-        M.remote.get("      https://api-features.ign.es//collections/administrativeunit/items?f=json&limit=1&&nameunit=Madrid&&nationallevelname=Municipio",).then(
+        M.remote.get("https://api-features.ign.es//collections/administrativeunit/items?f=json&limit=1&&nameunit=Madrid&&nationallevelname=Municipio",).then(
           function (res) {
             // Muestra un diálogo informativo con el resultado de la petición get
             // console.log(res.text);
