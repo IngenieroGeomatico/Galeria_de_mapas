@@ -62,3 +62,42 @@ function filterGeoJSON(geojson, attribute, value) {
         features: filteredFeatures
     };
 }
+
+/**
+ * Cuenta el número de veces que un valor específico aparece en los atributos de un GeoJSON.
+ * 
+ * @param {Object} geojson - El objeto GeoJSON que contiene las características (features).
+ * @param {string} valor - El valor a contar en los atributos de las propiedades del GeoJSON.
+ * @returns {number} - El número de ocurrencias del valor en los atributos.
+ * 
+ * @example
+ * const geojson = {
+ *   type: "FeatureCollection",
+ *   features: [
+ *     {
+ *       type: "Feature",
+ *       properties: { H1: "V", H2: "N", H3: "V" },
+ *       geometry: { type: "Point", coordinates: [0, 0] }
+ *     },
+ *     {
+ *       type: "Feature",
+ *       properties: { H1: "N", H2: "V", H3: "V" },
+ *       geometry: { type: "Point", coordinates: [1, 1] }
+ *     }
+ *   ]
+ * };
+ * 
+ * const numeroDeV = contarValoresenAtributos(geojson, "V");
+ * console.log(numeroDeV); // Resultado: 4
+ */
+function contarValoresenAtributos(feature, valor) {
+    let contador = 0;
+
+        Object.keys(feature.properties).forEach(key => {
+                if (feature.properties[key] === valor) {
+                    contador++;
+                }
+        });
+
+    return contador;
+}

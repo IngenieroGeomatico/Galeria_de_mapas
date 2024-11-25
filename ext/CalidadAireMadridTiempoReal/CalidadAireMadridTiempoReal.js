@@ -86,7 +86,6 @@ miPlugin.addTo = (map) => {
              <button id="botonCalcular" onclick="myFunctionInterpolateExtrapolate()" type="button">Calcular</button> 
         `
 
-
         map.on(M.evt.COMPLETED, () => {
 
             (async function checkForIncrease() {
@@ -134,7 +133,7 @@ async function myFunctionInterpolateExtrapolate() {
     SVGCarga.hidden = false;
 
     // Espera un ciclo de evento para que el navegador actualice el DOM
-    await new Promise(resolve => setTimeout(resolve, 0)); 
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     selector = miPlugin.panel.getTemplatePanel().querySelector("#seleccionCapasID")
     value = selector.value
@@ -143,7 +142,7 @@ async function myFunctionInterpolateExtrapolate() {
 
 
     var bbox = turf.bbox(geojsonJoin.municipio);
-    var grid = turf.pointGrid(bbox, 0.2,
+    var grid = turf.pointGrid(bbox, 0.5,
         // {mask:geojsonJoin.municipio.features[0]}
     );
 
@@ -151,11 +150,21 @@ async function myFunctionInterpolateExtrapolate() {
     var x = [ /* X-axis coordinates */];
     var y = [ /* Y-axis coordinates */];
     gjsonCapaSeleccionada = capaSeleccionada.toGeoJSON()
+
+    try {
+        Vs = contarValoresenAtributos(gjsonCapaSeleccionada.features[0], "V")
+        atributoH = "H" + Vs
+    } catch (error) {
+        M.toast.error('No existen los suficientes datos para realizar la operación', null, 2000);
+        SVGCarga.hidden = true
+        return
+    }
+
     gjsonCapaSeleccionada.features.forEach(feature => {
         properties = feature.properties;
         geometry = feature.geometry;
 
-        t.push(parseFloat(properties["H01"]));
+        t.push(parseFloat(properties[atributoH]));
         x.push(geometry.coordinates[0]); // Longitud
         y.push(geometry.coordinates[1]); // Lstitud
 
@@ -163,21 +172,30 @@ async function myFunctionInterpolateExtrapolate() {
 
     var model = "exponential";
     var sigma2 = 0, alpha = 100;
-    var variogram = kriging.train(t, x, y, model, sigma2, alpha);
+    try {
+        var variogram = kriging.train(t, x, y, model, sigma2, alpha);
+    } catch (error) {
+        M.toast.error('No existen los suficientes datos para realizar la operación', null, 2000);
+        SVGCarga.hidden = true
+        return
+    }
+
 
     grid.features.forEach(feature => {
         properties = feature.properties;
         geometry = feature.geometry;
         var tpredicted = kriging.predict(geometry.coordinates[0], geometry.coordinates[1], variogram);
 
-        properties["H01"] = tpredicted
+        properties[atributoH] = tpredicted
 
     })
 
     isoband = turf.isobands(
         grid,
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-        { zProperty: "H01" }
+        [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
+            1, 2, 3, 4, 5, 6, 7, 8, 9,
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+        { zProperty: atributoH }
     )
 
     isoband.features.forEach(feature => {
@@ -193,7 +211,13 @@ async function myFunctionInterpolateExtrapolate() {
     capaSeleccionada.clear()
     capaSeleccionada.getImpl().loadFeaturesPromise_ = null
     capaSeleccionada.setSource(gjsonCapaSeleccionada)
+    mapajs.getLayers()
+        .filter(objeto => objeto.isBase === false)
+        .forEach(objeto => objeto.setVisible(false));
+
     SVGCarga.hidden = true
+    await new Promise(resolve => setTimeout(resolve, 100));
+    capaSeleccionada.setVisible(true)
 }
 
 
