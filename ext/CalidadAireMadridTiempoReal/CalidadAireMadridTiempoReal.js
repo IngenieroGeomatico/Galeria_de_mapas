@@ -142,7 +142,7 @@ async function myFunctionInterpolateExtrapolate() {
 
 
     var bbox = turf.bbox(geojsonJoin.municipio);
-    var grid = turf.pointGrid(bbox, 0.5,
+    var grid = turf.pointGrid(bbox, 0.3,
         // {mask:geojsonJoin.municipio.features[0]}
     );
 
@@ -152,8 +152,13 @@ async function myFunctionInterpolateExtrapolate() {
     gjsonCapaSeleccionada = capaSeleccionada.toGeoJSON()
 
     try {
-        Vs = contarValoresenAtributos(gjsonCapaSeleccionada.features[0], "V")
+        VS_array = []
+        gjsonCapaSeleccionada.features.forEach(feature => {
+            VS_array.push(contarValoresenAtributos(feature, "V"))
+        })
+        Vs = Math.max(...VS_array);
         atributoH = "H" + Vs
+        atributoV = "V" + Vs
     } catch (error) {
         M.toast.error('No existen los suficientes datos para realizar la operación', null, 2000);
         SVGCarga.hidden = true
@@ -161,13 +166,17 @@ async function myFunctionInterpolateExtrapolate() {
     }
 
     gjsonCapaSeleccionada.features.forEach(feature => {
-        properties = feature.properties;
-        geometry = feature.geometry;
 
-        t.push(parseFloat(properties[atributoH]));
-        x.push(geometry.coordinates[0]); // Longitud
-        y.push(geometry.coordinates[1]); // Lstitud
+        if(feature.properties[atributoV]=='V'){
+            properties = feature.properties;
+            geometry = feature.geometry;
 
+            t.push(parseFloat(properties[atributoH]));
+            x.push(geometry.coordinates[0]); // Longitud
+            y.push(geometry.coordinates[1]); // Latitud
+        }else{
+
+        }
     })
 
     var model = "exponential";
@@ -192,9 +201,12 @@ async function myFunctionInterpolateExtrapolate() {
 
     isoband = turf.isobands(
         grid,
-        [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
+        [   
+            0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
             1, 2, 3, 4, 5, 6, 7, 8, 9,
-            10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
+            150, 200, 250, 300, 350, 400, 450, 500
+        ],
         { zProperty: atributoH }
     )
 
