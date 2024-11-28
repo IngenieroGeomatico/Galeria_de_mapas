@@ -135,10 +135,28 @@ async function myFunctionInterpolateExtrapolate() {
     // Espera un ciclo de evento para que el navegador actualice el DOM
     await new Promise(resolve => setTimeout(resolve, 100));
 
+    
+    
+
     selector = miPlugin.panel.getTemplatePanel().querySelector("#seleccionCapasID")
     value = selector.value
     capaSeleccionada = mapajs.getLayers().filter(capa => capa.getImpl().legend == value)[0]
-    console.log(capaSeleccionada.getImpl().legend)
+    // console.log(capaSeleccionada.getImpl().legend)
+
+    mapajs.getLayers()
+        .filter(objeto => objeto.isBase === false)
+        .forEach(objeto => objeto.setVisible(false));
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    capaSeleccionada.setVisible(true)
+
+    if(capaSeleccionada.interpolate){
+        M.toast.warning('Ya se ha realizado la interpolación de esta capa', null, 2000);
+        SVGCarga.hidden = true
+        return
+    }else{
+        capaSeleccionada.interpolate = true
+    }
 
 
     var bbox = turf.bbox(geojsonJoin.municipio);
@@ -150,6 +168,7 @@ async function myFunctionInterpolateExtrapolate() {
     var x = [ /* X-axis coordinates */];
     var y = [ /* Y-axis coordinates */];
     gjsonCapaSeleccionada = capaSeleccionada.toGeoJSON()
+    
 
     try {
         VS_array = []
@@ -159,6 +178,7 @@ async function myFunctionInterpolateExtrapolate() {
         Vs = Math.max(...VS_array);
         atributoH = "H" + Vs
         atributoV = "V" + Vs
+        valorMagnitud = gjsonCapaSeleccionada.features[0].properties["MAGNITUD"]
     } catch (error) {
         M.toast.error('No existen los suficientes datos para realizar la operación', null, 2000);
         SVGCarga.hidden = true
@@ -166,7 +186,8 @@ async function myFunctionInterpolateExtrapolate() {
     }
 
     gjsonCapaSeleccionada.features.forEach(feature => {
-
+        // console.log(feature.properties)
+        feature.properties["ultimoValor"] = feature.properties[atributoH]
         if(feature.properties[atributoV]=='V'){
             properties = feature.properties;
             geometry = feature.geometry;
@@ -189,7 +210,6 @@ async function myFunctionInterpolateExtrapolate() {
         return
     }
 
-
     grid.features.forEach(feature => {
         properties = feature.properties;
         geometry = feature.geometry;
@@ -199,14 +219,28 @@ async function myFunctionInterpolateExtrapolate() {
 
     })
 
-    isoband = turf.isobands(
-        grid,
-        [   
+    // limites de cada magnitud
+    if (valorMagnitud == "1"){
+        gridValues = [   
+            0, 5, 11, 23, 35, 75, 185, 304, 604, Infinity
+        ]
+
+    }else if(valorMagnitud == "6"){
+        gridValues = [   
+            0, 0.75, 1.46, 2.93, 4.4 , 9.4, 12.4, 15.4, 30.4, Infinity
+        ]
+    } else{
+        gridValues = [   
             0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
             1, 2, 3, 4, 5, 6, 7, 8, 9,
             10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
             150, 200, 250, 300, 350, 400, 450, 500
-        ],
+        ]
+    }
+
+    isoband = turf.isobands(
+        grid,
+        gridValues,
         { zProperty: atributoH }
     )
 
