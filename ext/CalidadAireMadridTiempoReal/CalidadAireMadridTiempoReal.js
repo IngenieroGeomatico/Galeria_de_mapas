@@ -219,22 +219,43 @@ async function myFunctionInterpolateExtrapolate() {
 
     })
 
+
     // limites de cada magnitud
     if (valorMagnitud == "1"){
         gridValues = [   
             0, 5, 11, 23, 35, 75, 185, 304, 604, Infinity
         ]
 
-    }else if(valorMagnitud == "6"){
+    } else if(valorMagnitud == "6"){
         gridValues = [   
             0, 0.75, 1.46, 2.93, 4.4 , 9.4, 12.4, 15.4, 30.4, Infinity
         ]
-    } else{
+    } else if(valorMagnitud == "7"){
+        gridValues = [   
+            0, 3, 6, 12.5, 25, 50, 75, 100, 200, 400, Infinity
+        ]
+    } else if(valorMagnitud == "8"){
+        gridValues = [   
+            0, 6, 12.5, 25, 50, 100, 360, 650, 1250, Infinity
+        ]
+    } else if(valorMagnitud == "9"){
+        gridValues = [   
+            0, 1, 2.25, 4.5, 9, 35, 55, 125, 225, Infinity
+        ]
+    } else if(valorMagnitud == "10"){
+        gridValues = [   
+            0, 6, 12.5, 25, 55, 155, 255, 350, 425, Infinity
+        ]
+    } else if(valorMagnitud == "12"){
+        gridValues = [   
+            0, 6, 12.5, 25, 50, 100, 150, 200, 300, Infinity
+        ]
+    }else{
         gridValues = [   
             0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
             1, 2, 3, 4, 5, 6, 7, 8, 9,
             10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
-            150, 200, 250, 300, 350, 400, 450, 500
+            150, 200, 250, 300, 350, 400, 450, 500,9999999
         ]
     }
 

@@ -278,6 +278,401 @@
           }
       });
 
+      let estiloEstacionesMedidas_7 = new M.style.Generic({
+          polygon: {
+            fill: {
+              opacity: 0.6,
+              color: function(feature) {
+                v = feature.getAttributes()[Object.keys(feature.getAttributes())[0]]
+                // valores = v.split("-");
+                // 0, 3, 6, 12.5, 25, 50, 75, 100, 200, Infinity
+
+                return  v == "100-200"? 'rgb(143,63,151)' : // Muy poco saludable
+                        v == "75-100"? 'rgb(255,0,0)' : // No saludable
+                        v == "50-75"? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v == "25-50"? 'rgb(255,255,0)' : // Moderado
+                        v == "12.5-25"? '#00E400' :  // Bien
+                        v == "6-12.5" ? '#7AF37A' :  // Muy Bien
+                        v == "3-6" ? '#B7FBB7' :  // Muy Muy Bien
+                        v == "0-3" ? '#E2FEE2':   // Muy Muy Muy Bien
+                                      'rgb(126,0,35)'; // Peligroso
+                        
+              },
+            },
+            stroke: {
+              color: '#616161',
+              width: 4
+            }
+          },
+          point:{
+            radius: 8,
+            // Relleno
+            fill: {
+              // Color de relleno. Hexadecimal, nominal
+              color: function(feature) {
+                v = feature.getAttribute('ultimoValor')
+                // 0, 3, 6, 12.5, 25, 50, 75, 100, 200, Infinity
+                return  v >= 200 ? 'rgb(126,0,35)' : // Peligroso
+                        v >= 100 ? 'rgb(143,63,151)' : // Muy poco saludable
+                        v >= 75 ? 'rgb(255,0,0)' : // No saludable
+                        v >= 50 ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v >= 25 ? 'rgb(255,255,0)' : // Moderado
+                        v >= 12.5 ? '#00E400' :  // Bien
+                        v >= 6 ? '#7AF37A' :  // Muy Bien
+                        v >= 3 ? '#B7FBB7' :  // Muy Muy Bien
+                        v >= 0 ? '#E2FEE2':   // Muy Muy Muy Bien
+                                 'black';     // Inicial
+                       
+              },
+              // Transparencia. 0(transparente)|1(opaco)
+              opacity: 0.9,
+            },
+            // Borde exterior
+            stroke: {
+              // Color del borde. Hexadecimal, nominal
+              color: 'rgb(0, 0, 0)',
+              // Grosor en pixeles
+              width: 2,
+            },
+            label: {
+              // Texto a escribir
+              text: 'NO',
+              // Fuente y características
+              font: 'bold 19px Comic Sans MS',
+              // Color de la fuente. Hexadecimal, nominal
+              color: 'white',
+              // Factor de escala de la fuente
+              scale: 0.9,
+              // Halo de la fuente
+              stroke: {
+                // Color de relleno del halo. Hexadecimal, nominal
+                color: 'rgb(0, 0, 0)',
+                // Grosor en píxeles del halo
+                width: 2,
+              },
+              align: M.style.align.CENTER,
+              baseline: M.style.baseline.BOTTOM,
+            }
+          }
+      });
+
+      let estiloEstacionesMedidas_8 = new M.style.Generic({
+          polygon: {
+            fill: {
+              opacity: 0.6,
+              color: function(feature) {
+                v = feature.getAttributes()[Object.keys(feature.getAttributes())[0]]
+                // valores = v.split("-");
+                // 0, 6, 12.5, 25, 50, 100, 360, 650, 1250, Infinity
+
+                return  v == "650-1250"? 'rgb(143,63,151)' : // Muy poco saludable
+                        v == "360-650"? 'rgb(255,0,0)' : // No saludable
+                        v == "100-360"? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v == "50-100"? 'rgb(255,255,0)' : // Moderado
+                        v == "25-50"? '#00E400' :  // Bien
+                        v == "12.5-25" ? '#7AF37A' :  // Muy Bien
+                        v == "6-12.5" ? '#B7FBB7' :  // Muy Muy Bien
+                        v == "0-6" ? '#E2FEE2':   // Muy Muy Muy Bien
+                                      'rgb(126,0,35)'; // Peligroso
+                        
+              },
+            },
+            stroke: {
+              color: '#616161',
+              width: 4
+            }
+          },
+          point:{
+            radius: 8,
+            // Relleno
+            fill: {
+              // Color de relleno. Hexadecimal, nominal
+              color: function(feature) {
+                v = feature.getAttribute('ultimoValor')
+                // 0, 6, 12.5, 25, 50, 100, 360, 650, 1250, Infinity
+                return  v >= 1250 ? 'rgb(126,0,35)' : // Peligroso
+                        v >= 650 ? 'rgb(143,63,151)' : // Muy poco saludable
+                        v >= 360 ? 'rgb(255,0,0)' : // No saludable
+                        v >= 100 ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v >= 50 ? 'rgb(255,255,0)' : // Moderado
+                        v >= 25 ? '#00E400' :  // Bien
+                        v >= 12.5 ? '#7AF37A' :  // Muy Bien
+                        v >= 6 ? '#B7FBB7' :  // Muy Muy Bien
+                        v >= 0 ? '#E2FEE2':   // Muy Muy Muy Bien
+                                 'black';     // Inicial
+                       
+              },
+              // Transparencia. 0(transparente)|1(opaco)
+              opacity: 0.9,
+            },
+            // Borde exterior
+            stroke: {
+              // Color del borde. Hexadecimal, nominal
+              color: 'rgb(0, 0, 0)',
+              // Grosor en pixeles
+              width: 2,
+            },
+            label: {
+              // Texto a escribir
+              text: 'NO2',
+              // Fuente y características
+              font: 'bold 19px Comic Sans MS',
+              // Color de la fuente. Hexadecimal, nominal
+              color: 'white',
+              // Factor de escala de la fuente
+              scale: 0.9,
+              // Halo de la fuente
+              stroke: {
+                // Color de relleno del halo. Hexadecimal, nominal
+                color: 'rgb(0, 0, 0)',
+                // Grosor en píxeles del halo
+                width: 2,
+              },
+              align: M.style.align.CENTER,
+              baseline: M.style.baseline.BOTTOM,
+            }
+          }
+      });
+      
+      let estiloEstacionesMedidas_9 = new M.style.Generic({
+          polygon: {
+            fill: {
+              opacity: 0.6,
+              color: function(feature) {
+                v = feature.getAttributes()[Object.keys(feature.getAttributes())[0]]
+                // valores = v.split("-");
+                // 0, 1, 2.25, 4.5, 9, 35, 55, 125, 225, Infinity
+
+
+                return  v == "125-225"? 'rgb(143,63,151)' : // Muy poco saludable
+                        v == "55-125"? 'rgb(255,0,0)' : // No saludable
+                        v == "35-55"? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v == "9-35"? 'rgb(255,255,0)' : // Moderado
+                        v == "4.5-9"? '#00E400' :  // Bien
+                        v == "2.25-4.5" ? '#7AF37A' :  // Muy Bien
+                        v == "1-2.25" ? '#B7FBB7' :  // Muy Muy Bien
+                        v == "0-1" ? '#E2FEE2':   // Muy Muy Muy Bien
+                                      'rgb(126,0,35)'; // Peligroso
+                        
+              },
+            },
+            stroke: {
+              color: '#616161',
+              width: 4
+            }
+          },
+          point:{
+            radius: 8,
+            // Relleno
+            fill: {
+              // Color de relleno. Hexadecimal, nominal
+              color: function(feature) {
+                v = feature.getAttribute('ultimoValor')
+                //  0, 1, 2.25, 4.5, 9, 35, 55, 125, 225, Infinity
+
+                return  v >= 225 ? 'rgb(126,0,35)' : // Peligroso
+                        v >= 125 ? 'rgb(143,63,151)' : // Muy poco saludable
+                        v >= 55 ? 'rgb(255,0,0)' : // No saludable
+                        v >= 35 ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v >= 9 ? 'rgb(255,255,0)' : // Moderado
+                        v >= 4.5 ? '#00E400' :  // Bien
+                        v >= 2.25 ? '#7AF37A' :  // Muy Bien
+                        v >= 1 ? '#B7FBB7' :  // Muy Muy Bien
+                        v >= 0 ? '#E2FEE2':   // Muy Muy Muy Bien
+                                 'black';     // Inicial
+                       
+              },
+              // Transparencia. 0(transparente)|1(opaco)
+              opacity: 0.9,
+            },
+            // Borde exterior
+            stroke: {
+              // Color del borde. Hexadecimal, nominal
+              color: 'rgb(0, 0, 0)',
+              // Grosor en pixeles
+              width: 2,
+            },
+            label: {
+              // Texto a escribir
+              text: '< 2.5 μm',
+              // Fuente y características
+              font: 'bold 19px Comic Sans MS',
+              // Color de la fuente. Hexadecimal, nominal
+              color: 'white',
+              // Factor de escala de la fuente
+              scale: 0.9,
+              // Halo de la fuente
+              stroke: {
+                // Color de relleno del halo. Hexadecimal, nominal
+                color: 'rgb(0, 0, 0)',
+                // Grosor en píxeles del halo
+                width: 2,
+              },
+              align: M.style.align.CENTER,
+              baseline: M.style.baseline.BOTTOM,
+            }
+          }
+      });
+      
+      let estiloEstacionesMedidas_10 = new M.style.Generic({
+          polygon: {
+            fill: {
+              opacity: 0.6,
+              color: function(feature) {
+                v = feature.getAttributes()[Object.keys(feature.getAttributes())[0]]
+                // valores = v.split("-");
+                // 0, 6, 12.5, 25, 55, 155, 255, 350, 425, Infinity
+
+                return  v == "350-425"? 'rgb(143,63,151)' : // Muy poco saludable
+                        v == "255-350"? 'rgb(255,0,0)' : // No saludable
+                        v == "155-255"? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v == "55-155"? 'rgb(255,255,0)' : // Moderado
+                        v == "25-55"? '#00E400' :  // Bien
+                        v == "12.5-25" ? '#7AF37A' :  // Muy Bien
+                        v == "6-12.5" ? '#B7FBB7' :  // Muy Muy Bien
+                        v == "0-6" ? '#E2FEE2':   // Muy Muy Muy Bien
+                                      'rgb(126,0,35)'; // Peligroso
+                        
+              }
+            },
+            stroke: {
+              color: '#616161',
+              width: 4
+            }
+          },
+          point:{
+            radius: 8,
+            // Relleno
+            fill: {
+              // Color de relleno. Hexadecimal, nominal
+              color: function(feature) {
+                v = feature.getAttribute('ultimoValor')
+                //  // 0, 6, 12.5, 25, 55, 155, 255, 350, 425, Infinity
+
+                return  v >= 425 ? 'rgb(126,0,35)' : // Peligroso
+                        v >= 350 ? 'rgb(143,63,151)' : // Muy poco saludable
+                        v >= 255 ? 'rgb(255,0,0)' : // No saludable
+                        v >= 155 ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v >= 55 ? 'rgb(255,255,0)' : // Moderado
+                        v >= 25 ? '#00E400' :  // Bien
+                        v >= 12.5 ? '#7AF37A' :  // Muy Bien
+                        v >= 6 ? '#B7FBB7' :  // Muy Muy Bien
+                        v >= 0 ? '#E2FEE2':   // Muy Muy Muy Bien
+                                 'black';     // Inicial
+                       
+              },
+              // Transparencia. 0(transparente)|1(opaco)
+              opacity: 0.9,
+            },
+            // Borde exterior
+            stroke: {
+              // Color del borde. Hexadecimal, nominal
+              color: 'rgb(0, 0, 0)',
+              // Grosor en pixeles
+              width: 2,
+            },
+            label: {
+              // Texto a escribir
+              text: '< 10 μm',
+              // Fuente y características
+              font: 'bold 19px Comic Sans MS',
+              // Color de la fuente. Hexadecimal, nominal
+              color: 'white',
+              // Factor de escala de la fuente
+              scale: 0.9,
+              // Halo de la fuente
+              stroke: {
+                // Color de relleno del halo. Hexadecimal, nominal
+                color: 'rgb(0, 0, 0)',
+                // Grosor en píxeles del halo
+                width: 2,
+              },
+              align: M.style.align.CENTER,
+              baseline: M.style.baseline.BOTTOM,
+            }
+          }
+      });
+      
+      let estiloEstacionesMedidas_12 = new M.style.Generic({
+          polygon: {
+            fill: {
+              opacity: 0.6,
+              color: function(feature) {
+                v = feature.getAttributes()[Object.keys(feature.getAttributes())[0]]
+                // valores = v.split("-");
+                // 0, 6, 12.5, 25, 50, 100, 150, 200, 300, Infinity
+
+                return  v == "200-300"? 'rgb(143,63,151)' : // Muy poco saludable
+                        v == "150-200"? 'rgb(255,0,0)' : // No saludable
+                        v == "100-150"? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v == "50-100"? 'rgb(255,255,0)' : // Moderado
+                        v == "25-50"? '#00E400' :  // Bien
+                        v == "12.5-25" ? '#7AF37A' :  // Muy Bien
+                        v == "6-12.5" ? '#B7FBB7' :  // Muy Muy Bien
+                        v == "0-6" ? '#E2FEE2':   // Muy Muy Muy Bien
+                                      'rgb(126,0,35)'; // Peligroso
+                        
+              }
+            },
+            stroke: {
+              color: '#616161',
+              width: 4
+            }
+          },
+          point:{
+            radius: 8,
+            // Relleno
+            fill: {
+              // Color de relleno. Hexadecimal, nominal
+              color: function(feature) {
+                v = feature.getAttribute('ultimoValor')
+                //  /0, 6, 12.5, 25, 50, 100, 150, 200, 300, Infinity
+
+                return  v >= 300 ? 'rgb(126,0,35)' : // Peligroso
+                        v >= 200 ? 'rgb(143,63,151)' : // Muy poco saludable
+                        v >= 150 ? 'rgb(255,0,0)' : // No saludable
+                        v >= 100 ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                        v >= 50 ? 'rgb(255,255,0)' : // Moderado
+                        v >= 25 ? '#00E400' :  // Bien
+                        v >= 12.5 ? '#7AF37A' :  // Muy Bien
+                        v >= 6 ? '#B7FBB7' :  // Muy Muy Bien
+                        v >= 0 ? '#E2FEE2':   // Muy Muy Muy Bien
+                                 'black';     // Inicial
+                       
+              },
+              // Transparencia. 0(transparente)|1(opaco)
+              opacity: 0.9,
+            },
+            // Borde exterior
+            stroke: {
+              // Color del borde. Hexadecimal, nominal
+              color: 'rgb(0, 0, 0)',
+              // Grosor en pixeles
+              width: 2,
+            },
+            label: {
+              // Texto a escribir
+              text: 'NOx',
+              // Fuente y características
+              font: 'bold 19px Comic Sans MS',
+              // Color de la fuente. Hexadecimal, nominal
+              color: 'white',
+              // Factor de escala de la fuente
+              scale: 0.9,
+              // Halo de la fuente
+              stroke: {
+                // Color de relleno del halo. Hexadecimal, nominal
+                color: 'rgb(0, 0, 0)',
+                // Grosor en píxeles del halo
+                width: 2,
+              },
+              align: M.style.align.CENTER,
+              baseline: M.style.baseline.BOTTOM,
+            }
+          }
+      });
+      
+
 
       // creamos la capa
       const capaEstaciones = new M.layer.GeoJSON({
@@ -344,7 +739,7 @@
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      },{visibility:false})
+      },{visibility:false, style:estiloEstacionesMedidas_7})
 
       const capaEstacionesMedidas_8 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_8",
@@ -356,7 +751,7 @@
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      },{visibility:false})
+      },{visibility:false, style:estiloEstacionesMedidas_8})
 
       const capaEstacionesMedidas_9 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_9",
@@ -368,7 +763,7 @@
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      },{visibility:false})
+      },{visibility:false, style:estiloEstacionesMedidas_9})
 
       const capaEstacionesMedidas_10 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_10",
@@ -380,7 +775,7 @@
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      },{visibility:false})
+      },{visibility:false, style:estiloEstacionesMedidas_10})
 
       const capaEstacionesMedidas_12 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_12",
@@ -392,7 +787,7 @@
         //   name: "Estaciones:",
         //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         // }
-      },{visibility:false})
+      },{visibility:false, style:estiloEstacionesMedidas_12})
 
       const capaEstacionesMedidas_14 = new M.layer.GeoJSON({
         name: "capaEstacionesMedidas_14",
