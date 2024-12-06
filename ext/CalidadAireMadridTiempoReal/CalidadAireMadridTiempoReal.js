@@ -379,7 +379,7 @@ miPlugin_leyenda.addTo = (map) => {
 
     panelExtra.getControls().forEach((btn) => {
         htmlControl = `
-             <img src="img/mapas/leyendaCalidadAire.svg" height="300px"> 
+             <img src="../img/mapas/leyendaCalidadAire.svg" height="300px"> 
         `
 
         document.querySelector('#m-herramienta-htmlPanel_leyenda_preview').innerHTML += htmlControl
