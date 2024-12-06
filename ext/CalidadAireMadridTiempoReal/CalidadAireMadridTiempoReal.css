@@ -1,6 +1,6 @@
 
 .g-herramienta .m-tools:before {
-  content: "\1F3F3";
+  content: "\1F5A9";
   font-size: 22px;
   font-family: none
 }
@@ -25,6 +25,11 @@
 .m-control.m-container.m-herramienta {
   display: flex !important;
   flex-direction: column;
+  min-width: 220px;
+}
+
+#seleccionCapasID{
+  width: 100%;
 }
 
 
@@ -95,4 +100,14 @@
   top: 30%;
   position: sticky;
 }
+
+.g-herramienta_leyenda{
+  order: -1;
+}
+
+.g-herramienta_leyenda .m-tools:before{
+  content: "\1F56E";
+}
+
+
 

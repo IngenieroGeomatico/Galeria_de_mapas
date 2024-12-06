@@ -250,12 +250,28 @@ async function myFunctionInterpolateExtrapolate() {
         gridValues = [   
             0, 6, 12.5, 25, 50, 100, 150, 200, 300, Infinity
         ]
-    }else{
+    } else if(valorMagnitud == "14"){
+        gridValues = [   
+            0, 6, 12.5, 25, 50, 70, 80, 100, 200, Infinity
+        ]
+    } else if(valorMagnitud == "20"){
+        gridValues = [   
+            0, 10, 25, 100, 400, 1000, 2500, 10000, 20000, Infinity
+        ]
+    } else if(valorMagnitud == "30"){
+        gridValues = [   
+            0, 0.10, 0.25, 0.5, 1, 2, 3, 4, 5, Infinity
+        ]
+    } else if(valorMagnitud == "35"){
+        gridValues = [   
+            0, 6, 12.5, 25, 50, 100, 200, 500, 1000, Infinity
+        ]
+    } else{
         gridValues = [   
             0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
             1, 2, 3, 4, 5, 6, 7, 8, 9,
             10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
-            150, 200, 250, 300, 350, 400, 450, 500,9999999
+            150, 200, 250, 300, 350, 400, 450, 500, Infinity
         ]
     }
 
@@ -285,6 +301,90 @@ async function myFunctionInterpolateExtrapolate() {
     SVGCarga.hidden = true
     await new Promise(resolve => setTimeout(resolve, 100));
     capaSeleccionada.setVisible(true)
+}
+
+
+miPlugin_leyenda = new M.Plugin()
+miPlugin_leyenda.name = "MiPluginLeyenda"
+
+miPlugin_leyenda.getHelp = () => {
+    return {
+        title: 'Mi Plugin Personalizado',
+        content: new Promise((success) => {
+            let html = '<div><p>Información del plugin</p></div>';
+            html = M.utils.stringToHtml(html);
+            success(html);
+        }),
+    };
+}
+
+
+const panelExtra_leyenda = new M.ui.Panel('toolsExtra_leyenda', {
+    "collapsible": true,
+    "className": 'g-herramienta_leyenda',
+    "collapsedButtonClass": 'm-tools',
+    "position": M.ui.position.BL
+});
+
+const htmlPanel_leyenda =
+    `
+  <div aria-label="Plugin View Management" role="menuitem" id="div-contenedor-herramienta" class="m-control m-container m-herramienta">
+      <header 
+          role="heading" 
+          tabindex="0" 
+          id="m-herramienta-htmlPanel_leyenda"
+          class="m-herramienta-header">
+            Leyenda
+      </header>
+      <section id="m-herramienta-htmlPanel_leyenda_preview">
+
+      </section>
+      <div id="m-herramienta-contents_leyenda"></div>
+  </div>
+  `
+
+const controlToast_leyenda = new M.Control(new M.impl.Control(), 'controlToast_leyenda');
+
+controlToast_leyenda.createView = (map) => {
+    const contenedor = document.createElement('div');
+    return contenedor;
+}
+
+
+miPlugin_leyenda.addTo = (map) => {
+
+    miPlugin_leyenda.panel = panelExtra_leyenda
+
+    panelExtra_leyenda.addControls(controlToast_leyenda);
+
+    map.addPanels(panelExtra_leyenda);
+    document.querySelector('.g-herramienta_leyenda .m-panel-controls').innerHTML = htmlPanel_leyenda;
+    document.querySelector('#m-herramienta-contents_leyenda').appendChild(controlToast_leyenda.getElement());
+
+    document.querySelector('.g-herramienta_leyenda .m-panel-controls').innerHTML = htmlPanel_leyenda;
+
+    // Para hacer movible el panel desde el título
+    M.utils.draggabillyPlugin(panelExtra_leyenda, '#m-herramienta-htmlPanel_leyenda');
+
+
+    controlToast.activate = () => {
+
+    }
+
+    controlToast.deactivate = () => {
+
+    }
+
+    panelExtra.addControls(controlToast);
+
+    panelExtra.getControls().forEach((btn) => {
+        htmlControl = `
+             <img src="../../img/mapas/leyendaCalidadAire.svg" height="300px"> 
+        `
+
+        document.querySelector('#m-herramienta-htmlPanel_leyenda_preview').innerHTML += htmlControl
+    })
+
 }
 
 
