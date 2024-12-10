@@ -4,6 +4,8 @@
 miPlugin = new M.Plugin()
 miPlugin.name = "MiPlugin"
 
+const valueOri = "-- Seleccione un gas --"
+
 miPlugin.getHelp = () => {
     return {
         title: 'Mi Plugin Personalizado',
@@ -18,6 +20,7 @@ miPlugin.getHelp = () => {
 
 const panelExtra = new M.ui.Panel('toolsExtra', {
     "collapsible": true,
+    "collapsed": false,
     "className": 'g-herramienta',
     "collapsedButtonClass": 'm-tools',
     "position": M.ui.position.TL
@@ -78,7 +81,7 @@ miPlugin.addTo = (map) => {
         htmlControl = `
             <h4> Selector de capa: </h4>
             <div id="selectorWrapperID">
-            <select class="seleccionCapasClass" id= "seleccionCapasID" name="seleccionCapas">
+            <select class="seleccionCapasClass" id="seleccionCapasID" name="seleccionCapas">
                 <option value="1">----</option>
                 <option value="2">....</option>
             </select>
@@ -109,6 +112,11 @@ miPlugin.addTo = (map) => {
                     .map(capa => capa.getImpl().legend).reverse();
                 selector = miPlugin.panel.getTemplatePanel().querySelector("#seleccionCapasID")
                 selector.innerHTML = ""
+                
+                var option = document.createElement("option");
+                option.text = valueOri;
+                option.value = valueOri;
+                selector.add(option);
                 legends.forEach((element) => {
                     if (element == "Municipio Madrid" || element == "Estaciones calidad del aire") {
                         // pass
@@ -140,6 +148,11 @@ async function myFunctionInterpolateExtrapolate() {
 
     selector = miPlugin.panel.getTemplatePanel().querySelector("#seleccionCapasID")
     value = selector.value
+    if(value==valueOri){
+        M.toast.warning('Seleccione una gas para mostrar su información', null, 2000);
+        SVGCarga.hidden = true
+        return
+    }
     capaSeleccionada = mapajs.getLayers().filter(capa => capa.getImpl().legend == value)[0]
     // console.log(capaSeleccionada.getImpl().legend)
 
@@ -176,6 +189,9 @@ async function myFunctionInterpolateExtrapolate() {
             VS_array.push(contarValoresenAtributos(feature, "V"))
         })
         Vs = Math.max(...VS_array);
+        if(Vs<10){
+            Vs = "0"+Vs.toString()
+        }
         atributoH = "H" + Vs
         atributoV = "V" + Vs
         valorMagnitud = gjsonCapaSeleccionada.features[0].properties["MAGNITUD"]
@@ -381,7 +397,6 @@ miPlugin_leyenda.addTo = (map) => {
         htmlControl = `
              <img src="../../img/mapas/leyendaCalidadAire.svg" height="300px"> 
         `
-
         document.querySelector('#m-herramienta-htmlPanel_leyenda_preview').innerHTML += htmlControl
     })
 
