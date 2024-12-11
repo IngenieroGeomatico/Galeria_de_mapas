@@ -1314,7 +1314,7 @@ M.proxy(false)
 mapajs.addPlugin(ext_Modal);
 
 const ext_LayerSwitcher = new M.plugin.Layerswitcher({
-  collapsed: false,
+  collapsed: true,
   position: 'TR',
   collapsible: true,
   isDraggable: true,

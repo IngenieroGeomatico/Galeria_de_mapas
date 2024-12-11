@@ -111,9 +111,9 @@ function csvToGeoJson(csvString, long = "long", lat = "lat", WKT = false) {
                 feature.geometry = WKTToGeoJson(value);
             } else {
                 if (key === long) {
-                    geojsonLong = parseFloat(value);
+                    geojsonLong = parseFloat(value.replace(",", "."));
                 } else if (key === lat) {
-                    geojsonLat = parseFloat(value);
+                    geojsonLat = parseFloat(value.replace(",", "."));
                 } else {
                     feature.properties[key] = value;
                 }
