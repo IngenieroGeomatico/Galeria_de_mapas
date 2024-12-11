@@ -184,14 +184,18 @@ async function myFunctionInterpolateExtrapolate() {
     
 
     try {
-        VS_array = []
-        gjsonCapaSeleccionada.features.forEach(feature => {
-            VS_array.push(contarValoresenAtributos(feature, "V"))
-        })
-        Vs = Math.max(...VS_array);
-        if(Vs<10){
-            Vs = "0"+Vs.toString()
-        }
+        let date = new Date();
+        // Convertir la hora actual al huso horario de Madrid y restarle 1 hora
+        let options = { timeZone: 'Europe/Madrid' };
+        let madridTime = new Date(date.toLocaleString('en-US', options));
+        madridTime.setHours(madridTime.getHours() - 1);
+
+        // Formatear solo los dígitos de la hora sin AM/PM
+        let Vs = madridTime.toLocaleTimeString('en-US', { hour: '2-digit', hourCycle: 'h23' });
+        console.log('La hora en Madrid restándole 1 hora es: ' + Vs);
+        // if(Vs<10){
+        //     Vs = "0"+Vs.toString()
+        // }
         atributoH = "H" + Vs
         atributoV = "V" + Vs
         valorMagnitud = gjsonCapaSeleccionada.features[0].properties["MAGNITUD"]
@@ -221,7 +225,7 @@ async function myFunctionInterpolateExtrapolate() {
     try {
         var variogram = kriging.train(t, x, y, model, sigma2, alpha);
     } catch (error) {
-        M.toast.error('No existen los suficientes datos para realizar la operación', null, 2000);
+        M.toast.error('No existen los suficientes datos para realizar la operación o no existen datos para la hora actual', null, 2000);
         SVGCarga.hidden = true
         return
     }
