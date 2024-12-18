@@ -188,7 +188,7 @@ async function myFunctionInterpolateExtrapolate() {
         // Convertir la hora actual al huso horario de Madrid y restarle 1 hora
         let options = { timeZone: 'Europe/Madrid' };
         let madridTime = new Date(date.toLocaleString('en-US', options));
-        madridTime.setHours(madridTime.getHours() - 1);
+        madridTime.setHours(madridTime.getHours());
 
         // Formatear solo los dígitos de la hora sin AM/PM
         let Vs = madridTime.toLocaleTimeString('en-US', { hour: '2-digit', hourCycle: 'h23' });
