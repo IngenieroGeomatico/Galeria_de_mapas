@@ -190,14 +190,21 @@ async function myFunctionInterpolateExtrapolate() {
         let madridTime = new Date(date.toLocaleString('en-US', options));
         madridTime.setHours(madridTime.getHours());
 
+        let madridTime_1 = new Date(date.toLocaleString('en-US', options));
+        madridTime_1.setHours(madridTime.getHours()-1);
+
         // Formatear solo los dígitos de la hora sin AM/PM
         let Vs = madridTime.toLocaleTimeString('en-US', { hour: '2-digit', hourCycle: 'h23' });
+        let Vs_1 = madridTime_1.toLocaleTimeString('en-US', { hour: '2-digit', hourCycle: 'h23' });
         console.log('La hora en Madrid restándole 1 hora es: ' + Vs);
+
         // if(Vs<10){
         //     Vs = "0"+Vs.toString()
         // }
         atributoH = "H" + Vs
         atributoV = "V" + Vs
+        atributoH_1 = "H" + Vs_1
+        atributoV_1 = "V" + Vs_1
         valorMagnitud = gjsonCapaSeleccionada.features[0].properties["MAGNITUD"]
     } catch (error) {
         M.toast.error('No existen los suficientes datos para realizar la operación', null, 2000);
@@ -215,6 +222,15 @@ async function myFunctionInterpolateExtrapolate() {
             t.push(parseFloat(properties[atributoH]));
             x.push(geometry.coordinates[0]); // Longitud
             y.push(geometry.coordinates[1]); // Latitud
+
+        }else if(feature.properties[atributoV_1]=='V'){
+            properties = feature.properties;
+            geometry = feature.geometry;
+
+            t.push(parseFloat(properties[atributoH_1]));
+            x.push(geometry.coordinates[0]); // Longitud
+            y.push(geometry.coordinates[1]); // Latitud
+
         }else{
 
         }
