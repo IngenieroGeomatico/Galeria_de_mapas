@@ -201,8 +201,8 @@ async function myFunctionInterpolateExtrapolate() {
         // if(Vs<10){
         //     Vs = "0"+Vs.toString()
         // }
-        atributoH = "H" + Vs
-        atributoV = "V" + Vs
+        atributoH_0 = "H" + Vs
+        atributoV_0 = "V" + Vs
         atributoH_1 = "H" + Vs_1
         atributoV_1 = "V" + Vs_1
         valorMagnitud = gjsonCapaSeleccionada.features[0].properties["MAGNITUD"]
@@ -214,14 +214,16 @@ async function myFunctionInterpolateExtrapolate() {
 
     gjsonCapaSeleccionada.features.forEach(feature => {
         // console.log(feature.properties)
-        feature.properties["ultimoValor"] = feature.properties[atributoH]
-        if(feature.properties[atributoV]=='V'){
+        
+        if(feature.properties[atributoV_0]=='V'){
             properties = feature.properties;
             geometry = feature.geometry;
 
-            t.push(parseFloat(properties[atributoH]));
+            t.push(parseFloat(properties[atributoH_0]));
             x.push(geometry.coordinates[0]); // Longitud
             y.push(geometry.coordinates[1]); // Latitud
+
+            atributoH = atributoH_0
 
         }else if(feature.properties[atributoV_1]=='V'){
             properties = feature.properties;
@@ -231,9 +233,13 @@ async function myFunctionInterpolateExtrapolate() {
             x.push(geometry.coordinates[0]); // Longitud
             y.push(geometry.coordinates[1]); // Latitud
 
+            atributoH = atributoH_1
+
         }else{
 
         }
+
+        feature.properties["ultimoValor"] = feature.properties[atributoH]
     })
 
     var model = "exponential";
