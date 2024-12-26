@@ -236,7 +236,9 @@ async function myFunctionInterpolateExtrapolate() {
             atributoH = atributoH_1
 
         }else{
-
+            M.toast.warning('No existen datos validados para la franja horaria actual', null, 2000);
+            SVGCarga.hidden = true
+            atributoH = atributoH_0
         }
 
         feature.properties["ultimoValor"] = feature.properties[atributoH]
