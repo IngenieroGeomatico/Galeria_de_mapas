@@ -71,6 +71,99 @@ const layer_1929 = new M.layer.WMS({
 mapajs.addLayers([layer_1929,layer_1910]);
 
 
+const layerVectorialGJSON = new M.layer.GeoJSON(
+  {
+    name: "layerVectorialGJSON", 
+    source:{},
+    extract:true
+  },{
+    displayInLayerSwitcher:false
+  }
+);
+mapajs.addLayers(layerVectorialGJSON);
+
+estilo1 = new M.style.Generic({
+  point: {
+      // Definición atributos para puntos
+      radius: 7,
+
+      fill: {
+        color: 'orange',
+        opacity: 0.9,//Transparencia del punto
+      },
+      //Borde exterior
+      stroke: {
+          color: 'red',
+          width: 3,
+      },
+  },
+  polygon: {
+      // Definición atributos para polígonos
+      // Polígono rosa semitransparente con borde rojo de grosor dos
+      fill: {
+        color: 'red',
+        opacity: 0.7,
+    },
+    stroke: {
+        color: '#FF0000',
+        width: 0.9
+    }
+  },
+  line: {
+      // Definición atributos para líneas
+      fill: {
+        color: 'red',
+        opacity: 0.7,
+    },
+    stroke: {
+        color: '#FF0000',
+        width: 4
+    }
+  }
+});
+
+
+estilo2 = new M.style.Generic({
+  point: {
+      // Definición atributos para puntos
+      radius: 7,
+
+      fill: {
+        color: 'blue',
+        opacity: 0.9,//Transparencia del punto
+      },
+      //Borde exterior
+      stroke: {
+          color: 'rgb(0,0,100)',
+          width: 3,
+      },
+  },
+  polygon: {
+      // Definición atributos para polígonos
+      // Polígono rosa semitransparente con borde rojo de grosor dos
+      fill: {
+        color: 'red',
+        opacity: 0.7,
+    },
+    stroke: {
+        color: '#FF0000',
+        width: 0.9
+    }
+  },
+  line: {
+      // Definición atributos para líneas
+      fill: {
+        color: 'red',
+        opacity: 0.7,
+    },
+    stroke: {
+        color: '#FF0000',
+        width: 4
+    }
+  }
+});
+
+
 
 
 
@@ -90,7 +183,7 @@ const ext_LayerSwitcher = new M.plugin.Layerswitcher({
 mapajs.addPlugin(ext_LayerSwitcher);
 
 
-const mp_SM = new M.plugin.StoryMap({
+const mp_StoryMap = new M.plugin.StoryMap({
   collapsed: false,
   collapsible: true,
   position: 'TR',
@@ -105,4 +198,7 @@ const mp_SM = new M.plugin.StoryMap({
   delay: 2000,
 });
 
-mapajs.addPlugin(mp_SM);
+mapajs.addPlugin(mp_StoryMap);
+
+
+// https://www.lucesdebohemia.es/
