@@ -525,31 +525,35 @@ var StoryMapJSON = {
                                     <br>
                                     <br>
                                     <li> 
-
+                                        MAX.—¿Dónde estamos?
                                     </li>
                                     <br>
                                     <li> 
-                                       
+                                       DON LATINO.—Esta calle no tiene letrero.
                                     </li>
                                     <br>
                                     <li> 
-                                       
+                                       MAX.—Yo voy pisando vidrios rotos
                                     </li>
                                     <br>
                                     <li> 
-                                        
+                                        DON LATINO.—No ha hecho mala cachiza el honrado pueblo.
                                     </li>
                                     <br>
                                     <li> 
-
+                                        MAX.—¿Qué rumbo consagramos?
                                     </li>
                                     <br>
                                     <li> 
-
+                                        DON LATINO.—Déjate guiar.
                                     </li>
                                     <br>
                                     <li> 
-
+                                        MAX.—Condúceme a casa.
+                                    </li>
+                                    <br>
+                                    <li> 
+                                        DON LATINO.—Tenemos abierta La Buñolería Modernista.
                                     </li>
                                   
                                 </ul>
@@ -559,9 +563,9 @@ var StoryMapJSON = {
                                 <br><br><br><br> <br><br><br> <br><br><br>
                             `,
                     "js": `
-                            console.log('hola, estoy comenzando el cap 3');
+                            console.log('hola, estoy comenzando el cap 4');
     
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%2026%2C%20Madrid&type=portal&tip_via=CALLE&id=280790375085&portal=26&extension=null&outputformat=geojson",
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO SAN GINES 5%2C Madrid&type=portal&tip_via=PASEO&id=280790268423&portal=5&extension=null&outputformat=geojson",
                                     {
                                     }
                                 ).then(function (res) {
@@ -576,32 +580,191 @@ var StoryMapJSON = {
     
                                     layerVectorialGJSON.on(M.evt.LOAD, () => {
                                         mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(17)
+                                        mapajs.setZoom(18)
                                     }); 
                                 });
                             
                         `,
     
-                    },
+                },
+                {
+                        "html": `   <br><br><br><br>
+        
+                                    <ul>
+                                        <li> 
+                                            La Buñolería Modernista está abierta de manera ininterrumpida en el Pasadizo de San Ginés desde 1894. 
+                                            Fue llamada el “Maxim’s Golfo”, ya que cuando echaban el cierre todos los cafés y tabernas de Puerta del Sol, 
+                                            era el único establecimiento abierto que recogía entre sus vahos de aceite y de aguardiente 
+                                            y su café de recuelo a una clientela aterida y heterogénea que incluía madrugadores, bohemios, noctívagos 
+                                            y ratés
+                                        </li>
+                                        <br>
+                                        <li> 
+                                            Por ese pasadizo de San Ginés, que aún conserva los faroles, se acercan Max y Don Latino, asidos del brazo 
+                                            y tambaleantes, posiblemente, tras cerrar las tabernas de Puerta del Sol. El suelo lleno de vidrios rotos y 
+                                            el frío que empieza a calar el cuerpo desabrigado y destemplado por el alcohol de Max. 
+                                        </li>
+                                    </ul>
+        
+                                    <br><br><br><br> <br><br><br> <br><br><br>
+                                    <br><br><br><br> <br><br><br> <br><br><br>
+                                    <br><br><br><br> <br><br><br> <br><br><br>
+                                `,
+                        "js": `
+                                console.log('hola, estoy comenzando el cap 4');
+        
+                                M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO SAN GINES 5%2C Madrid&type=portal&tip_via=PASEO&id=280790268423&portal=5&extension=null&outputformat=geojson",
+                                        {
+                                        }
+                                    ).then(function (res) {
+                                        // Muestra un diálogo informativo con el resultado de la petición get
+                                        gjson = JSON.parse(res.text)
+        
+                                        layerVectorialGJSON.setStyle(estilo1)
+        
+                                        layerVectorialGJSON.clear()
+                                        layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                        layerVectorialGJSON.setSource(gjson)
+        
+                                        layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                            mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                            mapajs.setZoom(18)
+                                        }); 
+                                    });
+                                
+                            `,
+        
+                },
+                {
+                    "html": `   <br><br><br><br>
+    
+                                <ul>
+                                    <li> 
+                                        La Chocolatería San Ginés es una popular chocolatería de Madrid, fundada en 1894 y 
+                                        situada en el pasadizo de San Ginés, junto a la Puerta del Sol, tradicional local para la 
+                                        degustación de chocolate con churros.
+                                    </li>
+                                    <br>
+                                    <li> 
+                                        En el año 1890 se abrió el local para mesón y fonda en el pasadizo de San Ginés, y en 1894 se transformó en churrería.
+                                         Emplazado junto al Teatro Eslava, su fama empezó cuando la gente a la salida del teatro acostumbraba a tomar un 
+                                         chocolate con churros.3​ Popular lugar de reunión de noctámbulos, también fue más tarde lugar de cita para los 
+                                         que salían de la discoteca de Joy Eslava. Durante la Segunda República se conocía como “La Escondida”. 
+                                         Por su cercanía con la Puerta del Sol y su horario nocturno todo el año, es el lugar, si se tiene paciencia, 
+                                         donde se suele tomar el primer chocolate del Año Nuevo. 
+                                    </li>
+                                    <br>
+                                    <li> 
+                                        Conserva la estética de los cafés de final de siglo xix, distribuido en dos plantas con mesas de mármol blanco y 
+                                        mostrador revestido de azulejería.  La fachada de la chocolatería se eligió como uno de los pasos del recorrido 
+                                        cultural la noche de Max Estrella siguiendo la obra teatral Luces de Bohemia de Valle-Inclán.
+                                    </li>
+                                    <br>
+                                    <li> 
+                                        En 2010 se inauguró una chocolatería San Ginés en Tokio, en barrio de Shibuya, 
+                                        adaptando sus productos a los gustos nipones.
+                                    </li>
+                                </ul>
+    
+                                <br><br><br><br> <br><br><br> <br><br><br>
+                                <br><br><br><br> <br><br><br> <br><br><br>
+                                <br><br><br><br> <br><br><br> <br><br><br>
+                            `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 4');
+    
+                            gjson = { 
+                                "type": "FeatureCollection", 
+                                "features": [
+                                    {
+                                        "type": "Feature",
+                                        "geometry": {
+                                            "type": "Point",
+                                            "coordinates": [
+                                            -3.70682,
+                                            40.41683, 
+                                            ]
+                                        },
+                                        "properties": {
+                                            "Dirección": "Pasadizo de San Ginés, 5",
+                                            "Descripción": "Chocolatería San Ginés"
+                                        }
+                                    }
+                                ]
+                            }
+
+                            layerVectorialGJSON.setStyle(estilo2)
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(gjson)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(18)
+                            }); 
+                            
+                        `,
+    
+            },
             ]
         },
 
         {
             "title": "Escena Quinta",
             "subtitle": "",
-            "steps": [{
+            "steps": [
+                {
                 "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    Zaguán en el Ministerio de la Gobernación. Estantería con legajos.
+                                    Bancos al filo de la pared. Mesa con carpetas de badana mugrienta.
+                                    Aire de cueva, y olor frío de tabaco rancio. Guardias soñolientos.
+                                    Policías de la Secreta. —Hongos, garrotes, cuellos de celuloide,
+                                    grandes sortijas, lunares rizosos y flamencos—. Hay un viejo
+                                    chabacano —bisoñé y manguitos de percalina—, que escribe, y un
+                                    pollo chulapón de peinado reluciente, con brisas de perfumería, que
+                                    se pasea y dicta humeando un veguero. DON SERAFÍN, le dicen sus
+                                    obligados, y la voz de la calle Serafín el Bonito. —Leve tumulto.
+                                    Dando voces, la cabeza desnuda, humorista y lunático irrumpe MAX
+                                    ESTRELLA—. DON LATINO le guía por la manga, implorante y
+                                    suspirante. Detrás asoman los cascos de los GUARDIAS. Y en el
+                                    corredor, se agrupan bajo la luz de una candileja, pipas,
+                                    chalinas y melenas del modernismo.
                                 </li>
                                 <br>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¡Traigo detenida una pareja de guindillas!. Estaban
+                                    emborrachándose en una tasca, y los hice salir a darme escolta.
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                    SERAFÍN EL BONITO.—Corrección, señor mío.
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—No falto a ella, señor Delegado.
+                                </li>
+                                <br>
+                                <li> 
+                                    SERAFÍN EL BONITO.—Inspector.
+                                </li>
+                                 <br>
+                                <li> 
+                                    MAX.—Todo es uno y lo mismo.
+                                </li>
+                                 <br>
+                                <li> 
+                                    SERAFÍN EL BONITO.—¿Cómo se llama usted?
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—Mi nombre es Máximo Estrella. Mi seudónimo Mala Estrella.
+                                    Tengo el honor de no ser Académico
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
@@ -609,14 +772,169 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                 "js": `
-                        console.log('hola, estoy comenzando el cap 1');
-
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
-
-            },]
+                            console.log('hola, estoy comenzando el cap 5');
+    
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo1)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
+                            
+                        `,
+                },
+                {
+                    "html": `   <br><br><br><br>
+    
+                                <ul>
+                                    <li> 
+                                        En el año 1847 el inmueble fue ampliamente reorganizado en su interior para convertirlo en la sede del Ministerio 
+                                        de la Gobernación, aunque su planta baja sigue siendo utilizada como oficina central de Correos. 
+                                        Anteriormente había estado Gobernación en el Palacio de la calle Torrija (edificio que perteneció 
+                                        al Consejo Supremo de la Inquisición). En la calle de Carretas, 
+                                        hasta comienzos del siglo XX se podían depositar cartas en unos buzones con forma de cabeza de león.
+                                    </li>
+                                    <br>
+                                    <li> 
+                                        A mediados del siglo XIX la hora de la Puerta del Sol se indicaba en un reloj de la fachada de la iglesia del Buen Suceso. 
+                                        Este reloj con mecánica medieval (poseía una única manilla) tenía numerosos fallos mecánicos que irritaban 
+                                        a los madrileños de la época por su habitual irregularidad. Las salidas de postas y diligencias se regían por este reloj. 
+                                        Al ser derribado el hospital del Buen Suceso poco antes de la reforma de la Puerta del Sol, 
+                                        el reloj se trasladó a la Casa de Correos y se construyó una torre y un templete para su instalación en 1855. 
+                                        
+                                         
+                                    </li>
+                                    <br>
+                                    <li> 
+                                        El segundo reloj, actual, obra del destacado relojero español José Rodríguez Losada, se colocó bajo una torrecilla que 
+                                        es inaugurada el 19 de noviembre de 1866. El mal funcionamiento de este primer reloj queda patente en el conocido epigrama de la época:
+                                    </li>
+                                    <br>
+                                    <li> 
+                                        Este reló fatal, que hay en la Puerta del Sol
+                                        dijo un turco a un español,
+                                        ¿por qué anda siempre tan mal?
+                                        El turco con desparpajo contestó cual perro viejo:
+                                        este reló es el espejo del gobierno que hay debajo
+                                    </li>
+                                </ul>
+    
+                                <br><br><br><br> <br><br><br> <br><br><br>
+                                <br><br><br><br> <br><br><br> <br><br><br>
+                                <br><br><br><br> <br><br><br> <br><br><br>
+                            `,
+                    "js": `
+                                console.log('hola, estoy comenzando el cap 5');
+        
+                                M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
+                                        {
+                                        }
+                                    ).then(function (res) {
+                                        // Muestra un diálogo informativo con el resultado de la petición get
+                                        gjson = JSON.parse(res.text)
+        
+                                        layerVectorialGJSON.setStyle(estilo1)
+        
+                                        layerVectorialGJSON.clear()
+                                        layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                        layerVectorialGJSON.setSource(gjson)
+        
+                                        layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                            mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                            mapajs.setZoom(18)
+                                        }); 
+                                    });
+                                
+                            `,
+                },
+                {
+                        "html": `   <br><br><br><br>
+        
+                                    <ul>
+                                        <li> 
+                                            El 14 de abril de 1931 se produce la proclamación de la Segunda República española, 
+                                            y la Puerta del Sol fue testigo del cambio de poder y de las celebraciones populares por la proclamación de 
+                                            la Segunda República, por lo que muchos madrileños se acercaron a la plaza con el objeto de celebrar 
+                                            y adquirir nuevas sobre el evento.
+                                        </li>
+                                        <br>
+                                        <li> 
+                                            En fotografías de la época se puede ver cómo la aglomeración de personas sube a los techos de los tranvías y quioscos.
+                                            La multitud era tanta que los miembros del nuevo gobierno que se acercaban en coche a la Casa de Correos (Gobernación) 
+                                            tuvieron que hacer el trayecto desde la Puerta de Alcalá a Sol en dos horas. 
+                                            Al llegar a las puertas principales de Gobernación se encuentran con unos guardias civiles, 
+                                            que vacilantes no les permiten el paso. Maura grita: “¡Señores, paso al gobierno de la República!”, 
+                                            justo en ese instante desde uno de los balcones ondeaba la bandera republicana.
+                                        </li>
+                                        <br>
+                                        <li> 
+                                            Después de la Guerra Civil la Casa de Correos se convirtió desde el edificio de Gobernación 
+                                            (Ministerio de Gobernación) en la Dirección General de Seguridad (DGS). En la época del franquismo (1936-1975) 
+                                            era imposible hacer manifestaciones delante del edificio y sus sótanos subterráneos albergaban prisiones, 
+                                            donde se detenía y se torturaba a miembros de la oposición clandestina al régimen.
+                                        </li>
+                                        <br>
+                                        <li> 
+                                            Tras la llegada de la democracia con la aprobación de la Constitución española de 1978 
+                                            y el Estado de las Autonomías, el 21 de diciembre de 1984 la Comunidad Autónoma de Madrid 
+                                            alcanzó un acuerdo con el Ministerio del Interior para realizar un intercambio de edificios, 
+                                            entre los que se incluía la Real Casa de Correos para ser transferido a la región madrileña. 
+                                            El 12 de marzo de 1985, se hizo oficial el traspaso con el objetivo de convertir el edificio 
+                                            en la sede de la presidencia regional.
+                                        </li>
+                                    </ul>
+        
+                                    <br><br><br><br> <br><br><br> <br><br><br>
+                                    <br><br><br><br> <br><br><br> <br><br><br>
+                                    <br><br><br><br> <br><br><br> <br><br><br>
+                                `,
+                        "js": `
+                                console.log('hola, estoy comenzando el cap 4');
+        
+                                gjson = { 
+                                    "type": "FeatureCollection", 
+                                    "features": [
+                                        {
+                                        "type": "Feature",
+                                        "geometry": {
+                                            "type": "Point",
+                                            "coordinates": [-3.7036,40.4166]
+                                        },
+                                        "properties": {
+                                            "Dirección": "Puerta del Sol, 7",
+                                            "Descripción": "Casa real de correos"
+                                        }
+                                        }
+                                    ]
+                                }
+    
+                                layerVectorialGJSON.setStyle(estilo2)
+    
+                                layerVectorialGJSON.clear()
+                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                layerVectorialGJSON.setSource(gjson)
+    
+                                layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                    mapajs.setZoom(18)
+                                }); 
+                                
+                            `,
+        
+                },
+            ]
         },
 
         {
@@ -634,6 +952,30 @@ var StoryMapJSON = {
                                 <li> 
                                     
                                 </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
                               
                             </ul>
 
@@ -642,7 +984,7 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                 "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                        console.log('hola, estoy comenzando el cap 6');
 
                         mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
                         mapajs.setZoom(13)
