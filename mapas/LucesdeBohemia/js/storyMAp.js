@@ -1224,35 +1224,65 @@ var StoryMapJSON = {
                                 <br>
                                 <br>
                                 <li> 
-                                  
+                                  (MAX ESTRELLA aparece en la puerta, pálido, arañado, la corbata
+                                    torcida, la expresión altanera y alocada. Detrás, abotonándose los
+                                    calzones, aparece EL UJIER.)
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   EL UJIER.—Deténgase usted, caballero.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—No me ponga usted la mano encima.
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   EL UJIER.—Salga usted sin hacer desacato
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   MAX.—Anúncieme usted al Ministro.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    EL UJIER.—No está visible.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¡Ah! Es usted un gran lógico. Pero estará audible.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    EL UJIER.—Retírese, caballero. Éstas no son horas de audiencia.
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—Anúncieme usted.
+                                </li>
+                                <br>
+                                <li> 
+                                    EL UJIER.—Es la orden… Y no vale ponerse pelmazo, caballero.
+                                </li>
+                                <br>
+                                <li> 
+                                    DIEGUITO.—Fernández, deje usted a ese caballero que pase.
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—¡Al fin doy con un indígena civilizado!
+                                </li>
+                                <br>
+                                <li> 
+                                    DIEGUITO.—Amigo Mala Estrella, usted perdonará que sólo un
+                                    momento me ponga a sus órdenes. Me habló por usted la Redacción de El
+                                    Popular. Allí le quieren a usted. A usted le quieren y le admiran en todas
+                                    partes. Usted me deja mandado aquí y donde sea. No me olvide… ¡Quién
+                                    sabe!… Yo tengo la nostalgia del periodismo… Pienso hacer algo… Hace
+                                    tiempo acaricio la idea de una hoja volandera, un periódico ligero, festivo,
+                                    espuma de champaña, fuego de virutas. Cuento con usted. Adiós,
+                                    maestro. ¡Deploro que la ocasión de conocernos haya venido de suceso tan
+                                    desagradable!.
                                 </li>
                             </ul>
 
@@ -1261,13 +1291,29 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                     "js": `
-                            console.log('hola, estoy comenzando el cap 7');
-
-                            layerVectorialGJSON.clear()
-                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                            mapajs.setZoom(13)
+                            console.log('hola, estoy comenzando el cap 8');
+    
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo1)
+                                    layerVectorialGJSON_Madrid.setZIndex(49)
+                                    layerVectorialGJSON_Libro.setZIndex(50)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
+                            
                         `,
                 },
             ]
@@ -1282,7 +1328,17 @@ var StoryMapJSON = {
 
                             <ul>
                                 <li> 
-                                    L
+                                    Un café que prolongan empañados espejos. Mesas de mármol.
+                                    Divanes rojos. El mostrador en el fondo, y detrás un vejete rubiales,
+                                    destacado el busto sobre la diversa botillería. El Café tiene piano y
+                                    violín. Las sombras y la música flotan en el vaho de humo, y en el
+                                    lívido temblor de los arcos voltaicos. Los espejos multiplicadores
+                                    están llenos de un interés folletinesco, en su fondo, con una geometría
+                                    absurda, extravaga el Café. El compás canalla de la música, las
+                                    luces en el fondo de los espejos, el vaho de humo penetrado del
+                                    temblor de los arcos voltaicos, cifran su diversidad en una sola
+                                    expresión. Entran extraños, y son de repente transfigurados en
+                                    aquel triple ritmo, MALA ESTRELLA y DON LATINO.
                                 </li>
                                 <br>
                                 <br>
