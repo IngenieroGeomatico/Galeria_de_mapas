@@ -133,6 +133,8 @@ var StoryMapJSON = {
                             }
 
                             layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
 
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -222,6 +224,8 @@ var StoryMapJSON = {
                                 gjson = JSON.parse(res.text)
 
                                 layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
 
                                 layerVectorialGJSON.clear()
                                 layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -279,6 +283,8 @@ var StoryMapJSON = {
                                 gjson = JSON.parse(res.text)
 
                                 layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
 
                                 layerVectorialGJSON.clear()
                                 layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -339,6 +345,8 @@ var StoryMapJSON = {
                                 gjson = JSON.parse(res.text)
 
                                 layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
 
                                 layerVectorialGJSON.clear()
                                 layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -363,7 +371,7 @@ var StoryMapJSON = {
             "subtitle": "",
             "steps": [
                 {
-                "html": `   <br><br><br><br>
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
@@ -409,7 +417,7 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
+                    "js": `
                         console.log('hola, estoy comenzando el cap 3');
 
                         M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%2026%2C%20Madrid&type=portal&tip_via=CALLE&id=280790375085&portal=26&extension=null&outputformat=geojson",
@@ -420,6 +428,8 @@ var StoryMapJSON = {
                                 gjson = JSON.parse(res.text)
 
                                 layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
 
                                 layerVectorialGJSON.clear()
                                 layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -484,6 +494,8 @@ var StoryMapJSON = {
                                     gjson = JSON.parse(res.text)
     
                                     layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
     
                                     layerVectorialGJSON.clear()
                                     layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -496,10 +508,10 @@ var StoryMapJSON = {
                                 });
                             
                         `,
-    
+
                 },
-        
-             ]
+
+            ]
         },
 
         {
@@ -573,6 +585,8 @@ var StoryMapJSON = {
                                     gjson = JSON.parse(res.text)
     
                                     layerVectorialGJSON.setStyle(estilo1)
+                                    layerVectorialGJSON_Madrid.setZIndex(49)
+                                    layerVectorialGJSON_Libro.setZIndex(50)
     
                                     layerVectorialGJSON.clear()
                                     layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -585,10 +599,10 @@ var StoryMapJSON = {
                                 });
                             
                         `,
-    
+
                 },
                 {
-                        "html": `   <br><br><br><br>
+                    "html": `   <br><br><br><br>
         
                                     <ul>
                                         <li> 
@@ -610,7 +624,7 @@ var StoryMapJSON = {
                                     <br><br><br><br> <br><br><br> <br><br><br>
                                     <br><br><br><br> <br><br><br> <br><br><br>
                                 `,
-                        "js": `
+                    "js": `
                                 console.log('hola, estoy comenzando el cap 4');
         
                                 M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO SAN GINES 5%2C Madrid&type=portal&tip_via=PASEO&id=280790268423&portal=5&extension=null&outputformat=geojson",
@@ -621,6 +635,8 @@ var StoryMapJSON = {
                                         gjson = JSON.parse(res.text)
         
                                         layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
         
                                         layerVectorialGJSON.clear()
                                         layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -633,7 +649,7 @@ var StoryMapJSON = {
                                     });
                                 
                             `,
-        
+
                 },
                 {
                     "html": `   <br><br><br><br>
@@ -694,6 +710,8 @@ var StoryMapJSON = {
                             }
 
                             layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
 
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -705,8 +723,8 @@ var StoryMapJSON = {
                             }); 
                             
                         `,
-    
-            },
+
+                },
             ]
         },
 
@@ -715,7 +733,7 @@ var StoryMapJSON = {
             "subtitle": "",
             "steps": [
                 {
-                "html": `   <br><br><br><br>
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
@@ -771,7 +789,7 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
+                    "js": `
                             console.log('hola, estoy comenzando el cap 5');
     
                             M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
@@ -782,6 +800,8 @@ var StoryMapJSON = {
                                     gjson = JSON.parse(res.text)
     
                                     layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
     
                                     layerVectorialGJSON.clear()
                                     layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -846,6 +866,8 @@ var StoryMapJSON = {
                                         gjson = JSON.parse(res.text)
         
                                         layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
         
                                         layerVectorialGJSON.clear()
                                         layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -860,7 +882,7 @@ var StoryMapJSON = {
                             `,
                 },
                 {
-                        "html": `   <br><br><br><br>
+                    "html": `   <br><br><br><br>
         
                                     <ul>
                                         <li> 
@@ -900,7 +922,7 @@ var StoryMapJSON = {
                                     <br><br><br><br> <br><br><br> <br><br><br>
                                     <br><br><br><br> <br><br><br> <br><br><br>
                                 `,
-                        "js": `
+                    "js": `
                                 console.log('hola, estoy comenzando el cap 4');
         
                                 gjson = { 
@@ -921,6 +943,8 @@ var StoryMapJSON = {
                                 }
     
                                 layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
     
                                 layerVectorialGJSON.clear()
                                 layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -932,7 +956,7 @@ var StoryMapJSON = {
                                 }); 
                                 
                             `,
-        
+
                 },
             ]
         },
@@ -940,327 +964,753 @@ var StoryMapJSON = {
         {
             "title": "Escena Sexta",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    El calabozo. Sótano mal alumbrado por una candileja. En la sombra,
+                                    se mueve el bulto de un hombre. —Blusa, tapabocas y alpargatas—.
+                                    Pasea hablando solo. Repentinamente se abre la puerta. MAX
+                                    ESTRELLA, empujado y trompicando, rueda al fondo del calabozo. Se
+                                    cierra de golpe la puerta.
                                 </li>
                                 <br>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¡Canallas! ¡Asalariados! ¡Cobardes!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    VOZ FUERA.—¡Aún vas a llevar mancuerda!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¡Esbirro!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    (Sale de la tiniebla el bulto del hombre morador del calabozo. Bajo la
+                                    luz se le ve esposado, con la cara llena de sangre.)
+                                </li>
+                                 <br>
+                                <li> 
+                                    EL PRESO.—¡Buenas noches!
+                                </li>
+                                 <br>
+                                <li> 
+                                    MAX.—¿No estoy solo?
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    EL PRESO.—Así parece.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¿Catalán?
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    EL PRESO.—De todas partes
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                    MAX.—¡Paria!… Solamente los obreros catalanes aguijan su rebeldía,
+                                    con ese denigrante epíteto. Paria, en bocas como la tuya, es una espuela.
+                                    Pronto llegará vuestra hora.
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 6');
-
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
-
-            },]
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 6');
+    
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo1)
+                                    layerVectorialGJSON_Madrid.setZIndex(49)
+                                    layerVectorialGJSON_Libro.setZIndex(50)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
+                            
+                        `,
+                },
+            
+            ]
         },
 
         {
             "title": "Escena Séptima",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    La redacción de El Popular: Sala baja con piso de baldosas: En el
+                                    centro una mesa larga y negra, rodeada de sillas vacías, que marcan
+                                    los puestos, ante roídas carpetas, y rimeros de cuartillas que destacan
+                                    su blancura en el círculo luminoso y verdoso de una lámpara con
+                                    enagüillas. Al extremo fuma y escribe un hombre calvo, el eterno
+                                    redactor del perfil triste, el gabán con flecos, los dedos de gancho, y
+                                    las uñas entintadas. El hombre lógico y mítico enciende el cigarro
+                                    apagado. Se abre la mampara, y el grillo de un timbre rasga el
+                                    silencio. Asoma el conserje, vejete renegado, bigotudo, tripón,
+                                    parejo de aquellos bizarros coroneles que en las procesiones se caen
+                                    del caballo. Un enorme parecido que extravaga.
                                 </li>
                                 <br>
                                 <br>
                                 <li> 
-                                    
+                                    EL CONSERJE.—Ahí está Don Latino de Hispalis, con otros capitalistas
+                                    de su cuerda. Vienen preguntando por el Señor Director. Les he dicho
+                                    que solamente estaba usted en la casa. ¿Los recibe usted, Don Filiberto?
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                    DON FILIBERTO.—Que pasen.
+                                </li>
+                                <br>
+                                <li> 
+                                    (Sigue escribiendo. EL CONSERJE sale, y queda batiente la verde
+                                    mampara que proyecta un recuerdo de garitos y naipes. Entra el
+                                    cotarro modernista, greñas, pipas, gabanes repelados[760], y alguna
+                                    capa. El periodista calvo levanta los anteojos a la frente, requiere el
+                                    cigarro, y se da importancia.)(Sigue escribiendo. EL CONSERJE sale, y queda batiente la verde
+                                    mampara que proyecta un recuerdo de garitos y naipes. Entra el
+                                    cotarro modernista, greñas, pipas, gabanes repelados[760], y alguna
+                                    capa. El periodista calvo levanta los anteojos a la frente, requiere el
+                                    cigarro, y se da importancia.)
+                                </li>
+                                <br>
+                                <li> 
+                                    DON FILIBERTO.—¡Caballeros y hombres buenos, adelante! ¿Ustedes me
+                                    dirán lo que desean de mí y del Journal?
+                                </li>
+                                <br>
+                                <li> 
+                                    DORIO DE GÁDEX.—En España sigue reinando Carlos II
+                                </li>
+                                <br>
+                                <li> 
+                                    DON FILIBERTO.—¡Válgame un santo de palo!. ¿Nuestro gran poeta estaría curda?
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—Una copa de más, no justifica esa violación de los derechos individuales.
+                                </li>
+                                <br>
+                                <li> 
+                                    DON FILIBERTO.—Max Estrella también es amigo nuestro. ¡Válgame un
+                                    santo de palo! El Señor Director, cuando a esta hora falta, ya no viene…
+                                    Ustedes conocen cómo se hace un periódico. ¡El Director, es siempre un
+                                    tirano…! Yo, sin consultarle, no me decido a recoger en nuestras columnas
+                                    la protesta de ustedes. Desconozco la política del periódico con la Dirección
+                                    de Seguridad… Y el relato de ustedes, francamente, me parece un poco
+                                    exagerado.
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
 
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-            },]
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
+                                    Localización imposible por falta de indicios en el texto.
+                                </li>
+                                <br>
+                                <br>
+                                <li> 
+                                    Los periódicos de la época se nutrían de artículos de fondo, sesudos y pesados, graves y 
+                                    doctrinales, de gacetillas intencionadas, pues la prensa de entonces estaba estrechamente 
+                                    unida a la vida política, tanto era así que los periódicos solían estar auspiciados 
+                                    por los distintos partidos políticos, por eso muchas páginas de la prensa estaban 
+                                    sometidas al poder, ausentes de crítica y cargadas de conformismo.
+                                </li>
+                                <br>
+                                <li> 
+                                    Durante la huelga general de agosto de 1917, los periódicos debían limitarse a publicar las notas 
+                                    de prensa que emitían las Capitanías Generales y, paralelamente, se llevó a cabo, por parte de las autoridades, 
+                                    la interrupción del servicio telegráfico y telefónico para impedir el flujo de información entre provincias.
+                                </li>
+                                <br>
+                                <li> 
+                                  Los periódicos se leían y comentaban en las casas, en los cafés, los círculos, los casinos y los ateneos; sus páginas se completaban 
+                                  con folletines novelescos, las reseñas taurinas, la información de sucesos, las caricaturas y viñetas satíricas, 
+                                  la cartelera y la crítica teatral… todo ello gracias a la naciente publicidad comercial. 
+                                </li>
+                                <br>
+                                <li> 
+                                   La vinculación estrecha de LUCES DE BOHEMIA con la prensa no se circunscribe solo su contenido, sino que la propia 
+                                   obra vio la luz por entregas en la prensa, concretamente en la revista España, entre julio y octubre de 1920. 
+                                   La vinculación estrecha de LUCES DE BOHEMIA con la prensa no se circunscribe solo su contenido, sino que la propia obra vio la luz por entregas en la prensa, 
+                                   concretamente en la revista España, entre julio y octubre de 1920. 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    Para su edición en libro en 1924, el autor añadió las escenas II, VI y XI, 
+                                   con ellas se intensifica la deformación y la naturaleza de antihéroe de Max Estrella y también hay una mayor crítica social y 
+                                   denuncia de los modos en que el poder administra la represión.
+                                </li>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
 
         {
             "title": "Escena Octava",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                   Secretaría particular de Su Excelencia. Olor de brevas habanas,
+                                    malos cuadros, lujo aparente y provinciano. La estancia tiene un
+                                    recuerdo partido por medio, de oficina y sala de círculo con
+                                    timba. De repente el grillo del teléfono se orina en el gran
+                                    regazo burocrático[830]. Y DIEGUITO GARCÍA —Don Diego del Corral,
+                                    en la Revista de Tribunales y Estrados — pega tres brincos y
+                                    se planta la trompetilla en la oreja.
                                 </li>
                                 <br>
+                                <br>
+                                <li> 
+                                  
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
                                 <br>
                                 <li> 
                                     
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
 
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-            },]
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
 
         {
             "title": "Escena Novena",
             "subtitle": "",
-            "steps": []
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
+                                    L
+                                </li>
+                                <br>
+                                <br>
+                                <li> 
+                                  
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 9');
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
 
         {
             "title": "Escena Décima",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    L
                                 </li>
                                 <br>
+                                <br>
+                                <li> 
+                                  
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
                                 <br>
                                 <li> 
                                     
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
 
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-            },]
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
 
         {
             "title": "Escena Undécima",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    L
                                 </li>
                                 <br>
+                                <br>
+                                <li> 
+                                  
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
                                 <br>
                                 <li> 
                                     
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
 
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-            },]
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
 
         {
             "title": "Escena Doudécima",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    L
                                 </li>
                                 <br>
+                                <br>
+                                <li> 
+                                  
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
                                 <br>
                                 <li> 
                                     
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
 
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-            },]
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
 
         {
             "title": "Escena Decimatercia",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    L
                                 </li>
                                 <br>
+                                <br>
+                                <li> 
+                                  
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
                                 <br>
                                 <li> 
                                     
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
 
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-            },]
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
 
         {
             "title": "Escena Decimacuarta",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    L
                                 </li>
                                 <br>
+                                <br>
+                                <li> 
+                                  
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
                                 <br>
                                 <li> 
                                     
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
 
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-            },]
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
         {
             "title": "Escena Última",
             "subtitle": "",
-            "steps": [{
-                "html": `   <br><br><br><br>
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
 
                             <ul>
                                 <li> 
-                                        
+                                    L
                                 </li>
                                 <br>
+                                <br>
+                                <li> 
+                                  
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
                                 <br>
                                 <li> 
                                     
                                 </li>
-                              
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                   
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    
+                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
-                "js": `
-                        console.log('hola, estoy comenzando el cap 1');
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 7');
 
-                        mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                        mapajs.setZoom(13)
-                        
-                    `,
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-            },]
+                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            mapajs.setZoom(13)
+                        `,
+                },
+            ]
         },
 
 

@@ -549,6 +549,7 @@ const layerVectorialGJSON = new M.layer.GeoJSON(
 }
 );
 mapajs.addLayers(layerVectorialGJSON);
+layerVectorialGJSON.setZIndex(100)
 
 
 
