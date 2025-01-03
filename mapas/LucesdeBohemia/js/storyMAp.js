@@ -420,7 +420,7 @@ var StoryMapJSON = {
                     "js": `
                         console.log('hola, estoy comenzando el cap 3');
 
-                        M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%2026%2C%20Madrid&type=portal&tip_via=CALLE&id=280790375085&portal=26&extension=null&outputformat=geojson",
+                        M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%202%2C%20Madrid&type=portal&tip_via=CALLE&id=2280790254631&portal=2&extension=null&outputformat=geojson",
                                 {
                                 }
                             ).then(function (res) {
@@ -486,7 +486,7 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 3');
     
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%2026%2C%20Madrid&type=portal&tip_via=CALLE&id=280790375085&portal=26&extension=null&outputformat=geojson",
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%202%2C%20Madrid&type=portal&tip_via=CALLE&id=2280790254631&portal=2&extension=null&outputformat=geojson",
                                     {
                                     }
                                 ).then(function (res) {
@@ -635,8 +635,8 @@ var StoryMapJSON = {
                                         gjson = JSON.parse(res.text)
         
                                         layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
+                                        layerVectorialGJSON_Madrid.setZIndex(49)
+                                        layerVectorialGJSON_Libro.setZIndex(50)
         
                                         layerVectorialGJSON.clear()
                                         layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
@@ -689,38 +689,26 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 4');
     
-                            gjson = { 
-                                "type": "FeatureCollection", 
-                                "features": [
-                                    {
-                                        "type": "Feature",
-                                        "geometry": {
-                                            "type": "Point",
-                                            "coordinates": [
-                                            -3.70682,
-                                            40.41683, 
-                                            ]
-                                        },
-                                        "properties": {
-                                            "Dirección": "Pasadizo de San Ginés, 5",
-                                            "Descripción": "Chocolatería San Ginés"
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO SAN GINES 5%2C Madrid&type=portal&tip_via=PASEO&id=280790268423&portal=5&extension=null&outputformat=geojson",
+                                        {
                                         }
-                                    }
-                                ]
-                            }
-
-                            layerVectorialGJSON.setStyle(estilo2)
-                            layerVectorialGJSON_Madrid.setZIndex(50)
-                            layerVectorialGJSON_Libro.setZIndex(49)
-
-                            layerVectorialGJSON.clear()
-                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                            layerVectorialGJSON.setSource(gjson)
-
-                            layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                mapajs.setZoom(18)
-                            }); 
+                                    ).then(function (res) {
+                                        // Muestra un diálogo informativo con el resultado de la petición get
+                                        gjson = JSON.parse(res.text)
+        
+                                        layerVectorialGJSON.setStyle(estilo2)
+                                        layerVectorialGJSON_Madrid.setZIndex(50)
+                                        layerVectorialGJSON_Libro.setZIndex(49)
+        
+                                        layerVectorialGJSON.clear()
+                                        layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                        layerVectorialGJSON.setSource(gjson)
+        
+                                        layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                            mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                            mapajs.setZoom(18)
+                                        }); 
+                            });
                             
                         `,
 
@@ -923,37 +911,28 @@ var StoryMapJSON = {
                                     <br><br><br><br> <br><br><br> <br><br><br>
                                 `,
                     "js": `
-                                console.log('hola, estoy comenzando el cap 4');
+                                console.log('hola, estoy comenzando el cap 5');
         
-                                gjson = { 
-                                    "type": "FeatureCollection", 
-                                    "features": [
-                                        {
-                                        "type": "Feature",
-                                        "geometry": {
-                                            "type": "Point",
-                                            "coordinates": [-3.7036,40.4166]
-                                        },
-                                        "properties": {
-                                            "Dirección": "Puerta del Sol, 7",
-                                            "Descripción": "Casa real de correos"
-                                        }
-                                        }
-                                    ]
-                                }
+                                M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
     
-                                layerVectorialGJSON.setStyle(estilo2)
-                            layerVectorialGJSON_Madrid.setZIndex(50)
-                            layerVectorialGJSON_Libro.setZIndex(49)
+                                    layerVectorialGJSON.setStyle(estilo2)
+                                layerVectorialGJSON_Madrid.setZIndex(50)
+                                layerVectorialGJSON_Libro.setZIndex(49)
     
-                                layerVectorialGJSON.clear()
-                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                layerVectorialGJSON.setSource(gjson)
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
     
-                                layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                    mapajs.setZoom(18)
-                                }); 
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
                                 
                             `,
 
@@ -1343,35 +1322,49 @@ var StoryMapJSON = {
                                 <br>
                                 <br>
                                 <li> 
-                                  
+                                  MAX.—¿Qué tierra pisamos?
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   DON LATINO.—El Café Colón.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—Mira si está Rubén. Suele ponerse enfrente de los músicos.
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   DON LATINO.—Allá está como un cerdo triste
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   MAX.—Vamos a su lado, Latino. Muerto yo, el cetro de la poesía pasa a ese negro
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    DON LATINO.—No me encargues de ser tu testamentario.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¡Es un gran poeta!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¡Merecías ser el barbero de Maura!
+                                </li>
+                                <br>
+                                <li> 
+                                    (Por entre sillas y mármoles llegan al rincón donde está sentado y
+                                    silencioso RUBÉN DARÍO. Ante aquella aparición, el poeta siente la
+                                    amargura de la vida, y con gesto egoísta de niño enfadado, cierra losojos, 
+                                    y bebe un sorbo de su copa de ajenjo. Finalmente, su
+                                    máscara de ídolo se anima con una sonrisa cargada de humedad. El
+                                    ciego se detiene ante la mesa y levanta su brazo, con magno ademán
+                                    de estatua cesárea.)
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—¡Salud hermano, si menor en años, mayor en prez!
                                 </li>
                             </ul>
 
@@ -1382,11 +1375,181 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 9');
 
-                            layerVectorialGJSON.clear()
-                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20ALCALA%2014%2C%20Madrid&type=portal&tip_via=CALLE&id=280790118799&portal=14&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo1)
+                                    layerVectorialGJSON_Madrid.setZIndex(49)
+                                    layerVectorialGJSON_Libro.setZIndex(50)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
+                        `,
+                },
+                {
+                    "html": `   <br><br><br><br>
 
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                            mapajs.setZoom(13)
+                            <ul>
+                                <li> 
+                                    Ahora pisa el Café Colón presidido por el ídolo índico, maestro del modernismo y de su estilo idealista, 
+                                    Rubén Darío. Al cruzar el dintel, Max y Latino son transfigurados por el triple ritmo de la luz en los 
+                                    “empañados espejos” multiplicadores, del “compás canalla de la música” y del “vaho de humo penetrado del 
+                                    temblor de los arcos voltaicos” da a toda la escena una geometría absurda. 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    Por la descripción que hace Valle-Inclán en la acotación, podría tratarse del Café Universal que 
+                                    estaba en el número 14 de la Calle de Alcalá. 
+                                </li>
+                                <br>
+                                 <br>
+                                <li> 
+                                    Aquí Max, la Mala Estrella es “Estrella resplandeciente”, y Rubén lo elogia como un San Martín de Tours pues viene 
+                                    a compartir su capa trasmudada en cena con él. Max gasta el dinero de los “reptiles”y, por un momento, 
+                                    gracias al sortilegio del alcohol y de la música de opereta acentuada por las cucharillas en los vasos, 
+                                    los tres desterrados vuelven a su paraíso y, hablando en francés “recuerdan y proyectan las luces de 
+                                    la fiesta divina y mortal. “¡París! ¡Cabarets!, ¡Ilusión! y en el ritmo de las frases, desfila con su pata coja, 
+                                    Papá Verlaine.” 
+                                </li>
+                                <br>
+                                <li> 
+                                    Los fragmentos modernistas que se esparcen en LDB contribuyen a dar la impresión de gente que vive enajenada de literatura,
+                                    esclava de su pequeña cultura, de su erudición en versos y desdichas. Pero donde podemos apreciar más ceñidamente cómo 
+                                    el habla sirve para retratar con indelebles apuntes una personalidad, es en la aparición de Rubén Darío. 
+                                    El poeta nicaragüense se mueve, en gran parte en un café, bebiendo, lejano, ausente, forcejeando por 
+                                    «distinguir eses y cedas».
+                                </li>
+                                <br>
+                                <li> 
+                                    Y el gran recurso de su diálogo es repetir copiosamente la palabreja alta de la época: «Admirable».
+                                </li>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 9');
+
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20ALCALA%2014%2C%20Madrid&type=portal&tip_via=CALLE&id=280790118799&portal=14&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo1)
+                                    layerVectorialGJSON_Madrid.setZIndex(49)
+                                    layerVectorialGJSON_Libro.setZIndex(50)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
+                        `,
+                },
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
+                                    Entre los años 1908 y 1914 Ramón María del Valle Inclán tuvo su importante tertulia en este café con música con 
+                                    la asistencia de José Augusto Martínez “Azorín”, Rubén Darío, Santiago Rusiñol Prats, Julio Romero de Torres, Pío y 
+                                    Ricardo Baroja Nessi, José Gutiérrez Solana y el joven Rafael de Penagos Zalabardo, entre otros muchos. 
+                                    
+                                </li>
+                                <br>
+                                <li> 
+                                    A medida que la tertulia de Valle Inclán tomaba nombre y resonancia, muchos eran los que a ella se acercaban 
+                                    para escuchar o intervenir, mientras la música sonaba. Esto dio motivo a cierta confrontación entre melómanos y 
+                                    tertulianos hasta que un día Valle Inclán, que se distinguía entonces por su falta de oído musical, con voz áspera y 
+                                    sonora, gritó: 
+                                </li>
+                                <br>
+                                <li> 
+                                   ¡Que se calle Wagner, que no deja que se me oiga! Pero en aquella disputa ganó el alemán.
+                                </li>
+                                <br>
+                                <li> 
+                                    No fue en éste, sino en otro café donde se produjo el lance que dejaría manco a Valle-Inclán. 
+                                    Así lo cuenta Ramón Gómez de la Serna:
+                                </li>
+                                <br>
+                                <li> 
+                                  En el Café de la Montaña (entre la calle de Alcalá y la carrera de San Jerónimo), que es donde se reunían Valle, 
+                                  Benavente, Manuel Bueno, Fernández Bahamonte, Palomero y Ricardo Baroja, se puso a discutir aquel duelo pendiente. 
+                                </li>
+                                <br>
+                                <li> 
+                                  - Es inútil que traten ustedes ese duelo – dijo Manuel Bueno-. 
+                                    No puede verificarse porque Leal da Cámara no tiene edad para batirse.
+                                </li>
+                                <br>
+                                <li> 
+                                  - No zea uzted majadero, que uzted no zabe una palabra de ezo- replicó Valle-Inclán.
+                                </li>
+                                 <br>
+                                <li> 
+                                    Manuel Bueno, al oírse insultado así, dio un paso atrás y levantó en el aire su bastón con barra de hierro.
+                                    Valle agarró una botella de agua por el cuello, como si manejase un as de bastos, y, llenando de agua a todos, 
+                                    dio lugar a que Manuel Bueno descargara el bastonazo; 
+                                    pero con tanta mala fortuna que le incrustó en la carne el gemelo del puño. 
+                                </li>
+                                 <br>
+                                <li> 
+                                  Todo se arregló de momento, pero al día siguiente se gangrenaba la pequeña herida y el médico dijo a Ruiz Castillo y 
+                                  a Benavente que había que cortar el brazo. Se consultó con don Ramón y éste dijo que sí, que lo amputasen, 
+                                  pero sin cloroformizarle, y hasta hay hasta quien dice que se cortó parte de la barba para ver bien la operación, 
+                                  añadiendo con mayor exageración que hubo que rectificar y cortarle por más arriba, 
+                                  ¡presenciando también don Ramón el segundocorte operatorio fumándose un puro! 
+                                </li>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 9');
+
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20SAN%20JERONIMO%204%2C%20Madrid&type=portal&tip_via=CALLE&id=280790179172&portal=4&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo2)
+                                    layerVectorialGJSON_Madrid.setZIndex(50)
+                                    layerVectorialGJSON_Libro.setZIndex(49)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
                         `,
                 },
             ]
@@ -1401,40 +1564,57 @@ var StoryMapJSON = {
 
                             <ul>
                                 <li> 
-                                    L
+                                   Paseo con jardines. El cielo raso y remoto. La luna lunera.
+                                    Patrullas de caballería. Silencioso y luminoso rueda un auto. En la
+                                    sombra clandestina de los ramajes, merodean mozuelas pingonas y
+                                    viejas pintadas como caretas. Repartidos por las sillas del paseo,
+                                    yacen algunos bultos durmientes. MAX ESTRELLA y DON LATINO
+                                    caminan bajo las sombras del paseo. El perfume primaveral de las
+                                    lilas embalsama la humedad de la noche.
                                 </li>
                                 <br>
                                 <br>
                                 <li> 
-                                  
+                                  UNA VIEJA PINTADA.—¡Morenos! ¡Chis!… ¡Morenos! ¿Queréis venir un ratito?
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   DON LATINO.—Cuando te pongas los dientes.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    LA VIEJA PINTADA.—¡No me dejáis siquiera un pitillo!
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   DON LATINO.—Te daré la Corres, para que te ilustres, publica una carta de Maura.
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   LA VIEJA PINTADA.—Que le den morcilla
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    DON LATINO.—Se la prohíbe el rito judaico
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    LA VIEJA PINTADA.—¡Mira el camelista!. Esperaros, que llamo a una amiguita. 
+                                    ¡Lunares! ¡Lunares!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    (Surge LA LUNARES, una mozuela pingona, medias blancas, delantal,
+                                    toquilla y alpargatas. Con risa desvergonzada se detiene en la
+                                    sombra del jardinillo.)
+                                </li>
+                                <br>
+                                <li> 
+                                    LA LUNARES.—¡Ay, qué pollos más elegantes! Vosotros me sacáis esta noche de la calle.
+                                </li>
+                                <br>
+                                <li> 
+                                    LA VIEJA PINTADA.—Nos ponen piso.
                                 </li>
                             </ul>
 
