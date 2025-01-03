@@ -157,189 +157,259 @@ estilo2_2 = new M.style.Generic({
 });
 
 
-gjsonVectorialGJSON_Libro = { 
-  "type": "FeatureCollection", 
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          -3.7124,
-          40.4147
+gjsonVectorialGJSON_Libro = {
+        "type": "FeatureCollection",
+        "crs": {
+          "type": "name",
+          "properties": {
+            "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+          }
+        },
+        "features": [
+          {
+            "type": "Feature",
+            "id": "geojson_8101551973134157",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                -3.7124,
+                40.41470000000001
+              ]
+            },
+            "properties": {
+              "Dirección": "Calle Pretil de los consejos",
+              "Descripción": "Calle donde se encuentra la cueva de Zaratrusta"
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "geojson_2093348857222318",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  -3.712288591136168,
+                  40.414747353466254
+                ],
+                [
+                  -3.712315413226317,
+                  40.41494340029118
+                ],
+                [
+                  -3.712057921160887,
+                  40.41522113231537
+                ],
+                [
+                  -3.710056993235777,
+                  40.41562955968021
+                ],
+                [
+                  -3.7087051598922707,
+                  40.41590728887212
+                ],
+                [
+                  -3.707326504458617,
+                  40.416176848462186
+                ],
+                [
+                  -3.7049071519271832,
+                  40.416511754327246
+                ],
+                [
+                  -3.704028670876216,
+                  40.41661956166689
+                ],
+                [
+                  -3.7038567988702957,
+                  40.416640653807605
+                ],
+                [
+                  -3.70373770879669,
+                  40.41690383712421
+                ],
+                [
+                  -3.703169080485533,
+                  40.4170549517589
+                ],
+                [
+                  -3.7029394833872034,
+                  40.41723286018359
+                ]
+              ]
+            },
+            "properties": {
+              "Dirección": "Calle Pretil de los consejos -> Calle Montera",
+              "Descripción": "Camino desde la cueva de Zaratustra hasta la taberna de Picalagartos"
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "geojson_7774117787491664",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                -3.7029,
+                40.41729999999998
+              ]
+            },
+            "properties": {
+              "Dirección": "Calle Montera",
+              "Descripción": "Calle donde se encuentra la taberna de Picalagartos"
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "mapea_feature_672989354390284",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  -3.702966305477353,
+                  40.4172859542937
+                ],
+                [
+                  -3.7031422583953844,
+                  40.41727549683284
+                ],
+                [
+                  -3.703657242526244,
+                  40.41722648687892
+                ],
+                [
+                  -3.704376074542235,
+                  40.41686707945914
+                ],
+                [
+                  -3.704665753115844,
+                  40.41684257433792
+                ],
+                [
+                  -3.7065218417541486,
+                  40.41722648687892
+                ],
+                [
+                  -3.70664972820282,
+                  40.41689566695956
+                ],
+                [
+                  -3.7067650631904594,
+                  40.416830319977436
+                ]
+              ]
+            },
+            "properties": {
+              "Dirección": "Calle Montera -> Pasadizo de San Ginés",
+              "Descripción": "Camino desde la taberna de Picalagartos hasta la Buñolería Modernista"
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "geojson_8021865701253958",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                -3.7068,
+                40.416799999999995
+              ]
+            },
+            "properties": {
+              "Dirección": "Pasadizo de San Ginés",
+              "Descripción": "La Buñolería Modernista"
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "mapea_feature_8152059935467802",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  -3.7068559254974187,
+                  40.41678385854769
+                ],
+                [
+                  -3.706906887468702,
+                  40.4167328061385
+                ],
+                [
+                  -3.70688393997116,
+                  40.416327964729646
+                ],
+                [
+                  -3.7040582327739724,
+                  40.416662869842554
+                ],
+                [
+                  -3.7038836209604447,
+                  40.41663656960762
+                ]
+              ]
+            },
+            "properties": {
+              "Dirección": "San Ginés -> Puerta del Sol",
+              "Descripción": "Camino desde La Buñolería Modernista hasta el Ministerio de gobernación"
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "geojson_5424750712071147",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                -3.7038,
+                40.41660000000002
+              ]
+            },
+            "properties": {
+              "Dirección": "Puerta del Sol",
+              "Descripción": "Ministerio de gobernación"
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "mapea_feature_24962348808471813",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  -3.703835341198177,
+                  40.41663656960762
+                ],
+                [
+                  -3.702724906666011,
+                  40.416697832581576
+                ],
+                [
+                  -3.7022426775932313,
+                  40.41708347733726
+                ],
+                [
+                  -3.700408046627045,
+                  40.41747555680254
+                ]
+              ]
+            },
+            "properties": {
+              "Dirección": "Ministerio de gobernación -> Café Colón",
+              "Descripción": "Camino desde gobernación hasta el Café Colón"
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "geojson_8439027846743228",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                -3.7004000000000006,
+                40.41739999999996
+              ]
+            },
+            "properties": {
+              "Dirección": "Calle San Jerónimo, 4",
+              "Descripción": "Café Colón"
+            }
+          }
         ]
-      },
-      "properties": {
-        "Dirección": "Calle Pretil de los consejos",
-        "Descripción": "Calle donde se encuentra la cueva de Zaratrusta"
-      }
-    },
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            -3.712288591136168,
-            40.414747353466254
-          ],
-          [
-            -3.712315413226317,
-            40.41494340029118
-          ],
-          [
-            -3.712057921160887,
-            40.41522113231537
-          ],
-          [
-            -3.710056993235777,
-            40.41562955968021
-          ],
-          [
-            -3.7087051598922707,
-            40.41590728887215
-          ],
-          [
-            -3.707326504458617,
-            40.416176848462186
-          ],
-          [
-            -3.7049071519271832,
-            40.416511754327246
-          ],
-          [
-            -3.7039147345916725,
-            40.41663836464687
-          ],
-          [
-            -3.70373770879669,
-            40.41690383712421
-          ],
-          [
-            -3.703169080485533,
-            40.4170549517589
-          ],
-          [
-            -3.7023161380187957,
-            40.418468061374966
-          ]
-        ]
-      },
-      "properties": {
-        "Dirección": "Calle Pretil de los consejos -> Calle Montera",
-        "Descripción": "Camino desde la cueva de Zaratustra hasta la taberna de Picalagartos"
-      }
-    },
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          -3.7022,
-          40.4186
-        ]
-      },
-      "properties": {
-        "Dirección": "Calle Montera",
-        "Descripción": "Calle donde se encuentra la taberna de Picalagartos"
-      }
-    },
-    {
-      "type": "Feature",
-      "id": "mapea_feature_672989354390284",
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            -3.7023912398712144,
-            40.41851707042457
-          ],
-          [
-            -3.7031422583953844,
-            40.41727549683284
-          ],
-          [
-            -3.703657242526244,
-            40.41722648687892
-          ],
-          [
-            -3.704376074542235,
-            40.41686707945914
-          ],
-          [
-            -3.704665753115844,
-            40.41684257433792
-          ],
-          [
-            -3.7065218417541486,
-            40.41722648687892
-          ],
-          [
-            -3.706682774295043,
-            40.4168834162017
-          ]
-        ]
-      },
-      "properties": {
-        "Dirección": "Calle Montera -> Pasadizo de San Ginés",
-        "Descripción": "Camino desde la taberna de Picalagartos hasta la Buñolería Modernista"
-      }
-    },
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          -3.7068,
-          40.4168
-        ]
-      },
-      "properties": {
-        "Dirección": "Pasadizo de San Ginés",
-        "Descripción": "La Buñolería Modernista"
-      }
-    },
-    {
-      "type": "Feature",
-      "id": "mapea_feature_8152059935467802",
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            -3.706948312987518,
-            40.416720048597625
-          ],
-          [
-            -3.70688393997116,
-            40.416327964729646
-          ],
-          [
-            -3.7040582327739724,
-            40.416662869842554
-          ],
-          [
-            -3.703921440114213,
-            40.41664244884677
-          ]
-        ]
-      },
-      "properties": {
-        "Dirección": "San Ginés -> Puerta del Sol",
-        "Descripción": "Camino desde La Buñolería Modernista hasta el Ministerio de gobernación"
-      }
-    },
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [-3.7038,40.4166]
-      },
-      "properties": {
-        "Dirección": "Puerta del Sol",
-        "Descripción": "Ministerio de gobernación"
-      }
-    }
-  ] 
 };
 
 const layerVectorialGJSON_Libro = new M.layer.GeoJSON(
@@ -420,8 +490,8 @@ gjsonVectorialGJSON_Madrid = {
       "geometry": {
         "type": "Point",
         "coordinates": [
-          -3.70682,
-          40.41683, 
+          -3.7068,
+          40.4168
         ]
       },
       "properties": {
@@ -433,13 +503,29 @@ gjsonVectorialGJSON_Madrid = {
       "type": "Feature",
       "geometry": {
         "type": "Point",
-        "coordinates": [-3.7036,40.4166]
+        "coordinates": [-3.7038,40.4166]
       },
       "properties": {
         "Dirección": "Puerta del Sol, 7",
         "Descripción": "Casa real de correos"
       }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -3.7022999999999997,
+          40.4169
+        ]
+      },
+      "properties": {
+        "Dirección": "Calle de Alcalá, 14",
+        "Descripción": "Café Universal"
+      }
     }
+
+    
   ] 
 };
 
