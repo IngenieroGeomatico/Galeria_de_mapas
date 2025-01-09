@@ -1471,6 +1471,66 @@ var StoryMapJSON = {
 
                             <ul>
                                 <li> 
+                                    Por la descripción que hace Valle-Inclán en la acotación, podría tratarse del Café Universal que estaba en 
+                                    el número 14 de la Calle de Alcalá. 
+                                </li>
+                                <br>
+                                <li> 
+                                    El Café Universal o "café de los espejos" fue un establecimiento de Madrid, situado 
+                                    en el número 15 (luego 14) de la Puerta del Sol, esquina al inicio de la calle de Alcalá. 
+                                    Abierto mediado el siglo xix se mantuvo hasta 1974
+                                </li>
+                                <br>
+                                 <br>
+                                <li> 
+                                    El Universal llamaba la atención por sus espejos enfrentados que conseguían un efecto óptico sorprendente para la época. 
+                                    La decoración con pinturas firmadas por Piccoli, Amerigo, Bonardo y Bussato, mezclaba imitaciones de estéticas 
+                                    italianizantes. El gran salón mostraba una escalera de caracol que subía al entresuelo, donde disponía de comedores 
+                                    privados, mesas de tresillo y de billar, planta que también tenía acceso directo desde la calle.
+                                </li>
+                                <br>
+                                <li> 
+                                    El café de los espejos tuvo entre sus más distinguidos clientes a Benito Pérez Galdós, 
+                                    miembro eventual en la tertulia de los "canarios",6 y que en los Episodios titulados La de los tristes destinos (1907) 
+                                    y España Trágica (1909), inmortalizó a uno de sus camareros, Pepe “el malagueño”. 
+                                    Entre los contertulios de Galdós, cabe mencionar a Fernando León y Castillo y Agustín Espinosa.
+                                </li>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 9');
+
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20ALCALA%2014%2C%20Madrid&type=portal&tip_via=CALLE&id=280790118799&portal=14&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo2)
+                                    layerVectorialGJSON_Madrid.setZIndex(50)
+                                    layerVectorialGJSON_Libro.setZIndex(49)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
+                        `,
+                },
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
                                     Entre los años 1908 y 1914 Ramón María del Valle Inclán tuvo su importante tertulia en este café con música con 
                                     la asistencia de José Augusto Martínez “Azorín”, Rubén Darío, Santiago Rusiñol Prats, Julio Romero de Torres, Pío y 
                                     Ricardo Baroja Nessi, José Gutiérrez Solana y el joven Rafael de Penagos Zalabardo, entre otros muchos. 
@@ -1623,13 +1683,111 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                     "js": `
-                            console.log('hola, estoy comenzando el cap 7');
+                            console.log('hola, estoy comenzando el cap 10');
+
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO%20RECOLETOS,%20Madrid&type=callejero&tip_via=PASEO&id=280790007738&portal=null&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo1)
+                                    layerVectorialGJSON_Madrid.setZIndex(49)
+                                    layerVectorialGJSON_Libro.setZIndex(50)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        // mapajs.setZoom(18)
+                                    }); 
+                                });
+                        `,
+                },
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
+                                    Estatua de Valle-Inclán
+                                </li>
+                                <br>
+                                <br>
+                                <li> 
+                                  Ramón María del Valle-Inclán (Villanueva de Arosa, Pontevedra, 28 de octubre de 1866 - Santiago de Compostela,
+                                   La Coruña, 5 de enero de 1936) fue un dramaturgo, poeta y novelista español, que formó parte de la corriente 
+                                   literaria del modernismo. Se le considera uno de los autores clave de la literatura española del siglo XX.
+                                </li>
+                                <br>
+                                <li> 
+                                   Novelista, poeta y autor dramático español, además de cuentista, ensayista y periodista. Destacó en todos los géneros 
+                                   que cultivó y fue un modernista de primera hora que satirizó amargamente la sociedad española de su época. 
+                                   Estudió Derecho en Santiago de Compostela, pero interrumpió sus estudios para viajar a México, donde trabajó de 
+                                   periodista en El Correo Español y El Universal
+                                </li>
+                                <br>
+                                <li> 
+                                    A su regreso a Madrid llevó una vida literaria, adoptando una imagen que parece encarnar algunos de sus personajes. 
+                                    Actor de sí mismo, profesó un auténtico culto a la literatura, por la que sacrificó todo, 
+                                    llevando una vida bohemia de la que corrieron muchas anécdotas. Perdió un brazo durante una pelea. 
+                                    En 1916 visitó el frente francés de la I Guerra Mundial, y en 1922 volvió a viajar a México. 
+                                </li>
+                                <br>
+                                <li> 
+                                   Considerada Luces de bohemia una de sus obras más importantes, con ella Valle-Inclán inaugura un nuevo género 
+                                   teatral, el «esperpento», y sería el primero de los cuatro textos que el propio autor consideraría de ese género. 
+                                   En la escena duodécima de la obra, el propio protagonista lo considera como una manera de mirar el mundo. 
+                                </li>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 10');
+
+                            gjsonn = {
+                                "type": "FeatureCollection",
+                                "crs": {
+                                    "type": "name",
+                                    "properties": {
+                                    "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+                                    }
+                                },
+                                "features": [
+                                {
+                                    "type": "Feature",
+                                    "geometry": {
+                                        "type": "Point",
+                                        "coordinates": [
+                                            -3.691462,
+                                            40.423551
+                                        ]
+                                    },
+                                    "properties": {
+            
+                                    }
+                                }
+                                ]
+                            }
+
+                            layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
 
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(gjsonn)
+                            
 
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                            mapajs.setZoom(13)
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(18)
+                            }); 
                         `,
                 },
             ]
@@ -1695,6 +1853,7 @@ var StoryMapJSON = {
                             mapajs.setZoom(13)
                         `,
                 },
+                
             ]
         },
 
@@ -1707,40 +1866,68 @@ var StoryMapJSON = {
 
                             <ul>
                                 <li> 
-                                    L
+                                    Una calle del Madrid austríaco. Las tapias de un convento. Un
+                                    casón de nobles. Las luces de una taberna. Un grupo consternado de
+                                    vecinas, en la acera. Una mujer, despechugada y ronca, tiene en los
+                                    brazos a su niño muerto, la sien traspasada por el agujero de una
+                                    bala. MAX ESTRELLA y DON LATINO, hacen un alto.
                                 </li>
                                 <br>
                                 <br>
                                 <li> 
-                                  
+                                  MAX.—También aquí se pisan cristales rotos
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   DON LATINO.—¡La zurra ha sido buena!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¡Canallas!… ¡Todos!… ¡Y los primeros nosotros, los poetas!
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   DON LATINO.—¡Se vive de milagro!
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   LA MADRE DEL NIÑO.—¡Maricas, cobardes! ¡El fuego del Infierno os abrase las negras entrañas! ¡Maricas, cobardes!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¿Qué sucede, Latino? ¿Quién llora? ¿Quién grita con tal rabia?
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    DON LATINO.—Una verdulera, que tiene a su chico muerto en los brazos.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    MAX.—¡Me ha estremecido esa voz trágica!
+                                </li>
+                                <br>
+                                <li> 
+                                    LA MADRE DEL NIÑO.—¡Sicarios! ¡Asesinos de criaturas!
+                                </li>
+                                <br>
+                                <li> 
+                                    EL EMPEÑISTA.—Está con algún trastorno, y no mide palabras.
+                                </li>
+                                <br>
+                                <li> 
+                                    EL GUARDIA.—La autoridad también se hace el cargo.
+                                </li>
+                                <br>
+                                <li> 
+                                    EL TABERNERO.—Son desgracias inevitables para el restablecimiento del orden.
+                                </li>
+                                <br>
+                                <li> 
+                                    EL EMPEÑISTA.—Las turbas anárquicas, me han destrozado el escaparate.
+                                </li>
+                                <br>
+                                <li> 
+                                    LA PORTERA.—¿Cómo no anduvo usted más vivo en echar los cierres?
                                 </li>
                             </ul>
 
