@@ -992,6 +992,17 @@ gjsonVectorialGJSON_Libro = {
         "Dirección": "Café Colón -> Paseo con Jardines",
         "Descripción": "Camino desde  el Café Colón al paseo con jardines"
       }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-3.6452,40.4242]
+      },
+      "properties": {
+        "Dirección": "Avenida Daroca 96",
+        "Descripción": "Cementerio de La Almudena"
+      }
     }
   ]
 };
@@ -1138,7 +1149,19 @@ gjsonVectorialGJSON_Madrid = {
         "Dirección": "Paseo de Recoletos 33",
         "Descripción": "Estatua de Valle Inclán"
       }
-  }
+    },
+    {
+      "type": "Feature",
+      "id": "geojson_22615447557309853",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-3.7022,40.4152]
+      },
+      "properties": {
+          "Dirección": "Calle Álvarez Gato 1",
+          "Descripción": "Placa del callejón del Gato"
+      }
+    }
   ] 
 };
 
@@ -1287,6 +1310,20 @@ const mp_StoryMap = new M.plugin.StoryMap({
 });
 
 mapajs.addPlugin(mp_StoryMap);
+mp_StoryMap.control.capIndex = function(idContainer, idElement) {
+  const container = document.querySelector(idContainer);
+  const divElement = container.querySelectorAll(idElement);
+  // eslint-disable-next-line guard-for-in, no-restricted-syntax
+  for (const key in divElement) {
+    if (divElement[key].style.display === 'block' && !Number.isNaN(key)) {
+      const id = divElement[key].id;
+      console.log(id)
+      console.log(Number.parseInt(id.match(/\d+/)[0], 10))
+      return Number.parseInt(id.match(/\d+/)[0], 10);
+    }
+  }
+  return false;
+}
 
 
 
