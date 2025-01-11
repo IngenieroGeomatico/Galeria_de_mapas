@@ -1797,70 +1797,7 @@ var StoryMapJSON = {
             "title": "Escena Undécima",
             "subtitle": "",
             "steps": [
-                {
-                    "html": `   <br><br><br><br>
-
-                            <ul>
-                                <li> 
-                                    L
-                                </li>
-                                <br>
-                                <br>
-                                <li> 
-                                  
-                                </li>
-                                <br>
-                                <li> 
-                                   
-                                </li>
-                                <br>
-                                <li> 
-                                    
-                                </li>
-                                <br>
-                                <li> 
-                                   
-                                </li>
-                                <br>
-                                <li> 
-                                   
-                                </li>
-                                <br>
-                                <li> 
-                                    
-                                </li>
-                                <br>
-                                <li> 
-                                    
-                                </li>
-                                <br>
-                                <li> 
-                                    
-                                </li>
-                            </ul>
-
-                            <br><br><br><br> <br><br><br> <br><br><br>
-                            <br><br><br><br> <br><br><br> <br><br><br>
-                            <br><br><br><br> <br><br><br> <br><br><br>
-                        `,
-                    "js": `
-                            console.log('hola, estoy comenzando el cap 7');
-
-                            layerVectorialGJSON.clear()
-                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                            mapajs.setZoom(13)
-                        `,
-                },
                 
-            ]
-        },
-
-        {
-            "title": "Escena Doudécima",
-            "subtitle": "",
-            "steps": [
                 {
                     "html": `   <br><br><br><br>
 
@@ -1936,13 +1873,224 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                     "js": `
-                            console.log('hola, estoy comenzando el cap 7');
+                            console.log('hola, estoy comenzando el cap 11');
 
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                            mapajs.setZoom(13)
+                            mapajs.setCenter({ x: -411597.7220705739, y: 4926892.792828205 })
+                            mapajs.setZoom(15)
+                        `,
+                }
+                
+            ]
+        },
+
+        {
+            "title": "Escena Doudécima",
+            "subtitle": "",
+            "steps": [
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
+                                   Rinconada en Costanilla, y una iglesia barroca por fondo. Sobre
+                                    las campanas negras, la luna clara. DON LATINO y MAX
+                                    ESTRELLA, filosofan sentados en el quicio de una puerta. A lo
+                                    largo de su coloquio, se torna lívido el cielo. En el alero de la iglesia
+                                    pían algunos pájaros. Remotos albores de amanecida. Ya se han ido
+                                    los serenos, pero aún están las puertas cerradas. Despiertan las
+                                    porteras.
+                                </li>
+                                <br>
+                                <br>
+                                <li> 
+                                    MAX.—¿Debe estar amaneciendo?
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—Así es.
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—¡Y qué frío!
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—Vamos a dar unos pasos.
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—Ayúdame, que no puedo levantarme. ¡Estoy aterido!
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—¡Mira que haber empeñado la capa!
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—Préstame tu carrik, Latino.
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—¡Max, eres fantástico!
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—Ayúdame a ponerme en pie.
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—¡Arriba, carcunda!
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—¡No me tengo!
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—¡Qué tuno eres!
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—¡La verdad es que tienes una fisonomía algo rara!
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—¡Don Latino de Hispalis, grotesco personaje, te inmortalizaré en una novela!
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—Una tragedia, Max.
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—La tragedia nuestra no es tragedia
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—¡Pues algo será!
+                                </li>
+                                <br>
+                                <li> 
+                                    MAX.—El Esperpento.
+                                </li>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 11');
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+
+                            mapajs.setCenter({ x: -411597.7220705739, y: 4926892.792828205 })
+                            mapajs.setZoom(15)
+                        `,
+                },
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
+                                  DON LATINO.—Incorpórate, Max. Vamos a caminar
+                                </li>
+                                <br>
+                                <li> 
+                                   MAX.—Estoy muerto.
+                                </li>
+                                <br>
+                                <li> 
+                                  DON LATINO.—¡Que me estás asustando! Max, vamos a caminar.
+                                    Incorpórate. ¡No tuerzas la boca condenado! ¡Max! ¡Max! ¡Condenado,
+                                    responde!
+                                </li>
+                                <br>
+                                <li> 
+                                   MAX.—Los muertos no hablan.
+                                </li>
+                                <br>
+                                <li> 
+                                  DON LATINO.—Definitivamente, te dejo.
+                                </li>
+                                <br>
+                                <li> 
+                                  MAX.—¡Buenas noches!
+                                </li>
+                                <br>
+                                <li> 
+                                  DON LATINO.—Max, estás completamente borracho, y sería un crimen
+                                    dejarte la cartera encima, para que te la roben. Max, me llevo tu
+                                    cartera, y te la devolveré mañana
+                                </li>
+                            
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 11');
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+
+                            mapajs.setCenter({ x: -411597.7220705739, y: 4926892.792828205 })
+                            mapajs.setZoom(15)
+                        `,
+                },
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
+                                    Placa a Valle-Inclán en el Callejón del Gato
+                                </li>
+                                <br>
+                                <br>
+                                <li> 
+                                    Este es el Callejón del Gato, templo del Esperpento. Aquí
+
+                                    las bravas gentes cuidan el tabernáculo de los espejos, donde
+
+                                    los peregrinos se quitan el cráneo, como Don Latino, ante Max
+
+                                    Estrella, Vicario de Don Ramón y Pontífice del Esperpentismo.
+                                </li>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                        `,
+                    "js": `
+                            console.log('hola, estoy comenzando el cap 12');
+
+                             M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20%C3%81LVAREZ%20GATO%201,%20Madrid&type=portal&tip_via=CALLE&id=2280790040012&portal=1&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo2)
+                                    layerVectorialGJSON_Madrid.setZIndex(50)
+                                    layerVectorialGJSON_Libro.setZIndex(49)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(18)
+                                    }); 
+                                });
                         `,
                 },
             ]
@@ -1957,40 +2105,74 @@ var StoryMapJSON = {
 
                             <ul>
                                 <li> 
-                                    L
+                                    Velorio en un sotabanco. MADAMA COLLET y CLAUDINITA,
+                                    desgreñadas y macilentas, lloran al muerto, ya tendido en la
+                                    angostura de la caja, amortajado con una sábana, entre cuatro
+                                    velas. Astillando una tabla, el brillo de un clavo aguza su punta
+                                    sobre la sien inerme[1041]. La caja, embetunada de luto por fuera, y
+                                    por dentro de tablas de pino sin labrar ni pintar, tiene una sórdida
+                                    esterilla que amarillea. Está posada sobre las baldosas, de esquina a
+                                    esquina, y las dos mujeres que lloran en los ángulos, tienen en las
+                                    manos cruzadas el reflejo de las velas. DORIO DE GÁDEX, CLARINITO y
+                                    PÉREZ, arrimados a la pared, son tres fúnebres fantoches en
+                                    hilera. Repentinamente, entrometiéndose en el duelo,
+                                    cloquea. un rajado repique, la campanilla de la
+                                    escalera.
                                 </li>
                                 <br>
                                 <br>
                                 <li> 
-                                  
+                                  DORIO DE GÁDEX.—A las cuatro viene la Funeraria.
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   CLARINITO.—No puede ser esa hora.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    DORIO DE GÁDEX.—¿Usted no tendrá reloj, Madama Collet?
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   MADAMA COLLET.—¡Que no me lo lleven todavía! ¡Que no me lo lleven!
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   PÉREZ.—No puede ser la Funeraria.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    DORIO DE GÁDEX.—¡Ninguno tiene reloj! ¡No hay duda que somos unos potentados!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    (CLAUDINITA, con andar cansado, trompicando, ha salido para abrir
+                                    la puerta. Se oye rumor de voces, y la tos de DON LATINO DE HISPALIS.
+                                    La tos clásica del tabaco y del aguardiente)
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    DON LATINO.—¡Ha muerto el Genio! ¡No llores, hija mía! ¡Ha muerto, y
+                                    no ha muerto!… ¡El Genio es inmortal!… ¡Consuélate, Claudinita, porque
+                                    eres la hija del primer poeta español! ¡Que te sirva de consuelo saber que
+                                    eres la hija de Víctor Hugo! ¡Una huérfana ilustre! ¡Déjame que te abrace!
+                                </li>
+                                 <br>
+                                <li> 
+                                    CLAUDINITA.—¡Usted está borracho!
+                                </li>
+                                 <br>
+                                <li> 
+                                    DON LATINO.—Lo parezco. Sin duda lo parezco. ¡Es el dolor!
+                                </li>
+                                 <br>
+                                <li> 
+                                    CLAUDINITA.—¡Si tumba el vaho de aguardiente!
+                                </li>
+                                <br>
+                                <li> 
+                                    DON LATINO.—¡Es el dolor! ¡Un efecto del dolor, estudiado
+                                    científicamente por los alemanes!
                                 </li>
                             </ul>
 
@@ -1999,13 +2181,13 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                     "js": `
-                            console.log('hola, estoy comenzando el cap 7');
+                            console.log('hola, estoy comenzando el cap 13');
 
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                            mapajs.setZoom(13)
+                            mapajs.setCenter({ x: -411597.7220705739, y: 4926892.792828205 })
+                            mapajs.setZoom(15)
                         `,
                 },
             ]
@@ -2020,40 +2202,63 @@ var StoryMapJSON = {
 
                             <ul>
                                 <li> 
-                                    L
+                                    Un patio en el cementerio del este. La tarde fría. El viento
+                                    adusto. La luz de la tarde sobre los muros de lápidas, tiene una aridez
+                                    agresiva. DOS SEPULTUREROS apisonan la tierra de una fosa. Un
+                                    momento suspenden la tarea: Sacan lumbre del yesquero, y las
+                                    colillas de tras la oreja. Fuman sentados al pie del hoyo
                                 </li>
                                 <br>
                                 <br>
                                 <li> 
-                                  
+                                  UN SEPULTURERO.—Ese sujeto era un hombre de pluma.
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   OTRO SEPULTURERO.—¡Pobre entierro ha tenido!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    UN SEPULTURERO.—Los papeles lo ponen por hombre de mérito.
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   OTRO SEPULTURERO.—En España el mérito no se premia. 
+                                   Se premia el robar y el ser sinvergüenza. En España se premia todo lo malo
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   UN SEPULTURERO.—¡No hay que poner las cosas tan negras!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    OTRO SEPULTURERO.—¡Ahí tienes al Pollo del Arete!
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    UN SEPULTURERO.—¿Y ése qué ha sacado?
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    OTRO SEPULTURERO.—Pasarlo como un rey siendo un malasangre.
+                                    Míralo, disfrutando a la viuda de un concejal.
+                                </li>
+                                 <br>
+                                <li> 
+                                    UN SEPULTURERO.—Di un ladrón del Ayuntamiento.
+                                </li>
+                                 <br>
+                                <li> 
+                                    OTRO SEPULTURERO.—Ponlo por dicho. ¿Te parece que una mujer de
+                                    posición se chifle así por un tal sujeto?
+                                </li>
+                                <br>
+                                <li> 
+                                    UN SEPULTURERO.—Cegueras. Es propio del sexo
+                                </li>
+                                <br>
+                                <li> 
+                                    OTRO SEPULTURERO.—¡Ahí tienes el mérito que triunfa! ¡Y para todo la misma ley!
                                 </li>
                             </ul>
 
@@ -2062,13 +2267,28 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                     "js": `
-                            console.log('hola, estoy comenzando el cap 7');
+                            console.log('hola, estoy comenzando el cap 14');
 
-                            layerVectorialGJSON.clear()
-                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                            mapajs.setZoom(13)
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=Capilla%20del%20Cementerio%20de%20Nuestra%20Se%C3%B1ora%20de%20la%20Almudena%2C%20Madrid&type=toponimo&tip_via=Iglesia&id=BTN_423352&portal=null&extension=null&outputformat=geojson",
+                                    {
+                                    }
+                                ).then(function (res) {
+                                    // Muestra un diálogo informativo con el resultado de la petición get
+                                    gjson = JSON.parse(res.text)
+    
+                                    layerVectorialGJSON.setStyle(estilo1)
+                                    layerVectorialGJSON_Madrid.setZIndex(49)
+                                    layerVectorialGJSON_Libro.setZIndex(50)
+    
+                                    layerVectorialGJSON.clear()
+                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                    layerVectorialGJSON.setSource(gjson)
+    
+                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                        mapajs.setZoom(15)
+                                    }); 
+                                });
                         `,
                 },
             ]
@@ -2082,28 +2302,34 @@ var StoryMapJSON = {
 
                             <ul>
                                 <li> 
-                                    L
+                                    La taberna de PICA LAGARTOS. —Lobreguez con un temblor
+                                    de acetileno—. DON LATINO DE HISPALIS, ante el mostrador, insiste y
+                                    tartajea convidando al POLLO DEL PAY-PAY. Entre traspiés y
+                                    traspiés, da la pelma.
                                 </li>
                                 <br>
                                 <br>
                                 <li> 
-                                  
+                                  DON LATINO.—¡Beba usted, amigo! ¡Usted no sabe la pena que rebosa
+                                    mi corazón! ¡Beba usted! ¡Yo bebo sin dejar cortinas!
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   EL POLLO. —Porque usted no es castizo.
                                 </li>
                                 <br>
                                 <li> 
-                                    
+                                    DON LATINO.—¡Hoy hemos enterrado al primer poeta de España!
+                                    ¡Cuatro amigos en el cementerio! ¡Acabose! ¡Ni una cabrona representación
+                                    de la Docta Casa!. ¿Qué te parece, Venancio?
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   PICA LAGARTOS. —Lo que usted guste, Don Latí.
                                 </li>
                                 <br>
                                 <li> 
-                                   
+                                   DON LATINO.—¡El Genio brilla con luz propia! ¿Que no, Pollo?
                                 </li>
                                 <br>
                                 <li> 
