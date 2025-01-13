@@ -71,7 +71,7 @@ var StoryMapJSON = {
 
                                 <ul>
                                     <li> 
-                                        La casa de Max Estrella — «Calle Bastardillos, veintitrés, duplicado, Escalera interior, Guardilla B. 
+                                        La casa de Sawa— «Calle Bastardillos, veintitrés, duplicado, Escalera interior, Guardilla B. 
                                         Nota: Si en este laberinto hiciese falta un hilo para guiarse, no se le pida a la portera, porque muerde.» (
                                         
                                         Cita de la escena octava. La calle es ficticia, y aparece en las escenas primera, duodécima y decimotercera.)
@@ -2331,18 +2331,6 @@ var StoryMapJSON = {
                                 <li> 
                                    DON LATINO.—¡El Genio brilla con luz propia! ¿Que no, Pollo?
                                 </li>
-                                <br>
-                                <li> 
-                                    
-                                </li>
-                                <br>
-                                <li> 
-                                    
-                                </li>
-                                <br>
-                                <li> 
-                                    
-                                </li>
                             </ul>
 
                             <br><br><br><br> <br><br><br> <br><br><br>
@@ -2350,14 +2338,78 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                     "js": `
-                            console.log('hola, estoy comenzando el cap 7');
+                        console.log('hola, estoy comenzando el cap 15');
 
-                            layerVectorialGJSON.clear()
-                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                        M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%202%2C%20Madrid&type=portal&tip_via=CALLE&id=2280790254631&portal=2&extension=null&outputformat=geojson",
+                                {
+                                }
+                            ).then(function (res) {
+                                // Muestra un diálogo informativo con el resultado de la petición get
+                                gjson = JSON.parse(res.text)
 
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
-                            mapajs.setZoom(13)
+                                layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
+
+                                layerVectorialGJSON.clear()
+                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                layerVectorialGJSON.setSource(gjson)
+
+                                layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                    mapajs.setZoom(17)
+                                }); 
+                            });
+                        
+                    `,
+                },
+                {
+                    "html": `   <br><br><br><br>
+
+                            <ul>
+                                <li> 
+                                    PICA LAGARTOS. —¡El mundo es una controversia!
+                                </li>
+                                <br>
+                                <li> 
+                                  DON LATINO. —¡Un esperpento!
+                                </li>
+                                <br>
+                                <li> 
+                                   EL BORRACHO. —¡Cráneo previlegiado!
+                                </li>
+                                <br>
+                            </ul>
+
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
+                            <br><br><br><br> <br><br><br> <br><br><br>
                         `,
+                    "js": `
+                        console.log('hola, estoy comenzando el cap 3');
+
+                        M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%202%2C%20Madrid&type=portal&tip_via=CALLE&id=2280790254631&portal=2&extension=null&outputformat=geojson",
+                                {
+                                }
+                            ).then(function (res) {
+                                // Muestra un diálogo informativo con el resultado de la petición get
+                                gjson = JSON.parse(res.text)
+
+                                layerVectorialGJSON.setStyle(estilo1)
+                                layerVectorialGJSON_Madrid.setZIndex(49)
+                                layerVectorialGJSON_Libro.setZIndex(50)
+
+                                layerVectorialGJSON.clear()
+                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                                layerVectorialGJSON.setSource(gjson)
+
+                                layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                    mapajs.setZoom(17)
+                                }); 
+                            });
+                        
+                    `,
                 },
             ]
         },
