@@ -1266,7 +1266,9 @@ const layerVectorialGJSON = new M.layer.GeoJSON(
   {
     name: "layerVectorialGJSON",
     source: {},
-    extract: false
+    extract: false,
+    attribution: '<p><b>Puntos de interés</b>: <a style="color: #0000FF" href="https://www.scne.es" target="_blank">CartoCiudad CC-BY 4.0 scne.es</a></p>',
+
   }, {
   displayInLayerSwitcher: false
 }
@@ -1326,24 +1328,14 @@ mp_StoryMap.control.capIndex = function(idContainer, idElement) {
 }
 
 
-
-const mpp = new M.plugin.VectorsManagement({
-  position: 'TR',
-  collapsible: true,
-  collapsed: true,
-  selection: true,
-  addlayer: true,
-  creation: true,
-  edition: true,
-  style: true,
-  analysis: true,
-  download: true,
-  help: true,
+// Extensiones
+M.proxy(false)
+const ext_Modal = new M.plugin.Modal({
+  position: 'BL',
+  helpLink: {
+    es: '../../html/modal_LucesdeBohemia.html'
+  }
 });
+M.proxy(false)
+mapajs.addPlugin(ext_Modal);
 
-mapajs.addPlugin(mpp);
-
-
-// https://www.lucesdebohemia.es/
-// https://enzapatillas.es/luces-de-bohemia/
-// http://carmengarciahilo.blogspot.com/p/rutaluces-de-bohemia.html
