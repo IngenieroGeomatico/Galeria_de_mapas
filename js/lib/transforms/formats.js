@@ -322,3 +322,71 @@ function svgToGeoJSON(svgText, bbox) {
 }
 
 
+/**
+ * Convierte un JSON-LD a un GeoJSON válido.
+ * 
+ * El JSON-LD debe tener un campo `@graph` que contenga los datos. El parámetro `confJSON_LD` especifica 
+ * el tipo de geometría, el campo de las coordenadas dentro de `@graph`, y los nombres de los subcampos 
+ * que contienen la latitud y longitud.
+ * 
+ * @param {Object} jsonLd - El objeto JSON-LD a convertir.
+ * @param {Object} confJSON_LD - Un objeto con el tipo de geometría, el campo de coordenadas y los subcampos de latitud y longitud.
+ * @param {string} confJSON_LD.type - El tipo de geometría (por ejemplo, "Point", "LineString", "Polygon").
+ * @param {string} confJSON_LD.field - El nombre del campo dentro de `@graph` que contiene las coordenadas.
+ * @param {string} confJSON_LD.lat - El subcampo para la latitud (por defecto "latitude").
+ * @param {string} confJSON_LD.long - El subcampo para la longitud (por defecto "longitude").
+ * @returns {Object} - Un objeto GeoJSON válido.
+ * @throws {Error} Si el formato del JSON-LD no es válido o faltan datos.
+ */
+function convertJsonLdToGeoJson(jsonLd, confJSON_LD) {
+    // Validar que el JSON-LD contiene el campo @graph
+    if (!jsonLd || !Array.isArray(jsonLd["@graph"])) {
+        throw new Error('El JSON-LD debe contener un campo "@graph" con un array de datos.');
+    }
+
+    // Validar que confJSON_LD tenga los parámetros esperados
+    if (!confJSON_LD || !confJSON_LD.type || !confJSON_LD.field) {
+        throw new Error('El parámetro confJSON_LD debe contener "type" y "field".');
+    }
+
+    // Si el tipo es "Point", validar que existan latitud y longitud
+    if (confJSON_LD.type === "Point" && (!confJSON_LD.lat || !confJSON_LD.long)) {
+        throw new Error('Para el tipo "Point", confJSON_LD debe contener "lat" y "long".');
+    }
+
+    // Convertir cada elemento del @graph a un feature GeoJSON
+    const features = jsonLd["@graph"].map(item => {
+        // console.log(item)
+        const geometryData = item[confJSON_LD.field];
+        
+        // Si las coordenadas no existen, se ignoran este elemento y se sigue con el siguiente
+        if (!geometryData || geometryData[confJSON_LD.lat] == null || geometryData[confJSON_LD.long] == null) {
+            console.warn(`Coordenadas faltantes para el campo "${confJSON_LD.field}" en el elemento con ID "${item["@id"]}". Se ignorará este elemento.`);
+            return null;  // Retorna null para este elemento y se ignorará en el resultado final
+        }
+
+        // Crear el Feature con la geometría correspondiente
+        const geometry = {
+            type: confJSON_LD.type,
+            coordinates: [geometryData[confJSON_LD.long], geometryData[confJSON_LD.lat]]
+        };
+
+        // Crear un feature GeoJSON
+        return {
+            type: "Feature",
+            geometry,
+            properties: Object.fromEntries(
+                Object.entries(item).filter(([key]) => key !== confJSON_LD.field)
+            )
+        };
+    });
+
+    // Retornar el GeoJSON
+    return {
+        type: "FeatureCollection",
+        features: features.filter(item => item !== null)
+    };
+}
+
+
+
