@@ -76,6 +76,7 @@ function csvToJson(csvString, id = false) {
  * console.log(geoJson);
  */
 function csvToGeoJson(csvString, long = "long", lat = "lat", WKT = false) {
+    // Posiblemente haya un problema aquí cuando un csv tenga /n
     const rows = csvString.split("\n");
     const headers = rows[0].split(";").map(h => h.trim());
 
