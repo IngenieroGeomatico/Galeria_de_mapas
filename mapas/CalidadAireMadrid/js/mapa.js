@@ -1238,7 +1238,7 @@ async function myFunction_JoinData() {
       });
   });
   value1_estaciones = await myPromise;
-  geojsonEstaciones = csvToGeoJson(value1_estaciones, long = "LONGITUD", lat = "LATITUD")
+  geojsonEstaciones = csvToGeoJson({csvString: value1_estaciones, long : "LONGITUD", lat : "LATITUD"})
 
 
   let myPromise2 = new Promise(function (resolve) {
