@@ -1,4 +1,57 @@
 
+function parseCSV(csvString) {
+    const rows = [];
+    let currentRow = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < csvString.length; i++) {
+        const char = csvString[i];
+        const nextChar = csvString[i + 1];
+
+        if (inQuotes) {
+            if (char === '"' && nextChar === '"') {
+                // Handle escaped quotes
+                currentField += '"';
+                i++; // Skip the next quote
+            } else if (char === '"') {
+                // End of quoted field
+                inQuotes = false;
+            } else {
+                // Add character to field
+                currentField += char;
+            }
+        } else {
+            if (char === '"') {
+                // Start of quoted field
+                inQuotes = true;
+            } else if (char === ',') {
+                // End of field
+                currentRow.push(currentField);
+                currentField = '';
+            } else if (char === '\n') {
+                // End of row
+                currentRow.push(currentField);
+                rows.push(currentRow[0]);
+                currentRow = [];
+                currentField = '';
+            } else {
+                // Add character to field
+                currentField += char;
+            }
+        }
+    }
+
+    // Add the last field and row if present
+    if (currentField || currentRow.length) {
+        currentRow.push(currentField);
+        rows.push(currentRow[0]);
+    }
+
+    return rows;
+}
+
+
 /**
  * Convierte una cadena CSV en un objeto JSON.
  * 
@@ -61,6 +114,7 @@ function csvToJson(csvString, id = false) {
     return jsonData;
 }
 
+
 /**
  * Convierte una cadena CSV en un objeto GeoJSON.
  * 
@@ -75,10 +129,19 @@ function csvToJson(csvString, id = false) {
  * const geoJson = csvToGeoJson(csvData);
  * console.log(geoJson);
  */
-function csvToGeoJson(csvString, long = "long", lat = "lat", WKT = false) {
-    // Posiblemente haya un problema aquí cuando un csv tenga /n
-    const rows = csvString.split("\n");
-    const headers = rows[0].split(";").map(h => h.trim());
+function csvToGeoJson({csvString, long = "long", lat = "lat", WKT = false, advancedParse = false}) {
+    
+    if (advancedParse){
+        rows = parseCSV(csvString)
+        headers = rows[0].split(";").map(h => h.trim());
+        
+    
+    } else {
+        rows = csvString.split("\n")
+        headers = rows[0].split(";").map(h => h.trim());
+    }
+        
+
 
     const geojsonData = {
         type: "FeatureCollection",

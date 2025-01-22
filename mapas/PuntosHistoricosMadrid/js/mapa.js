@@ -164,12 +164,12 @@ geojsonData.then(() => {
 
 
   const capaPlacas = new M.layer.GeoJSON({
-    name: "Placas",
+    name: "Placas conmemorativas ",
     source: geojsonDataAsync.geoJson_Placas,
     extract: true,
-    legend: "Placas",
+    legend: "Placas conmemorativas ",
     attribution: {
-      name: "Placas:",
+      name: "Placas conmemorativas:",
       description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     }
   }, {
@@ -185,7 +185,33 @@ geojsonData.then(() => {
   // });
   mapajs.addLayers(capaPlacas)
 
+
+  const capaStolpersteine = new M.layer.GeoJSON({
+    name: "Placas Stolpersteine",
+    source: geojsonDataAsync.geoJson_Stolpersteine,
+    extract: true,
+    legend: "Placas Stolpersteine",
+    attribution: {
+      name: "Placas Stolpersteine:",
+      description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
+    }
+  }, {
+    // style:estiloEstacion
+  })
+  // capaPlacas.setStyle(styleCluster_Monumentos)
+  // capaPlacas.on(M.evt.SELECT_FEATURES, function (features, evt) {
+  //   // se puede comprobar si el elemento seleccionado es un cluster o no
+  //   if (features[0] instanceof M.ClusteredFeature) {
+  //     console.log('Es un cluster');
+  //     mapajs.getPopup().hide()
+  //   }
+  // });
+  mapajs.addLayers(capaStolpersteine)
+
 })
+
+
+
 
 
 async function myFunction_GetData() {
@@ -221,8 +247,25 @@ async function myFunction_GetData() {
       });
   });
   value_placas = await myPromise_Placas;
-  geojsonPlacas = csvToGeoJson(value_placas, long = "LONGITUD", lat = "LATITUD")
+  geojsonPlacas = csvToGeoJson({csvString:value_placas, long : "longitud", lat : "latitud", advancedParse : true})
   geojsonDataAsync.geoJson_Placas = geojsonPlacas
+
+
+
+  let myPromise_Stolpersteine = new Promise(function (resolve) {
+
+    M.proxy(true)
+    M.remote.get("https://datos.madrid.es/egob/catalogo/300453-2-placas-stolpersteine.csv",).then(
+      function (res) {
+        // Muestra un diálogo informativo con el resultado de la petición get
+        // console.log(res.text);
+        M.proxy(false)
+        resolve(res.text)
+      });
+  });
+  value_Stolpersteine = await myPromise_Stolpersteine;
+  geojsonStolpersteine = csvToGeoJson({csvString:value_Stolpersteine, long : "longitud", lat : "latitud"})
+  geojsonDataAsync.geoJson_Stolpersteine = geojsonStolpersteine
 
   // console.log('0 :',geojsonDataAsync)
   return geojsonDataAsync
