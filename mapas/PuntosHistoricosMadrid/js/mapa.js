@@ -63,7 +63,7 @@ let clusterOptionsMonumentos = {
         fill: {
           color: '#79daf7',
         },
-        radius: 10
+        radius: 15
       }
     })
   }, {
@@ -77,7 +77,7 @@ let clusterOptionsMonumentos = {
         fill: {
           color: '#46a5c2',
         },
-        radius: 20
+        radius: 25
       }
     })
   }, {
@@ -179,9 +179,9 @@ let clusterOptionsPlacas = {
           color: '#5789aa'
         },
         fill: {
-          color: '#79daf7',
+          color: '#BABD5E',
         },
-        radius: 10
+        radius: 15
       }
     })
   }, {
@@ -193,9 +193,9 @@ let clusterOptionsPlacas = {
           color: '#5789aa'
         },
         fill: {
-          color: '#46a5c2',
+          color: '#C1C33E',
         },
-        radius: 20
+        radius: 25
       }
     })
   }, {
@@ -207,7 +207,7 @@ let clusterOptionsPlacas = {
           color: '#5789aa'
         },
         fill: {
-          color: '#157a99',
+          color: '#808006',
         },
         radius: 30
       }
@@ -221,7 +221,7 @@ let clusterOptionsPlacas = {
           color: '#5789aa'
         },
         fill: {
-          color: '#034357',
+          color: '#8C7300',
         },
         radius: 40
       }
@@ -285,9 +285,9 @@ let clusterOptionsStonh = {
           color: '#5789aa'
         },
         fill: {
-          color: '#79daf7',
+          color: '#BD9D5E',
         },
-        radius: 10
+        radius: 15
       }
     })
   }, {
@@ -299,9 +299,9 @@ let clusterOptionsStonh = {
           color: '#5789aa'
         },
         fill: {
-          color: '#46a5c2',
+          color: '#AC8F3E',
         },
-        radius: 20
+        radius: 25
       }
     })
   }, {
@@ -313,7 +313,7 @@ let clusterOptionsStonh = {
           color: '#5789aa'
         },
         fill: {
-          color: '#157a99',
+          color: '#9B821F',
         },
         radius: 30
       }
@@ -327,7 +327,7 @@ let clusterOptionsStonh = {
           color: '#5789aa'
         },
         fill: {
-          color: '#034357',
+          color: '#8A7500',
         },
         radius: 40
       }
@@ -410,10 +410,10 @@ geojsonData.then(() => {
 
 
   const capaPlacas = new M.layer.GeoJSON({
-    name: "Placas conmemorativas ",
+    name: "Placas conmemorativas",
     source: geojsonDataAsync.geoJson_Placas,
     extract: true,
-    legend: "Placas conmemorativas ",
+    legend: "Placas conmemorativas",
     attribution: {
       name: "Placas conmemorativas:",
       description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
@@ -564,4 +564,8 @@ const ext_Modal = new M.plugin.Modal({
 });
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
+
+mapajs.addPlugin(miPlugin)
+
+
 
