@@ -85,7 +85,7 @@ miPlugin.addTo = (map) => {
                 <option value="1">----</option>
                 <option value="2">....</option>
             </select>
-             <h4> Texto a buscar: </h4>
+             <h4> Filtrado de capa por </h4>
              <input type="text" id="nameSearch" name="nameSearch" placeholder="Texto a buscar" required />
             </div>
              <button id="botonCalcular" onclick="myFunctionFilterLayer()" type="button">Filtrar</button> 
@@ -225,34 +225,13 @@ async function myFunctionFilterLayerClean() {
         return
     }
     capaSeleccionada = mapajs.getLayers().filter(capa => capa.getImpl().legend == value)[0]
+    Zindex = capaSeleccionada.getZIndex()
 
-    //se crea un filtro personalizado
+    //se elimina un filtro personalizado
     document.getElementById("nameSearch").value = ""
-
+    M.toast.warning('Eliminando filtro, esto puede tardar un "poco"', null, 1000);
+    await new Promise(resolve => setTimeout(resolve, 100));
     capaSeleccionada.removeFilter();
-
-
-    
-
-    try {
-        document.querySelector(`[value="GeoJSON-${capaSeleccionada.legend}"]`).click()
-    } catch (error) {
-        console.error(error);
-    }
-    
-    // console.log(capaSeleccionada.getImpl().legend)
-
-    mapajs.getLayers()
-        .filter(objeto => objeto.isBase === false)
-        .forEach(objeto => {
-            objeto.setVisible(false)
-            // if(objeto.legend != '__draw__'){
-            //     document.querySelector(`[value="GeoJSON-${capaSeleccionada.legend}"]`).checked = false
-            // }
-        });
-
-    // await new Promise(resolve => setTimeout(resolve, 100));
-
 
     SVGCarga.hidden = true
     capaSeleccionada.setVisible(true)
@@ -263,6 +242,8 @@ async function myFunctionFilterLayerClean() {
     } catch (error) {
         console.error(error);
     }
+
+    
 }
 
 
