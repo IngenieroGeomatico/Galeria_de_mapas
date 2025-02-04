@@ -89,7 +89,8 @@ miPlugin.addTo = (map) => {
              <input type="text" id="nameSearch" name="nameSearch" placeholder="Texto a buscar" required />
             </div>
              <button id="botonCalcular" onclick="myFunctionFilterLayer()" type="button">Filtrar</button> 
-             <button id="botonLimpiar" onclick="myFunctionFilterLayerClean()" type="button">Limpiar filtrado</button> 
+             <!--<button id="botonLimpiar" onclick="myFunctionFilterLayerClean()" type="button">Limpiar filtrado</button>  -->
+             
         `
 
         map.on(M.evt.COMPLETED, () => {
@@ -111,7 +112,7 @@ miPlugin.addTo = (map) => {
                 }
 
                 const legends = mapajs.getLayers()
-                    .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false) // Filtrar capas que tengan la propiedad 'legend'
+                    .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false && capa.filterID) // Filtrar capas que tengan la propiedad 'legend'
                     .map(capa => capa.getImpl().legend).reverse();
                 selector = miPlugin.panel.getTemplatePanel().querySelector("#seleccionCapasID")
                 selector.innerHTML = ""
@@ -121,7 +122,7 @@ miPlugin.addTo = (map) => {
                 option.value = valueOri;
                 selector.add(option);
                 legends.forEach((element) => {
-                    if (element == "Municipio Madrid" || element == "Estaciones calidad del aire") {
+                    if (element.includes(' -//- ')) {
                         // pass
                     } else {
                         var option = document.createElement("option");
@@ -144,6 +145,7 @@ async function myFunctionFilterLayer() {
     SVGCarga.hidden = false;
 
     // Espera un ciclo de evento para que el navegador actualice el DOM
+    M.toast.warning('Filtrando capa . . .', null, 2000);
     await new Promise(resolve => setTimeout(resolve, 100));
 
     
@@ -162,26 +164,36 @@ async function myFunctionFilterLayer() {
     textoaBuscar = document.getElementById("nameSearch").value
 
     let filter = new M.filter.Function(feature => {
-        if (capaSeleccionada.legend=="Placas Stolpersteine"){
+        if (capaSeleccionada.filterID=="Placas Stolpersteine"){
             return feature.getAttribute('nombre_completo').indexOf(textoaBuscar) >= 0;
-        } else if (capaSeleccionada.legend=="Placas conmemorativas"){
+        } else if (capaSeleccionada.filterID=="Placas conmemorativas"){
             return feature.getAttribute('Comentario').indexOf(textoaBuscar) >= 0;
-        }else if (capaSeleccionada.legend=="Monumentos"){
+        }else if (capaSeleccionada.filterID=="Monumentos"){
             return feature.getAttribute('organization')['organization-desc'].indexOf(textoaBuscar) >= 0;
         }
-        
     });
 
-    capaSeleccionada.setFilter(filter);
-
-
+    // capaSeleccionada.setFilter(filter);
     
+    let Filtrados = filter.execute(capaSeleccionada.getFeatures());
+    capaVectorial = new M.layer.Vector({ 
+            name: capaSeleccionada.legend + ' - ' +textoaBuscar,
+            legend: capaSeleccionada.legend + ' - ' +textoaBuscar,
+    });
+
+    // capaVectorial.filterID = capaSeleccionada.filterID
+    mapajs.addLayers(capaVectorial)
+    for (const elemento of Filtrados) {
+        capaVectorial.addFeatures([elemento])
+    }
+
 
     try {
-        document.querySelector(`[value="GeoJSON-${capaSeleccionada.legend}"]`).click()
+        document.querySelector(`[value="Vector-${capaVectorial.legend}"]`).click()
     } catch (error) {
         console.error(error);
     }
+    
     
     // console.log(capaSeleccionada.getImpl().legend)
 
@@ -198,16 +210,27 @@ async function myFunctionFilterLayer() {
 
 
     SVGCarga.hidden = true
-    capaSeleccionada.setVisible(true)
+    capaVectorial.setVisible(true)
 
-    // await new Promise(resolve => setTimeout(resolve, 500));
-    try {
-        document.querySelector(`[value="GeoJSON-${capaSeleccionada.legend}"]`).click()
-    } catch (error) {
-        console.error(error);
+    if(ext_LayerSwitcher.collapsed == false){
+
+        while (!`[value="Vector-${capaVectorial.legend}"]`) {
+            console.log("Esperando el elemento...");
+            await new Promise(resolve => setTimeout(resolve, 500)); // Espera 500ms antes de volver a comprobar
+        }
+        try {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            document.querySelector(`[value="Vector-${capaVectorial.legend}"]`).click()
+        } catch (error) {
+            console.error(error);
+        }
+
     }
+
 }
 
+
+// No se usa debido a lo que tarda en limpiar el filtrado de una capa con cluster
 async function myFunctionFilterLayerClean() {
     SVGCarga.hidden = false;
 
@@ -229,9 +252,30 @@ async function myFunctionFilterLayerClean() {
 
     //se elimina un filtro personalizado
     document.getElementById("nameSearch").value = ""
-    M.toast.warning('Eliminando filtro, esto puede tardar un "poco"', null, 1000);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    capaSeleccionada.removeFilter();
+
+
+    // Primra iteración para eliminar filtros:
+    // Lo veo inviable hasta que no se solucione quevaya tan lento en la API-IDEE
+    // M.toast.warning('Eliminando filtro, esto puede tardar un "poco"', null, 1000);
+    // await new Promise(resolve => setTimeout(resolve, 100));
+    // estilo2 = new M.style.Generic({
+    //     point: {
+    //       radius: 5, 
+    //       fill: {  
+    //         color: 'green',
+    //         opacity: 0.5
+    //       },
+    //       stroke: {
+    //         color: '#FF0000'
+    //       }
+    //     }
+    //   });
+    // capaSeleccionada.setStyle(estilo2)
+    // capaSeleccionada.removeFilter();
+    // capaSeleccionada.setStyle(styleCluster_Monumentos)
+
+    // Segunda iteración, añadir una capa nueca con el resultado del filtro: 
+    
 
     SVGCarga.hidden = true
     capaSeleccionada.setVisible(true)
