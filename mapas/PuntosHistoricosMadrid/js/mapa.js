@@ -390,6 +390,7 @@ geojsonData.then(() => {
     source: geojsonDataAsync.geoJson_Monumentos,
     extract: true,
     legend: "Monumentos",
+    filterID: "Monumentos",
     attribution: {
       name: "Monumentos:",
       description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
@@ -398,6 +399,7 @@ geojsonData.then(() => {
     visibility:true,
     // style:estiloEstacion
   })
+  capaMonumentos.filterID = "Monumentos"
   capaMonumentos.setStyle(styleCluster_Monumentos)
   capaMonumentos.on(M.evt.SELECT_FEATURES, function (features, evt) {
     // se puede comprobar si el elemento seleccionado es un cluster o no
@@ -414,6 +416,7 @@ geojsonData.then(() => {
     source: geojsonDataAsync.geoJson_Placas,
     extract: true,
     legend: "Placas conmemorativas",
+    filterID: "Placas conmemorativas",
     attribution: {
       name: "Placas conmemorativas:",
       description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
@@ -430,6 +433,7 @@ geojsonData.then(() => {
   //     mapajs.getPopup().hide()
   //   }
   // });
+  capaPlacas.filterID = "Placas conmemorativas"
   capaPlacas.setStyle(styleCluster_Placas)
   capaPlacas.on(M.evt.SELECT_FEATURES, function (features, evt) {
     // se puede comprobar si el elemento seleccionado es un cluster o no
@@ -446,6 +450,7 @@ geojsonData.then(() => {
     source: geojsonDataAsync.geoJson_Stolpersteine,
     extract: true,
     legend: "Placas Stolpersteine",
+    filterID: "Placas Stolpersteine",
     attribution: {
       name: "Placas Stolpersteine:",
       description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
@@ -462,6 +467,7 @@ geojsonData.then(() => {
   //     mapajs.getPopup().hide()
   //   }
   // });
+  capaStolpersteine.filterID = "Placas Stolpersteine"
   capaStolpersteine.setStyle(styleCluster_Stonh)
   capaStolpersteine.on(M.evt.SELECT_FEATURES, function (features, evt) {
     // se puede comprobar si el elemento seleccionado es un cluster o no
