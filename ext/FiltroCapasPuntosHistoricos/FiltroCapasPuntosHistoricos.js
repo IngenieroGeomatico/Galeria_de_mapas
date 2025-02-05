@@ -179,6 +179,7 @@ async function myFunctionFilterLayer() {
     capaVectorial = new M.layer.Vector({ 
             name: capaSeleccionada.legend + ' - ' +textoaBuscar,
             legend: capaSeleccionada.legend + ' - ' +textoaBuscar,
+            extract:true
     });
 
     // capaVectorial.filterID = capaSeleccionada.filterID
