@@ -148,9 +148,6 @@ async function myFunctionFilterLayer() {
     M.toast.warning('Filtrando capa . . .', null, 2000);
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    
-    
-
     selector = miPlugin.panel.getTemplatePanel().querySelector("#seleccionCapasID")
     value = selector.value
     if(value==valueOri){
@@ -179,7 +176,11 @@ async function myFunctionFilterLayer() {
     capaVectorial = new M.layer.Vector({ 
             name: capaSeleccionada.legend + ' - ' +textoaBuscar,
             legend: capaSeleccionada.legend + ' - ' +textoaBuscar,
-            extract:true
+            extract:true,
+            attribution: {
+                name: capaSeleccionada.legend +" :",
+                description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
+              }
     });
 
     // capaVectorial.filterID = capaSeleccionada.filterID
