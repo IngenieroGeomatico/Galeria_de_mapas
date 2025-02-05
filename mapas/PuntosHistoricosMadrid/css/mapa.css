@@ -1,0 +1,71 @@
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+#cargaSVG {
+    height: 100%;
+    background-color: #dd61ff82;
+    position: absolute;
+    z-index: 9999;
+    width: 100%;
+  }
+#cargaSVG img{
+    height: 30vh;
+  position: unset;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: auto;
+  margin-bottom: auto;
+  top: 30%;
+  position: sticky;
+}
+
+.m-panel>button {
+    background-color: orangered !important;
+}
+
+.m-areas>div.m-area>div.m-panel.collapsed>button.m-panel-btn {
+    background-color: orangered !important;
+}
+
+.m-areas>div.m-area>div.m-panel.m-panel-modal.collapsed>button.m-panel-btn {
+    background-color: orangered !important;
+}
+
+.m-areas>div.m-area>div.m-plugin-storymap.m-panel.opened>.m-panel-controls .m-storymap-panel {
+    height: 100vh;
+    width: 400px;
+}
+
+.navContent {
+    align-items: center;
+    height: 100%;
+    width: 85%;
+    padding-right: 20px;
+    text-align: justify;
+    margin-left: -15px;
+}
+
+.m-popup > div.m-content > div.m-body > div.m-geojson-content > div.result > table {
+    border-top: 2px dashed rgba(0,0,0,.3);
+    width: 100%;
+  }
+
+.m-popup > div.m-content > div.m-body > div.m-geojson-content > div.result > table td.value {
+    text-align: justify;
+    white-space: preserve-breaks;
+    word-break: break-word;
+    min-width: 360px;
+    padding: 20px;
+  }
+
+
+  .m-popup > div.m-content > div.m-body > div.m-geojson-content > div.result > table td.key{
+    white-space: preserve-breaks;
+    margin-right: 74px;
+    width: 200px;
+  }
