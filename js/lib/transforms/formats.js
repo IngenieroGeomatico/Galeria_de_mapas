@@ -1,4 +1,57 @@
 
+function parseCSV(csvString) {
+    const rows = [];
+    let currentRow = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < csvString.length; i++) {
+        const char = csvString[i];
+        const nextChar = csvString[i + 1];
+
+        if (inQuotes) {
+            if (char === '"' && nextChar === '"') {
+                // Handle escaped quotes
+                currentField += '"';
+                i++; // Skip the next quote
+            } else if (char === '"') {
+                // End of quoted field
+                inQuotes = false;
+            } else {
+                // Add character to field
+                currentField += char;
+            }
+        } else {
+            if (char === '"') {
+                // Start of quoted field
+                inQuotes = true;
+            } else if (char === ',') {
+                // End of field
+                currentRow.push(currentField);
+                currentField = '';
+            } else if (char === '\n') {
+                // End of row
+                currentRow.push(currentField);
+                rows.push(currentRow[0]);
+                currentRow = [];
+                currentField = '';
+            } else {
+                // Add character to field
+                currentField += char;
+            }
+        }
+    }
+
+    // Add the last field and row if present
+    if (currentField || currentRow.length) {
+        currentRow.push(currentField);
+        rows.push(currentRow[0]);
+    }
+
+    return rows;
+}
+
+
 /**
  * Convierte una cadena CSV en un objeto JSON.
  * 
@@ -61,6 +114,7 @@ function csvToJson(csvString, id = false) {
     return jsonData;
 }
 
+
 /**
  * Convierte una cadena CSV en un objeto GeoJSON.
  * 
@@ -75,9 +129,19 @@ function csvToJson(csvString, id = false) {
  * const geoJson = csvToGeoJson(csvData);
  * console.log(geoJson);
  */
-function csvToGeoJson(csvString, long = "long", lat = "lat", WKT = false) {
-    const rows = csvString.split("\n");
-    const headers = rows[0].split(";").map(h => h.trim());
+function csvToGeoJson({csvString, long = "long", lat = "lat", WKT = false, advancedParse = false}) {
+    
+    if (advancedParse){
+        rows = parseCSV(csvString)
+        headers = rows[0].split(";").map(h => h.trim());
+        
+    
+    } else {
+        rows = csvString.split("\n")
+        headers = rows[0].split(";").map(h => h.trim());
+    }
+        
+
 
     const geojsonData = {
         type: "FeatureCollection",
@@ -320,5 +384,73 @@ function svgToGeoJSON(svgText, bbox) {
         features: features
     };
 }
+
+
+/**
+ * Convierte un JSON-LD a un GeoJSON válido.
+ * 
+ * El JSON-LD debe tener un campo `@graph` que contenga los datos. El parámetro `confJSON_LD` especifica 
+ * el tipo de geometría, el campo de las coordenadas dentro de `@graph`, y los nombres de los subcampos 
+ * que contienen la latitud y longitud.
+ * 
+ * @param {Object} jsonLd - El objeto JSON-LD a convertir.
+ * @param {Object} confJSON_LD - Un objeto con el tipo de geometría, el campo de coordenadas y los subcampos de latitud y longitud.
+ * @param {string} confJSON_LD.type - El tipo de geometría (por ejemplo, "Point", "LineString", "Polygon").
+ * @param {string} confJSON_LD.field - El nombre del campo dentro de `@graph` que contiene las coordenadas.
+ * @param {string} confJSON_LD.lat - El subcampo para la latitud (por defecto "latitude").
+ * @param {string} confJSON_LD.long - El subcampo para la longitud (por defecto "longitude").
+ * @returns {Object} - Un objeto GeoJSON válido.
+ * @throws {Error} Si el formato del JSON-LD no es válido o faltan datos.
+ */
+function convertJsonLdToGeoJson(jsonLd, confJSON_LD) {
+    // Validar que el JSON-LD contiene el campo @graph
+    if (!jsonLd || !Array.isArray(jsonLd["@graph"])) {
+        throw new Error('El JSON-LD debe contener un campo "@graph" con un array de datos.');
+    }
+
+    // Validar que confJSON_LD tenga los parámetros esperados
+    if (!confJSON_LD || !confJSON_LD.type || !confJSON_LD.field) {
+        throw new Error('El parámetro confJSON_LD debe contener "type" y "field".');
+    }
+
+    // Si el tipo es "Point", validar que existan latitud y longitud
+    if (confJSON_LD.type === "Point" && (!confJSON_LD.lat || !confJSON_LD.long)) {
+        throw new Error('Para el tipo "Point", confJSON_LD debe contener "lat" y "long".');
+    }
+
+    // Convertir cada elemento del @graph a un feature GeoJSON
+    const features = jsonLd["@graph"].map(item => {
+        // console.log(item)
+        const geometryData = item[confJSON_LD.field];
+        
+        // Si las coordenadas no existen, se ignoran este elemento y se sigue con el siguiente
+        if (!geometryData || geometryData[confJSON_LD.lat] == null || geometryData[confJSON_LD.long] == null) {
+            console.warn(`Coordenadas faltantes para el campo "${confJSON_LD.field}" en el elemento con ID "${item["@id"]}". Se ignorará este elemento.`);
+            return null;  // Retorna null para este elemento y se ignorará en el resultado final
+        }
+
+        // Crear el Feature con la geometría correspondiente
+        const geometry = {
+            type: confJSON_LD.type,
+            coordinates: [geometryData[confJSON_LD.long], geometryData[confJSON_LD.lat]]
+        };
+
+        // Crear un feature GeoJSON
+        return {
+            type: "Feature",
+            geometry,
+            properties: Object.fromEntries(
+                Object.entries(item).filter(([key]) => key !== confJSON_LD.field)
+            )
+        };
+    });
+
+    // Retornar el GeoJSON
+    return {
+        type: "FeatureCollection",
+        features: features.filter(item => item !== null)
+    };
+}
+
 
 

@@ -1308,7 +1308,7 @@ const mp_StoryMap = new M.plugin.StoryMap({
     subtitle: 'Ramón María del Valle-Inclán',
     js: "console.log('BLAAAAAAAAAAA');",
   },
-  delay: 2000,
+  delay:10000,
 });
 
 mapajs.addPlugin(mp_StoryMap);
