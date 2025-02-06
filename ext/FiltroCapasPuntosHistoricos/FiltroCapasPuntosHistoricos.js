@@ -180,7 +180,7 @@ async function myFunctionFilterLayer() {
             attribution: {
                 name: capaSeleccionada.legend +" :",
                 description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
-              }
+            }
     });
 
     // capaVectorial.filterID = capaSeleccionada.filterID
