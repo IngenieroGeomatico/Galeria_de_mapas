@@ -142,9 +142,11 @@ let estilo_base_Monumentos = new M.style.Generic({
       // Forma del fontsymbol.
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
-      form: M.style.form.SHIELD,
+      // form: M.style.form.SHIELD,
+      src: 'https://cdn-icons-png.flaticon.com/512/984/984106.png',
       // Tamaño de la fuente
       fontsize: 0.7,
+      scale: 0.08,
       // Clase fuente
       class: 'M',
       // Tamaño del radio
@@ -248,11 +250,13 @@ let estilo_base_Placas = new M.style.Generic({
       // Forma del fontsymbol.
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
-      form: M.style.form.LOZENGE,
+      // form: M.style.form.LOZENGE,
+      src: 'https://cdn-icons-png.flaticon.com/512/3897/3897579.png',
       // Tamaño de la fuente
       fontsize: 0.7,
+      scale: 0.08,
       // Clase fuente
-      class: 'P',
+      // class: 'P',
       // Tamaño del radio
       radius: 15,
       // Giro del icono en radianes
@@ -354,9 +358,11 @@ let estilo_base_Stonh = new M.style.Generic({
       // Forma del fontsymbol.
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
-      form: M.style.form.SQUARE,
+      // form: M.style.form.SQUARE,
+      src: 'https://cdn-icons-png.flaticon.com/512/5854/5854013.png',
       // Tamaño de la fuente
       fontsize: 0.7,
+      scale: 0.06,
       // Clase fuente
       class: 'S',
       // Tamaño del radio
@@ -400,7 +406,7 @@ geojsonData.then(() => {
     // style:estiloEstacion
   })
   capaMonumentos.filterID = "Monumentos"
-  capaMonumentos.setStyle(styleCluster_Monumentos)
+  capaMonumentos.setStyle(compositeMonumentos)
   capaMonumentos.on(M.evt.SELECT_FEATURES, function (features, evt) {
     // se puede comprobar si el elemento seleccionado es un cluster o no
     if (features[0] instanceof M.ClusteredFeature) {
