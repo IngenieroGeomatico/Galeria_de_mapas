@@ -50,9 +50,46 @@ mapajs.addQuickLayers('Base_IGNBaseTodo_TMS_2')
 geojsonJoin = myFunction_JoinData_CM()
 geojsonJoin.then(()=>{
 
+  // Estilos:
+  let estiloEstacion = new M.style.Generic({
+    point: {
+      icon: {
+        src: '../../img/iconos/house_wifi.svg',
+        scale: 0.06,
+      },
+
+    }
+  });
+
+  let estiloComunidadAutonoma = new M.style.Generic({
+    polygon: {
+      fill: {
+        opacity: 0.2,
+      },
+      stroke: {
+        color: '#ff3c00',
+        width: 4
+      }
+    }
+  });
+
 
 
   // Capas:
+
+  const capaEstaciones = new M.layer.GeoJSON({
+      name: "Estaciones calidad del aire",
+      source: geojsonJoin_CM.geojsonEstaciones,
+      extract: true,
+      legend: "Estaciones calidad del aire",
+      attribution: {
+        name: "Estaciones:",
+        description: " <a style='color: #0000FF' href='https://www.comunidad.madrid/gobierno/datos-abiertos' target='_blank'>Comunidad de Madrid</a> "
+      }
+    },{
+      style:estiloEstacion
+  })
+
   const capaCM = new M.layer.GeoJSON({
     name: "Comunidad de Madrid",
     source: geojsonJoin_CM.ComunidadAutonoma,
@@ -63,7 +100,7 @@ geojsonJoin.then(()=>{
       description: " <a style='color: #0000FF' href='https://api-features.ign.es/collections/administrativeunit/items?limit=1&nameunit=Comunidad%20de%20Madrid&nationallevelname=Comunidad autónoma' target='_blank'>IGN</a> "
     }
   },{
-    // style: estiloComunidadAutonoma
+    style: estiloComunidadAutonoma
   })
 
 
@@ -72,7 +109,7 @@ geojsonJoin.then(()=>{
 
 
   arrayLayers = [
-    // capaEstaciones,
+    capaEstaciones,
     capaCM,      
     // capaEstacionesMedidas_1, capaEstacionesMedidas_6, 
     // capaEstacionesMedidas_7, capaEstacionesMedidas_8, capaEstacionesMedidas_9,
@@ -108,6 +145,27 @@ async function myFunction_JoinData_CM() {
   value_1__gjson_ComunidadMadrid = await myPromise_1_CM;
 
   geojsonJoin_CM.ComunidadAutonoma = value_1__gjson_ComunidadMadrid
+
+
+  let myPromise_2_Estaciones= new Promise(function (resolve) {
+    M.proxy(true)
+    M.remote.get("https://datos.comunidad.madrid/catalogo/dataset/4cd076a3-e602-48da-b834-58de39d3125c/resource/0aa62bb9-9fad-42df-826d-72ae903e3bd6/download/calidad_aire_estaciones.json").then(
+      function (res) {
+        // Muestra un diálogo informativo con el resultado de la petición get
+        // console.log(res.text);
+        M.proxy(false)
+        resolve(JSON.parse(res.text))
+      });
+  });
+  value_2__gjson_Estaciones = await myPromise_2_Estaciones;
+
+  for (f in value_2__gjson_Estaciones["data"]) {
+      value_2__gjson_Estaciones["data"][f]["estacion_coord_latitud"] = convertGmsToDecimal(value_2__gjson_Estaciones["data"][f]["estacion_coord_latitud"])
+      value_2__gjson_Estaciones["data"][f]["estacion_coord_longitud"] = convertGmsToDecimal(value_2__gjson_Estaciones["data"][f]["estacion_coord_longitud"])
+  }
+
+  geojsonEstaciones = jsonToGeoJson_fromLongLat(value_2__gjson_Estaciones["data"], "estacion_coord_longitud","estacion_coord_latitud")
+  geojsonJoin_CM.geojsonEstaciones = geojsonEstaciones
 
 
   return geojsonJoin_CM
