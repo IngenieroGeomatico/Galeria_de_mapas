@@ -34,7 +34,7 @@ M.proxy(false)
 mapajs = M.map({
   container: "mapa",
   zoom: 8,
-  center: {x: -424798.4880097259, y: 4943019.355160896},
+  center: {x: -424083.9690092861, y: 4934857.956984267},
   controls: ['attributions'],
   layers: []
 });
