@@ -993,6 +993,7 @@ geojsonJoin.then(() => {
     visibility:false,
     style: estiloEstacionesMedidas_1
   })
+  capaEstacionesMedidas_1.filterLayer = true
 
   const capaEstacionesMedidas_6 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_6",
@@ -1005,6 +1006,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style: estiloEstacionesMedidas_6})
+  capaEstacionesMedidas_6.filterLayer = true
+
 
   const capaEstacionesMedidas_7 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_7",
@@ -1017,6 +1020,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style:estiloEstacionesMedidas_7})
+  capaEstacionesMedidas_7.filterLayer = true
+
 
   const capaEstacionesMedidas_8 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_8",
@@ -1029,6 +1034,9 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style:estiloEstacionesMedidas_8})
+  capaEstacionesMedidas_8.filterLayer = true
+
+
 
   const capaEstacionesMedidas_9 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_9",
@@ -1041,6 +1049,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style:estiloEstacionesMedidas_9})
+  capaEstacionesMedidas_9.filterLayer = true
+
 
   const capaEstacionesMedidas_10 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_10",
@@ -1053,6 +1063,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style:estiloEstacionesMedidas_10})
+  capaEstacionesMedidas_10.filterLayer = true
+
 
   const capaEstacionesMedidas_12 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_12",
@@ -1065,6 +1077,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style:estiloEstacionesMedidas_12})
+  capaEstacionesMedidas_12.filterLayer = true
+
 
   const capaEstacionesMedidas_14 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_14",
@@ -1077,6 +1091,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
     },{visibility:false, style:estiloEstacionesMedidas_14})
+    capaEstacionesMedidas_14.filterLayer = true
+
 
   const capaEstacionesMedidas_20 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_20",
@@ -1089,6 +1105,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style:estiloEstacionesMedidas_20})
+  capaEstacionesMedidas_20.filterLayer = true
+
 
   const capaEstacionesMedidas_30 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_30",
@@ -1101,6 +1119,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style:estiloEstacionesMedidas_30})
+  capaEstacionesMedidas_30.filterLayer = true
+
 
 
   const capaEstacionesMedidas_35 = new M.layer.GeoJSON({
@@ -1114,6 +1134,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false, style:estiloEstacionesMedidas_35})
+  capaEstacionesMedidas_35.filterLayer = true
+
 
 
   const capaEstacionesMedidas_37 = new M.layer.GeoJSON({
@@ -1127,6 +1149,9 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false})
+  capaEstacionesMedidas_37.filterLayer = true
+
+
 
   const capaEstacionesMedidas_38 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_38",
@@ -1139,6 +1164,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false})
+  capaEstacionesMedidas_38.filterLayer = true
+
 
   const capaEstacionesMedidas_39 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_39",
@@ -1151,6 +1178,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false})
+  capaEstacionesMedidas_39.filterLayer = true
+
 
 
   const capaEstacionesMedidas_42 = new M.layer.GeoJSON({
@@ -1164,6 +1193,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false})
+  capaEstacionesMedidas_42.filterLayer = true
+
 
   const capaEstacionesMedidas_43 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_43",
@@ -1176,6 +1207,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false})
+  capaEstacionesMedidas_43.filterLayer = true
+
 
   const capaEstacionesMedidas_44 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_44",
@@ -1188,6 +1221,8 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false})
+  capaEstacionesMedidas_44.filterLayer = true
+
 
   const capaEstacionesMedidas_431 = new M.layer.GeoJSON({
     name: "capaEstacionesMedidas_431",
@@ -1200,7 +1235,7 @@ geojsonJoin.then(() => {
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
   },{visibility:false})
-
+  capaEstacionesMedidas_431.filterLayer = true
 
 
 
