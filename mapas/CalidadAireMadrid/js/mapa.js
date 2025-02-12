@@ -1364,6 +1364,10 @@ const ext_LayerSwitcher = new M.plugin.Layerswitcher({
 mapajs.addPlugin(ext_LayerSwitcher);
 M.proxy(false)
 
+miPlugin.BBox_Gjson = "geojsonJoin.municipio"
+miPlugin.gridValue = 0.3
+miPlugin.alpha = 100
+miPlugin.sigma2 = 0
 
 mapajs.addPlugin(miPlugin)
 
