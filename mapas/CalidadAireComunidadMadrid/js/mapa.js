@@ -1330,8 +1330,8 @@ M.proxy(false)
 
 miPlugin.BBox_Gjson = "geojsonJoin_CM.ComunidadAutonoma"
 miPlugin.gridValue = 0.3
-miPlugin.alpha = 75
-miPlugin.sigma2 = 0.1
+miPlugin.alpha = 100
+miPlugin.sigma2 = 0.02
 mapajs.addPlugin(miPlugin)
 
 mapajs.addPlugin(miPlugin_leyenda)
