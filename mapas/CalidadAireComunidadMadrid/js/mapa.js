@@ -781,7 +781,244 @@ geojsonJoin.then(()=>{
       }
   });
 
+  let estiloEstacionesMedidas_42 = new M.style.Generic({
+    polygon: {
+      fill: {
+        opacity: 0.6,
+        color: function(feature) {
+          v = feature.getAttributes()[Object.keys(feature.getAttributes())[0]]
+          // valores = v.split("-");
+          // 0, 0.4, 0.75, 1.25, 2.5, 5, 10, 20, 50, Infinity
 
+          return  v == "20-50" ? 'rgb(143,63,151)' : // Muy poco saludable
+                  v == "10-20" ? 'rgb(255,0,0)' : // No saludable
+                  v == "5-10" ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                  v == "2.5-5" ? 'rgb(255,255,0)' : // Moderado
+                  v == "1.25-2.5" ? '#00E400' :  // Bien
+                  v == "0.75-1.25" ? '#7AF37A' :  // Muy Bien
+                  v == "0.4-0.75" ? '#B7FBB7' :  // Muy Muy Bien
+                  v == "0-0.4" ? '#E2FEE2':   // Muy Muy Muy Bien
+                                'rgb(126,0,35)'; // Peligroso
+                  
+        }
+      },
+      stroke: {
+        color: '#616161',
+        width: 4
+      }
+    },
+    point:{
+      radius: 8,
+      // Relleno
+      fill: {
+        // Color de relleno. Hexadecimal, nominal
+        color: function(feature) {
+          v = feature.getAttribute('ultimoValor')
+          // 0, 0.4, 0.75, 1.25, 2.5, 5, 10, 20, 50, Infinity
+
+          return  v >= 50 ? 'rgb(126,0,35)' : // Peligroso
+                  v >= 20 ? 'rgb(143,63,151)' : // Muy poco saludable
+                  v >= 10 ? 'rgb(255,0,0)' : // No saludable
+                  v >= 5 ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                  v >= 2.5 ? 'rgb(255,255,0)' : // Moderado
+                  v >= 1.25 ? '#00E400' :  // Bien
+                  v >= 0.75 ? '#7AF37A' :  // Muy Bien
+                  v >= 0.4 ? '#B7FBB7' :  // Muy Muy Bien
+                  v >= 0 ? '#E2FEE2':   // Muy Muy Muy Bien
+                          'black';     // Inicial
+                
+        },
+        // Transparencia. 0(transparente)|1(opaco)
+        opacity: 0.9,
+      },
+      // Borde exterior
+      stroke: {
+        // Color del borde. Hexadecimal, nominal
+        color: 'rgb(0, 0, 0)',
+        // Grosor en pixeles
+        width: 2,
+      },
+      label: {
+        // Texto a escribir
+        text: 'COVs',
+        // Fuente y características
+        font: 'bold 19px Comic Sans MS',
+        // Color de la fuente. Hexadecimal, nominal
+        color: 'white',
+        // Factor de escala de la fuente
+        scale: 0.9,
+        // Halo de la fuente
+        stroke: {
+          // Color de relleno del halo. Hexadecimal, nominal
+          color: 'rgb(0, 0, 0)',
+          // Grosor en píxeles del halo
+          width: 2,
+        },
+        align: M.style.align.CENTER,
+        baseline: M.style.baseline.BOTTOM,
+      }
+    }
+  });
+
+  let estiloEstacionesMedidas_44 = new M.style.Generic({
+    polygon: {
+      fill: {
+        opacity: 0.6,
+        color: function(feature) {
+          v = feature.getAttributes()[Object.keys(feature.getAttributes())[0]]
+          // valores = v.split("-");
+          // 0, 0.4, 0.75, 1.25, 2.5, 5, 10, 20, 50, Infinity
+
+          return  v == "20-50" ? 'rgb(143,63,151)' : // Muy poco saludable
+                  v == "10-20" ? 'rgb(255,0,0)' : // No saludable
+                  v == "5-10" ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                  v == "2.5-5" ? 'rgb(255,255,0)' : // Moderado
+                  v == "1.25-2.5" ? '#00E400' :  // Bien
+                  v == "0.75-1.25" ? '#7AF37A' :  // Muy Bien
+                  v == "0.4-0.75" ? '#B7FBB7' :  // Muy Muy Bien
+                  v == "0-0.4" ? '#E2FEE2':   // Muy Muy Muy Bien
+                                'rgb(126,0,35)'; // Peligroso
+                  
+        }
+      },
+      stroke: {
+        color: '#616161',
+        width: 4
+      }
+    },
+    point:{
+      radius: 8,
+      // Relleno
+      fill: {
+        // Color de relleno. Hexadecimal, nominal
+        color: function(feature) {
+          v = feature.getAttribute('ultimoValor')
+          // 0, 0.4, 0.75, 1.25, 2.5, 5, 10, 20, 50, Infinity
+
+          return  v >= 50 ? 'rgb(126,0,35)' : // Peligroso
+                  v >= 20 ? 'rgb(143,63,151)' : // Muy poco saludable
+                  v >= 10 ? 'rgb(255,0,0)' : // No saludable
+                  v >= 5 ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                  v >= 2.5 ? 'rgb(255,255,0)' : // Moderado
+                  v >= 1.25 ? '#00E400' :  // Bien
+                  v >= 0.75 ? '#7AF37A' :  // Muy Bien
+                  v >= 0.4 ? '#B7FBB7' :  // Muy Muy Bien
+                  v >= 0 ? '#E2FEE2':   // Muy Muy Muy Bien
+                          'black';     // Inicial
+                
+        },
+        // Transparencia. 0(transparente)|1(opaco)
+        opacity: 0.9,
+      },
+      // Borde exterior
+      stroke: {
+        // Color del borde. Hexadecimal, nominal
+        color: 'rgb(0, 0, 0)',
+        // Grosor en pixeles
+        width: 2,
+      },
+      label: {
+        // Texto a escribir
+        text: 'HAPs',
+        // Fuente y características
+        font: 'bold 19px Comic Sans MS',
+        // Color de la fuente. Hexadecimal, nominal
+        color: 'white',
+        // Factor de escala de la fuente
+        scale: 0.9,
+        // Halo de la fuente
+        stroke: {
+          // Color de relleno del halo. Hexadecimal, nominal
+          color: 'rgb(0, 0, 0)',
+          // Grosor en píxeles del halo
+          width: 2,
+        },
+        align: M.style.align.CENTER,
+        baseline: M.style.baseline.BOTTOM,
+      }
+    }
+  });
+
+  let estiloEstacionesMedidas_431 = new M.style.Generic({
+    polygon: {
+      fill: {
+        opacity: 0.6,
+        color: function(feature) {
+          v = feature.getAttributes()[Object.keys(feature.getAttributes())[0]]
+          // valores = v.split("-");
+          // 0, 12.5, 25, 50, 100, 200, 400, 800, 1600
+
+          return  v == "800-1600" ? 'rgb(143,63,151)' : // Muy poco saludable
+                  v == "400-800" ? 'rgb(255,0,0)' : // No saludable
+                  v == "200-400" ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                  v == "100-200" ? 'rgb(255,255,0)' : // Moderado
+                  v == "50-100" ? '#00E400' :  // Bien
+                  v == "25-50" ? '#7AF37A' :  // Muy Bien
+                  v == "12.5-25" ? '#B7FBB7' :  // Muy Muy Bien
+                  v == "0-12.5" ? '#E2FEE2':   // Muy Muy Muy Bien
+                                'rgb(126,0,35)'; // Peligroso
+                  
+        }
+      },
+      stroke: {
+        color: '#616161',
+        width: 4
+      }
+    },
+    point:{
+      radius: 8,
+      // Relleno
+      fill: {
+        // Color de relleno. Hexadecimal, nominal
+        color: function(feature) {
+          v = feature.getAttribute('ultimoValor')
+          // 0, 12.5, 25, 50, 100, 200, 400, 800, 1600, Infinity
+
+          return  v >= 1600 ? 'rgb(126,0,35)' : // Peligroso
+                  v >= 800 ? 'rgb(143,63,151)' : // Muy poco saludable
+                  v >= 400 ? 'rgb(255,0,0)' : // No saludable
+                  v >= 200 ? 'rgb(255,126,0)' : // No saludable para Grupos Sensibles
+                  v >= 100 ? 'rgb(255,255,0)' : // Moderado
+                  v >= 50 ? '#00E400' :  // Bien
+                  v >= 25 ? '#7AF37A' :  // Muy Bien
+                  v >= 12.5 ? '#B7FBB7' :  // Muy Muy Bien
+                  v >= 0 ? '#E2FEE2':   // Muy Muy Muy Bien
+                          'black';     // Inicial
+                
+        },
+        // Transparencia. 0(transparente)|1(opaco)
+        opacity: 0.9,
+      },
+      // Borde exterior
+      stroke: {
+        // Color del borde. Hexadecimal, nominal
+        color: 'rgb(0, 0, 0)',
+        // Grosor en pixeles
+        width: 2,
+      },
+      label: {
+        // Texto a escribir
+        text: 'm,p-Xileno',
+        // Fuente y características
+        font: 'bold 19px Comic Sans MS',
+        // Color de la fuente. Hexadecimal, nominal
+        color: 'white',
+        // Factor de escala de la fuente
+        scale: 0.9,
+        // Halo de la fuente
+        stroke: {
+          // Color de relleno del halo. Hexadecimal, nominal
+          color: 'rgb(0, 0, 0)',
+          // Grosor en píxeles del halo
+          width: 2,
+        },
+        align: M.style.align.CENTER,
+        baseline: M.style.baseline.BOTTOM,
+      }
+    }
+  });
+
+  
 
   // Capas:
 
@@ -937,7 +1174,7 @@ geojsonJoin.then(()=>{
       visibility:false,
     },{
       visibility:false, 
-      // style:estiloEstacionesMedidas_42
+      style:estiloEstacionesMedidas_42
     })
     capaEstacionesMedidas_42.filterLayer = true
 
@@ -949,7 +1186,7 @@ geojsonJoin.then(()=>{
       visibility:false,
     },{
       visibility:false, 
-      // style:estiloEstacionesMedidas_44
+      style:estiloEstacionesMedidas_44
     })
     capaEstacionesMedidas_44.filterLayer = true
 
@@ -961,7 +1198,7 @@ geojsonJoin.then(()=>{
       visibility:false,
     },{
       visibility:false, 
-      // style:estiloEstacionesMedidas_431
+      style:estiloEstacionesMedidas_431
     })
     capaEstacionesMedidas_431.filterLayer = true
 
@@ -1067,7 +1304,7 @@ M.proxy(false)
 const ext_Modal = new M.plugin.Modal({
   position: 'BL',
   helpLink: {
-    es: '../../html/modal_CalidadAireMadridTiempoReal.html'
+    es: '../../html/modal_CalidadAireComunidadMadridTiempoReal.html'
   }
 });
 
@@ -1092,9 +1329,9 @@ mapajs.addPlugin(ext_LayerSwitcher);
 M.proxy(false)
 
 miPlugin.BBox_Gjson = "geojsonJoin_CM.ComunidadAutonoma"
-miPlugin.gridValue = 0.5
-miPlugin.alpha = 100
-miPlugin.sigma2 = 0.5
+miPlugin.gridValue = 0.3
+miPlugin.alpha = 75
+miPlugin.sigma2 = 0.1
 mapajs.addPlugin(miPlugin)
 
 mapajs.addPlugin(miPlugin_leyenda)

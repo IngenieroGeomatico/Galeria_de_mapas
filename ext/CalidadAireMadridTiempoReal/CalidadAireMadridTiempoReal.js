@@ -238,8 +238,7 @@ async function myFunctionInterpolateExtrapolate() {
         if(feature.properties[atributoV_0]=='V' || feature.properties[atributoV_0]=='T'){
             properties = feature.properties;
             geometry = feature.geometry;
-
-            t.push(parseFloat(properties[atributoH_0]));
+            t.push(parseFloat(properties[atributoH_0].replace(",",".")));
             x.push(geometry.coordinates[0]); // Longitud
             y.push(geometry.coordinates[1]); // Latitud
 
@@ -248,8 +247,7 @@ async function myFunctionInterpolateExtrapolate() {
         }else if(feature.properties[atributoV_1]=='V'||feature.properties[atributoV_1]=='T'){
             properties = feature.properties;
             geometry = feature.geometry;
-
-            t.push(parseFloat(properties[atributoH_1]));
+            t.push(parseFloat(properties[atributoH_1].replace(",",".")));
             x.push(geometry.coordinates[0]); // Longitud
             y.push(geometry.coordinates[1]); // Latitud
 
@@ -329,6 +327,21 @@ async function myFunctionInterpolateExtrapolate() {
     } else if(valorMagnitud == "35"){
         gridValues = [   
             0, 6, 12.5, 25, 50, 100, 200, 500, 1000, Infinity
+        ]
+    } else if(valorMagnitud == "42"){
+        // 0, 0.4, 0.75, 1.25, 2.5, 5, 10, 20, 50, Infinity
+        gridValues = [   
+            0, 0.4, 0.75, 1.25, 2.5, 5, 10, 20, 50, Infinity
+        ]
+    } else if(valorMagnitud == "44"){
+        // 0, 0.4, 0.75, 1.25, 2.5, 5, 10, 20, 50, Infinity
+        gridValues = [   
+            0, 0.4, 0.75, 1.25, 2.5, 5, 10, 20, 50, Infinity
+        ]
+    } else if(valorMagnitud == "431"){
+        // 0, 12.5, 25, 50, 100, 200, 400, 800, 1600, Infinity
+        gridValues = [   
+            0, 12.5, 25, 50, 100, 200, 400, 800, 1600, Infinity
         ]
     } else{
         gridValues = [   
