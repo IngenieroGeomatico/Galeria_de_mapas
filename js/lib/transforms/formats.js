@@ -292,13 +292,75 @@ function WKTToGeoJson(wktString) {
  *   { id: "B", name: "Location2", latitude: 1, longitude: 1, population: 1000 }
  * ];
  * 
- * const geoJson = jsonToGeoJson(jsonArray, 'latitude', 'longitude');
+ * const geoJson = jsonToGeoJson_fromLongLat(jsonArray, 'latitude', 'longitude');
  * // Resultado esperado:
  * // {
  * //   type: "FeatureCollection",
  * //   features: [
  * //     { type: "Feature", properties: { id: "A", name: "Location1", population: 500 }, geometry: { type: "Point", coordinates: [0, 0] } },
  * //     { type: "Feature", properties: { id: "B", name: "Location2", population: 1000 }, geometry: { type: "Point", coordinates: [1, 1] } }
+ * //   ]
+ * // }
+ */
+function jsonToGeoJson_fromLongLat(jsonArray, lonKey, latKey) {
+    return {
+        type: "FeatureCollection",
+        features: jsonArray.map(item => {
+            const { [latKey]: lat, [lonKey]: lon, ...properties } = item;
+            return {
+                type: "Feature",
+                properties: properties,
+                geometry: {
+                    type: "Point",
+                    coordinates: [lon, lat]
+                }
+            };
+        })
+    };
+}
+
+
+
+
+
+/**
+ * Convierte un array de objetos JSON en un GeoJSON de tipo FeatureCollection.
+ *
+ * @param {Object[]} jsonArray - Array de objetos JSON que contienen datos geoespaciales.
+ * @param {string} geometryField - Nombre del campo que contiene la geometría en formato GeoJSON.
+ * @returns {Object} Un objeto GeoJSON de tipo FeatureCollection.
+ *
+ * @example
+ * const data = [
+ *   {
+ *     id: 1,
+ *     name: "Punto A",
+ *     geometry: { type: "Point", coordinates: [40.4168, -3.7038] }
+ *   },
+ *   {
+ *     id: 2,
+ *     name: "Punto B",
+ *     geometry: { type: "Point", coordinates: [40.4178, -3.7048] }
+ *   }
+ * ];
+ * 
+ * const geojson = jsonToGeoJson(data, "geometry");
+ * console.log(geojson);
+ * 
+ * // Salida:
+ * // {
+ * //   "type": "FeatureCollection",
+ * //   "features": [
+ * //     {
+ * //       "type": "Feature",
+ * //       "properties": { "id": 1, "name": "Punto A" },
+ * //       "geometry": { "type": "Point", "coordinates": [40.4168, -3.7038] }
+ * //     },
+ * //     {
+ * //       "type": "Feature",
+ * //       "properties": { "id": 2, "name": "Punto B" },
+ * //       "geometry": { "type": "Point", "coordinates": [40.4178, -3.7048] }
+ * //     }
  * //   ]
  * // }
  */
@@ -317,6 +379,7 @@ function jsonToGeoJson(jsonArray, geometryField) {
       })
     };
   }
+
 
 /**
  * Convierte un SVG en formato de texto en un objeto GeoJSON.
@@ -451,6 +514,52 @@ function convertJsonLdToGeoJson(jsonLd, confJSON_LD) {
         features: features.filter(item => item !== null)
     };
 }
+
+
+
+/**
+ * Convierte una coordenada en formato grados, minutos y segundos (GMS) a grados decimales (DD).
+ *
+ * @param {string} gms - La coordenada en formato "GG°MM'SS,S\"[N|S|E|W]".
+ * @returns {number} La coordenada convertida a grados decimales.
+ *
+ * @example
+ * // Convertir una latitud en formato GMS a decimal
+ * const lat = convertGmsToDecimal("40°28'45,0\"N");
+ * console.log(lat); // 40.479167
+ *
+ * // Convertir una longitud en formato GMS a decimal
+ * const lon = convertGmsToDecimal("03°22'40,0\"W");
+ * console.log(lon); // -3.377778
+ */
+function convertGmsToDecimal(gms) {
+
+    if (typeof gms !== "string") {
+        console.warn("El parámetro gms debe ser una cadena de texto.");
+        return
+    }
+
+    const regex = /(\d+)°(\d+)'(\d+[\.,]?\d*)['"\s]*([NSEW])/;
+    const match = gms.match(regex);
+
+    if (!match) {
+        throw new Error("Formato de coordenadas inválido: " + gms);
+    }
+
+    let [_, degrees, minutes, seconds, direction] = match;
+    degrees = parseInt(degrees, 10);
+    minutes = parseInt(minutes, 10);
+    seconds = parseFloat(seconds.replace(",", "."));
+
+    let decimal = degrees + minutes / 60 + seconds / 3600;
+
+    if (direction === "S" || direction === "W") {
+        decimal *= -1;
+    }
+
+    return decimal;
+}
+
 
 
 

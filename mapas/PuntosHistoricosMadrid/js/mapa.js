@@ -143,7 +143,7 @@ let estilo_base_Monumentos = new M.style.Generic({
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
       // form: M.style.form.SHIELD,
-      src: 'https://cdn-icons-png.flaticon.com/512/984/984106.png',
+      src: 'https://cdn-icons-png.flaticon.com/512/984/984106.png', // Ponerlo en relatvo
       // Tamaño de la fuente
       fontsize: 0.7,
       scale: 0.08,
