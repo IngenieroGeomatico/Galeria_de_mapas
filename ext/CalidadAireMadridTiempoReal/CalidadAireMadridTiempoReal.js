@@ -191,7 +191,7 @@ async function myFunctionInterpolateExtrapolate() {
         madridTime.setHours(madridTime.getHours());
 
         let madridTime_1 = new Date(date.toLocaleString('en-US', options));
-        madridTime_1.setHours(madridTime.getHours()-2);
+        madridTime_1.setHours(madridTime.getHours()-1);
 
         // Formatear solo los dígitos de la hora sin AM/PM
         let Vs = madridTime.toLocaleTimeString('en-US', { hour: '2-digit', hourCycle: 'h23' });
