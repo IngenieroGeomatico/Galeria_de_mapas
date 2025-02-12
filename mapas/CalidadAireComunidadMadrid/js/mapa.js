@@ -965,8 +965,6 @@ geojsonJoin.then(()=>{
     })
     capaEstacionesMedidas_431.filterLayer = true
 
-
-
   arrayLayers = [
     capaEstaciones,
     capaCM,      
@@ -977,13 +975,10 @@ geojsonJoin.then(()=>{
     // capaEstacionesMedidas_22, capaEstacionesMedidas_30, 
     
     capaEstacionesMedidas_42, capaEstacionesMedidas_44,capaEstacionesMedidas_431
-
   ]
-
 
   // y la añadimos al mapa
   mapajs.addLayers(arrayLayers.reverse());
-
 })
 
 
@@ -1067,7 +1062,6 @@ async function myFunction_JoinData_CM() {
 }
 
 
-
 // Extensiones
 M.proxy(false)
 const ext_Modal = new M.plugin.Modal({
@@ -1076,6 +1070,7 @@ const ext_Modal = new M.plugin.Modal({
     es: '../../html/modal_CalidadAireMadridTiempoReal.html'
   }
 });
+
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
 
@@ -1092,10 +1087,14 @@ const ext_LayerSwitcher = new M.plugin.Layerswitcher({
   showCatalog: false,
   displayLabel: false,
 });
+
 mapajs.addPlugin(ext_LayerSwitcher);
 M.proxy(false)
 
-
+miPlugin.BBox_Gjson = "geojsonJoin_CM.ComunidadAutonoma"
+miPlugin.gridValue = 0.5
+miPlugin.alpha = 100
+miPlugin.sigma2 = 0.5
 mapajs.addPlugin(miPlugin)
 
 mapajs.addPlugin(miPlugin_leyenda)

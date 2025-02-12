@@ -23,7 +23,7 @@ const panelExtra = new M.ui.Panel('toolsExtra', {
     "collapsed": false,
     "className": 'g-herramienta',
     "collapsedButtonClass": 'm-tools',
-    "position": M.ui.position.TL
+    "position": M.ui.position.TL,
 });
 
 const htmlPanel =
@@ -108,7 +108,7 @@ miPlugin.addTo = (map) => {
                 }
 
                 const legends = mapajs.getLayers()
-                    .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false) // Filtrar capas que tengan la propiedad 'legend'
+                    .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false && capa.filterLayer) // Filtrar capas que tengan la propiedad 'legend'
                     .map(capa => capa.getImpl().legend).reverse();
                 selector = miPlugin.panel.getTemplatePanel().querySelector("#seleccionCapasID")
                 selector.innerHTML = ""
@@ -171,9 +171,9 @@ async function myFunctionInterpolateExtrapolate() {
         capaSeleccionada.interpolate = true
     }
 
-
-    var bbox = turf.bbox(geojsonJoin.municipio);
-    var grid = turf.pointGrid(bbox, 0.3,
+    Bbox_GJSON = window[miPlugin.BBox_Gjson.split('.')[0]][miPlugin.BBox_Gjson.split('.')[1]]
+    var bbox = turf.bbox(Bbox_GJSON);
+    var grid = turf.pointGrid(bbox, miPlugin.gridValue,
         // {mask:geojsonJoin.municipio.features[0]}
     );
 
@@ -191,7 +191,7 @@ async function myFunctionInterpolateExtrapolate() {
         madridTime.setHours(madridTime.getHours());
 
         let madridTime_1 = new Date(date.toLocaleString('en-US', options));
-        madridTime_1.setHours(madridTime.getHours()-1);
+        madridTime_1.setHours(madridTime.getHours()-2);
 
         // Formatear solo los dígitos de la hora sin AM/PM
         let Vs = madridTime.toLocaleTimeString('en-US', { hour: '2-digit', hourCycle: 'h23' });
@@ -201,11 +201,31 @@ async function myFunctionInterpolateExtrapolate() {
         // if(Vs<10){
         //     Vs = "0"+Vs.toString()
         // }
-        atributoH_0 = "H" + Vs
-        atributoV_0 = "V" + Vs
-        atributoH_1 = "H" + Vs_1
-        atributoV_1 = "V" + Vs_1
-        valorMagnitud = gjsonCapaSeleccionada.features[0].properties["MAGNITUD"]
+
+        if(gjsonCapaSeleccionada.features[0].properties["MAGNITUD"]){
+
+            atributoMagnitud = "MAGNITUD"
+            atributoH_0 = "H" + Vs
+            atributoV_0 = "V" + Vs
+            atributoH_1 = "H" + Vs_1
+            atributoV_1 = "V" + Vs_1
+
+        } else if(gjsonCapaSeleccionada.features[0].properties["magnitud"]){
+
+            atributoMagnitud = "magnitud"
+            atributoH_0 = "h" + Vs
+            atributoV_0 = "v" + Vs
+            atributoH_1 = "h" + Vs_1
+            atributoV_1 = "v" + Vs_1
+
+        } else{
+            M.toast.error('No existen los suficientes datos para realizar la operaciónatributo magnitud', null, 2000);
+            SVGCarga.hidden = true
+            return
+        }
+        
+        
+        valorMagnitud = gjsonCapaSeleccionada.features[0].properties[atributoMagnitud]
     } catch (error) {
         M.toast.error('No existen los suficientes datos para realizar la operación', null, 2000);
         SVGCarga.hidden = true
@@ -215,7 +235,7 @@ async function myFunctionInterpolateExtrapolate() {
     gjsonCapaSeleccionada.features.forEach(feature => {
         // console.log(feature.properties)
         
-        if(feature.properties[atributoV_0]=='V'){
+        if(feature.properties[atributoV_0]=='V' || feature.properties[atributoV_0]=='T'){
             properties = feature.properties;
             geometry = feature.geometry;
 
@@ -225,7 +245,7 @@ async function myFunctionInterpolateExtrapolate() {
 
             atributoH = atributoH_0
 
-        }else if(feature.properties[atributoV_1]=='V'){
+        }else if(feature.properties[atributoV_1]=='V'||feature.properties[atributoV_1]=='T'){
             properties = feature.properties;
             geometry = feature.geometry;
 
@@ -241,11 +261,11 @@ async function myFunctionInterpolateExtrapolate() {
             atributoH = atributoH_0
         }
 
-        feature.properties["ultimoValor"] = feature.properties[atributoH]
+        feature.properties["ultimoValor"] = parseFloat(feature.properties[atributoH].replace(",","."))
     })
 
     var model = "exponential";
-    var sigma2 = 0, alpha = 100;
+    var sigma2 = miPlugin.sigma2 , alpha = miPlugin.alpha;
     try {
         var variogram = kriging.train(t, x, y, model, sigma2, alpha);
     } catch (error) {
@@ -326,7 +346,7 @@ async function myFunctionInterpolateExtrapolate() {
     )
 
     isoband.features.forEach(feature => {
-        intersection = turf.intersect(turf.featureCollection([feature, geojsonJoin.municipio.features[0]]));
+        intersection = turf.intersect(turf.featureCollection([feature, Bbox_GJSON.features[0]]));
         if (intersection) {
             feature.geometry = intersection.geometry
         }
