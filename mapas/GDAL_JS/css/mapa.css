@@ -1,0 +1,19 @@
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+.m-panel > button {
+    background-color: orangered !important;
+}
+
+.m-areas > div.m-area > div.m-panel.collapsed > button.m-panel-btn {
+    background-color: orangered !important;
+}
+
+.m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn {
+    background-color: orangered !important;
+}
+
