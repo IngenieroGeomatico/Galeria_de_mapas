@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <title>Visualizador base</title>
+
+  <!-- fichero estilos -->
+  <link href="https://componentes.cnig.es/api-core/assets/css/apiign.ol.min.css" rel="stylesheet" />
+
+  <!-- Ficheros javascript de la API -->
+  <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>
+  <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>
+  <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>
+
+  <!-- Extensiones de la API-CNIG -->
+  <link href="https://componentes.cnig.es/api-core/plugins/layerswitcher/layerswitcher.ol.min.css" rel="stylesheet" />
+
+  <script type="text/javascript"
+    src="https://componentes.cnig.es/api-core/plugins/layerswitcher/layerswitcher.ol.min.js">
+    </script>
+
+
+  <!-- estilo básico -->
+  <!-- fichero estilos -->
+  <link href="./css/drag_Drop.css" rel="stylesheet" />
+  <link href="./css/navbar.css" rel="stylesheet" />
+  <link href="./css/mapa.css" rel="stylesheet" />
+
+</head>
+
+<body>
+
+
+  <div class="nav">
+    <input type="checkbox" id="nav-check">
+    <div class="nav-header">
+    </div>
+    <div class="nav-btn">
+      <label for="nav-check">
+        <span></span>
+        <span></span>
+        <span></span>
+      </label>
+    </div>
+    
+    <div class="nav-links">
+      <a id="Arhivos" class="active">Archivos</a>
+      <a id="Mapa">Mapa</a>
+    </div>
+  </div>
+
+
+
+
+
+  <div class="container p-y-1">
+    <div class="row m-b-1">
+      <div class="col-sm-6 offset-sm-3">
+        <button  type="button"  class="custom-btn btn-7"   onclick="document.getElementById('inputFile').click()"><span>Sube un fichero</span></button>
+        <div class="form-group inputDnD">
+          <input type="file" class="form-control-file text-primary font-weight-bold" id="inputFile" accept="image/*"
+            onchange="readUrl(this)" data-title="Drag and drop a file">
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Contenedor principal del mapa -->
+  <div id="mapa" hidden></div>
+
+  <script type="text/javascript" src="./js/drag&Drop.js"></script>
+  <script type="text/javascript" src="./js/mapa.js"></script>
+</body>
+
+</html>
