@@ -166,7 +166,7 @@
   }
 }
 .upload:hover::before {
-  background-color: #f49759;
+  background-color: #fcf1e9;
 }
 
 @keyframes shadow-animate {

@@ -17,9 +17,9 @@ function readUrl(input) {
       setTimeout(() => fileUpload.classList.remove("done"), 6000);
       setTimeout(() => fileUpload.classList.remove("drop"), 6000);
       reader.name = imgName
-      console.log(reader)
+      // console.log(reader)
       filesObj[n] = reader
-      n +=1
+      n+=1
     }
     reader.readAsDataURL(input.files[0]);
   }
