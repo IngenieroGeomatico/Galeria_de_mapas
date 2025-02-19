@@ -34,6 +34,8 @@
 
 <body>
 
+  
+
 
   <div class="nav">
     <input type="checkbox" id="nav-check">
@@ -54,10 +56,13 @@
   </div>
 
 
+   <!-- Div carga -->
+   <div id="cargaSVG">
+    <img src="../../img/iconos/gear-spinner.svg">
+  </div>
 
 
-
-  <div class="container p-y-1">
+  <div id="containerID" class="container p-y-1">
 
     <button  type="button"  class="custom-btn btn-7"   onclick="document.getElementById('inputFile').click()"><span>Sube un fichero</span></button>
     
@@ -80,6 +85,7 @@
   <!-- Contenedor principal del mapa -->
   <div id="mapa" hidden></div>
 
+  <script type="text/javascript" src="../../js/gdal/gdal3.js"></script>
   <script type="text/javascript" src="./js/drag&Drop.js"></script>
   <script type="text/javascript" src="./js/mapa.js"></script>
 </body>

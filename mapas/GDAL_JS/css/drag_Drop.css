@@ -289,3 +289,20 @@ button {
   .btn-7 span:hover:after {
     width: 100%;
   }
+
+
+
+  #cargaSVG {
+    height: -webkit-fill-available;
+    background-color: #dd61ff82;
+    position: absolute;
+    z-index: 9999;
+    width: 100%;
+    display:grid;
+    justify-content: space-evenly;
+    align-content: stretch;
+}
+#cargaSVG >img{
+  height: 200px;
+  align-self: center;
+}
