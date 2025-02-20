@@ -26,6 +26,7 @@
 
   <!-- estilo básico -->
   <!-- fichero estilos -->
+  <link href="./css/info.css" rel="stylesheet" />
   <link href="./css/drag_Drop.css" rel="stylesheet" />
   <link href="./css/navbar.css" rel="stylesheet" />
   <link href="./css/mapa.css" rel="stylesheet" />
@@ -50,7 +51,8 @@
     </div>
     
     <div class="nav-links">
-      <a id="Arhivos" class="active">Archivos</a>
+      <a id="Info">Info</a>
+      <a id="Arhivos" class="activeButton">Archivos </a>
       <a id="Mapa">Mapa</a>
     </div>
   </div>
@@ -61,6 +63,42 @@
     <img src="../../img/iconos/gear-spinner.svg">
   </div>
 
+  <div id="info" >
+
+    <h2>Formatos disponibles</h2>
+
+    <button class="accordion">Información de la librería</button>
+    <div class="panel">
+      <ul class="a">
+        <li>La documentación de la librería gdaljs utilizada está disponible   <a href="https://gdal3.js.org/docs/" target="_blank">aquí</a>
+        </li>
+      </ul>
+    </div>
+
+    <button class="accordion">Archivos vectoriales</button>
+    <div class="panel">
+      <table>
+        <tr>
+          <th>Nombre del formato</th>
+          <th>Nombre corto</th>
+          <th>¿Es leible?</th>
+          <th>¿Es exportable?</th>
+        </tr>
+        <tr>
+          <td>Peter</td>
+          <td>Griffin</td>
+          <td>$100</td>
+          <td>$100</td>
+        </tr>
+      </table>
+    </div>
+
+    <button class="accordion">Archivos ráster</button>
+    <div class="panel">
+      <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    </div>
+
+  </div>
 
   <div id="containerID" class="container p-y-1">
 
@@ -76,6 +114,10 @@
       <svg class="check-wrapper" width="130" height="130">
         <polyline class="check" points="100.2,40.2 51.5,88.8 29.8,67.5 "/>
       </svg>
+      <svg class="fail-wrapper" width="130" height="130">
+        <line class="fail" x1="30" y1="30" x2="90" y2="90" stroke="red" stroke-width="10"/>
+        <line class="fail" x1="90" y1="30" x2="30" y2="90" stroke="red" stroke-width="10"/>
+      </svg>
       <div class="shadow"></div>
     </div>
 
@@ -86,6 +128,7 @@
   <div id="mapa" hidden></div>
 
   <script type="text/javascript" src="../../js/gdal/gdal3.js"></script>
+  <script type="text/javascript" src="./js/info.js"></script>
   <script type="text/javascript" src="./js/drag&Drop.js"></script>
   <script type="text/javascript" src="./js/mapa.js"></script>
 </body>

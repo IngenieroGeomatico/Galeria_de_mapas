@@ -45,10 +45,10 @@
     cursor:pointer;
   }
   
-  .nav > .nav-links > a:hover, .nav > .nav-links > a.active:hover {
+  .nav > .nav-links > a:hover, .nav > .nav-links > a.activeButton:hover {
     background-color: rgba(0, 0, 0, 0.2);
   }
-  .nav > .nav-links > a.active{
+  .nav > .nav-links > a.activeButton{
     background-color: rgba(0, 0, 0, 0.4);
   }
   
