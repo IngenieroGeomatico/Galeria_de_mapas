@@ -74,12 +74,30 @@
       stroke-dashoffset: 722;
     }
   }
+  
   .check-wrapper {
     position: absolute;
     opacity: var(--opacity, 0);
     transform: scale(var(--scale, .9)) rotate(var(--rotate, 3deg));
     transition: transform .15s ease-in-out, opacity .15s ease-in;
     .check {
+      width: 100px;
+      width: 100px;
+      fill: none;
+      stroke: var(--check-color);
+      stroke-width: 7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 100 0;
+      stroke-dashoffset: 100;
+    }
+  }
+  .fail-wrapper {
+    position: absolute;
+    opacity: var(--opacity, 0);
+    transform: scale(var(--scale, .9)) rotate(var(--rotate, 3deg));
+    transition: transform .15s ease-in-out, opacity .15s ease-in;
+    .fail {
       width: 100px;
       width: 100px;
       fill: none;
@@ -155,6 +173,30 @@
       transition: transform .3s, opacity .3s;
     }
     .check-wrapper {
+      --opacity: 1;
+      --scale: 1;
+      --rotate: 0deg;
+      transition: transform .5s ease-in-out .3s, opacity .5s ease-in .3s;
+      .check {
+        animation: check-animate .5s ease-in-out .3s forwards;
+      }
+    }
+  }
+  &.fail {
+    --opacity: 0;
+    .text {
+      &.text-upload {
+        --opacity: 0;
+      }
+    }
+    .shadow {
+      --opacity: 0;
+    }
+    .progress-wrapper {
+      --scale: .95;
+      transition: transform .3s, opacity .3s;
+    }
+    .fail-wrapper {
       --opacity: 1;
       --scale: 1;
       --rotate: 0deg;
