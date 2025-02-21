@@ -3,6 +3,9 @@
   flex-direction: column; /* Alinea los elementos de arriba hacia abajo */
   justify-content: center; /* Centra verticalmente los elementos */
   align-items: center; /* Centra horizontalmente los elementos */
+  top: 50px;
+  position: relative;
+  transition: none; 
 }
 
 

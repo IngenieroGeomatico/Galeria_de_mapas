@@ -5,6 +5,13 @@ body {
     height: 100%;
 }
 
+#mapaID{
+    top: 50px;
+    position: absolute;
+    height: calc(100% - 50px);
+    transition: none; 
+}
+
 .m-panel > button {
     background-color: orangered !important;
 }
