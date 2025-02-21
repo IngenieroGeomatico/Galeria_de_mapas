@@ -1,6 +1,9 @@
-#info{
+#infoID{
     display: grid;
     justify-items: center;
+    top: 50px;
+    position: absolute;
+    transition: none; 
 }
 
 .accordion {
@@ -8,7 +11,7 @@
     color: #444;
     cursor: pointer;
     padding: 18px;
-    width: 100%;
+    width: 95vw;
     border: none;
     text-align: left;
     outline: none;
@@ -38,6 +41,8 @@
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.2s ease-out;
+    display: flex;
+    justify-content: space-evenly;
   }
 
 

@@ -1,4 +1,6 @@
-mapajs = M.map({
-    container: "mapa"
+var mapajs = M.map({
+    container: "mapaID",
+    zoom:3,
   });
+
 
