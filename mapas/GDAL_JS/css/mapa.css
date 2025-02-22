@@ -6,10 +6,11 @@ body {
 }
 
 #mapaID{
-    top: 50px;
+    /* top: 50px;
     position: absolute;
-    height: calc(100% - 50px);
-    transition: none; 
+    height: calc(100% - 50px); */
+    position: fixed;
+    top: 50px;
 }
 
 .m-panel > button {
