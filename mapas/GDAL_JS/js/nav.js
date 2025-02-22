@@ -46,19 +46,22 @@ links.forEach(link => {
           infoID.style.visibility = "hidden";
           infoID.hidden = true
 
-          setTimeout(function(){ 
+          mapaID.style.visibility = "visible";
+          mapaID.hidden = false;
+
+          // setTimeout(function(){ 
             
-            mapaID.style.visibility = "visible";
-            mapaID.hidden = false;
+          //   mapaID.style.visibility = "visible";
+          //   mapaID.hidden = false;
 
-          }, 500);
+          // }, 500);
 
-          setTimeout(function(){ 
+          // setTimeout(function(){ 
             
-            mapajs.setCenter({x: -841284.6582134482, y: 4219019.308751002})
-            mapajs.setZoom(5)
+          //   mapajs.setCenter({x: -841284.6582134482, y: 4219019.308751002})
+          //   mapajs.setZoom(5)
 
-          }, 2000);
+          // }, 2000);
 
           
 
