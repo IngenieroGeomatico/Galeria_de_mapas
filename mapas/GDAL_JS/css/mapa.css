@@ -25,4 +25,19 @@ body {
 .m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn {
     background-color: orangered !important;
 }
+.m-layerswitcher-content{
+    max-width:450px
+}
 
+button.m-panel-btn, button.m-layerswitcher-groupDisplay, button.m-layerswitcher-icons-target, 
+button.m-layerswitcher-icons-info, button.m-layerswitcher-icons-delete {
+    margin: 0px;
+}
+.m-layerswitcher-icons-delete, .m-layerswitcher-icons-image, .m-layerswitcher-icons-info, 
+.m-layerswitcher-icons-style, .m-layerswitcher-icons-target {
+    top: 0px;
+}
+
+.m-layerswitcher-visible-typeContent>table>tbody>tr>td{
+    padding: 0px;
+}
