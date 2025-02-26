@@ -14,8 +14,6 @@ function readUrl(input) {
     reader.onload = async () => {
       const arrayBuffer = reader.result;
       let imgName = file.name
-      console.log("Archivo cargado como ArrayBuffer:", arrayBuffer);
-
 
       try {
         if (input.value.includes('zip')) {
@@ -35,7 +33,6 @@ function readUrl(input) {
       }
 
       dataset.name = imgName
-      console.log("dataset: ", dataset)
       groupLayerName = imgName.split(".")[0]
 
       // layerGroup = new M.layer.LayerGroup({
@@ -48,7 +45,6 @@ function readUrl(input) {
       layersName = dataset.datasets[0].info.layers.map(item => item.name).filter(name => name !== undefined);
 
       layersName.forEach(name => {
-        console.log(name);
         const options = [
           '-f', 'GeoJSON',
           '-t_srs', 'EPSG:4326',
@@ -58,14 +54,11 @@ function readUrl(input) {
         const filePathExportGJSON = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
 
         filePathExportGJSON.then((OUTPUT) => {
-          console.log(OUTPUT);
           // dataset.gjson = OUTPUT.local
 
           decoder = new TextDecoder('utf-8');
 
           gjson_file = JSON.parse(decoder.decode(gdal.Module.FS.readFile(OUTPUT.local)))
-
-          console.log(gjson_file)
 
           capa = new M.layer.GeoJSON({
             name: name,
@@ -73,6 +66,51 @@ function readUrl(input) {
             source: gjson_file,
             extract: true
           })
+          function rndInt0_255() { return (Math.floor(Math.random() * 255) + 1).toString(); };
+          estilo1 = new M.style.Generic({
+              point: {
+                  // Definición atributos para puntos
+                  radius: 7,
+
+                  fill: {
+                      color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                      opacity: 0.8,//Transparencia del punto
+                  },
+                  //Borde exterior
+                  stroke: {
+                      color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                      width: 2, // Grosor en pixeles
+                      opacity: 1
+                  },
+              },
+              polygon: {
+                  // Definición atributos para polígonos
+                  // Polígono rosa semitransparente con borde rojo de grosor dos
+                  fill: {
+                    color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                      opacity: 0.8,
+                  },
+                  stroke: {
+                    color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                      width: 2,
+                      opacity: 1
+                  }
+              },
+              line: {
+                  // Definición atributos para líneas
+                  fill: {
+                    color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                      opacity: 0.8,
+                  },
+                  stroke: {
+                    color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                      width: 2,
+                      opacity: 1
+                  }
+
+              }
+          });
+          capa.setStyle(estilo1)
           mapajs.addLayers(capa)
           // layerGroup.addLayers(capa)
 
@@ -99,21 +137,142 @@ function readUrl(input) {
         }
       });
 
+
+
       const panel = document.createElement("div");
       panel.className = "panel";
 
-      const ul = document.createElement("ul");
-      ul.className = "a";
+      const table = document.createElement("table");
 
-      const li = document.createElement("li");
-      li.innerHTML = `La documentación de la librería gdaljs utilizada está disponible <a href="https://gdal3.js.org/docs/" target="_blank">aquí</a>`;
+      var fila = table.insertRow();
 
-      ul.appendChild(li);
-      panel.appendChild(ul);
+      var cabecera1 = document.createElement("th");
+      var cabecera2 = document.createElement("th");
+      var cabecera3 = document.createElement("th");
+      var cabecera4 = document.createElement("th");
+      var cabecera5 = document.createElement("th");
+
+      cabecera1.innerHTML = "Capa";
+      cabecera2.innerHTML = "Tipo de geometría";
+      cabecera3.innerHTML = "S.G.R.";
+      cabecera4.innerHTML = "Número de objetos geográficos";
+      cabecera5.innerHTML = "Número de atributos";
+
+      // Agregamos las celdas de cabecera a la fila
+      fila.appendChild(cabecera1);
+      fila.appendChild(cabecera2);
+      fila.appendChild(cabecera3);
+      fila.appendChild(cabecera4);
+      fila.appendChild(cabecera5);
+
+      for (let capa_n in dataset.datasets[0].info.layers) {
+        capa = dataset.datasets[0].info.layers[capa_n]
+        if(capa.name){
+          var fila_n = table.insertRow();
+          var celda1 = fila_n.insertCell(0);
+          var celda2 = fila_n.insertCell(1);
+          var celda3 = fila_n.insertCell(2);
+          var celda4 = fila_n.insertCell(3);
+          var celda5 = fila_n.insertCell(4);
+
+          // Asignar contenido a las celdas
+          celda1.innerHTML = capa.name;
+          celda2.innerHTML = capa.geometryFields[0].type;
+          celda3.innerHTML = capa.geometryFields[0].coordinateSystem.projjson.id.authority + ":"+ capa.geometryFields[0].coordinateSystem.projjson.id.code;
+          celda5.innerHTML = capa.featureCount;
+          celda4.innerHTML = capa.fields.length;
+        }
+        
+      } 
+      var fila_0 = table.insertRow();
+      var celda_0 = document.createElement("td");
+      celda_0.colSpan =5
+      fila_0.appendChild(celda_0);
+
+      var fila_cabeceraExp = table.insertRow();
+      var celda_cabExp = document.createElement("th");
+      celda_cabExp.colSpan =5
+      celda_cabExp.style = "text-align: center;"
+      celda_cabExp.innerHTML = "Opciones de exportación";
+
+      var fila_1 = table.insertRow();
+      var celda_1 = document.createElement("td");
+      celda_1.colSpan =5
+      fila_cabeceraExp.appendChild(celda_cabExp);
+      fila_1.appendChild(celda_1);
+
+      var fila_Exp = table.insertRow();
+      var celda_Exp_1 = document.createElement("th");
+      var celda_Exp_2 = document.createElement("th");
+      var celda_Exp_3 = document.createElement("th");
+      celda_Exp_1.colSpan = 2
+      celda_Exp_2.colSpan = 2
+      celda_Exp_3.colSpan = 1
+      celda_Exp_1.innerHTML = "Formato exportación";
+      celda_Exp_2.innerHTML = "S.G.R. Exportación";
+      celda_Exp_3.innerHTML = "Exportar";
+      fila_Exp.appendChild(celda_Exp_1);
+      fila_Exp.appendChild(celda_Exp_2);
+      fila_Exp.appendChild(celda_Exp_3);
+
+      var fila_ExpOpt = table.insertRow();
+      var celda_opt_1 = fila_ExpOpt.insertCell(0);
+      var celda_opt_2 = fila_ExpOpt.insertCell(1);
+      var celda_opt_3 = fila_ExpOpt.insertCell(2);
+
+      var selectFormat = document.createElement('select');
+      vectores = gdal.drivers.vector
+      raster = gdal.drivers.raster
+      if(dataset.datasets[0].type == "raster"){
+        for (let format in raster) {
+          console.log(raster[format].longName)
+          option = document.createElement('option');
+          option.value = format;
+          option.textContent = raster[format].longName;
+          selectFormat.appendChild(option);
+        }
+      } else if(dataset.datasets[0].type == "vector"){
+        for (let format in vectores) {
+          option = document.createElement('option');
+          option.value = format;
+          option.textContent = vectores[format].longName;
+          if (format == "GeoJSON"){
+            option.selected = true;
+          }
+          if(vectores[format].isWritable == true){
+            selectFormat.appendChild(option);
+          }
+        }
+      }
+      
+      celda_opt_1.appendChild(selectFormat);
+      celda_opt_1.colSpan =2
+
+      var inputTextEPSG = document.createElement('input');
+      inputTextEPSG.type = 'text';
+      inputTextEPSG.value = 'EPSG:4326';
+      celda_opt_2.appendChild(inputTextEPSG);
+      celda_opt_2.colSpan =2
+      celda_opt_2.colSpan =2
+
+      let botonExp = document.createElement('button');
+      botonExp.textContent = 'Exportar';
+      botonExp.onclick = function() {
+        alert('¡Botón clickeado!');
+      };
+      celda_opt_3.appendChild(botonExp);
+      celda_opt_3.colSpan =1
+
+
+
+
+      panel.appendChild(table);
+
 
       // Añadir el contenido al div
       divAccordionFiles.appendChild(button);
       divAccordionFiles.appendChild(panel);
+      
 
 
       setTimeout(() => fileUpload.classList.add("done"), 1000);
