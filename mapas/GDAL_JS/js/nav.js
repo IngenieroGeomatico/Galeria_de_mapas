@@ -11,9 +11,17 @@ const infoID = document.getElementById('infoID');
 // Añadir un evento de clic a cada enlace
 links.forEach(link => {
     link.addEventListener('click', (e) => {
-        console.log(e.target.id)
+
         // Eliminar la clase 'activeButton' de todos los enlaces
         links.forEach(l => l.classList.remove('activeButton'));
+
+        const accordions = document.querySelectorAll('.accordion.active');
+
+        // Recorremos todos esos elementos
+        accordions.forEach(function(accordion) {
+          // Eliminamos la clase 'active' de cada uno de los elementos
+          accordion.click()
+        });
 
         // Añadir la clase 'activeButton' al enlace clicado
         link.classList.add('activeButton');

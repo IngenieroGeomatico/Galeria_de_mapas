@@ -5,6 +5,7 @@
   align-items: center; /* Centra horizontalmente los elementos */
   top: 50px;
   position: relative;
+  padding-bottom: 50px;
 }
 
 
