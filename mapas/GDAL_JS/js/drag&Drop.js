@@ -44,79 +44,85 @@ function readUrl(input) {
 
       layersName = dataset.datasets[0].info.layers.map(item => item.name).filter(name => name !== undefined);
 
-      layersName.forEach(name => {
-        const options = [
-          '-f', 'GeoJSON',
-          '-t_srs', 'EPSG:4326',
-          '-sql', 'SELECT * from ' + name
-        ];
-        outputName = "gjson_" + groupLayerName + "_" + name
-        const filePathExportGJSON = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
+      if(dataset.datasets[0].type="vector"){
 
-        filePathExportGJSON.then((OUTPUT) => {
-          // dataset.gjson = OUTPUT.local
-
-          decoder = new TextDecoder('utf-8');
-
-          gjson_file = JSON.parse(decoder.decode(gdal.Module.FS.readFile(OUTPUT.local)))
-
-          capa = new M.layer.GeoJSON({
-            name: name,
-            legend: groupLayerName + "_" +name,
-            source: gjson_file,
-            extract: true
+        layersName.forEach(name => {
+          const options = [
+            '-f', 'GeoJSON',
+            '-t_srs', 'EPSG:4326',
+            '-sql', 'SELECT * from ' + name
+          ];
+          outputName = "gjson_" + groupLayerName + "_" + name
+          const filePathExportGJSON = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
+  
+          filePathExportGJSON.then((OUTPUT) => {
+            // dataset.gjson = OUTPUT.local
+  
+            decoder = new TextDecoder('utf-8');
+  
+            gjson_file = JSON.parse(decoder.decode(gdal.Module.FS.readFile(OUTPUT.local)))
+  
+            capa = new M.layer.GeoJSON({
+              name: name,
+              legend: groupLayerName + "_" +name,
+              source: gjson_file,
+              extract: true
+            })
+            function rndInt0_255() { return (Math.floor(Math.random() * 255) + 1).toString(); };
+            estilo1 = new M.style.Generic({
+                point: {
+                    // Definición atributos para puntos
+                    radius: 7,
+  
+                    fill: {
+                        color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                        opacity: 0.8,//Transparencia del punto
+                    },
+                    //Borde exterior
+                    stroke: {
+                        color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                        width: 2, // Grosor en pixeles
+                        opacity: 1
+                    },
+                },
+                polygon: {
+                    // Definición atributos para polígonos
+                    // Polígono rosa semitransparente con borde rojo de grosor dos
+                    fill: {
+                      color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                        opacity: 0.8,
+                    },
+                    stroke: {
+                      color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                        width: 2,
+                        opacity: 1
+                    }
+                },
+                line: {
+                    // Definición atributos para líneas
+                    fill: {
+                      color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                        opacity: 0.8,
+                    },
+                    stroke: {
+                      color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
+                        width: 2,
+                        opacity: 1
+                    }
+  
+                }
+            });
+            capa.setStyle(estilo1)
+            mapajs.addLayers(capa)
+            // layerGroup.addLayers(capa)
+  
           })
-          function rndInt0_255() { return (Math.floor(Math.random() * 255) + 1).toString(); };
-          estilo1 = new M.style.Generic({
-              point: {
-                  // Definición atributos para puntos
-                  radius: 7,
+  
+        });
 
-                  fill: {
-                      color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
-                      opacity: 0.8,//Transparencia del punto
-                  },
-                  //Borde exterior
-                  stroke: {
-                      color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
-                      width: 2, // Grosor en pixeles
-                      opacity: 1
-                  },
-              },
-              polygon: {
-                  // Definición atributos para polígonos
-                  // Polígono rosa semitransparente con borde rojo de grosor dos
-                  fill: {
-                    color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
-                      opacity: 0.8,
-                  },
-                  stroke: {
-                    color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
-                      width: 2,
-                      opacity: 1
-                  }
-              },
-              line: {
-                  // Definición atributos para líneas
-                  fill: {
-                    color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
-                      opacity: 0.8,
-                  },
-                  stroke: {
-                    color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
-                      width: 2,
-                      opacity: 1
-                  }
+      }
 
-              }
-          });
-          capa.setStyle(estilo1)
-          mapajs.addLayers(capa)
-          // layerGroup.addLayers(capa)
-
-        })
-
-      });
+      
 
       filesObj[n] = dataset
       n += 1
@@ -247,34 +253,81 @@ function readUrl(input) {
       
       celda_opt_1.appendChild(selectFormat);
       celda_opt_1.colSpan =2
+      celda_opt_1.id= "outputFormat_"+(n-1)
 
       var inputTextEPSG = document.createElement('input');
       inputTextEPSG.type = 'text';
       inputTextEPSG.value = 'EPSG:4326';
+      inputTextEPSG.id = "InputTextEpsg_"+(n-1)
       celda_opt_2.appendChild(inputTextEPSG);
       celda_opt_2.colSpan =2
       celda_opt_2.colSpan =2
 
       let botonExp = document.createElement('button');
       botonExp.textContent = 'Exportar';
-      botonExp.onclick = function() {
-        alert('¡Botón clickeado!');
+      botonExp.id = "buttonExport_"+(n-1)
+
+      botonExp.onclick = function(e) {
+        id = e.target.id.split("_")[1]
+        datasetInExport = filesObj[id]
+        console.log("datasetInExport: ",datasetInExport)
+
+        EPSG_out = document.getElementById("InputTextEpsg_"+id).value
+        console.log("EPSG_out: ", EPSG_out)
+
+        format_out = document.getElementById("outputFormat_"+id).children[0].value
+        console.log("format_out: ", format_out)
+
+
+        // Función para generar un archivo y descargarlo
+        function descargarArchivo(contenido, EPSG, format) {
+
+          const options = [
+            '-f', format,
+            '-t_srs', EPSG,
+          ];
+          outputName = contenido.name.split(".")[0]
+
+          const filePathExportGJSON = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
+  
+          filePathExportGJSON.then((OUTPUT) => {
+  
+            fileExport = gdal.Module.FS.readFile(OUTPUT.local)
+
+            // Crear un Blob con el contenido que quieres exportar
+            const blob = new Blob([fileExport], { type: 'text/plain' });
+            
+            // Crear una URL para el Blob
+            const url = URL.createObjectURL(blob);
+            
+            // Crear un enlace de descarga
+            const enlace = document.createElement('a');
+            enlace.href = url;
+            outname = OUTPUT.local.replace("_output_","")
+            enlace.download = outname;  // Establecer el nombre del archivo de descarga
+            
+            // Hacer clic en el enlace para iniciar la descarga
+            enlace.click();
+            
+            // Liberar el objeto URL después de usarlo
+            URL.revokeObjectURL(url);
+          })
+          
+        }
+
+        // Llamada a la función para descargar el archivo
+        descargarArchivo(datasetInExport, EPSG_out, format_out);
       };
+
       celda_opt_3.appendChild(botonExp);
       celda_opt_3.colSpan =1
 
-
-
-
       panel.appendChild(table);
-
 
       // Añadir el contenido al div
       divAccordionFiles.appendChild(button);
       divAccordionFiles.appendChild(panel);
       
-
-
       setTimeout(() => fileUpload.classList.add("done"), 1000);
       setTimeout(() => fileUpload.classList.remove("done"), 3000);
       setTimeout(() => fileUpload.classList.remove("drop"), 3000);
