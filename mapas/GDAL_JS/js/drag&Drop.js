@@ -288,9 +288,9 @@ function readUrl(input) {
           ];
           outputName = contenido.name.split(".")[0]
 
-          const filePathExportGJSON = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
+          const filePathExport= gdal.ogr2ogr(dataset.datasets[0], options, outputName);
   
-          filePathExportGJSON.then((OUTPUT) => {
+          filePathExport.then((OUTPUT) => {
   
             fileExport = gdal.Module.FS.readFile(OUTPUT.local)
 
@@ -312,6 +312,33 @@ function readUrl(input) {
             // Liberar el objeto URL después de usarlo
             URL.revokeObjectURL(url);
           })
+
+          // Esto es lo que habría que hacer para más de un archivo, a si que podría poner un try/cath en caso que no hubiera un único archivo y hacer el zip si son varios.
+          // if(dataset.datasets[0].type="vector"){
+
+          //   layersName.forEach(name => {
+          //     const options = [
+          //       '-f', format,
+          //       '-t_srs', EPSG,
+          //       '-sql', 'SELECT * from ' + name
+          //     ];
+          //     outputName = contenido.name.split(".")[0]
+          //     const filePathExport = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
+      
+          //     filePathExportGJSON.then((OUTPUT) => {
+
+          //       fileExport = gdal.Module.FS.readFile(OUTPUT.local)
+
+          //       // Crear un Blob con el contenido que quieres exportar
+          //       blob = new Blob([fileExport], { type: 'text/plain' }); 
+
+          //       filesExport.push(blob)
+
+          //     })
+      
+          //   });
+    
+          // }
           
         }
 
