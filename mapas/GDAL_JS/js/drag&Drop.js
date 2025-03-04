@@ -17,8 +17,27 @@ function readUrl(input) {
 
       try {
         if (input.value.includes('zip')) {
-          gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
-          dataset = await gdal.open('/input/' + imgName, [], ['vsizip'])
+          try {
+            gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
+            dataset = await gdal.open('/input/' + imgName, [], ['vsizip']);
+          } catch (error) {
+            console.error("Error al abrir el archivo comprimido:", error);
+            const zip = new JSZip();
+            const zipContent = await zip.loadAsync(arrayBuffer);
+            const fileNames = Object.keys(zipContent.files);
+
+            for (const fileName of fileNames) {
+              const fileData = await zipContent.files[fileName].async("arraybuffer");
+              gdal.Module.FS.writeFile('/input/' + fileName, new Int8Array(fileData));
+            }
+            for (const fileName of fileNames) {
+              try {
+                dataset = await gdal.open('/input/' + fileName)
+              } catch (error) {
+                console.error("Error al abrir el archivo comprimido:", error);
+              }
+            }
+          }
         }
         else {
           gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
@@ -32,8 +51,7 @@ function readUrl(input) {
         return
       }
 
-      dataset.name = imgName
-      groupLayerName = imgName.split(".")[0]
+      
 
       // layerGroup = new M.layer.LayerGroup({
       //   name: groupLayerName,           // Nombre del grupo de capas
@@ -42,9 +60,12 @@ function readUrl(input) {
       // });
       // mapajs.addLayers(layerGroup)
 
-      layersName = dataset.datasets[0].info.layers.map(item => item.name).filter(name => name !== undefined);
 
-      if (dataset.datasets[0].type = "vector") {
+      if (dataset.datasets[0].type == "vector") {
+        dataset.name = imgName
+        groupLayerName = imgName.split(".")[0]
+        layersName = dataset.datasets[0].info.layers.map(item => item.name).filter(name => name !== undefined);
+
 
         layersName.forEach(name => {
           const options = [
@@ -120,6 +141,9 @@ function readUrl(input) {
 
         });
 
+      }
+      else if (dataset.datasets[0].type == "raster"){
+        console.log(dataset)
       }
 
 
@@ -231,7 +255,6 @@ function readUrl(input) {
       raster = gdal.drivers.raster
       if (dataset.datasets[0].type == "raster") {
         for (let format in raster) {
-          console.log(raster[format].longName)
           option = document.createElement('option');
           option.value = format;
           option.textContent = raster[format].longName;
@@ -259,6 +282,7 @@ function readUrl(input) {
       inputTextEPSG.type = 'text';
       inputTextEPSG.value = 'EPSG:4326';
       inputTextEPSG.id = "InputTextEpsg_" + (n - 1)
+      inputTextEPSG.style = "text-align: center;"
       celda_opt_2.appendChild(inputTextEPSG);
       celda_opt_2.colSpan = 2
       celda_opt_2.colSpan = 2
@@ -266,6 +290,7 @@ function readUrl(input) {
       let botonExp = document.createElement('button');
       botonExp.textContent = 'Exportar';
       botonExp.id = "buttonExport_" + (n - 1)
+      botonExp.classList = "custom-btn btn-7 btn-exp"
 
       botonExp.onclick = function (e) {
         id = e.target.id.split("_")[1]
@@ -293,11 +318,13 @@ function readUrl(input) {
             outputName = contenido.name.split(".")[0];
 
             try {
-
-              // mandar un error si hay más de un archivo en all
-              
               const filePathExport = gdal.ogr2ogr(contenido.datasets[0], options, outputName);
               filePathExport.then((OUTPUT) => {
+
+                if (OUTPUT.all.length > 1) {
+                  manejarErrorExportacion(layersName, contenido, EPSG, format);
+                  return
+                }
                 fileExport = gdal.Module.FS.readFile(OUTPUT.local);
 
                 // Crear un Blob con el contenido que quieres exportar
