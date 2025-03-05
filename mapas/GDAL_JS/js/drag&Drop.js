@@ -143,7 +143,71 @@ function readUrl(input) {
 
       }
       else if (dataset.datasets[0].type == "raster"){
-        console.log(dataset)
+        dataset.name = imgName.split(".")[0]
+
+        // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+        const EPSG_input = await showModalAndGetEPSG();
+
+        const options = [
+          '-of', 'GTiff',
+          '-s_srs', EPSG_input,
+          '-t_srs', 'EPSG:3857'
+        ];
+        outputName = "GTiff_" + dataset.name 
+        const filePathExportGJSON = gdal.gdalwarp(dataset.datasets[0], options, outputName);
+        filePathExportGJSON.then( async (OUTPUT) => {
+          console.log(dataset.datasets[0])
+          console.log(OUTPUT)
+          blob_file_ = new Blob([gdal.Module.FS.readFile(OUTPUT.local)], { type: 'application/octet-stream' });
+
+          olLayer = new ol.layer.WebGLTile({
+            source: new ol.source.GeoTIFF({
+              sources: [
+                {
+                  blob: blob_file_,
+                },
+              ],
+            }),
+          });
+        
+          GenericRaster = new M.layer.GenericRaster({
+             name: dataset.name,
+             legend: dataset.name,
+          }, {}, olLayer);
+          
+          // La añadimos al mapa
+          mapajs.addLayers(GenericRaster);
+        })
+
+
+
+        function showModalAndGetEPSG() {
+          return new Promise((resolve) => {
+            const modal = document.getElementById("epsgModal");
+            const span = document.getElementsByClassName("close")[0];
+            const acceptButton = document.getElementById("acceptButton");
+        
+            modal.style.display = "block";
+        
+            span.onclick = function() {
+              modal.style.display = "none";
+            };
+        
+            window.onclick = function(event) {
+              if (event.target == modal) {
+                modal.style.display = "none";
+              }
+            };
+        
+            acceptButton.onclick = function() {
+              const EPSG_input = document.getElementById("inputTextEPSG").value;
+              modal.style.display = "none";
+              resolve(EPSG_input);
+            };
+          });
+        }
+
+
       }
 
 
