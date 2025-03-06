@@ -3,9 +3,14 @@ var filesObj = {}
 var n = 1
 var gdal;  // Variable global
 
-function readUrl(input) {
+async function readUrl(input) {
 
   const file = input.files[0];
+
+  const result = await gdal.open(file);
+  const resultInfo= await gdal.getInfo(result.datasets[0]);
+
+  // QUITAR los Module.FS por métodos de gdal directamente
 
   if (file && gdal) {
     const reader = new FileReader();
@@ -156,8 +161,7 @@ function readUrl(input) {
         outputName = "GTiff_" + dataset.name 
         const filePathExportGJSON = gdal.gdalwarp(dataset.datasets[0], options, outputName);
         filePathExportGJSON.then( async (OUTPUT) => {
-          console.log(dataset.datasets[0])
-          console.log(OUTPUT)
+
           blob_file_ = new Blob([gdal.Module.FS.readFile(OUTPUT.local)], { type: 'application/octet-stream' });
 
           olLayer = new ol.layer.WebGLTile({
@@ -543,12 +547,15 @@ function start() {
 
 async function initGdalJS() {
   // Esperamos a que gdal se haya inicializado
-  await initGdalJs({ path: 'https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package', useWorker: false })
+  await initGdalJs({ path: '../../js/gdal', useWorker: true })
     .then((Gdal) => {
       gdal = Gdal;
       // const count = Object.keys(Gdal.drivers.raster).length + Object.keys(Gdal.drivers.vector).length;
       // console.log(count);
-      // console.log(Gdal.drivers);
+      console.log(Gdal)
+      console.log(Gdal.drivers);
+      console.log(gdal)
+      console.log(gdal.drivers);
     })
     .catch((err) => {
       console.error("Error al inicializar GDAL:", err);
