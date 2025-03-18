@@ -2,21 +2,25 @@ var fileUpload = document.querySelector(".upload");
 var filesObj = {}
 var n = 1
 var gdal;  // Variable global
+var gdalWorker;  // Variable global
+
 
 async function readUrl(input) {
 
+ 
   const file = input.files[0];
-
-  const result = await gdal.open(file);
-  const resultInfo= await gdal.getInfo(result.datasets[0]);
-
-  // QUITAR los Module.FS por métodos de gdal directamente
+  var EPSG_input 
 
   if (file && gdal) {
+
     const reader = new FileReader();
     reader.readAsArrayBuffer(file);
 
     reader.onload = async () => {
+
+      // const result = await gdal.open(file);
+      // const resultInfo= await gdal.getInfo(result.datasets[0]);
+
       const arrayBuffer = reader.result;
       let imgName = file.name
 
@@ -25,6 +29,13 @@ async function readUrl(input) {
           try {
             gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
             dataset = await gdal.open('/input/' + imgName, [], ['vsizip']);
+            if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
+              EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
+              // Aquí puedes usar EPSG_input si no es undefined
+            } else {
+              // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+              EPSG_input = await showModalAndGetEPSG();
+            }
           } catch (error) {
             console.error("Error al abrir el archivo comprimido:", error);
             const zip = new JSZip();
@@ -38,6 +49,15 @@ async function readUrl(input) {
             for (const fileName of fileNames) {
               try {
                 dataset = await gdal.open('/input/' + fileName)
+                if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
+                  EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
+                  // Aquí puedes usar EPSG_input si no es undefined
+                } else {
+                  // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+                  EPSG_input = await showModalAndGetEPSG();
+                }
+                continue
+
               } catch (error) {
                 console.error("Error al abrir el archivo comprimido:", error);
               }
@@ -47,6 +67,14 @@ async function readUrl(input) {
         else {
           gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
           dataset = await gdal.open('/input/' + imgName)
+
+          if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
+            EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
+            // Aquí puedes usar EPSG_input si no es undefined
+          } else {
+            // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+            EPSG_input = await showModalAndGetEPSG();
+          }
         }
       } catch (error) {
         console.error(error);
@@ -56,7 +84,7 @@ async function readUrl(input) {
         return
       }
 
-      
+
 
       // layerGroup = new M.layer.LayerGroup({
       //   name: groupLayerName,           // Nombre del grupo de capas
@@ -147,20 +175,17 @@ async function readUrl(input) {
         });
 
       }
-      else if (dataset.datasets[0].type == "raster"){
+      else if (dataset.datasets[0].type == "raster") {
         dataset.name = imgName.split(".")[0]
-
-        // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-        const EPSG_input = await showModalAndGetEPSG();
 
         const options = [
           '-of', 'GTiff',
           '-s_srs', EPSG_input,
           '-t_srs', 'EPSG:3857'
         ];
-        outputName = "GTiff_" + dataset.name 
+        outputName = "GTiff_" + dataset.name
         const filePathExportGJSON = gdal.gdalwarp(dataset.datasets[0], options, outputName);
-        filePathExportGJSON.then( async (OUTPUT) => {
+        filePathExportGJSON.then(async (OUTPUT) => {
 
           blob_file_ = new Blob([gdal.Module.FS.readFile(OUTPUT.local)], { type: 'application/octet-stream' });
 
@@ -173,47 +198,21 @@ async function readUrl(input) {
               ],
             }),
           });
-        
+
           GenericRaster = new M.layer.GenericRaster({
-             name: dataset.name,
-             legend: dataset.name,
+            name: dataset.name,
+            legend: dataset.name,
           }, {}, olLayer);
-          
+
           // La añadimos al mapa
           mapajs.addLayers(GenericRaster);
         })
 
 
 
-        function showModalAndGetEPSG() {
-          return new Promise((resolve) => {
-            const modal = document.getElementById("epsgModal");
-            const span = document.getElementsByClassName("close")[0];
-            const acceptButton = document.getElementById("acceptButton");
         
-            modal.style.display = "block";
-        
-            span.onclick = function() {
-              modal.style.display = "none";
-            };
-        
-            window.onclick = function(event) {
-              if (event.target == modal) {
-                modal.style.display = "none";
-              }
-            };
-        
-            acceptButton.onclick = function() {
-              const EPSG_input = document.getElementById("inputTextEPSG").value;
-              modal.style.display = "none";
-              resolve(EPSG_input);
-            };
-          });
-        }
-
 
       }
-
 
 
       filesObj[n] = dataset
@@ -244,44 +243,75 @@ async function readUrl(input) {
 
       var fila = table.insertRow();
 
-      var cabecera1 = document.createElement("th");
-      var cabecera2 = document.createElement("th");
-      var cabecera3 = document.createElement("th");
-      var cabecera4 = document.createElement("th");
-      var cabecera5 = document.createElement("th");
+      var cabecera1_v = document.createElement("th");
+      var cabecera2_v = document.createElement("th");
+      var cabecera3_v = document.createElement("th");
+      var cabecera4_v = document.createElement("th");
+      var cabecera5_v = document.createElement("th");
 
-      cabecera1.innerHTML = "Capa";
-      cabecera2.innerHTML = "Tipo de geometría";
-      cabecera3.innerHTML = "S.G.R.";
-      cabecera4.innerHTML = "Número de objetos geográficos";
-      cabecera5.innerHTML = "Número de atributos";
+      var cabecera1_r = document.createElement("th");
+      var cabecera2_r = document.createElement("th");
+      var cabecera3_r = document.createElement("th");
+      var cabecera4_r = document.createElement("th");
+      var cabecera5_r = document.createElement("th");
 
-      // Agregamos las celdas de cabecera a la fila
-      fila.appendChild(cabecera1);
-      fila.appendChild(cabecera2);
-      fila.appendChild(cabecera3);
-      fila.appendChild(cabecera4);
-      fila.appendChild(cabecera5);
+      cabecera1_v.innerHTML = "Capa";
+      cabecera2_v.innerHTML = "Tipo de geometría";
+      cabecera3_v.innerHTML = "S.G.R.";
+      cabecera4_v.innerHTML = "Número de objetos geográficos";
+      cabecera5_v.innerHTML = "Número de atributos";
 
-      for (let capa_n in dataset.datasets[0].info.layers) {
-        capa = dataset.datasets[0].info.layers[capa_n]
-        if (capa.name) {
-          var fila_n = table.insertRow();
-          var celda1 = fila_n.insertCell(0);
-          var celda2 = fila_n.insertCell(1);
-          var celda3 = fila_n.insertCell(2);
-          var celda4 = fila_n.insertCell(3);
-          var celda5 = fila_n.insertCell(4);
+      cabecera1_r.innerHTML = "Capa";
+      cabecera3_r.innerHTML = "S.G.R.";
 
-          // Asignar contenido a las celdas
-          celda1.innerHTML = capa.name;
-          celda2.innerHTML = capa.geometryFields[0].type;
-          celda3.innerHTML = capa.geometryFields[0].coordinateSystem.projjson.id.authority + ":" + capa.geometryFields[0].coordinateSystem.projjson.id.code;
-          celda5.innerHTML = capa.featureCount;
-          celda4.innerHTML = capa.fields.length;
+      
+
+
+      if (dataset.datasets[0].type == "raster") {
+        fila.appendChild(cabecera1_r);
+        fila.appendChild(cabecera3_r);
+
+        capa = dataset.datasets[0]
+        var fila_n = table.insertRow();
+        var celda1 = fila_n.insertCell(0);
+        var celda3 = fila_n.insertCell(1);
+        celda1.innerHTML = imgName;
+        celda3.innerHTML = EPSG_input;
+
+
+      } else if (dataset.datasets[0].type == "vector") {
+
+        // Agregamos las celdas de cabecera a la fila
+        fila.appendChild(cabecera1_v);
+        fila.appendChild(cabecera2_v);
+        fila.appendChild(cabecera3_v);
+        fila.appendChild(cabecera4_v);
+        fila.appendChild(cabecera5_v);
+
+        for (let capa_n in dataset.datasets[0].info.layers) {
+          capa = dataset.datasets[0].info.layers[capa_n]
+          if (capa.name) {
+            var fila_n = table.insertRow();
+            var celda1 = fila_n.insertCell(0);
+            var celda2 = fila_n.insertCell(1);
+            var celda3 = fila_n.insertCell(2);
+            var celda4 = fila_n.insertCell(3);
+            var celda5 = fila_n.insertCell(4);
+  
+            // Asignar contenido a las celdas
+            celda1.innerHTML = capa.name;
+            celda2.innerHTML = capa.geometryFields[0].type;
+            celda3.innerHTML = capa.geometryFields[0].coordinateSystem.projjson.id.authority + ":" + capa.geometryFields[0].coordinateSystem.projjson.id.code;
+            celda5.innerHTML = capa.featureCount;
+            celda4.innerHTML = capa.fields.length;
+          }
+  
         }
 
       }
+
+      
+
       var fila_0 = table.insertRow();
       var celda_0 = document.createElement("td");
       celda_0.colSpan = 5
@@ -523,6 +553,31 @@ async function readUrl(input) {
     };
   }
 
+  function showModalAndGetEPSG() {
+    return new Promise((resolve) => {
+      const modal = document.getElementById("epsgModal");
+      const span = document.getElementsByClassName("close")[0];
+      const acceptButton = document.getElementById("acceptButton");
+
+      modal.style.display = "block";
+
+      span.onclick = function () {
+        modal.style.display = "none";
+      };
+
+      window.onclick = function (event) {
+        if (event.target == modal) {
+          modal.style.display = "none";
+        }
+      };
+
+      acceptButton.onclick = function () {
+        const EPSG_input = document.getElementById("inputTextEPSG").value;
+        modal.style.display = "none";
+        resolve(EPSG_input);
+      };
+    });
+  }
 }
 
 
@@ -545,26 +600,46 @@ function start() {
 }
 
 
-async function initGdalJS() {
+async function initGdalJS_() {
+
+  const workerData = await fetch('../../js/gdal/gdal3.js');
+  const workerUrl = window.URL.createObjectURL(await workerData.blob());
+
+  const paths = {
+    wasm: '../../js/gdal/gdal3WebAssembly.wasm',
+    data: '../../js/gdal/gdal3WebAssembly.data',
+    // js: '../../js/gdal/gdal3.js',
+    js: '../../js/gdal/gdal3.node.js',
+  };
+
   // Esperamos a que gdal se haya inicializado
-  await initGdalJs({ path: '../../js/gdal', useWorker: true })
+  await initGdalJs({
+    // path: '../../js/gdal',
+    paths: paths,
+    useWorker: false
+  })
     .then((Gdal) => {
+
       gdal = Gdal;
+
       // const count = Object.keys(Gdal.drivers.raster).length + Object.keys(Gdal.drivers.vector).length;
       // console.log(count);
-      console.log(Gdal)
-      console.log(Gdal.drivers);
-      console.log(gdal)
-      console.log(gdal.drivers);
+      // console.log(Gdal)
+      // console.log(Gdal.drivers);
+      // console.log(gdal)
+      // console.log(gdal.drivers);
     })
     .catch((err) => {
       console.error("Error al inicializar GDAL:", err);
     });
 
+
+
   const SVGCarga = document.getElementById("cargaSVG")
   SVGCarga.hidden = true
   SVGCarga.style.visibility = "hidden"
-  console.log('o- - - - -', gdal);  // Aquí ya puedes acceder a la variable gdal
+  console.log('o:   gdal - - - - -', gdal);  // Aquí ya puedes acceder a la variable gdal
 }
 
-initGdalJS()
+
+initGdalJS_()
