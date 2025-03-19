@@ -2,33 +2,69 @@ var fileUpload = document.querySelector(".upload");
 var filesObj = {}
 var n = 1
 var gdal;  // Variable global
-var gdalWorker;  // Variable global
+var gdalWorker = true;  // Variable global
 
 
 async function readUrl(input) {
 
- 
   const file = input.files[0];
   var EPSG_input 
 
   if (file && gdal) {
 
-    const reader = new FileReader();
-    reader.readAsArrayBuffer(file);
+    if(!gdalWorker){
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
 
-    reader.onload = async () => {
+      reader.onload = async () => {
 
-      // const result = await gdal.open(file);
-      // const resultInfo= await gdal.getInfo(result.datasets[0]);
+        const arrayBuffer = reader.result;
+        let imgName = file.name
 
-      const arrayBuffer = reader.result;
-      let imgName = file.name
+        try {
+          if (input.value.includes('zip')) {
+            try {
+              gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
+              dataset = await gdal.open('/input/' + imgName, [], ['vsizip']);
+              if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
+                EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
+                // Aquí puedes usar EPSG_input si no es undefined
+              } else {
+                // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+                EPSG_input = await showModalAndGetEPSG();
+              }
+            } catch (error) {
+                console.error("Error al abrir el archivo comprimido:", error);
+                const zip = new JSZip();
+                const zipContent = await zip.loadAsync(arrayBuffer);
+                const fileNames = Object.keys(zipContent.files);
 
-      try {
-        if (input.value.includes('zip')) {
-          try {
+              for (const fileName of fileNames) {
+                const fileData = await zipContent.files[fileName].async("arraybuffer");
+                gdal.Module.FS.writeFile('/input/' + fileName, new Int8Array(fileData));
+              }
+              for (const fileName of fileNames) {
+                try {
+                  dataset = await gdal.open('/input/' + fileName)
+                  if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
+                    EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
+                    // Aquí puedes usar EPSG_input si no es undefined
+                  } else {
+                    // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+                    EPSG_input = await showModalAndGetEPSG();
+                  }
+                  continue
+
+                } catch (error) {
+                  console.error("Error al abrir el archivo comprimido:", error);
+                }
+              }
+            }
+          }
+          else {
             gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
-            dataset = await gdal.open('/input/' + imgName, [], ['vsizip']);
+            dataset = await gdal.open('/input/' + imgName)
+
             if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
               EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
               // Aquí puedes usar EPSG_input si no es undefined
@@ -36,46 +72,74 @@ async function readUrl(input) {
               // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
               EPSG_input = await showModalAndGetEPSG();
             }
+          }
+        } catch (error) {
+          console.error(error);
+          setTimeout(() => fileUpload.classList.add("fail"), 1000);
+          setTimeout(() => fileUpload.classList.remove("fail"), 3000);
+          setTimeout(() => fileUpload.classList.remove("drop"), 3000);
+          return
+        }
+      }
+
+      reader.onerror = () => {
+        console.error("Error al leer el archivo");
+      };
+    
+    
+    } else {
+      try {
+        if (input.value.includes('zip')) {
+          try {
+
+            dataset = await gdal.open(file, [], ['vsizip']);
+            datasetInfo= await gdal.getInfo(dataset.datasets[0]);
+
           } catch (error) {
-            console.error("Error al abrir el archivo comprimido:", error);
-            const zip = new JSZip();
-            const zipContent = await zip.loadAsync(arrayBuffer);
-            const fileNames = Object.keys(zipContent.files);
 
-            for (const fileName of fileNames) {
-              const fileData = await zipContent.files[fileName].async("arraybuffer");
-              gdal.Module.FS.writeFile('/input/' + fileName, new Int8Array(fileData));
-            }
-            for (const fileName of fileNames) {
-              try {
-                dataset = await gdal.open('/input/' + fileName)
-                if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
-                  EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
-                  // Aquí puedes usar EPSG_input si no es undefined
-                } else {
-                  // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-                  EPSG_input = await showModalAndGetEPSG();
+            console.error(error);
+            const reader = new FileReader();
+            reader.readAsArrayBuffer(file);
+            // Hay que ver por qué no pasa por aquí antes del condicional para ver el tipo del dataset
+            
+            reader.onload = async () => {
+                try {
+                    const zip = await JSZip.loadAsync(file.result);
+                    
+                    // Extraer todos los archivos
+                    let zipList = [];
+                    let promises = [];
+
+                    zip.forEach((relativePath, zipEntry) => {
+                        const promise = zipEntry.async("blob").then(function(content) {
+                            // Aquí, "content" será el archivo descomprimido
+                            // Crear un Blob con el contenido
+                            blob = new Blob([content], { type: "application/octet-stream" }); // O ajusta el tipo MIME según el archivo
+                            fileZip = new File([blob], relativePath);
+                            zipList.push(fileZip)
+                        });
+                        promises.push(promise);
+                    });
+
+                    await Promise.all(promises);
+                    dataset = await gdal.open(zipList);
+                    datasetInfo= await gdal.getInfo(dataset.datasets[0]);
+
+                } catch (error) {
+                    console.error("Error al descomprimir el archivo ZIP:", error);
                 }
-                continue
 
-              } catch (error) {
-                console.error("Error al abrir el archivo comprimido:", error);
-              }
-            }
-          }
-        }
-        else {
-          gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
-          dataset = await gdal.open('/input/' + imgName)
+                return
+            };
 
-          if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
-            EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
-            // Aquí puedes usar EPSG_input si no es undefined
-          } else {
-            // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-            EPSG_input = await showModalAndGetEPSG();
           }
+        } else {
+
+          dataset = await gdal.open(file);
+          datasetInfo= await gdal.getInfo(dataset.datasets[0]);
+
         }
+      
       } catch (error) {
         console.error(error);
         setTimeout(() => fileUpload.classList.add("fail"), 1000);
@@ -83,6 +147,8 @@ async function readUrl(input) {
         setTimeout(() => fileUpload.classList.remove("drop"), 3000);
         return
       }
+        
+    }
 
 
 
@@ -92,7 +158,6 @@ async function readUrl(input) {
       //   layers: layers    // Capas que pertenecen al grupo
       // });
       // mapajs.addLayers(layerGroup)
-
 
       if (dataset.datasets[0].type == "vector") {
         dataset.name = imgName
@@ -548,11 +613,6 @@ async function readUrl(input) {
 
     };
 
-    reader.onerror = () => {
-      console.error("Error al leer el archivo");
-    };
-  }
-
   function showModalAndGetEPSG() {
     return new Promise((resolve) => {
       const modal = document.getElementById("epsgModal");
@@ -578,6 +638,7 @@ async function readUrl(input) {
       };
     });
   }
+
 }
 
 
@@ -608,15 +669,15 @@ async function initGdalJS_() {
   const paths = {
     wasm: '../../js/gdal/gdal3WebAssembly.wasm',
     data: '../../js/gdal/gdal3WebAssembly.data',
-    // js: '../../js/gdal/gdal3.js',
-    js: '../../js/gdal/gdal3.node.js',
+    js: '../../js/gdal/gdal3.js',
+    // js: '../../js/gdal/gdal3.node.js',
   };
 
   // Esperamos a que gdal se haya inicializado
   await initGdalJs({
     // path: '../../js/gdal',
     paths: paths,
-    useWorker: false
+    useWorker: gdalWorker
   })
     .then((Gdal) => {
 
