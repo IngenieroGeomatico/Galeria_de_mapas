@@ -12,6 +12,8 @@ async function readUrl(input) {
 
   if (file && gdal) {
 
+    let imgName = file.name
+
     if(!gdalWorker){
       const reader = new FileReader();
       reader.readAsArrayBuffer(file);
@@ -19,7 +21,7 @@ async function readUrl(input) {
       reader.onload = async () => {
 
         const arrayBuffer = reader.result;
-        let imgName = file.name
+        
 
         try {
           if (input.value.includes('zip')) {
@@ -91,52 +93,70 @@ async function readUrl(input) {
       try {
         if (input.value.includes('zip')) {
           try {
-
-            dataset = await gdal.open(file, [], ['vsizip']);
-            datasetInfo= await gdal.getInfo(dataset.datasets[0]);
-
+              dataset = await gdal.open(file, [], ['vsizip']);
+              datasetInfo = await gdal.getInfo(dataset.datasets[0]);
+              if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
+                EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
+                // Aquí puedes usar EPSG_input si no es undefined
+              } else {
+                // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+                EPSG_input = await showModalAndGetEPSG();
+              }
           } catch (error) {
-
-            console.error(error);
-            const reader = new FileReader();
-            reader.readAsArrayBuffer(file);
-            // Hay que ver por qué no pasa por aquí antes del condicional para ver el tipo del dataset
-            
-            reader.onload = async () => {
-                try {
-                    const zip = await JSZip.loadAsync(file.result);
-                    
-                    // Extraer todos los archivos
-                    let zipList = [];
-                    let promises = [];
-
-                    zip.forEach((relativePath, zipEntry) => {
-                        const promise = zipEntry.async("blob").then(function(content) {
-                            // Aquí, "content" será el archivo descomprimido
-                            // Crear un Blob con el contenido
-                            blob = new Blob([content], { type: "application/octet-stream" }); // O ajusta el tipo MIME según el archivo
-                            fileZip = new File([blob], relativePath);
-                            zipList.push(fileZip)
-                        });
-                        promises.push(promise);
-                    });
-
-                    await Promise.all(promises);
-                    dataset = await gdal.open(zipList);
-                    datasetInfo= await gdal.getInfo(dataset.datasets[0]);
-
-                } catch (error) {
-                    console.error("Error al descomprimir el archivo ZIP:", error);
-                }
-
-                return
-            };
-
+              console.error(error);
+              const reader = new FileReader();
+              reader.readAsArrayBuffer(file);
+  
+              // Usar promesas para manejar el flujo asincrónico
+              await new Promise((resolve, reject) => {
+                  reader.onload = async () => {
+                      try {
+                          const zip = await JSZip.loadAsync(reader.result);
+                          
+                          // Extraer todos los archivos
+                          let zipList = [];
+                          let promises = [];
+  
+                          zip.forEach((relativePath, zipEntry) => {
+                              const promise = zipEntry.async("blob").then(function(content) {
+                                  // Aquí, "content" será el archivo descomprimido
+                                  blob = new Blob([content], { type: "application/octet-stream" });
+                                  fileZip = new File([blob], relativePath);
+                                  zipList.push(fileZip);
+                              });
+                              promises.push(promise);
+                          });
+  
+                          await Promise.all(promises);
+                          dataset = await gdal.open(zipList);
+                          datasetInfo = await gdal.getInfo(dataset.datasets[0]);
+                          if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
+                            EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
+                            // Aquí puedes usar EPSG_input si no es undefined
+                          } else {
+                            // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+                            EPSG_input = await showModalAndGetEPSG();
+                          }
+  
+                          resolve();  // Resolviendo la promesa cuando termine
+                      } catch (error) {
+                          console.error("Error al descomprimir el archivo ZIP:", error);
+                          reject(error);  // Si hay un error, rechazamos la promesa
+                      }
+                  };
+              });
           }
         } else {
 
           dataset = await gdal.open(file);
           datasetInfo= await gdal.getInfo(dataset.datasets[0]);
+          if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
+            EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
+            // Aquí puedes usar EPSG_input si no es undefined
+          } else {
+            // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
+            EPSG_input = await showModalAndGetEPSG();
+          }
 
         }
       
@@ -174,12 +194,21 @@ async function readUrl(input) {
           outputName = "gjson_" + groupLayerName + "_" + name
           const filePathExportGJSON = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
 
-          filePathExportGJSON.then((OUTPUT) => {
+          filePathExportGJSON.then(async(OUTPUT) => {
             // dataset.gjson = OUTPUT.local
 
             decoder = new TextDecoder('utf-8');
 
-            gjson_file = JSON.parse(decoder.decode(gdal.Module.FS.readFile(OUTPUT.local)))
+           
+
+            if(gdalWorker){
+
+              newDataset = await gdal.getFileBytes(OUTPUT.local)
+              gjson_file = JSON.parse(decoder.decode(newDataset))
+  
+            }else{
+              gjson_file = JSON.parse(decoder.decode(gdal.Module.FS.readFile(OUTPUT.local)))
+            }
 
             capa = new M.layer.GeoJSON({
               name: name,
@@ -242,6 +271,9 @@ async function readUrl(input) {
       }
       else if (dataset.datasets[0].type == "raster") {
         dataset.name = imgName.split(".")[0]
+        dataset.datasets[0].info.layers = []
+        dataset.datasets[0].info.layers.push({name: imgName.split(".")[0]})
+        
 
         const options = [
           '-of', 'GTiff',
@@ -252,7 +284,15 @@ async function readUrl(input) {
         const filePathExportGJSON = gdal.gdalwarp(dataset.datasets[0], options, outputName);
         filePathExportGJSON.then(async (OUTPUT) => {
 
-          blob_file_ = new Blob([gdal.Module.FS.readFile(OUTPUT.local)], { type: 'application/octet-stream' });
+          if(gdalWorker){
+
+            newDataset = await gdal.getFileBytes(OUTPUT.local)
+            blob_file_ = new Blob([newDataset], { type: 'application/octet-stream' });
+
+          }else{
+            blob_file_ = new Blob([gdal.Module.FS.readFile(OUTPUT.local)], { type: 'application/octet-stream' });
+          }
+          
 
           olLayer = new ol.layer.WebGLTile({
             source: new ol.source.GeoTIFF({
@@ -273,12 +313,7 @@ async function readUrl(input) {
           mapajs.addLayers(GenericRaster);
         })
 
-
-
-        
-
       }
-
 
       filesObj[n] = dataset
       n += 1
@@ -482,13 +517,22 @@ async function readUrl(input) {
 
             try {
               const filePathExport = gdal.ogr2ogr(contenido.datasets[0], options, outputName);
-              filePathExport.then((OUTPUT) => {
+              filePathExport.then( async (OUTPUT) => {
 
                 if (OUTPUT.all.length > 1) {
                   manejarErrorExportacion(layersName, contenido, EPSG, format);
                   return
                 }
-                fileExport = gdal.Module.FS.readFile(OUTPUT.local);
+
+                if(gdalWorker){
+
+                  newDataset = await gdal.getFileBytes(OUTPUT.local)
+                  fileExport = new Blob([newDataset], { type: 'application/octet-stream' });
+      
+                }else{
+                  fileExport = gdal.Module.FS.readFile(OUTPUT.local);
+                }
+                
 
                 // Crear un Blob con el contenido que quieres exportar
                 const blob = new Blob([fileExport], { type: 'text/plain' });
@@ -528,7 +572,7 @@ async function readUrl(input) {
             outputName = contenido.name.split(".")[0];
             const filePathExport = gdal.ogr2ogr(contenido.datasets[0], options, name);
 
-            filePathExport.then((OUTPUT) => {
+            filePathExport.then( (OUTPUT) => {
 
               if (OUTPUT.all.length === 1) {
                 const fileExport = gdal.Module.FS.readFile(OUTPUT.local);
@@ -541,11 +585,20 @@ async function readUrl(input) {
 
               }
               else {
-                OUTPUT.all.forEach(element => {
+                OUTPUT.all.forEach( async element => {
                   elementLayer = element.local.split("/")[element.local.split("/").length - 1]
 
                   if (elementLayer.includes(name)) {
-                    const fileExport = gdal.Module.FS.readFile(element.local);
+
+                    if(gdalWorker){
+
+                      newDataset = await gdal.getFileBytes(OUTPUT.local)
+                      fileExport = new Blob([newDataset], { type: 'application/octet-stream' });
+          
+                    }else{
+                      fileExport = gdal.Module.FS.readFile(element.local);
+                    }
+                
                     const fileExportFormat = element.local.split(".")[element.local.split(".").length - 1]
 
                     // Crear un Blob con el contenido que quieres exportar
