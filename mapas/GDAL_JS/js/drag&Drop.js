@@ -33,7 +33,10 @@ async function readUrl(input) {
                 // Aquí puedes usar EPSG_input si no es undefined
               } else {
                 // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-                EPSG_input = await showModalAndGetEPSG();
+                if(dataset.datasets[0].type == "raster"){
+                  EPSG_input = await showModalAndGetEPSG();
+                }
+                
               }
             } catch (error) {
                 console.error("Error al abrir el archivo comprimido:", error);
@@ -53,7 +56,9 @@ async function readUrl(input) {
                     // Aquí puedes usar EPSG_input si no es undefined
                   } else {
                     // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-                    EPSG_input = await showModalAndGetEPSG();
+                    if(dataset.datasets[0].type == "raster"){
+                      EPSG_input = await showModalAndGetEPSG();
+                    }
                   }
                   continue
 
@@ -72,7 +77,9 @@ async function readUrl(input) {
               // Aquí puedes usar EPSG_input si no es undefined
             } else {
               // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-              EPSG_input = await showModalAndGetEPSG();
+              if(dataset.datasets[0].type == "raster"){
+                EPSG_input = await showModalAndGetEPSG();
+              }
             }
           }
         } catch (error) {
@@ -100,7 +107,9 @@ async function readUrl(input) {
                 // Aquí puedes usar EPSG_input si no es undefined
               } else {
                 // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-                EPSG_input = await showModalAndGetEPSG();
+                if(dataset.datasets[0].type == "raster"){
+                  EPSG_input = await showModalAndGetEPSG();
+                }
               }
           } catch (error) {
               console.error(error);
@@ -135,7 +144,9 @@ async function readUrl(input) {
                             // Aquí puedes usar EPSG_input si no es undefined
                           } else {
                             // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-                            EPSG_input = await showModalAndGetEPSG();
+                            if(dataset.datasets[0].type == "raster"){
+                              EPSG_input = await showModalAndGetEPSG();
+                            }
                           }
   
                           resolve();  // Resolviendo la promesa cuando termine
@@ -155,7 +166,9 @@ async function readUrl(input) {
             // Aquí puedes usar EPSG_input si no es undefined
           } else {
             // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-            EPSG_input = await showModalAndGetEPSG();
+            if(dataset.datasets[0].type == "raster"){
+              EPSG_input = await showModalAndGetEPSG();
+            }
           }
 
         }
@@ -559,6 +572,8 @@ async function readUrl(input) {
               console.error("Error en el bloque try:", error);
               manejarErrorExportacion(layersName, contenido, EPSG, format);
             }
+          } else if (contenido.datasets[0].type === "raster") {
+            // Hacer aquí la algoritmia para exportar ráster
           }
         }
 
