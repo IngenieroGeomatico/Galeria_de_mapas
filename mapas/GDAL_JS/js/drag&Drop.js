@@ -564,16 +564,67 @@ async function readUrl(input) {
 
                 // Liberar el objeto URL después de usarlo
                 URL.revokeObjectURL(url);
-              }).catch(error => {
-                console.error("Error en la promesa de exportación:", error);
+                }).catch(error => {
+                  console.error("Error en la promesa de exportación:", error);
+                  manejarErrorExportacion(layersName, contenido, EPSG, format);
+                });
+              } catch (error) {
+                console.error("Error en el bloque try:", error);
                 manejarErrorExportacion(layersName, contenido, EPSG, format);
-              });
-            } catch (error) {
-              console.error("Error en el bloque try:", error);
-              manejarErrorExportacion(layersName, contenido, EPSG, format);
-            }
+              }
           } else if (contenido.datasets[0].type === "raster") {
-            // Hacer aquí la algoritmia para exportar ráster
+
+            const options = [
+              '-of', format,
+              '-t_srs', EPSG,
+            ];
+            outputName = contenido.name.split(".")[0];
+
+            try {
+              const filePathExport = gdal.gdalwarp(dataset.datasets[0], options, outputName);
+              filePathExport.then( async (OUTPUT) => {
+
+                if (OUTPUT.all.length > 1) {
+                  manejarErrorExportacion(layersName, contenido, EPSG, format);
+                  return
+                }
+
+                if(gdalWorker){
+
+                  newDataset = await gdal.getFileBytes(OUTPUT.local)
+                  fileExport = new Blob([newDataset], { type: 'application/octet-stream' });
+      
+                }else{
+                  fileExport = gdal.Module.FS.readFile(OUTPUT.local);
+                }
+                
+
+                // Crear un Blob con el contenido que quieres exportar
+                const blob = new Blob([fileExport], { type: 'text/plain' });
+
+                // Crear una URL para el Blob
+                const url = URL.createObjectURL(blob);
+
+                // Crear un enlace de descarga
+                const enlace = document.createElement('a');
+                enlace.href = url;
+                outname = OUTPUT.local.replace("/output/", "")
+                enlace.download = outname;  // Establecer el nombre del archivo de descarga
+
+                // Hacer clic en el enlace para iniciar la descarga
+                enlace.click();
+
+                // Liberar el objeto URL después de usarlo
+                URL.revokeObjectURL(url);
+                }).catch(error => {
+                  console.error("Error en la promesa de exportación:", error);
+                  manejarErrorExportacion(layersName, contenido, EPSG, format);
+                });
+              } catch (error) {
+                console.error("Error en el bloque try:", error);
+                manejarErrorExportacion(layersName, contenido, EPSG, format);
+              }
+            
           }
         }
 
