@@ -857,9 +857,12 @@ async function initGdalJS_() {
   const workerData = await fetch('../../js/gdal/gdal3.js');
   const workerUrl = window.URL.createObjectURL(await workerData.blob());
 
+  const path = 'https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package';
   const paths = {
-    wasm: '../../js/gdal/gdal3WebAssembly.wasm',
-    data: '../../js/gdal/gdal3WebAssembly.data',
+    // wasm: '../../js/gdal/gdal3WebAssembly.wasm',
+    // data: '../../js/gdal/gdal3WebAssembly.data',
+    wasm: `${path}/gdal3WebAssembly.wasm`,
+    data: `${path}/gdal3WebAssembly.data`,
     js: '../../js/gdal/gdal3.js',
     // js: '../../js/gdal/gdal3.node.js',
   };
