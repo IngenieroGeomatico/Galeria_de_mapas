@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <title>Visualizador base</title>
+
+  <!-- fichero estilos -->
+  <link href="https://componentes.idee.es/api-idee/assets/css/apiidee.ol.min.css" rel="stylesheet" />
+
+  <!-- Ficheros javascript de la API -->
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/vendor/browser-polyfill.js"></script>
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.ol.min.js"></script>
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>
+
+  <!-- Extensiones de la API-CNIG -->
+  <link href="https://componentes.idee.es/api-idee/plugins/layerswitcher/layerswitcher.ol.min.css" rel="stylesheet" />
+
+  <script type="text/javascript"
+    src="https://componentes.idee.es/api-idee/plugins/layerswitcher/layerswitcher.ol.min.js">
+    </script>
+
+  
+  <link href="https://componentes.idee.es/api-idee/plugins/layerswitcher/layerswitcher.ol.min.css" rel="stylesheet" />
+  <script type="text/javascript"
+    src="https://componentes.idee.es/api-idee/plugins/layerswitcher/layerswitcher.ol.min.js"></script>
+
+
+  <!-- estilo básico -->
+  <!-- fichero estilos -->
+  <link href="./css/info.css" rel="stylesheet" />
+  <link href="./css/drag_Drop.css" rel="stylesheet" />
+  <link href="./css/navbar.css" rel="stylesheet" />
+  <link href="./css/mapa.css" rel="stylesheet" />
+
+</head>
+
+<body>
+
+  <div class="nav">
+    <input type="checkbox" id="nav-check">
+    <div class="nav-header">
+    </div>
+    <div class="nav-btn">
+      <label for="nav-check">
+        <span></span>
+        <span></span>
+        <span></span>
+      </label>
+    </div>
+    
+    <div class="nav-links">
+      <a id="Info">Info</a>
+      <a id="Arhivos" class="activeButton">Archivos </a>
+      <a id="Mapa">Mapa</a>
+    </div>
+  </div>
+
+
+   <!-- Div carga -->
+   <div id="cargaSVG">
+    <img src="../../img/iconos/gear-spinner.svg">
+  </div>
+
+  <div id="infoID" hidden style="visibility: hidden;">
+
+    <h2>Formatos disponibles</h2>
+
+    <button class="accordion">Información de la librería</button>
+    <div class="panel">
+      <ul class="a">
+        <li>La documentación de la librería gdaljs utilizada está disponible   <a href="https://gdal3.js.org/docs/" target="_blank">aquí</a>
+        </li>
+      </ul>
+    </div>
+
+    <button class="accordion">Archivos vectoriales</button>
+    <div class="panel">
+      <table id="tablaVectorID">
+        <tr>
+          <th>Nombre del formato</th>
+          <th>Nombre corto</th>
+          <th>¿Es leible?</th>
+          <th>¿Es exportable?</th>
+        </tr>
+      </table>
+    </div>
+
+    <button class="accordion">Archivos ráster</button>
+    <div class="panel">
+      <table id="tablaRasterID">
+        <tr>
+          <th>Nombre del formato</th>
+          <th>Nombre corto</th>
+          <th>¿Es leible?</th>
+          <th>¿Es exportable?</th>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+
+  <div id="containerID" class="container p-y-1">
+
+    <button  type="button"  class="custom-btn btn-7"   onclick="document.getElementById('inputFile').click()"><span>Sube un fichero</span></button>
+    
+    <div class="upload">
+      <input name="file" type="file" title="" class="drop-here" id="inputFile" onchange="readUrl(this)">
+      <div class="text text-drop" >Arrastrar archivo aquí</div>
+      <div class="text text-upload">subiendo</div>
+      <svg class="progress-wrapper" width="300" height="300">
+        <circle class="progress" r="115" cx="150" cy="150"></circle>
+      </svg>
+      <svg class="check-wrapper" width="130" height="130">
+        <polyline class="check" points="100.2,40.2 51.5,88.8 29.8,67.5 "/>
+      </svg>
+      <svg class="fail-wrapper" width="130" height="130">
+        <line class="fail" x1="30" y1="30" x2="90" y2="90" stroke="red" stroke-width="10"/>
+        <line class="fail" x1="90" y1="30" x2="30" y2="90" stroke="red" stroke-width="10"/>
+      </svg>
+      <div class="shadow"></div>
+    </div>
+
+    <div id="accordionFiles">
+      
+    </div>
+
+
+    <!-- Modal -->
+    <div id="epsgModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h3>Introduce el EPSG del arhivo de entrada:</h3>
+        <input type="text" id="inputTextEPSG" value="EPSG:3857" style="text-align: center;">
+        <button id="acceptButton">Aceptar</button>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- Contenedor principal del mapa -->
+  <div id="mapaID" hidden></div>
+
+  <script type="text/javascript" src="../../js/gdal/gdal3.js"></script>
+  <script type="text/javascript" src="../../js/jsZIP/jszip.min.js"></script>
+  <script type="text/javascript" src="./js/nav.js"></script>
+  <script type="text/javascript" src="./js/info.js"></script>
+  <script type="text/javascript" src="./js/drag&Drop.js"></script>
+  <script type="text/javascript" src="./js/mapa.js"></script>
+</body>
+
+</html>
