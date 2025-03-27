@@ -1,5 +1,9 @@
 # Galeria de mapas
 
+## Licencia
+
+Este proyecto está bajo la licencia [Creative Commons Attribution-NonCommercial 4.0 International](https://creativecommons.org/licenses/by-nc/4.0/).
+
 Este repositorio tiene como objetivo mostrar datos geoespaciales de forma gratuita y abierta, utilizando tecnologías accesibles y eficientes. Está basado en la API-CNIG y utiliza OpenLayers como herramienta principal.
 🎯 Objetivo
 
@@ -28,7 +32,6 @@ Proveer ejemplos de visualización cartográfica interactiva y personalizable, p
 
 🌟 Características
 
-    Visualización de datos espaciales con OpenLayers.
-    Ejemplos personalizados utilizando la API-CNIG.
+    Visualización de datos espaciales con API-CNIG y ejemplos personalizados a esos datos.
     Diseño modular que facilita la extensión y personalización.
 
