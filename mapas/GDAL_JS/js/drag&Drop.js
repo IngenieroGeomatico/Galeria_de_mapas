@@ -403,8 +403,8 @@ async function readUrl(input) {
       celda1.innerHTML = imgName;
       celda2.innerHTML = capa.info.size[0] + " x " + capa.info.size[1];
       celda3.innerHTML = EPSG_input;
-      celda5.innerHTML = capa.info.bands.length;
-      celda4.innerHTML = capa.info.metadata.IMAGE_STRUCTURE.COMPRESSION
+      celda4.innerHTML = capa.info.bands.length;
+      celda5.innerHTML = capa.info.metadata.IMAGE_STRUCTURE.COMPRESSION
 
 
     } else if (dataset.datasets[0].type == "vector") {
