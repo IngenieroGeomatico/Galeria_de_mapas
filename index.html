@@ -6,6 +6,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <!-- PWA - Soporte para iOS -->
+  <link rel="apple-touch-icon" href="/img/iconos/map-svgrepo-com.svg" />
+  <meta name="apple-mobile-web-app-status-bar" content="#db4938" />
+  <meta name="theme-color" content="#db4938" />
+
   <!-- Bootstrap CSS -->
   <link rel="stylesheet" type="text/css" href="./bootstrap/bootstrap.min.css" />
 
@@ -19,152 +26,151 @@
 
 <body>
 
-  <!-- Option 1: Bootstrap Bundle with Popper -->
-  <script src="./bootstrap/bootstrap.bundle.min.js.js"></script>
-  <!-- jquery -->
-  <script src="./js/jquery/jquery.min.js"></script>
-
-  <!-- js propio -->
-  <script src="./js/paginaPrincipal.js"></script>
-
-
-  <nav id="navbarID" class="navbar navbar-light bg-light">
-    <a id="idImgAPICNIG" href="https://plataforma.idee.es/cnig-api" target="_blank">
-      <img src="http://componentes.cnig.es/api-core/img/logo-apicnig.png" width="50" height="50">
-    </a>
-
-    <h3>Galería de Mapas API-CNIG</h3>
-    <form class="form-inline" role="search">
-      <div class="input-group">
-        <input name="q" type="text" id="keywords" class="form-control search-query" placeholder="Buscar..."
-          aria-label="Examples" aria-describedby="count" autocomplete="off" autofocus="">
-      </div>
-    </form>
-  </nav>
-
-
-  <div class="container-fluid">
-    <div id="examples" class="row mt-3">
-
-      <!--  -->
-      <!-- Ejemplos visualizadores -->
-      <!--  -->
-
-      <!-- inicio tarjeta sección Madrid-->
-      <div class="example exampleSection bg-light border rounded">
-        <span class="mainlink">
-          <strong>Madrid</strong><br>
-        </span>
-      </div>
-      <!-- fin tarjeta -->
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/CalidadAireMadrid/" target="_blank">
+    <!-- Option 1: Bootstrap Bundle with Popper -->
+    <script src="./bootstrap/bootstrap.bundle.min.js.js"></script>
+    <!-- jquery -->
+    <script src="./js/jquery/jquery.min.js"></script>
+  
+    <!-- js propio -->
+    <script src="./js/paginaPrincipal.js"></script>
+  
+  
+    <nav id="navbarID" class="navbar navbar-light bg-light">
+      <a id="idImgAPICNIG" href="https://plataforma.idee.es/cnig-api" target="_blank">
+        <img src="http://componentes.cnig.es/api-core/img/logo-apicnig.png" width="50" height="50">
+      </a>
+  
+      <h3>Galería de Mapas API-CNIG</h3>
+      <form class="form-inline" role="search">
+        <div class="input-group">
+          <input name="q" type="text" id="keywords" class="form-control search-query" placeholder="Buscar..."
+            aria-label="Examples" aria-describedby="count" autocomplete="off" autofocus="">
+        </div>
+      </form>
+    </nav>
+  
+  
+    <div class="container-fluid">
+      <div id="examples" class="row mt-3">
+  
+        <!--  -->
+        <!-- Ejemplos visualizadores -->
+        <!--  -->
+  
+        <!-- inicio tarjeta sección Madrid-->
+        <div class="example exampleSection bg-light border rounded">
           <span class="mainlink">
-            <strong>Estaciones calidad aire Madrid</strong><br>
+            <strong>Madrid</strong><br>
           </span>
-          <p class="description">Datos en tiempo real de las estaciones de calidad del aire del ayuntamiento de Madrid</p>
-          <p class="keywords">#Calidad #Aire #Madrid #TiempoReal</p>
-          <img src="img/calidadAireMAdrid.png" alt="img/mapaBase.png" width="200"> 
-        </a>
-      </div>
-      <!-- fin tarjeta -->
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/LucesdeBohemia/" target="_blank">
+        </div>
+        <!-- fin tarjeta -->
+  
+        <!-- inicio tarjeta-->
+        <div class="col-md-4 col-sm-6">
+          <a class="example  bg-light border rounded" href="./mapas/CalidadAireMadrid/" target="_blank">
+            <span class="mainlink">
+              <strong>Estaciones calidad aire Madrid</strong><br>
+            </span>
+            <p class="description">Datos en tiempo real de las estaciones de calidad del aire del ayuntamiento de Madrid</p>
+            <p class="keywords">#Calidad #Aire #Madrid #TiempoReal</p>
+            <img src="img/calidadAireMAdrid.png" alt="img/mapaBase.png" width="200"> 
+          </a>
+        </div>
+        <!-- fin tarjeta -->
+  
+        <!-- inicio tarjeta-->
+        <div class="col-md-4 col-sm-6">
+          <a class="example  bg-light border rounded" href="./mapas/LucesdeBohemia/" target="_blank">
+            <span class="mainlink">
+              <strong>"StoryMap" Luces de Bohemia"</strong><br>
+            </span>
+            <p class="description">"Story Map" de Luces de Bohemia, escrito por Ramón María del Valle-Inclán y publicado en 1920</p>
+            <p class="keywords">#Libro #StoryMap #Madrid #Esperpento</p>
+            <img src="img/lucesdeBohemia.png" alt="img/mapaBase.png" width="200"> 
+          </a>
+        </div>
+        <!-- fin tarjeta -->
+  
+        <!-- inicio tarjeta-->
+        <div class="col-md-4 col-sm-6">
+          <a class="example  bg-light border rounded" href="./mapas/PuntosHistoricosMadrid/" target="_blank">
+            <span class="mainlink">
+              <strong>Puntos de interés histórico de Madrid</strong><br>
+            </span>
+            <p class="description">Visualizador que ofrece la información sobre puntos de interés histórico y monumentos de Madrid</p>
+            <p class="keywords">#Historia #PuntoDeInterés #Madrid #POI #Monumentos</p>
+            <img src="img/PuntosHistoricos.png" alt="img/PuntosHistoricos.png" width="200"> 
+          </a>
+        </div>
+        <!-- fin tarjeta -->
+        <!-- fin tarjeta sección Madrid-->
+  
+  
+        <!-- inicio tarjeta sección Madrid-->
+        <div class="example exampleSection bg-light border rounded">
           <span class="mainlink">
-            <strong>"StoryMap" Luces de Bohemia"</strong><br>
+            <strong>Comunidad de Madrid</strong><br>
           </span>
-          <p class="description">"Story Map" de Luces de Bohemia, escrito por Ramón María del Valle-Inclán y publicado en 1920</p>
-          <p class="keywords">#Libro #StoryMap #Madrid #Esperpento</p>
-          <img src="img/lucesdeBohemia.png" alt="img/mapaBase.png" width="200"> 
-        </a>
-      </div>
-      <!-- fin tarjeta -->
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/PuntosHistoricosMadrid/" target="_blank">
+        </div>
+        <!-- fin tarjeta -->
+  
+        <!-- inicio tarjeta-->
+        <div class="col-md-4 col-sm-6">
+          <a class="example  bg-light border rounded" href="./mapas/CalidadAireComunidadMadrid/" target="_blank">
+            <span class="mainlink">
+              <strong>Estaciones calidad aire Comunidad de Madrid</strong><br>  
+            </span>
+            <p class="description">Datos en tiempo real de las estaciones de calidad del aire de la Comunidad de Madrid</p>
+            <p class="keywords">#Calidad #Aire #ComunidadMadrid #TiempoReal</p>
+            <img src="img/calidadAureComunidadMadrid.png" alt="img/mapaBase.png" width="200"> 
+          </a>
+        </div>
+        <!-- fin tarjeta -->
+        <!-- fin tarjeta sección Comunidad de Madrid-->
+  
+        <!-- inicio tarjeta sección-->
+        <div class="example exampleSection bg-light border rounded">
           <span class="mainlink">
-            <strong>Puntos de interés histórico de Madrid</strong><br>
-          </span>
-          <p class="description">Visualizador que ofrece la información sobre puntos de interés histórico y monumentos de Madrid</p>
-          <p class="keywords">#Historia #PuntoDeInterés #Madrid #POI #Monumentos</p>
-          <img src="img/PuntosHistoricos.png" alt="img/PuntosHistoricos.png" width="200"> 
-        </a>
-      </div>
-      <!-- fin tarjeta -->
-      <!-- fin tarjeta sección Madrid-->
-
-
-      <!-- inicio tarjeta sección Madrid-->
-      <div class="example exampleSection bg-light border rounded">
-        <span class="mainlink">
-          <strong>Comunidad de Madrid</strong><br>
-        </span>
-      </div>
-      <!-- fin tarjeta -->
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/CalidadAireComunidadMadrid/" target="_blank">
-          <span class="mainlink">
-            <strong>Estaciones calidad aire Comunidad de Madrid</strong><br>  
-          </span>
-          <p class="description">Datos en tiempo real de las estaciones de calidad del aire de la Comunidad de Madrid</p>
-          <p class="keywords">#Calidad #Aire #ComunidadMadrid #TiempoReal</p>
-          <img src="img/calidadAureComunidadMadrid.png" alt="img/mapaBase.png" width="200"> 
-        </a>
-      </div>
-      <!-- fin tarjeta -->
-      <!-- fin tarjeta sección Comunidad de Madrid-->
-
-      <!-- inicio tarjeta sección-->
-      <div class="example exampleSection bg-light border rounded">
-        <span class="mainlink">
-          <strong>Otros</strong><br>
-          <!--<small>(mapaBase.html)</small>-->
-        </span>
-      </div>
-      <!-- fin tarjeta -->
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/GDAL_JS/" target="_blank">
-          <span class="mainlink">
-            <strong>Transformador de formatos con gdal3.js</strong><br>
+            <strong>Otros</strong><br>
             <!--<small>(mapaBase.html)</small>-->
           </span>
-          <p class="description">Aplicación para transformación y visualización de datos</p>
-          <p class="keywords">#GDAL #Transformación</p>
-          <img src="img/gdaljs.png" alt="img/mapaBase.png" width="200">
-        </a>
+        </div>
+        <!-- fin tarjeta -->
+  
+        <!-- inicio tarjeta-->
+        <div class="col-md-4 col-sm-6">
+          <a class="example  bg-light border rounded" href="./mapas/GDAL_JS/" target="_blank">
+            <span class="mainlink">
+              <strong>Transformador de formatos con gdal3.js</strong><br>
+              <!--<small>(mapaBase.html)</small>-->
+            </span>
+            <p class="description">Aplicación para transformación y visualización de datos</p>
+            <p class="keywords">#GDAL #Transformación</p>
+            <img src="img/gdaljs.png" alt="img/mapaBase.png" width="200">
+          </a>
+        </div>
+        <!-- fin tarjeta -->
+  
+        <!-- inicio tarjeta-->
+        <div class="col-md-4 col-sm-6">
+          <a class="example  bg-light border rounded" href="./mapas/MapaBase/" target="_blank">
+            <span class="mainlink">
+              <strong>Visualizador base</strong><br>
+              <!--<small>(mapaBase.html)</small>-->
+            </span>
+            <p class="description">Ejemplo de un visualizador simple</p>
+            <p class="keywords">#Base #Simple</p>
+            <img src="img/mapaBase.png" alt="img/mapaBase.png" width="200">
+          </a>
+        </div>
+        <!-- fin tarjeta -->
+        <!-- fin tarjeta sección-->
+  
       </div>
-      <!-- fin tarjeta -->
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/MapaBase/" target="_blank">
-          <span class="mainlink">
-            <strong>Visualizador base</strong><br>
-            <!--<small>(mapaBase.html)</small>-->
-          </span>
-          <p class="description">Ejemplo de un visualizador simple</p>
-          <p class="keywords">#Base #Simple</p>
-          <img src="img/mapaBase.png" alt="img/mapaBase.png" width="200">
-        </a>
-      </div>
-      <!-- fin tarjeta -->
-      <!-- fin tarjeta sección-->
-
-
-
     </div>
-  </div>
-
-
+  
+  
 </body>
+  
 
 </html>
