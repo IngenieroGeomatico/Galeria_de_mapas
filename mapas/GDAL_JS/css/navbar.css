@@ -101,3 +101,10 @@
       overflow-y: auto;
     }
   }
+
+
+  #H3_Title{
+    position: fixed;
+    left: 10px;
+    font-family: system-ui;
+  }
