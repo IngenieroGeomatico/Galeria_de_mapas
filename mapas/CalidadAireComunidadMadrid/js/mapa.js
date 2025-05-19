@@ -1,9 +1,9 @@
 
 
 const SVGCarga = document.getElementById("cargaSVG")
-window.onload = (event) => {
-  SVGCarga.hidden = true
-};
+// window.onload = (event) => {
+//   SVGCarga.hidden = true
+// };
 
 
 Base_IGNBaseTodo_TMS_2 = new M.layer.TMS({
@@ -1216,6 +1216,7 @@ geojsonJoin.then(()=>{
 
   // y la añadimos al mapa
   mapajs.addLayers(arrayLayers.reverse());
+  SVGCarga.hidden = true
 })
 
 
@@ -1224,7 +1225,7 @@ async function myFunction_JoinData_CM() {
   geojsonJoin_CM = {}
 
   let myPromise_1_CM = new Promise(function (resolve) {
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://api-features.ign.es/collections/administrativeunit/items?limit=1&nameunit=Comunidad%20de%20Madrid&nationallevelname=Comunidad%20aut%C3%B3noma&f=json").then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get
@@ -1237,9 +1238,14 @@ async function myFunction_JoinData_CM() {
 
   geojsonJoin_CM.ComunidadAutonoma = value_1__gjson_ComunidadMadrid
 
+  if(value_1__gjson_ComunidadMadrid.features.length == 0){
+    M.dialog.info("Necesita tener activada la extensión del navegador CORS para poder cargar los datos")
+  }
+
+
 
   let myPromise_2_Estaciones= new Promise(function (resolve) {
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://datos.comunidad.madrid/catalogo/dataset/4cd076a3-e602-48da-b834-58de39d3125c/resource/0aa62bb9-9fad-42df-826d-72ae903e3bd6/download/calidad_aire_estaciones.json").then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get
@@ -1260,7 +1266,7 @@ async function myFunction_JoinData_CM() {
 
 
   let myPromise_3_Medidas= new Promise(function (resolve) {
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://datos.comunidad.madrid/catalogo/dataset/3dacd589-ecca-485c-81b9-a61606b7199f/resource/93bed3f0-3ba5-4b00-90bf-1c81951bab24/download/calidad_aire_datos_dia.json").then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get
