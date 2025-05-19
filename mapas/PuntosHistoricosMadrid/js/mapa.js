@@ -1,9 +1,9 @@
 
 
 const SVGCarga = document.getElementById("cargaSVG")
-window.onload = (event) => {
-  SVGCarga.hidden = true
-};
+// window.onload = (event) => {
+//   SVGCarga.hidden = true
+// };
 
 
 Base_IGNBaseTodo_TMS_2 = new M.layer.TMS({
@@ -484,6 +484,8 @@ geojsonData.then(() => {
   });
   mapajs.addLayers(capaStolpersteine)
 
+
+
 })
 
 
@@ -496,7 +498,7 @@ async function myFunction_GetData() {
 
   let myPromise_Monumentos = new Promise(function (resolve) {
 
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://datos.madrid.es/egob/catalogo/300356-0-monumentos-ciudad-madrid.json",).then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get
@@ -507,13 +509,22 @@ async function myFunction_GetData() {
   });
   value_Monumentos = await myPromise_Monumentos;
   confJSON_LD = { type: "Point", field: "location", long: "longitude", lat: "latitude" }
+
+  if(value_Monumentos.length == 0){
+    SVGCarga.hidden = true
+    M.dialog.info("Necesita tener activada la extensión del navegador CORS para poder cargar los datos")
+  }
+
+
+
   geoJson_Monumentos = convertJsonLdToGeoJson(JSON.parse(value_Monumentos), confJSON_LD);
   geojsonDataAsync.geoJson_Monumentos = geoJson_Monumentos
 
+  
 
   let myPromise_Placas = new Promise(function (resolve) {
 
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://datos.madrid.es/egob/catalogo/300329-1-placas-conmemorativas-madrid.csv",).then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get
@@ -530,7 +541,7 @@ async function myFunction_GetData() {
 
   let myPromise_Stolpersteine = new Promise(function (resolve) {
 
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://datos.madrid.es/egob/catalogo/300453-2-placas-stolpersteine.csv",).then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get

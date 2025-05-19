@@ -1,9 +1,9 @@
 
 
 const SVGCarga = document.getElementById("cargaSVG")
-window.onload = (event) => {
-  SVGCarga.hidden = true
-};
+// window.onload = (event) => {
+//   SVGCarga.hidden = true
+// };
 
 
 Base_IGNBaseTodo_TMS_2 = new M.layer.TMS({
@@ -39,6 +39,7 @@ mapajs = M.map({
   layers: []
 });
 
+
 mapajs.addAttribution({
   name: "Autor:",
   description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
@@ -47,7 +48,7 @@ mapajs.addAttribution({
 mapajs.addQuickLayers('Base_IGNBaseTodo_TMS_2')
 
 
-// M.proxy(true)
+// //M.proxy(true)
 // M.remote.get("https://datos.madrid.es/egob/catalogo/212629-1-estaciones-control-aire.csv",
 //   {}
 // ).then(function (res) {
@@ -1255,6 +1256,7 @@ geojsonJoin.then(() => {
 
   // y la añadimos al mapa
   mapajs.addLayers(arrayLayers.reverse());
+  SVGCarga.hidden = true
 })
 
 
@@ -1263,7 +1265,7 @@ async function myFunction_JoinData() {
 
   let myPromise = new Promise(function (resolve) {
 
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://datos.madrid.es/egob/catalogo/212629-1-estaciones-control-aire.csv",).then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get
@@ -1275,10 +1277,13 @@ async function myFunction_JoinData() {
   value1_estaciones = await myPromise;
   geojsonEstaciones = csvToGeoJson({csvString: value1_estaciones, long : "LONGITUD", lat : "LATITUD"})
 
+  if(geojsonEstaciones.features.length == 0){
+    M.dialog.info("Necesita tener activada la extensión del navegador CORS para poder cargar los datos")
+  }
 
   let myPromise2 = new Promise(function (resolve) {
 
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://datos.madrid.es/egob/catalogo/212531-10515086-calidad-aire-tiempo-real.csv",).then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get
@@ -1292,7 +1297,7 @@ async function myFunction_JoinData() {
   jsonEstaciones = csvToJson(value2_datos)
 
   let myPromise3 = new Promise(function (resolve) {
-    M.proxy(true)
+    //M.proxy(true)
     M.remote.get("https://api-features.ign.es//collections/administrativeunit/items?f=json&limit=1&&nameunit=Madrid&&nationallevelname=Municipio",).then(
       function (res) {
         // Muestra un diálogo informativo con el resultado de la petición get
