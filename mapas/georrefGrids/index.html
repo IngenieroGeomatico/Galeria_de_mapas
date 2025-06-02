@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <title>Visualizador base</title>
+
+    <!-- fichero estilos -->
+    <link href="https://componentes.cnig.es/api-core/assets/css/apiign.ol.min.css" rel="stylesheet" />
+
+    <!-- Ficheros javascript de la API -->
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>          
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>        
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>   
+
+    <!-- Extensiones de la API-CNIG -->
+    <link href="https://componentes.cnig.es/api-core/plugins/layerswitcher/layerswitcher.ol.min.css" 
+          rel="stylesheet" />
+          
+    <script type="text/javascript"
+      src="https://componentes.cnig.es/api-core/plugins/layerswitcher/layerswitcher.ol.min.js">
+    </script>      
+
+
+    <!-- estilo básico -->
+     <link href="./css/mapa.css" 
+          rel="stylesheet" />
+
+    <!-- Importación librerías externas -->
+    <script type="text/javascript" src="../../js/h3/h3-js.umd.js"></script>
+
+    <!-- Importación librerías propias -->
+    <script type="text/javascript" src="../../js/lib/transforms/DGGS.js"></script>
+
+
+    <!-- Extensión personalizada para georreferenciar teselas -->
+    <link href="../../ext/georrefTeselas/georrefTeselas .css" rel="stylesheet" />
+    <script type="text/javascript" src="../../ext/georrefTeselas/georrefTeselas.js"></script>
+  
+
+
+</head>
+<body>
+   
+
+  <!-- Contenedor principal del mapa -->
+    <div id="mapa"></div>
+
+    <script type="text/javascript"
+      src="./js/mapa.js">
+    </script>     
+</body>
+</html>
