@@ -1,0 +1,59 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    background: linear-gradient(135deg, #b6fbff 0%, #83a4d4 100%);
+    min-height: 100vh;
+    margin: 0;
+    padding: 1rem;
+}
+
+header {
+    background-color: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(10px);
+    border-radius: 1rem;
+    padding: 1rem 2rem;
+    margin-bottom: 2rem;
+}
+
+.card {
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    color: white;
+    border: none;
+    border-radius: 1.5rem;
+    transition: transform 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.card h2 {
+    font-weight: 700;
+}
+
+.text-shadow-1 {
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.col {
+    margin-block: 20px;
+}
+
+small, small {
+    font-size: 20px;
+}
+
+.disabled-card {
+    opacity: 0.5;
+    pointer-events: none;
+    filter: grayscale(100%);
+  }
+
+a {
+    color: inherit;
+    text-decoration: inherit;
+}
+
+a:hover {
+    color: #86b7fe;
+}

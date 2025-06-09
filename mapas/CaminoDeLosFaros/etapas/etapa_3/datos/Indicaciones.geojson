@@ -1,0 +1,32 @@
+{
+"type": "FeatureCollection",
+"name": "Indicaciones",
+"features": [
+{ "type": "Feature", "properties": { "id": 0, "indicacion": "" }, "geometry": { "type": "Point", "coordinates": [ 0.0, 0.0 ] } },
+{ "type": "Feature", "properties": { "id": 302, "indicacion": "Primer kilómetro de la etapa por arcen carretera transitada" }, "geometry": { "type": "Point", "coordinates": [ -8.901453764873404, 43.241780749768012 ] } },
+{ "type": "Feature", "properties": { "id": 303, "indicacion": "PELIGROSIDAD 2 PUNTUAL: OJO al cruce a la derecha para ir al Anllóns. La gente debe ir por el arcén de la izquierda hasta el cruce." }, "geometry": { "type": "Point", "coordinates": [ -8.906155525756487, 43.233577488794069 ] } },
+{ "type": "Feature", "properties": { "id": 305, "indicacion": "Cruce. El camino va por el medio del bosque al campo de fútbol. Cuando está embarrado suele formar tapón.\r\nNo ir por la playa que es peligroso por las rocas húmedas y resbaladizas" }, "geometry": { "type": "Point", "coordinates": [ -8.918575160813953, 43.231186833936889 ] } },
+{ "type": "Feature", "properties": { "id": 308, "indicacion": "OJO al cruce para iniciar el Rego dos Muiños. Hay paso de cebra" }, "geometry": { "type": "Point", "coordinates": [ -8.947477791013347, 43.215547588437815 ] } },
+{ "type": "Feature", "properties": { "id": 309, "indicacion": "OJO a la pasarela de madera si está mojada. Resbalan" }, "geometry": { "type": "Point", "coordinates": [ -8.948049871452833, 43.215220589592612 ] } },
+{ "type": "Feature", "properties": { "id": 310, "indicacion": "OJO al cruce a la izquierda que nos lleva hasta la carretera" }, "geometry": { "type": "Point", "coordinates": [ -8.954769872220831, 43.196683080312702 ] } },
+{ "type": "Feature", "properties": { "id": 311, "indicacion": "Hay que cruzar la carretera. Hay bastante visibilidad" }, "geometry": { "type": "Point", "coordinates": [ -8.952798794952004, 43.197060273692188 ] } },
+{ "type": "Feature", "properties": { "id": 313, "indicacion": "Prohibido subirse a los muros de las edificaciones. Parada de avituallamiento." }, "geometry": { "type": "Point", "coordinates": [ -8.95289655430483, 43.194902995701504 ] } },
+{ "type": "Feature", "properties": { "id": 314, "indicacion": "Hay que cruzar la carretera. Paso de cebra" }, "geometry": { "type": "Point", "coordinates": [ -8.956632047311935, 43.19329995613095 ] } },
+{ "type": "Feature", "properties": { "id": 316, "indicacion": "Tramo de carretera con poco tráfico" }, "geometry": { "type": "Point", "coordinates": [ -8.965047514038591, 43.190624208156279 ] } },
+{ "type": "Feature", "properties": { "id": 317, "indicacion": "OJO - Normalmente, cierra de 14:00 a 16:00" }, "geometry": { "type": "Point", "coordinates": [ -8.969275899842346, 43.190228436237753 ] } },
+{ "type": "Feature", "properties": { "id": 319, "indicacion": "OJO al cruce a la izquierda y después a la derecha" }, "geometry": { "type": "Point", "coordinates": [ -8.968201326825143, 43.198972619214075 ] } },
+{ "type": "Feature", "properties": { "id": 320, "indicacion": "OJO al cruce en la carretera a la izquierda para iniciar la subida" }, "geometry": { "type": "Point", "coordinates": [ -8.968263319641245, 43.203925417855416 ] } },
+{ "type": "Feature", "properties": { "id": 321, "indicacion": "dificuktad: 2 || Punto más alto de O Camiño dos Faros, con 312 metros. OJO a las señales en la bajada. Bajada técnica por sendero" }, "geometry": { "type": "Point", "coordinates": [ -8.972122233883155, 43.207199686845854 ] } },
+{ "type": "Feature", "properties": { "id": 322, "indicacion": "Se baja por una pista de tierra a la derecha" }, "geometry": { "type": "Point", "coordinates": [ -8.968061004141772, 43.208290993934426 ] } },
+{ "type": "Feature", "properties": { "id": 324, "indicacion": "Cruce de carretera. Buena visibilidad" }, "geometry": { "type": "Point", "coordinates": [ -8.955877976042741, 43.220301571382265 ] } },
+{ "type": "Feature", "properties": { "id": 325, "indicacion": "OJO al cruce a la izquierda para internarse en los bosques de Taboido camino de la costa. Fácil de no ver" }, "geometry": { "type": "Point", "coordinates": [ -8.954905493203944, 43.225716568336033 ] } },
+{ "type": "Feature", "properties": { "id": 326, "indicacion": "fin dificuktad: 2 || Tramo costeando de acantilados. Sendeiro irregular" }, "geometry": { "type": "Point", "coordinates": [ -8.965858158517433, 43.225477508342777 ] } },
+{ "type": "Feature", "properties": { "id": 327, "indicacion": "Se sale por un sendero que parte al inicio de la playa, en el riachuelo" }, "geometry": { "type": "Point", "coordinates": [ -8.96620175398705, 43.22427836930872 ] } },
+{ "type": "Feature", "properties": { "id": 329, "indicacion": "Interesante llegar al mirador a la derecha de la pista" }, "geometry": { "type": "Point", "coordinates": [ -8.980909273379254, 43.227225262583787 ] } },
+{ "type": "Feature", "properties": { "id": 330, "indicacion": "El camino desde aquí va costeando" }, "geometry": { "type": "Point", "coordinates": [ -8.98579253958918, 43.225550640722638 ] } },
+{ "type": "Feature", "properties": { "id": 331, "indicacion": "PELIGROSIDAD: 3 || Ojo, hay cerca un acantilado peligroso. No acercarse" }, "geometry": { "type": "Point", "coordinates": [ -8.986120462920692, 43.224674858300631 ] } },
+{ "type": "Feature", "properties": { "id": 332, "indicacion": "Hay que cruzar el riachuelo de un salto." }, "geometry": { "type": "Point", "coordinates": [ -8.983887969089174, 43.22210156598026 ] } },
+{ "type": "Feature", "properties": { "id": 333, "indicacion": "FIN PELIGROSIDAD: 3 \\\\ Siguientes 100 metros riesgo alto por estar cerca de acantilado" }, "geometry": { "type": "Point", "coordinates": [ -8.989010292874767, 43.220118052611262 ] } },
+{ "type": "Feature", "properties": { "id": 335, "indicacion": "El camino va por el borde del mar hasta la altura del paseo" }, "geometry": { "type": "Point", "coordinates": [ -8.992330331489244, 43.216297313262764 ] } }
+]
+}

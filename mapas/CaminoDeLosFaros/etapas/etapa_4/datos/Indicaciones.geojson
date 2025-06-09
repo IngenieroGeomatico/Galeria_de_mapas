@@ -1,0 +1,17 @@
+{
+"type": "FeatureCollection",
+"name": "Indicaciones",
+"features": [
+{ "type": "Feature", "properties": { "id": 0, "indicacion": "" }, "geometry": { "type": "Point", "coordinates": [ 0.0, 0.0 ] } },
+{ "type": "Feature", "properties": { "id": 420, "indicacion": "Cruce por el coído saltando atravesando las boleras" }, "geometry": { "type": "Point", "coordinates": [ -9.0806588294717, 43.180890551228913 ] } },
+{ "type": "Feature", "properties": { "id": 419, "indicacion": "DIFICULTAD: 2 \\\\ Tramo entre grandes rocas graníticas, hay que tener cuidado saltando de unas a otras" }, "geometry": { "type": "Point", "coordinates": [ -9.068469847445343, 43.185906056183562 ] } },
+{ "type": "Feature", "properties": { "id": 401, "indicacion": "Cruce a la derecha" }, "geometry": { "type": "Point", "coordinates": [ -9.006598620216831, 43.226150397184256 ] } },
+{ "type": "Feature", "properties": { "id": 404, "indicacion": "PELIGROSIDAD: 2 DIFICUKTAD: 2 \\\\ Paso cerca del acantilado" }, "geometry": { "type": "Point", "coordinates": [ -9.013069429463098, 43.23107372595134 ] } },
+{ "type": "Feature", "properties": { "id": 406, "indicacion": "Después de la Playa de los Cristales y justo después del cementerio, tomar cruce a la derecha" }, "geometry": { "type": "Point", "coordinates": [ -9.010029009681444, 43.226855373330885 ] } },
+{ "type": "Feature", "properties": { "id": 407, "indicacion": "NULLPaso cerca de los acantilados. Mucho cuidado al adelantar" }, "geometry": { "type": "Point", "coordinates": [ -9.009394782539808, 43.226306403203772 ] } },
+{ "type": "Feature", "properties": { "id": 408, "indicacion": "FIN DIFICUKTAD: 2 PELIGROSIDAD: 2 \\\\ Subida corta pero exigente" }, "geometry": { "type": "Point", "coordinates": [ -9.016781990315469, 43.21945772032624 ] } },
+{ "type": "Feature", "properties": { "id": 414, "indicacion": "Antes de llegar a la playa, hay que tomar cruce a la derecha para bajar a la playa" }, "geometry": { "type": "Point", "coordinates": [ -9.036165876960176, 43.200403019621525 ] } },
+{ "type": "Feature", "properties": { "id": 417, "indicacion": "Parada de avituallamiento en Bar Os Espiños." }, "geometry": { "type": "Point", "coordinates": [ -9.053182507369421, 43.182653352797971 ] } },
+{ "type": "Feature", "properties": { "id": 419, "indicacion": "DIFICULTAD: 2 \\\\ Tramo entre grandes rocas graníticas, hay que tener cuidado saltando de unas a otras" }, "geometry": { "type": "Point", "coordinates": [ -9.075853676753196, 43.182477314653774 ] } }
+]
+}
