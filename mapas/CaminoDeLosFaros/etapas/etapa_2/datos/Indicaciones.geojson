@@ -1,0 +1,22 @@
+{
+"type": "FeatureCollection",
+"name": "Indicaciones",
+"features": [
+{ "type": "Feature", "properties": { "id": 0, "indicacion": "" }, "geometry": { "type": "Point", "coordinates": [ 0.0, 0.0 ] } },
+{ "type": "Feature", "properties": { "id": 202, "indicacion": "PEROSIDAD: 3 , DIFICULTAD:· || No salirse del sendero porque hay acantilados que no se ven. No adelantar sin seguridad" }, "geometry": { "type": "Point", "coordinates": [ -8.909429840051994, 43.293842073885628 ] } },
+{ "type": "Feature", "properties": { "id": 204, "indicacion": "Cruce peligroso. Después de la cruz seguir el sendero hacia el interior y no continuar nunca por la costa que es\r\nimposible pasar." }, "geometry": { "type": "Point", "coordinates": [ -8.922998471879804, 43.292662130981824 ] } },
+{ "type": "Feature", "properties": { "id": 205, "indicacion": "Cruce a la derecha hacia A Barda" }, "geometry": { "type": "Point", "coordinates": [ -8.920383315797048, 43.288984323580557 ] } },
+{ "type": "Feature", "properties": { "id": 206, "indicacion": "Descenso pronunciado e con saintes de troncos de tojo en el sendero." }, "geometry": { "type": "Point", "coordinates": [ -8.925347376885332, 43.287313900865975 ] } },
+{ "type": "Feature", "properties": { "id": 208, "indicacion": "Señal vertical al principio del tramo. Tramo de alta dificultad, posibilidad de hacerlo por los eólicos. No salirse del\r\nsendero y pisar con cuidado. Salientes de troncos de tojo en el sendero." }, "geometry": { "type": "Point", "coordinates": [ -8.94502031383445, 43.288483834739715 ] } },
+{ "type": "Feature", "properties": { "id": 211, "indicacion": "No salirse del sendero. Descenso con mucha pendiente y muy técnico. Suelo de roca y raices." }, "geometry": { "type": "Point", "coordinates": [ -8.974177430951006, 43.281683506276636 ] } },
+{ "type": "Feature", "properties": { "id": 212, "indicacion": "Está muy cerca de los acantilados" }, "geometry": { "type": "Point", "coordinates": [ -8.980675726142332, 43.282438859029135 ] } },
+{ "type": "Feature", "properties": { "id": 213, "indicacion": "FIN PELIGROSIDAD:3 DIFICULTAD: 3" }, "geometry": { "type": "Point", "coordinates": [ -8.98939753966658, 43.274814532077784 ] } },
+{ "type": "Feature", "properties": { "id": 217, "indicacion": "Cruce. El camino continua por la costa, al otro lado de la playa, en un tramo de dificultad media hasta la playa de\r\nValarés. Existe una variante más cómoda que va por A Pedra da Serpe y la pista de tierra, para unirse después en el\r\nmirador del Monte da Facho. Tiene 1 kilómetro más pero es bastante más cómoda." }, "geometry": { "type": "Point", "coordinates": [ -8.951561086121776, 43.262745081025955 ] } },
+{ "type": "Feature", "properties": { "id": 218, "indicacion": "DIFICUKTAD: 2 || Pequeño descenso muy técnico" }, "geometry": { "type": "Point", "coordinates": [ -8.948846629298583, 43.254154672698412 ] } },
+{ "type": "Feature", "properties": { "id": 219, "indicacion": "Sendero irregular" }, "geometry": { "type": "Point", "coordinates": [ -8.950999032296567, 43.248057090371098 ] } },
+{ "type": "Feature", "properties": { "id": 221, "indicacion": "FIN DIFICUKTAD: 2 || Bajada muy técnica pegada a los acantilados" }, "geometry": { "type": "Point", "coordinates": [ -8.946967893882237, 43.242531136054417 ] } },
+{ "type": "Feature", "properties": { "id": 222, "indicacion": "Cruce. El camino continua al otro lado de la playa. Servicios" }, "geometry": { "type": "Point", "coordinates": [ -8.943313032229179, 43.242767318153369 ] } },
+{ "type": "Feature", "properties": { "id": 223, "indicacion": "Punto muy sensible medioambientalmente. No salirse del camino marcado" }, "geometry": { "type": "Point", "coordinates": [ -8.93759010309719, 43.233759078507312 ] } },
+{ "type": "Feature", "properties": { "id": 227, "indicacion": "Final de Etapa. Hay fuente en la plaza" }, "geometry": { "type": "Point", "coordinates": [ -8.90071480365008, 43.242629923947653 ] } }
+]
+}

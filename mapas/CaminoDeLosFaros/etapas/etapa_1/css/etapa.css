@@ -1,0 +1,12 @@
+html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+
+.m-popup>div.m-content>div.m-body>div.m-geojson-content>div.result>table td.key, .m-popup>div.m-content>div.m-body>div.m-geojson-content>div.result>table td.value {
+    white-space: normal;
+}

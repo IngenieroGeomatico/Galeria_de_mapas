@@ -63,8 +63,11 @@ img{
 
 .exampleSection{
   text-align: center;
-  margin: 0px 30px;
+  /* margin: 0px 30px; */
   width: -moz-available;
+}
+.container-fluid{
+  padding: 0px 20px;
 }
 
 

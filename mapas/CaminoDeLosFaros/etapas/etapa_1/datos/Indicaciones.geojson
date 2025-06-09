@@ -1,0 +1,17 @@
+{
+"type": "FeatureCollection",
+"name": "Indicaciones",
+"features": [
+{ "type": "Feature", "properties": { "id": 9, "indicacion": "Final de etapa. En la playa no suele haber cobertura movil, recomendamos continuar hasta el siguiente punto." }, "geometry": { "type": "Point", "coordinates": [ -8.903105631540752, 43.294277647921511 ] } },
+{ "type": "Feature", "properties": { "id": 1, "indicacion": "Cruce. El camino continua hacia abajo por los acantilados" }, "geometry": { "type": "Point", "coordinates": [ -8.831079514457434, 43.339827210318035 ] } },
+{ "type": "Feature", "properties": { "id": 2, "indicacion": "PELIGROSIDAD:2  || Tramo de acantilados. No salirse del camino (OJO con las fotos)" }, "geometry": { "type": "Point", "coordinates": [ -8.831843061261807, 43.340471386187886 ] } },
+{ "type": "Feature", "properties": { "id": 3, "indicacion": "En la salida de la Playa de Beo, con marea baja, seguir por la costa (flecha a la derecha). Con marea alta, seguir\r\npor el pueblo (flecha de frente) hacia la carretera." }, "geometry": { "type": "Point", "coordinates": [ -8.843746458282572, 43.319034095410046 ] } },
+{ "type": "Feature", "properties": { "id": 4, "indicacion": "Cruzar el río si no hay marea alta en invierno. OJO al caminar sobre rocas mojadas. Continuar por la pasarela\r\nhacia el bar (casa blanca) y costear" }, "geometry": { "type": "Point", "coordinates": [ -8.85737062047753, 43.316532597172419 ] } },
+{ "type": "Feature", "properties": { "id": 2, "indicacion": "FIN Peligrosidad : 2" }, "geometry": { "type": "Point", "coordinates": [ -8.845018293052794, 43.321424450328003 ] } },
+{ "type": "Feature", "properties": { "id": 6, "indicacion": "Después de la playa, atravesar el eucaliptal" }, "geometry": { "type": "Point", "coordinates": [ -8.874071228989877, 43.312050905595392 ] } },
+{ "type": "Feature", "properties": { "id": 5, "indicacion": "Cruce. Antes del Bar Xan coger a la derecha." }, "geometry": { "type": "Point", "coordinates": [ -8.870896208360152, 43.314730719669718 ] } },
+{ "type": "Feature", "properties": { "id": 7, "indicacion": "PELIGROSIDAD y DIFICUKTAD: 3  ||  Tramo exigente de 3.2 km, por sendero estrecho, poco asentado y con pendientes. Salientes de raíces de toxo\r\nTomárselo con mucha tranquilidad, realizando las paradas necesarias para descansar" }, "geometry": { "type": "Point", "coordinates": [ -8.880607128320877, 43.314744865032125 ] } },
+{ "type": "Feature", "properties": { "id": 8, "indicacion": "OJO al pasear por las rocas del faro. Después del faro seguir por la costa." }, "geometry": { "type": "Point", "coordinates": [ -8.91024965944858, 43.320451699841762 ] } },
+{ "type": "Feature", "properties": { "id": 7, "indicacion": "FIN PELIBROSIDAD y DIFICUKTAD: 3 || Meterse por el sendero marcado." }, "geometry": { "type": "Point", "coordinates": [ -8.905937701782239, 43.306223982088838 ] } }
+]
+}
