@@ -560,6 +560,101 @@ function convertGmsToDecimal(gms) {
     return decimal;
 }
 
+/**
+ * Este método convierte una cadena WKT (Well-Known Text) de un sistema de
+ * referencia de coordenadas (CRS) en un objeto JSON estructurado,
+ * interpretando correctamente jerarquías, claves repetidas y valores anidados.
+ *
+ * - Si una clave aparece varias veces (como MEMBER), se agrupa en un array.
+ * - Si un valor no tiene clave explícita, se asigna a "name".
+ * - Si hay dos valores simples, se convierten en un objeto { clave: valor }.
+ * - Si hay un solo valor, se devuelve directamente.
+ *
+ * @function
+ * @param {string} wkt Cadena WKT que representa un sistema de referencia de coordenadas.
+ * @returns {Object} Objeto JSON estructurado equivalente al WKT.
+ */
+function parseCRSWKTtoJSON(wkt) {
+  const tokens = wkt.match(/"[^"]*"|[\[\],]|[^\s\[\],]+/g);
+  let index = 0;
+
+  function parseArrayOrObject(parentKey) {
+    const values = [];
+    let hasNested = false;
+
+    while (index < tokens.length) {
+      const token = tokens[index];
+
+      if (token === ']') {
+        index++;
+        break;
+      } else if (token === ',') {
+        index++;
+        continue;
+      } else if (tokens[index + 1] === '[') {
+        const key = tokens[index++];
+        index++; // skip '['
+        const value = parseArrayOrObject(key);
+        values.push({ [key]: value });
+        hasNested = true;
+      } else {
+        const value = parseValue(tokens[index++]);
+        values.push(value);
+      }
+    }
+
+    if (!hasNested) {
+      if (values.length === 1) {
+        return values[0];
+      } else if (values.length === 2 && typeof values[0] !== 'object') {
+        return { [values[0]]: values[1] };
+      } else {
+        return values;
+      }
+    } else {
+      const obj = {};
+      if (values.length > 0 && typeof values[0] !== 'object') {
+        obj.name = values.shift();
+      }
+      for (const item of values) {
+        if (typeof item === 'object' && !Array.isArray(item)) {
+          const key = Object.keys(item)[0];
+          const value = item[key];
+
+          if (obj.hasOwnProperty(key)) {
+            if (!Array.isArray(obj[key])) {
+              obj[key] = [obj[key]];
+            }
+            obj[key].push(value);
+          } else {
+            obj[key] = value;
+          }
+        }
+      }
+      return obj;
+    }
+  }
+
+  function parseValue(token) {
+    if (token.startsWith('"') && token.endsWith('"')) {
+      return token.slice(1, -1);
+    } else if (!isNaN(token)) {
+      return Number(token);
+    } else {
+      return token;
+    }
+  }
+
+  function parseRoot() {
+    const key = tokens[index++];
+    index++; // skip first '['
+    const value = parseArrayOrObject(key);
+    return { [key]: value };
+  }
+
+  return parseRoot();
+}
+
 
 
 
