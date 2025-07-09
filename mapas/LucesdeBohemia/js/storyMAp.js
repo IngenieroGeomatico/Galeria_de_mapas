@@ -216,26 +216,29 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 2');
 
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20PRETIL%20DE%20LOS%20CONSEJOS%201%2C%20Madrid&type=portal&tip_via=CALLE&id=280790465320&portal=1&extension=null&outputformat=geojson",
-                                {
-                                }
-                            ).then(function (res) {
-                                // Muestra un diálogo informativo con el resultado de la petición get
-                                gjson = JSON.parse(res.text)
+                            
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
 
-                                layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle Pretil de los consejos"
+                            );
 
-                                layerVectorialGJSON.clear()
-                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                layerVectorialGJSON.setSource(gjson)
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
 
-                                layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                    mapajs.setZoom(17)
-                                }); 
-                            });
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
 
                             
                             
@@ -275,29 +278,29 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 2');
 
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20PRETIL%20DE%20LOS%20CONSEJOS%201%2C%20Madrid&type=portal&tip_via=CALLE&id=280790465320&portal=1&extension=null&outputformat=geojson",
-                                {
-                                }
-                            ).then(function (res) {
-                                // Muestra un diálogo informativo con el resultado de la petición get
-                                gjson = JSON.parse(res.text)
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
 
-                                layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle Pretil de los consejos"
+                            );
 
-                                layerVectorialGJSON.clear()
-                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                layerVectorialGJSON.setSource(gjson)
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
 
-                                layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                    mapajs.setZoom(17)
-                                }); 
-                            });
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
 
-                            
-                            
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
+
                         `,
 
                 },
@@ -335,29 +338,28 @@ var StoryMapJSON = {
                                 <br><br><br><br> <br><br><br> <br><br><br>
                             `,
                     "js": `
-                            console.log('hola, estoy comenzando el cap 2');
-
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MESONERO%20ROMANOS%2010%2C%20Madrid&type=portal&tip_via=CALLE&id=280790492709&portal=10&extension=null&outputformat=geojson",
-                                {
-                                }
-                            ).then(function (res) {
-                                // Muestra un diálogo informativo con el resultado de la petición get
-                                gjson = JSON.parse(res.text)
-
-                                layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON.setStyle(estilo2)
                             layerVectorialGJSON_Madrid.setZIndex(50)
                             layerVectorialGJSON_Libro.setZIndex(49)
 
-                                layerVectorialGJSON.clear()
-                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                layerVectorialGJSON.setSource(gjson)
+                            layerVectorialGJSON_Madrid_gjson = layerVectorialGJSON_Madrid.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Madrid_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle Mesoneros Romanos"
+                            );
 
-                                layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                    mapajs.setZoom(17)
-                                }); 
-                            });
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
 
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             
                             
                         `,
@@ -420,26 +422,28 @@ var StoryMapJSON = {
                     "js": `
                         console.log('hola, estoy comenzando el cap 3');
 
-                        M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%202%2C%20Madrid&type=portal&tip_via=CALLE&id=2280790254631&portal=2&extension=null&outputformat=geojson",
-                                {
-                                }
-                            ).then(function (res) {
-                                // Muestra un diálogo informativo con el resultado de la petición get
-                                gjson = JSON.parse(res.text)
+                        layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
 
-                                layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle Montera"
+                            );
 
-                                layerVectorialGJSON.clear()
-                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                layerVectorialGJSON.setSource(gjson)
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
 
-                                layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                    mapajs.setZoom(17)
-                                }); 
-                            });
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                         
                     `,
 
@@ -486,26 +490,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 3');
     
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%202%2C%20Madrid&type=portal&tip_via=CALLE&id=2280790254631&portal=2&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(17)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle Montera"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             
                         `,
 
@@ -577,26 +583,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 4');
     
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO SAN GINES 5%2C Madrid&type=portal&tip_via=PASEO&id=280790268423&portal=5&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo1)
-                                    layerVectorialGJSON_Madrid.setZIndex(49)
-                                    layerVectorialGJSON_Libro.setZIndex(50)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Pasadizo de San Ginés"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             
                         `,
 
@@ -626,27 +634,29 @@ var StoryMapJSON = {
                                 `,
                     "js": `
                                 console.log('hola, estoy comenzando el cap 4');
-        
-                                M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO SAN GINES 5%2C Madrid&type=portal&tip_via=PASEO&id=280790268423&portal=5&extension=null&outputformat=geojson",
-                                        {
-                                        }
-                                    ).then(function (res) {
-                                        // Muestra un diálogo informativo con el resultado de la petición get
-                                        gjson = JSON.parse(res.text)
-        
-                                        layerVectorialGJSON.setStyle(estilo1)
-                                        layerVectorialGJSON_Madrid.setZIndex(49)
-                                        layerVectorialGJSON_Libro.setZIndex(50)
-        
-                                        layerVectorialGJSON.clear()
-                                        layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                        layerVectorialGJSON.setSource(gjson)
-        
-                                        layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                            mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                            mapajs.setZoom(18)
-                                        }); 
-                                    });
+            
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Pasadizo de San Ginés"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                                 
                             `,
 
@@ -689,26 +699,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 4');
     
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO SAN GINES 5%2C Madrid&type=portal&tip_via=PASEO&id=280790268423&portal=5&extension=null&outputformat=geojson",
-                                        {
-                                        }
-                                    ).then(function (res) {
-                                        // Muestra un diálogo informativo con el resultado de la petición get
-                                        gjson = JSON.parse(res.text)
-        
-                                        layerVectorialGJSON.setStyle(estilo2)
-                                        layerVectorialGJSON_Madrid.setZIndex(50)
-                                        layerVectorialGJSON_Libro.setZIndex(49)
-        
-                                        layerVectorialGJSON.clear()
-                                        layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                        layerVectorialGJSON.setSource(gjson)
-        
-                                        layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                            mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                            mapajs.setZoom(18)
-                                        }); 
-                            });
+                            layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
+
+                            layerVectorialGJSON_Madrid_gjson = layerVectorialGJSON_Madrid.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Madrid_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Pasadizo de San Ginés, 5"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             
                         `,
 
@@ -780,26 +792,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 5');
     
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Puerta del Sol"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             
                         `,
                 },
@@ -846,27 +860,28 @@ var StoryMapJSON = {
                     "js": `
                                 console.log('hola, estoy comenzando el cap 5');
         
-                                M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
-                                        {
-                                        }
-                                    ).then(function (res) {
-                                        // Muestra un diálogo informativo con el resultado de la petición get
-                                        gjson = JSON.parse(res.text)
-        
-                                        layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
-        
-                                        layerVectorialGJSON.clear()
-                                        layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                        layerVectorialGJSON.setSource(gjson)
-        
-                                        layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                            mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                            mapajs.setZoom(18)
-                                        }); 
-                                    });
-                                
+                                layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Puerta del Sol"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             `,
                 },
                 {
@@ -913,27 +928,28 @@ var StoryMapJSON = {
                     "js": `
                                 console.log('hola, estoy comenzando el cap 5');
         
-                                M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo2)
-                                layerVectorialGJSON_Madrid.setZIndex(50)
-                                layerVectorialGJSON_Libro.setZIndex(49)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
-                                
+                                layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
+
+                            layerVectorialGJSON_Madrid_gjson = layerVectorialGJSON_Madrid.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Madrid_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Puerta del Sol, 7"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             `,
 
                 },
@@ -1008,26 +1024,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 6');
     
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo1)
-                                    layerVectorialGJSON_Madrid.setZIndex(49)
-                                    layerVectorialGJSON_Libro.setZIndex(50)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Puerta del Sol"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             
                         `,
                 },
@@ -1272,26 +1290,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 8');
     
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PLAZA%20PUERTA%20DEL%20SOL%207,%20Madrid&type=portal&tip_via=PLAZA&id=280790417594&portal=7&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo1)
-                                    layerVectorialGJSON_Madrid.setZIndex(49)
-                                    layerVectorialGJSON_Libro.setZIndex(50)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Puerta del Sol"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                             
                         `,
                 },
@@ -1375,30 +1395,33 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 9');
 
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20ALCALA%2014%2C%20Madrid&type=portal&tip_via=CALLE&id=280790118799&portal=14&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo1)
-                                    layerVectorialGJSON_Madrid.setZIndex(49)
-                                    layerVectorialGJSON_Libro.setZIndex(50)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
-                        `,
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle de Alcalá, 14"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
+                    `,
                 },
                 {
-                    "html": `   <br><br><br><br>
+                    "html": `   
+                            <br><br><br><br>
 
                             <ul>
                                 <li> 
@@ -1444,26 +1467,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 9');
 
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20ALCALA%2014%2C%20Madrid&type=portal&tip_via=CALLE&id=280790118799&portal=14&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo1)
-                                    layerVectorialGJSON_Madrid.setZIndex(49)
-                                    layerVectorialGJSON_Libro.setZIndex(50)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle de Alcalá, 14"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                         `,
                 },
                 {
@@ -1504,26 +1529,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 9');
 
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20ALCALA%2014%2C%20Madrid&type=portal&tip_via=CALLE&id=280790118799&portal=14&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo2)
-                                    layerVectorialGJSON_Madrid.setZIndex(50)
-                                    layerVectorialGJSON_Libro.setZIndex(49)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
+
+                            layerVectorialGJSON_Madrid_gjson = layerVectorialGJSON_Madrid.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Madrid_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle de Alcalá, 14"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                         `,
                 },
                 {
@@ -1590,26 +1617,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 9');
 
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20SAN%20JERONIMO%204%2C%20Madrid&type=portal&tip_via=CALLE&id=280790179172&portal=4&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo2)
-                                    layerVectorialGJSON_Madrid.setZIndex(50)
-                                    layerVectorialGJSON_Libro.setZIndex(49)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
+
+                            layerVectorialGJSON_Madrid_gjson = layerVectorialGJSON_Madrid.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Madrid_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle de Alcalá, 14"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                         `,
                 },
             ]
@@ -1685,7 +1714,7 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 10');
 
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO%20RECOLETOS,%20Madrid&type=callejero&tip_via=PASEO&id=280790007738&portal=null&extension=null&outputformat=geojson",
+                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=PASEO%20RECOLETOS,%20Madrid&type=callejero&tip_via=PASEO&portal=null&extension=null&outputformat=geojson",
                                     {
                                     }
                                 ).then(function (res) {
@@ -2071,26 +2100,29 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 12');
 
-                             M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20%C3%81LVAREZ%20GATO%201,%20Madrid&type=portal&tip_via=CALLE&id=2280790040012&portal=1&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo2)
-                                    layerVectorialGJSON_Madrid.setZIndex(50)
-                                    layerVectorialGJSON_Libro.setZIndex(49)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(18)
-                                    }); 
-                                });
+                             layerVectorialGJSON.setStyle(estilo2)
+                            layerVectorialGJSON_Madrid.setZIndex(50)
+                            layerVectorialGJSON_Libro.setZIndex(49)
+
+                            layerVectorialGJSON_Madrid_gjson = layerVectorialGJSON_Madrid.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Madrid_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle Álvarez Gato 1"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
+                            
                         `,
                 },
             ]
@@ -2269,26 +2301,28 @@ var StoryMapJSON = {
                     "js": `
                             console.log('hola, estoy comenzando el cap 14');
 
-                            M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=Capilla%20del%20Cementerio%20de%20Nuestra%20Se%C3%B1ora%20de%20la%20Almudena%2C%20Madrid&type=toponimo&tip_via=Iglesia&id=BTN_423352&portal=null&extension=null&outputformat=geojson",
-                                    {
-                                    }
-                                ).then(function (res) {
-                                    // Muestra un diálogo informativo con el resultado de la petición get
-                                    gjson = JSON.parse(res.text)
-    
-                                    layerVectorialGJSON.setStyle(estilo1)
-                                    layerVectorialGJSON_Madrid.setZIndex(49)
-                                    layerVectorialGJSON_Libro.setZIndex(50)
-    
-                                    layerVectorialGJSON.clear()
-                                    layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                    layerVectorialGJSON.setSource(gjson)
-    
-                                    layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                        mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                        mapajs.setZoom(15)
-                                    }); 
-                                });
+                            layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
+
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Avenida Daroca 96"
+                            );
+
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
+
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                         `,
                 },
             ]
@@ -2340,26 +2374,28 @@ var StoryMapJSON = {
                     "js": `
                         console.log('hola, estoy comenzando el cap 15');
 
-                        M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%202%2C%20Madrid&type=portal&tip_via=CALLE&id=2280790254631&portal=2&extension=null&outputformat=geojson",
-                                {
-                                }
-                            ).then(function (res) {
-                                // Muestra un diálogo informativo con el resultado de la petición get
-                                gjson = JSON.parse(res.text)
+                        layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
 
-                                layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle Montera"
+                            );
 
-                                layerVectorialGJSON.clear()
-                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                layerVectorialGJSON.setSource(gjson)
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
 
-                                layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                    mapajs.setZoom(17)
-                                }); 
-                            });
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                         
                     `,
                 },
@@ -2386,29 +2422,30 @@ var StoryMapJSON = {
                             <br><br><br><br> <br><br><br> <br><br><br>
                         `,
                     "js": `
-                        console.log('hola, estoy comenzando el cap 3');
+                        console.log('hola, estoy comenzando el cap 15');
 
-                        M.remote.get("https://www.cartociudad.es/geocoder/api/geocoder/find?q=CALLE%20MONTERA%202%2C%20Madrid&type=portal&tip_via=CALLE&id=2280790254631&portal=2&extension=null&outputformat=geojson",
-                                {
-                                }
-                            ).then(function (res) {
-                                // Muestra un diálogo informativo con el resultado de la petición get
-                                gjson = JSON.parse(res.text)
+                        layerVectorialGJSON.setStyle(estilo1)
+                            layerVectorialGJSON_Madrid.setZIndex(49)
+                            layerVectorialGJSON_Libro.setZIndex(50)
 
-                                layerVectorialGJSON.setStyle(estilo1)
-                                layerVectorialGJSON_Madrid.setZIndex(49)
-                                layerVectorialGJSON_Libro.setZIndex(50)
+                            layerVectorialGJSON_Libro_gjson = layerVectorialGJSON_Libro.toGeoJSON()
+                            const filteredFeatures = layerVectorialGJSON_Libro_gjson.features.filter(feature => 
+                                feature.properties["Dirección"] === "Calle Montera"
+                            );
 
-                                layerVectorialGJSON.clear()
-                                layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
-                                layerVectorialGJSON.setSource(gjson)
+                            const filteredGeoJSON = {
+                                type: 'FeatureCollection',
+                                features: filteredFeatures
+                            };
 
-                                layerVectorialGJSON.on(M.evt.LOAD, () => {
-                                    mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
-                                    mapajs.setZoom(17)
-                                }); 
-                            });
-                        
+                            layerVectorialGJSON.clear()
+                            layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
+                            layerVectorialGJSON.setSource(filteredGeoJSON)
+
+                            layerVectorialGJSON.on(M.evt.LOAD, () => {
+                                mapjs.setBbox(layerVectorialGJSON.getMaxExtent())
+                                mapajs.setZoom(17)
+                            }); 
                     `,
                 },
             ]
