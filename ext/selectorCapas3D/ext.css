@@ -1,0 +1,140 @@
+.g-herramienta .m-tools:before {
+    content: "🔀";
+    font-size: 22px;
+    font-family: none
+}
+
+
+/* Abrir y cerrar panel */
+.m-panel.m-plugin-herramienta.collapsed {
+    height: 40px;
+}
+
+
+.opened .g-cartografia-flecha-izquierda {
+    position: absolute !important;
+    right: -40px !important;
+
+    color: #71a7d3 !important;
+    background-color: #fff !important;
+}
+
+
+/* Contenedor del plugin */
+.m-control.m-container.m-herramienta {
+    width: 250px;
+    display: flex !important;
+    flex-direction: column;
+}
+
+
+/* Título */
+.m-herramienta-header {
+    background-color: #71a7d3;
+    color: white;
+    display: block;
+    font-size: 15px;
+    height: 40px;
+    line-height: 40px;
+    padding: 0 5px;
+    text-align: center;
+    width: 100%;
+}
+
+
+/* Contenedor general */
+#m-herramienta-previews ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  max-width: 300px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Cada elemento de la lista */
+#m-herramienta-previews li {
+  padding: 5px 12px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  transition: background-color 0.2s ease;
+}
+
+#m-herramienta-previews li:last-child {
+  border-bottom: none;
+}
+
+#m-herramienta-previews li:hover {
+  background-color: #f0f0f0;
+}
+
+/* Checkbox y etiqueta */
+#m-herramienta-previews input[type="checkbox"] {
+  margin-right: 10px;
+  transform: scale(1.2);
+  cursor: pointer;
+}
+
+#m-herramienta-previews label {
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  display: flex;
+  align-items: center;
+}
+
+
+
+
+
+.g-herramienta2 .m-tools:before {
+    content: "🔄";
+    font-size: 22px;
+    font-family: none
+}
+
+.base-layer-selector {
+  padding: 0.5em;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  font-family: sans-serif;
+}
+
+.base-layer-selector h3 {
+  margin-top: 0;
+  font-size: 1.1em;
+  color: #333;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 0.3em;
+}
+
+.base-layer-selector ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.base-layer-selector li {
+  margin: 0.5em 0;
+}
+
+.base-layer-selector input[type="radio"] {
+  accent-color: #0078d4; /* color azul tipo Microsoft */
+  margin-right: 0.5em;
+  transform: scale(1.2);
+  cursor: pointer;
+}
+
+.base-layer-selector label {
+  cursor: pointer;
+  font-size: 1.1em;
+  color: #222;
+  display: flex;
+  align-items: center;
+}
+
