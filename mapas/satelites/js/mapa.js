@@ -28,13 +28,29 @@ tms_2 = {
 }
 
 IDEE.config("tms", tms_2)
+IDEE.config.backgroundlayers = [
+  {
+    "id": "mapa",
+    "title": "Callejero",
+    "layers": [
+      "QUICK*Base_IGNBaseTodo_TMS_2"
+    ]
+  },
+  {
+    "id": "imagen",
+    "title": "Imagen",
+    "layers": [
+      "QUICK*BASE_PNOA_MA_TMS"
+    ]
+  }
+]
 
 // Configuración del mapa
 IDEE.proxy(false);
 
 let alturaISS = 0; // metros (solo marcador puntual, no para órbita)
 
-ISSPosition = function (centerMap = false) {
+ISSPosition = function (centerMap = false, onlyPosition=false) {
 
   IDEE.remote.get("https://api.wheretheiss.at/v1/satellites/25544",
     {}
@@ -52,7 +68,40 @@ ISSPosition = function (centerMap = false) {
         }
       }]
     };
-    layerISS.setSource(ISS);
+
+    if(!onlyPosition){
+      layerISS.setSource(ISS);
+    }
+
+    
+    let checkVar = setInterval(() => {
+
+      layerISS_Cesium = layerISS.getImpl().getLayer()
+      if (typeof layerISS_Cesium !== 'undefined' && layerISS_Cesium !== null && layerISS_Cesium.entities.values.length > 0) {
+
+        entity = layerISS_Cesium.entities.values[0]
+        
+        if(onlyPosition){
+          entity.position = Cesium.Cartesian3.fromDegrees(jsonParser.longitude, jsonParser.latitude,alturaISS);
+          clearInterval(checkVar);
+          return
+        }
+        
+        if (typeof entity.model !== undefined && entity.model !== null) {
+          entity.billboard = undefined;
+          entity.point = undefined;
+          entity.model = {
+            uri: './img/ISS_stationary.glb',    // tu modelo GLB o GLTF
+            scale: 10000,       // ajusta al tamaño del globo
+            minimumPixelSize: 50
+          }
+          // Parar el intervalo
+          clearInterval(checkVar);
+        }
+      }
+
+    }, 500);
+
     if (centerMap) {
       mapajs.setCenter({ x: jsonParser.longitude, y: jsonParser.latitude });
     }
@@ -109,28 +158,72 @@ const mapajs = IDEE.map({
   zoom: 7,
 });
 
+
 var mapaCesium = mapajs.getMapImpl();
+mapaCesium.scene.globe.depthTestAgainstTerrain = true;
 
 layerISS = new IDEE.layer.GeoJSON({
   name: "layerISS",
-  legend: "layerISS",
+  legend: "Estación Espacial Internacional (ISS)",
   source: {},
 }, {
   clampToGround: false,
 });
+let estilo_ISS = new IDEE.style.Generic({
+  point: {
+    // Definición atributos para puntos
+    stroke: {
+      color: 'red',
+      width: 5,
+    },
+    radius: 4,
+    // icon: {
+    //   src: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/ISS_spacecraft_model_1.png/960px-ISS_spacecraft_model_1.png?20200411071338',
+    //   scale: 0.2,
+    // }
+  },
+  polygon: {
+    // Definición atributos para polígonos
+  },
+  line: {
+    // Definición atributos para líneas
+  }
+});
+layerISS.setStyle(estilo_ISS);
+
 
 layerOrbit = new IDEE.layer.GeoJSON({
   name: "layerOrbit",
-  legend: "layerOrbit",
+  legend: "Órbita ISS",
   source: {},
 }, {
   clampToGround: false,
 });
 
+let estilo_orbISS = new IDEE.style.Generic({
+  point: {
+    // Definición atributos para puntos
+  },
+  polygon: {
+    // Definición atributos para polígonos
+  },
+  line: {
+    // Definición atributos para líneas
+    stroke: {
+      color: 'orange',
+      width: 5,
+    }
+  }
+});
+layerOrbit.setStyle(estilo_orbISS);
+
 mapajs.addLayers(layerISS);
 mapajs.addLayers(layerOrbit);
-ISSPosition(centerMap = true)
 OrbitISS()
+ISSPosition(centerMap = true)
+
+mapajs.addPlugin(miPlugin)
+mapajs.addPlugin(miPlugin2)
 
 
 let iter = 0;
@@ -141,9 +234,9 @@ setInterval(() => {
     OrbitISS()
   }
   iter += 1
-  ISSPosition()
+  ISSPosition(centerMap = false, onlyPosition=true)
 
-}, 2000);
+},5*1000);
 
 
 SVGCarga.hidden = true
