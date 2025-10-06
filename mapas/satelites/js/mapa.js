@@ -149,6 +149,7 @@ OrbitISS = function () {
   })
 }
 
+jsonGalileo = {}
 GalileoPosition = function (Orbit = false) {
 
   function parseTLEtoJSON(tleText) {
@@ -170,7 +171,7 @@ GalileoPosition = function (Orbit = false) {
     IDEE.remote.get("https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=tle", {})
   ]).then(([res1_json, res2_tle]) => {
     // Ambos resultados están disponibles aquí
-    const jsonGalileo = JSON.parse(res1_json.text);
+    jsonGalileo = JSON.parse(res1_json.text);
     const tleGalileo = parseTLEtoJSON(res2_tle.text);
     // Creamos un mapa para buscar rápido por nombre
     const tleMap = {};
@@ -259,6 +260,87 @@ GalileoPosition = function (Orbit = false) {
 
 }
 
+GalileoPositionByTime = function (Orbit = false) {
+
+    // Añadimos line1 y line2 a cada objeto del JSON si hay coincidencia
+    geojsonGalileoOrbit = {
+      type: "FeatureCollection",
+      features: []
+    };
+
+    geojsonGalileo = {
+      type: "FeatureCollection",
+      features: []
+    };
+
+    jsonGalileo.forEach(obj => {
+      const tle = tleMap[obj.OBJECT_NAME.trim()];
+      if (tle) {
+        obj.line1 = tle.line1;
+        obj.line2 = tle.line2;
+      }
+
+      satrec = satellite.twoline2satrec(obj.line1, obj.line2);
+
+      if (Orbit) {
+
+        startDate = new Date(Date.now() - 60 * 60 * 1000);
+        const positions = [];
+
+        for (let i = 0; i < 120 * 5; i++) {
+          const time = new Date(startDate.getTime() + i * 60 * 1000);
+          const pv = satellite.propagate(satrec, time);
+          const positionEci = pv.position;
+          if (!positionEci) continue;
+
+          const gmst = satellite.gstimeFromDate(time);
+          const positionGd = satellite.eciToGeodetic(positionEci, gmst);
+          const longitude = satellite.degreesLong(positionGd.longitude);
+          const latitude = satellite.degreesLat(positionGd.latitude);
+          // positionGd.height está en km -> convertir a metros
+          const altitudeMeters = positionGd.height * 1000;
+          positions.push([longitude, latitude, altitudeMeters]);
+        }
+        feature = {
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: positions },
+          properties: { name: "ISS", id: "25544" }
+        }
+        geojsonGalileoOrbit.features.push(feature)
+
+
+
+      }
+
+      DateNow = new Date(Date.now());
+      const pv2 = satellite.propagate(satrec, DateNow);
+      const positionEci2 = pv2.position;
+
+      const gmst2 = satellite.gstimeFromDate(DateNow);
+      const positionGd2 = satellite.eciToGeodetic(positionEci2, gmst2);
+      const longitude2 = satellite.degreesLong(positionGd2.longitude);
+      const latitude2 = satellite.degreesLat(positionGd2.latitude);
+      // positionGd.height está en km -> convertir a metros
+      const altitudeMeters2 = positionGd2.height * 1000;
+
+      feature2 = {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [longitude2, latitude2, altitudeMeters2] },
+        properties: { name: "ISS", id: "25544" }
+      }
+      geojsonGalileo.features.push(feature2)
+
+
+    });
+
+
+    if (Orbit) {
+      layerGalileoOrbit.setSource(geojsonGalileoOrbit)
+    }
+    layerGalileo.setSource(geojsonGalileo)
+
+
+}
 
 const mapajs = IDEE.map({
   container: "mapa", //id del contenedor del mapa
@@ -400,11 +482,11 @@ setInterval(() => {
   if (iter >= 60) { // cada 120 s recalculamos órbita (1 hora antes / 1 hora después)
     iter = 0;
     OrbitISS()
-    GalileoPosition(Orbit = true)
+    GalileoPositionByTime(Orbit = true)
   }
   iter += 1
   ISSPosition(centerMap = false, onlyPosition = true)
-  GalileoPosition(Orbit = false)
+  GalileoPositionByTime(Orbit = false)
 
 
 }, 5 * 1000);
