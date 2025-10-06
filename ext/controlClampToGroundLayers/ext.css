@@ -1,0 +1,32 @@
+.m-herramienta-container {
+  top: 20px;
+  left: 600px;
+}
+
+
+.buttonHerramienta {
+  border: 2px solid #FFF !important;
+  border-radius: 50% !important;
+  background-color: orangered !important;
+}
+
+.buttonHerramienta:before {
+  /*  icono a usar */
+  content: "🌐";
+  font-size: 22px;
+  font-family: none;
+  color: #FFF !important;
+}
+
+
+.buttonHerramienta.activated {
+  border: 2px solid #71A7D3 !important;
+  border-radius: 50% !important;
+  background-color: #ffffff !important;
+
+}
+
+.buttonHerramienta.activated:before {
+  background-color: #ffffff !important;
+  color: #71A7D3 !important;
+}
