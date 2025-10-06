@@ -150,6 +150,8 @@ OrbitISS = function () {
 }
 
 jsonGalileo = {}
+tleGalileo = {}
+tleMap = {};
 GalileoPosition = function (Orbit = false) {
 
   function parseTLEtoJSON(tleText) {
@@ -172,9 +174,9 @@ GalileoPosition = function (Orbit = false) {
   ]).then(([res1_json, res2_tle]) => {
     // Ambos resultados están disponibles aquí
     jsonGalileo = JSON.parse(res1_json.text);
-    const tleGalileo = parseTLEtoJSON(res2_tle.text);
+    tleGalileo = parseTLEtoJSON(res2_tle.text);
     // Creamos un mapa para buscar rápido por nombre
-    const tleMap = {};
+    
     tleGalileo.forEach(tle => {
       tleMap[tle.name.trim()] = tle;
     });
