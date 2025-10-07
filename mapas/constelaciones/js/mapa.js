@@ -255,7 +255,6 @@ mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador,layerPlaneta
 mapajs.addPlugin(miPlugin)
 mapajs.addPlugin(miPlugin2)
 
-mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
 
 
 
@@ -545,7 +544,7 @@ function actualizarCielo(fechaJulian = null) {
   //   }, 
   //   i * 20 * 1000); // <-- Multiplica por i para escalonar las ejecuciones
   // }
-
+  mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
   actualizarCielo();
   setInterval(actualizarCielo, 5 * 60 * 1000);
 })();
