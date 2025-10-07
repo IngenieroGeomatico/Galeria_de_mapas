@@ -477,7 +477,7 @@ GalileoPosition(Orbit = true)
 mapajs.addPlugin(miPlugin)
 mapajs.addPlugin(miPlugin2)
 
-mapaCesium.scene.globe.depthTestAgainstTerrain = true;
+mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
 
 
 let iter = 0;
