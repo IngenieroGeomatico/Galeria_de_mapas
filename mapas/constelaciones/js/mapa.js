@@ -43,8 +43,12 @@ SHELL_ALT_METERS = 1.0e9;  // 1000 km
 // https://cdn.jsdelivr.net/gh/ofrohn/d3-celestial@master/data/
 const CONSTELLATION_URL =
   'https://cdn.jsdelivr.net/gh/dieghernan/celestial_data@main/data/constellations.lines.min.geojson';
+
 const STARS_URL =
   'https://cdn.jsdelivr.net/gh/ofrohn/d3-celestial@master/data/stars.6.json'; // mag <= 8 (6,8,14)
+
+const STAR_NAME_URL =
+  "https://cdn.jsdelivr.net/gh/ofrohn/d3-celestial@master/data/starnames.json"
 
 const PLANETAS_URL =
   'https://cdn.jsdelivr.net/gh/ofrohn/d3-celestial@master/data/planets.json'; // mag <= 8 (6,8,14)
@@ -269,6 +273,16 @@ async function cargarConstelacionesICRF() {
 async function cargarEstrellasICRF() {
   const res = await IDEE.remote.get(STARS_URL, {});
   const raw = JSON.parse(res.text);
+
+  const res2 = await IDEE.remote.get(STAR_NAME_URL, {});
+  const raw2 = JSON.parse(res2.text);
+
+  raw.features.forEach(feature => {
+    const id = feature.id || feature.properties.id;
+    if (id && raw2[id]) {
+      Object.assign(feature.properties, raw2[id]);
+    }
+  });
 
   // d3-celestial suele exponer FeatureCollection con Point [RAdeg, Decdeg]
   // (pero robustecemos por si viene anidado)
