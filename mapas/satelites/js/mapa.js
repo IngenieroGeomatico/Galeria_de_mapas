@@ -223,7 +223,7 @@ GalileoPosition = function (Orbit = false) {
         feature = {
           type: "Feature",
           geometry: { type: "LineString", coordinates: positions },
-          properties: { name: "ISS", id: "25544" }
+          properties: obj
         }
         geojsonGalileoOrbit.features.push(feature)
 
@@ -245,7 +245,7 @@ GalileoPosition = function (Orbit = false) {
       feature2 = {
         type: "Feature",
         geometry: { type: "Point", coordinates: [longitude2, latitude2, altitudeMeters2] },
-        properties: { name: "ISS", id: "25544" }
+        properties: obj
       }
       geojsonGalileo.features.push(feature2)
 
@@ -306,7 +306,7 @@ GalileoPositionByTime = function (Orbit = false) {
         feature = {
           type: "Feature",
           geometry: { type: "LineString", coordinates: positions },
-          properties: { name: "ISS", id: "25544" }
+          properties: obj
         }
         geojsonGalileoOrbit.features.push(feature)
 
@@ -328,7 +328,7 @@ GalileoPositionByTime = function (Orbit = false) {
       feature2 = {
         type: "Feature",
         geometry: { type: "Point", coordinates: [longitude2, latitude2, altitudeMeters2] },
-        properties: { name: "ISS", id: "25544" }
+        properties: obj
       }
       geojsonGalileo.features.push(feature2)
 
@@ -476,6 +476,8 @@ GalileoPosition(Orbit = true)
 
 mapajs.addPlugin(miPlugin)
 mapajs.addPlugin(miPlugin2)
+
+mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
 
 
 let iter = 0;

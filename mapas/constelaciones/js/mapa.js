@@ -29,6 +29,31 @@ tms_2 = {
 
 IDEE.config("tms", tms_2)
 
+IDEE.config.backgroundlayers = [
+  {
+    "id": "mapa",
+    "title": "Callejero",
+    "layers": [
+      "QUICK*Base_IGNBaseTodo_TMS_2"
+    ]
+  },
+  {
+    "id": "imagen",
+    "title": "Imagen",
+    "layers": [
+      "QUICK*BASE_PNOA_MA_TMS"
+    ]
+  },
+  {
+    "id": "ning",
+    "title": "Ninguno",
+    "layers": [
+      ""
+    ]
+  }
+]
+
+
 // Configuración del mapa
 IDEE.proxy(false);
 
@@ -233,6 +258,7 @@ mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador,layerPlaneta
 
 mapajs.addPlugin(miPlugin)
 mapajs.addPlugin(miPlugin2)
+
 
 
 
@@ -532,7 +558,7 @@ function actualizarCielo(fechaJulian = null) {
   //   }, 
   //   i * 20 * 1000); // <-- Multiplica por i para escalonar las ejecuciones
   // }
-
+  mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
   actualizarCielo();
   setInterval(actualizarCielo, 5 * 60 * 1000);
 })();
