@@ -230,6 +230,8 @@ mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador,layerPlaneta
 mapajs.addPlugin(miPlugin)
 mapajs.addPlugin(miPlugin2)
 
+mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+
 
 
 
