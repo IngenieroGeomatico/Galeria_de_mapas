@@ -328,7 +328,7 @@ GalileoPositionByTime = function (Orbit = false) {
       feature2 = {
         type: "Feature",
         geometry: { type: "Point", coordinates: [longitude2, latitude2, altitudeMeters2] },
-        properties: { name: "ISS", id: "25544" }
+        properties: obj
       }
       geojsonGalileo.features.push(feature2)
 
