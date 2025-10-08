@@ -181,10 +181,18 @@ layerEstrellas.proj = true
 let estilo_layerEstrellas = new IDEE.style.Generic({
   point: {
     // Definición atributos para puntos
-    radius: 3,
+    radius: (feature)=>{
+      mag = feature.getAttributes().mag
+      if (mag <= 1) return 9
+      else if (mag <= 2) return 7
+      else if (mag <= 3) return 5
+      else if (mag <= 4) return 3
+      else if (mag <= 5) return 2
+      else return 1
+    },
     fill: {
-      color: 'red',
-      opacity: 0.8
+      color: '#ffe4aaff',
+      opacity: 0.9
     },
   },
   polygon: {
@@ -234,12 +242,58 @@ const layerPlanetas = new IDEE.layer.GeoJSON({
 }, { clampToGround: false });
 layerPlanetas.proj = true
 
+// Júpiter 9, Saturno 8, Urano 7, Neptuno 6, Venus 5, Marte 4 y Mercurio 3
 let estilo_layerPlanetas = new IDEE.style.Generic({
   point: {
     // Definición atributos para puntos
-    radius: 10,
+    radius: (feature)=>{
+        nameP = feature.getAttributes().name
+        mult = 2
+        switch (nameP) {
+          case 'Mercury':
+            return 3 * mult
+          case 'Venus':
+            return 5 * mult
+          case 'Mars':
+            return 4 * mult
+          case 'Jupiter':
+            return 9 * mult
+          case 'Saturn':
+            return 8 * mult
+          case 'Uranus':
+            return 7 * mult
+          case 'Neptune':
+            return 6 * mult
+          case 'Pluto':
+            return 2 * mult
+          default:
+            return 2 * mult
+        }
+      },
     fill: {
-      color: 'blue',
+      color: (feature)=>{
+        nameP = feature.getAttributes().name
+        switch (nameP) {
+          case 'Mercury':
+            return '#797979ff'
+          case 'Venus':
+            return '#ff5e00ff'
+          case 'Mars':
+            return '#ff0000ff'
+          case 'Jupiter':
+            return '#c2a369ff'
+          case 'Saturn':   
+            return '#6e5628ff'
+          case 'Uranus':
+            return '#1595ebff'
+          case 'Neptune': 
+            return '#0000ffff'
+          case 'Pluto':
+            return '#836262ff'
+          default:
+            return '#797979ff'
+        }
+      },
       opacity: 1
     },
   },
