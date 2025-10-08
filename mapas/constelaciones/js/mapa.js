@@ -412,7 +412,7 @@ function buildEquatorGeojsonAtTime_withMatrix(R_icrf2ecef, shellAlt) {
     features: [{
       type: "Feature",
       geometry: { type: "LineString", coordinates: coords },
-      properties: { name: "Ecuador celeste" }
+      properties: { name: "Ecuador" }
     }]
   };
 }
