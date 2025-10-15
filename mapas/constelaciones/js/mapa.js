@@ -62,7 +62,7 @@ IDEE.proxy(false);
          * CONFIG
 **************************************************************************/
 // Altura de la "capa celeste" donde se proyectan líneas y estrellas (m)
-SHELL_ALT_METERS = 1.0e9;  // 1000 km
+SHELL_ALT_METERS = 9.5e9; // 9000 km
 
 // Datos RA->lon (grados), Dec->lat (grados)
 // https://cdn.jsdelivr.net/gh/ofrohn/d3-celestial@master/data/
@@ -118,7 +118,11 @@ const mapajs = IDEE.map({
 });
 
 const mapaCesium = mapajs.getMapImpl();
-mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+
+// --- 🔆 Añadir el efecto de lente solar (Lens Flare) ---
+  const lensFlare = mapaCesium.scene.postProcessStages.add(
+    Cesium.PostProcessStageLibrary.createLensFlareStage()
+  );
 
 
 // Skybox y ocultar Tierra/atmósfera
@@ -133,10 +137,25 @@ mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
   //     positiveZ: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_pz.jpg",
   //   }
   // });
-  mapaCesium.scene.globe.showGroundAtmosphere = false;
-  mapaCesium.scene.skyAtmosphere = undefined;
-  mapaCesium.scene.globe.show = true;
+  // mapaCesium.scene.globe.show = true;
   mapaCesium.scene.backgroundColor = Cesium.Color.BLACK;
+  mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+
+  // mapaCesium.scene.sun = new Cesium.Sun();
+  // mapaCesium.scene.sun.show = true; // Muestra el sol
+  mapaCesium.scene.skyAtmosphere.show = true; // Muestra la atmósfera
+  // mapaCesium.scene.globe.enableLighting = true;
+
+
+  // Configura los parámetros del efecto
+  lensFlare.enabled = true;
+  lensFlare.uniforms.intensity = 0.15;      // Brillo general del efecto
+  lensFlare.uniforms.distortion = 1;     // Distorsión de la lente
+  lensFlare.uniforms.ghostDispersal = 0.5; // Separación de los reflejos
+  lensFlare.uniforms.haloWidth = 10;      // Anchura del halo
+  lensFlare.uniforms.dirtAmount = 10;     // Simula suciedad en la lente
+  lensFlare.uniforms.earthRadius = Cesium.Ellipsoid.WGS84.maximumRadius;
+
 })();
 
 
@@ -181,7 +200,7 @@ layerEstrellas.proj = true
 let estilo_layerEstrellas = new IDEE.style.Generic({
   point: {
     // Definición atributos para puntos
-    radius: (feature)=>{
+    radius: (feature) => {
       mag = feature.getAttributes().mag
       if (mag <= 1) return 9
       else if (mag <= 2) return 7
@@ -246,32 +265,32 @@ layerPlanetas.proj = true
 let estilo_layerPlanetas = new IDEE.style.Generic({
   point: {
     // Definición atributos para puntos
-    radius: (feature)=>{
-        nameP = feature.getAttributes().name
-        mult = 2
-        switch (nameP) {
-          case 'Mercury':
-            return 3 * mult
-          case 'Venus':
-            return 5 * mult
-          case 'Mars':
-            return 4 * mult
-          case 'Jupiter':
-            return 9 * mult
-          case 'Saturn':
-            return 8 * mult
-          case 'Uranus':
-            return 7 * mult
-          case 'Neptune':
-            return 6 * mult
-          case 'Pluto':
-            return 2 * mult
-          default:
-            return 2 * mult
-        }
-      },
+    radius: (feature) => {
+      nameP = feature.getAttributes().name
+      mult = 2
+      switch (nameP) {
+        case 'Mercury':
+          return 3 * mult
+        case 'Venus':
+          return 5 * mult
+        case 'Mars':
+          return 4 * mult
+        case 'Jupiter':
+          return 9 * mult
+        case 'Saturn':
+          return 8 * mult
+        case 'Uranus':
+          return 7 * mult
+        case 'Neptune':
+          return 6 * mult
+        case 'Pluto':
+          return 2 * mult
+        default:
+          return 2 * mult
+      }
+    },
     fill: {
-      color: (feature)=>{
+      color: (feature) => {
         nameP = feature.getAttributes().name
         switch (nameP) {
           case 'Mercury':
@@ -282,11 +301,11 @@ let estilo_layerPlanetas = new IDEE.style.Generic({
             return '#ff0000ff'
           case 'Jupiter':
             return '#c2a369ff'
-          case 'Saturn':   
+          case 'Saturn':
             return '#6e5628ff'
           case 'Uranus':
             return '#1595ebff'
-          case 'Neptune': 
+          case 'Neptune':
             return '#0000ffff'
           case 'Pluto':
             return '#836262ff'
@@ -307,8 +326,36 @@ let estilo_layerPlanetas = new IDEE.style.Generic({
 layerPlanetas.setStyle(estilo_layerPlanetas)
 
 
+// --- Capa para Sol y Luna ---
+const layerSolLuna = new IDEE.layer.GeoJSON({
+  name: "layerSolLuna",
+  legend: "Sol y Luna",
+  source: {}
+}, { clampToGround: false });
+layerSolLuna.proj = true;
 
-mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador,layerPlanetas]);
+const estilo_layerSolLuna = new IDEE.style.Generic({
+  point: {
+    radius: (feature) => feature.getAttributes().name === "Sol" ? 25 : 20,
+    fill: {
+      color: (feature) => feature.getAttributes().name === "Sol"
+        ? '#ffcc00ff'
+        : '#ddddddff',
+      opacity: 1
+    },
+    stroke: {
+      color: (feature) => feature.getAttributes().name === "Sol"
+        ? '#ffaa00ff'
+        : '#5e5e5eff',
+      width: 4,
+      opacity: 0.9
+    }
+  }
+});
+layerSolLuna.setStyle(estilo_layerSolLuna);
+
+
+mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador, layerPlanetas, layerSolLuna]);
 
 mapajs.addPlugin(miPlugin)
 mapajs.addPlugin(miPlugin2)
@@ -401,6 +448,14 @@ async function cargarPlanetas() {
   return rawPlanetas
 }
 
+async function actualizarSolYLuna(alturaCero = false) {
+  const geojsonSolLuna = await getSunAndMoonGeoJSON(alturaCero=alturaCero);
+  if (geojsonSolLuna && geojsonSolLuna.features.length > 0) {
+    layerSolLuna.setSource(geojsonSolLuna);
+  } else {
+    console.warn("No se pudo actualizar la capa Sol/Luna: GeoJSON vacío o inválido");
+  }
+}
 
 function buildEquatorGeojsonAtTime_withMatrix(R_icrf2ecef, shellAlt) {
   if (!equatorICRF) return { type: "FeatureCollection", features: [] };
@@ -534,6 +589,73 @@ function buildStarsGeojsonAtTime_withMatrix(R_icrf2ecef, shellAlt) {
   return { type: "FeatureCollection", features };
 }
 
+// CÁLCULO Y CAPA DE SOL Y LUNA
+async function getSunAndMoonGeoJSON(alturaCero = false) {
+  const jd = Cesium.JulianDate.now();
+
+  function getBodyLonLatAlt(name, positionICRF, jd) {
+    if (!positionICRF) return null;
+    const R = Cesium.Transforms.computeIcrfToFixedMatrix(jd);
+    if (!R) return null;
+
+    // Convertimos posición de ICRF a ECEF
+    const posECEF = Cesium.Matrix3.multiplyByVector(R, positionICRF, new Cesium.Cartesian3());
+    if (!posECEF) return null;
+
+    const carto = Cesium.Cartographic.fromCartesian(posECEF);
+    if (!carto) return null;
+
+    const unitVec = Cesium.Cartesian3.normalize(posECEF, new Cesium.Cartesian3());
+    const earthR = 6378137.0;
+    const posOnShell = Cesium.Cartesian3.multiplyByScalar(unitVec, earthR + SHELL_ALT_METERS, new Cesium.Cartesian3());
+    const cartoShell = Cesium.Cartographic.fromCartesian(posOnShell);
+    if (!cartoShell) return null;
+
+    return {
+      name,
+      lon: Cesium.Math.toDegrees(cartoShell.longitude),
+      lat: Cesium.Math.toDegrees(cartoShell.latitude),
+      alt: SHELL_ALT_METERS,
+      distance_m: Cesium.Cartesian3.magnitude(positionICRF),
+      alt_real_m: carto.height,
+      jd: Cesium.JulianDate.toIso8601(jd)
+    };
+  }
+
+  // Calculamos posiciones del sol y la luna
+  const sunICRF = Cesium.Simon1994PlanetaryPositions.computeSunPositionInEarthInertialFrame(jd);
+  const moonICRF = Cesium.Simon1994PlanetaryPositions.computeMoonPositionInEarthInertialFrame(jd);
+
+  const bodies = [
+    getBodyLonLatAlt("Sol", sunICRF, jd),
+    getBodyLonLatAlt("Luna", moonICRF, jd)
+  ].filter(Boolean); // 👈 elimina los null
+
+
+  const features = bodies.map(p => {
+    if (typeof alturaCero !== "undefined" && (alturaCero || SHELL_ALT_METERS === 0)) {
+      p.alt = 0;
+    } else if (p.distance_m <= p.alt) {
+      p.alt = p.distance_m;
+    }
+
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [p.lon, p.lat, p.alt] },
+      properties: {
+        name: p.name,
+        distance_m: p.distance_m,
+        alt_real_m: p.alt_real_m,
+        jd: p.jd
+      }
+    };
+  });
+
+  return { type: "FeatureCollection", features };
+}
+
+
+
 /**************************************************************************
  * ACTUALIZACIÓN (con polling si R no está lista)
  **************************************************************************/
@@ -563,6 +685,7 @@ function actualizarCielo(fechaJulian = null) {
       geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
       layerPlanetas.setSource(geojsonPlanets);
     }
+    actualizarSolYLuna() 
     return;
   }
 
@@ -591,15 +714,17 @@ function actualizarCielo(fechaJulian = null) {
         geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
         layerPlanetas.setSource(geojsonPlanets);
       }
+      actualizarSolYLuna() 
     }, 1000);
   }
 }
+
 
 /**************************************************************************
  * INICIALIZACIÓN
  **************************************************************************/
 (async function init() {
-  await Promise.all([cargarConstelacionesICRF(), cargarEstrellasICRF(), cargarPlanetas()]);
+  await Promise.all([cargarConstelacionesICRF(), cargarEstrellasICRF(), cargarPlanetas(), actualizarSolYLuna()]);
   prepararEcuadorICRF(5); // resolución 5°
 
   // Bucle para ver la evolución cada hora durante 12 horas

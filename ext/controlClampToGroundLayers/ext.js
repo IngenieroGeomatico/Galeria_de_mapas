@@ -34,31 +34,36 @@ controlC1.getActivationButton = (html) => {
     return html.querySelector('#m-herramienta-button');
 }
 
-controlC1.activate = () => {
+controlC1.activate = async () => {
+  IDEE.toast.success('Activado: geometrías proyectadas en la Tierra');
+  console.log('Activado');
 
-    IDEE.toast.success('Activado: geometrías proyectadas en la Tierra');
-    console.log('Activado');
+  await new Promise(resolve => setTimeout(resolve, 100)); // deja que se repinte la UI
 
-    setClampToGroundForLayers(capasCesium, true);
+  // Ahora sí, ejecutar las tareas pesadas
+  setClampToGroundForLayers(capasCesium, true);
 
-    SHELL_ALT_METERS = 0
-    const t = Cesium.JulianDate.now(); // Cesium.JulianDate
-    const R = Cesium.Transforms.computeIcrfToFixedMatrix(t);
-    const gjsonS = buildStarsGeojsonAtTime_withMatrix(R, SHELL_ALT_METERS);
-    layerEstrellas.setSource(gjsonS);
-    geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
-    layerPlanetas.setSource(geojsonPlanets);
+  SHELL_ALT_METERS = 0;
+  const t = Cesium.JulianDate.now();
+  const R = Cesium.Transforms.computeIcrfToFixedMatrix(t);
+  const gjsonS = buildStarsGeojsonAtTime_withMatrix(R, SHELL_ALT_METERS);
+  layerEstrellas.setSource(gjsonS);
 
-    
-    document.querySelector('.buttonHerramienta').classList.add("activated");
-    
-}
+  geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true);
+  layerPlanetas.setSource(geojsonPlanets);
 
-controlC1.deactivate = () => {
+  actualizarSolYLuna(alturaCero = true);
+
+  document.querySelector('.buttonHerramienta').classList.add("activated");
+};
+
+controlC1.deactivate = async () => {
 
     IDEE.toast.info('Desactivado: geometrías proyectadas en la esfera celeste');
     console.log('Desactivado');
-    SVGCarga.hidden = false
+    
+    await new Promise(resolve => setTimeout(resolve, 100)); // deja que se repinte la UI
+
 
 
     setClampToGroundForLayers(capasCesium, false);
@@ -70,12 +75,10 @@ controlC1.deactivate = () => {
     layerEstrellas.setSource(gjsonS);
     geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), false); 
     layerPlanetas.setSource(geojsonPlanets);
+    actualizarSolYLuna(alturaCero = false)
 
     
     document.querySelector('.buttonHerramienta').classList.remove("activated");
-    SVGCarga.hidden = true
-
-    
 }
 
 controlC1.manageActivation(document.querySelector('.m-herramienta-container'));
