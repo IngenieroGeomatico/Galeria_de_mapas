@@ -24,6 +24,13 @@ memes = [
         long: -3.725719,
         lat: 40.495414  
     },
+    {
+        name: "La socorrista la lía parda",
+        url: "https://www.youtube.com/watch?v=QNTZbJSQVis",
+        long: -3.6248071994710798,
+        lat: 40.55864554555915,
+        collaborator: "https://github.com/quiqueciria"
+    },
 ]
 
 
