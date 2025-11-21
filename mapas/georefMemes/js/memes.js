@@ -3,7 +3,8 @@ memes = [
     //     name: "Nombre del Meme",
     //     url: "URL del vídeo de youtube",
     //     long: longitud,
-    //     lat: latitud
+    //     lat: latitud,
+    //     collaborator: "https://github.com/IngenieroGeomatico"
     // },
     {
         name: "¿A quién no le va a gustar un Imperio Romano del Siglo I?",
