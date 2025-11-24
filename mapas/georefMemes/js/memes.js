@@ -32,7 +32,7 @@ memes = [
         collaborator: "https://github.com/quiqueciria"
     },
     {
-        name: "Vecinas de valencia",
+        name: "Vecinas de Valencia",
         url: "https://www.youtube.com/watch?v=2AUGuctxCHk",
         long: -0.380550,
         lat: 39.465731  
