@@ -43,6 +43,12 @@ memes = [
         long: 2.653619,
         lat: 39.575587  
     },
+    {
+        name: "Sole que te meto con el mechero!!",
+        url: "https://www.youtube.com/watch?v=1N5n9zbgY_s",
+        long: -3.712066,
+        lat: 40.3705647  
+    },
 ]
 
 
