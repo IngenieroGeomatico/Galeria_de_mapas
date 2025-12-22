@@ -55,6 +55,12 @@ memes = [
         long: -6.007258,
         lat: 37.382324 
     },
+    { 
+        name: " El Chucky de Cieza ",
+        url: "https://www.youtube.com/watch?v=841Nrqngu-A",
+        long: -0.787736,
+        lat: 38.118690
+    },
 ]
 
 
