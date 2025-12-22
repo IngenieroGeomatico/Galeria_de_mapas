@@ -37,6 +37,12 @@ memes = [
         long: -0.380550,
         lat: 39.465731  
     },
+    {
+        name: "EL GUARDIAN DE LAS ESTRELLAS",
+        url: "https://www.youtube.com/watch?v=QYffoaQsmVk",
+        long: 2.653619,
+        lat: 39.575587  
+    },
 ]
 
 
