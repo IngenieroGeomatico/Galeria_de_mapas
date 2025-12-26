@@ -103,6 +103,12 @@ memes = [
         long: -8.541527,
         lat: 42.887491
     },
+    { 
+        name: "Control de la Guardia Civil",
+        url: "https://www.youtube.com/watch?v=uPx4u6XVy3k",
+        long: -5.008481,
+        lat: 40.136433
+    },
 ]
 
 
