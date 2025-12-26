@@ -21,6 +21,7 @@ svgObjID.addEventListener('load', () => {
   capaGeojson = new IDEE.layer.GeoJSON(
     {
       source: geojsonSVG,
+      extract:false
     }
   )
   mapajs.addLayers(capaGeojson)
