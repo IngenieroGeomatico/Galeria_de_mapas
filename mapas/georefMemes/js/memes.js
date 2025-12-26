@@ -67,6 +67,12 @@ memes = [
         long: -1.049422,
         lat: 40.329798
     },
+    { 
+        name: " MEJORES MOMENTOS HERMANOS LÓPEZ BAR KOKI ",
+        url: "https://www.youtube.com/watch?v=W6kcKvWsv6E",
+        long: -3.589597,
+        lat: 40.474125
+    },
 ]
 
 
