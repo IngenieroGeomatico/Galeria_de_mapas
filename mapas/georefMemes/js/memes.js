@@ -97,6 +97,12 @@ memes = [
         long: -4.152594,
         lat: 40.641884
     },
+    { 
+        name: "Nos pegan",
+        url: "https://www.youtube.com/watch?v=yRXZbnP_big",
+        long: -8.541527,
+        lat: 42.887491
+    },
 ]
 
 
