@@ -85,6 +85,12 @@ memes = [
         long: -5.661708,
         lat: 40.948996
     },
+    { 
+        name: "Queremos ir a misa",
+        url: "https://www.youtube.com/watch?v=lsqnOndAuaE",
+        long: -4.102087,
+        lat: 40.650437
+    },
 ]
 
 
