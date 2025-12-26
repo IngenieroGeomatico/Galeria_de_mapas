@@ -1,7 +1,9 @@
 mapajs = IDEE.map({
   container: "mapa",
-  viewExtent:[ -405571.43707260775, 4927847.854762467, -402550.4545042762, 4929479.9789827075 ],
+  viewExtent:[ -405800.2034844995, 4927827.20105894, -402226.7819836404, 4929587.855610927 ],
   maxZoom: 18,
+  center:{ x: -403965.9268097952, y: 4928708.155611674 },
+  zoom: 15
 });
 window.mapajs = mapajs
 
@@ -37,7 +39,7 @@ svgObjID.addEventListener('load', () => {
     stroke: {
         // Si no se utiliza función, el estilo se queda estático en su creación
         color: 'rgba('+rndInt0_255()+','+rndInt0_255()+','+rndInt0_255()+',0.8)',
-        width: 4
+        width: 2
     }
   });
   capaGeojson.setStyle(estilo, true);
