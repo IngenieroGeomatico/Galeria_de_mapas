@@ -388,65 +388,140 @@ function jsonToGeoJson(jsonArray, geometryField) {
  * @param {Array} bbox - La extensión geográfica [minLng, minLat, maxLng, maxLat].
  * @returns {Object} - El objeto en formato GeoJSON.
  */
-function svgToGeoJSON(svgText, bbox) {
-    const [minLng, minLat, maxLng, maxLat] = bbox;
 
-    // Crear un contenedor SVG temporal para analizarlo
-    const svgElement = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
-    const svgWidth = svgElement.viewBox.baseVal.width;
-    const svgHeight = svgElement.viewBox.baseVal.height;
+function svgToGeoJSON(svgInput, bbox) {
+  const [minLng, minLat, maxLng, maxLat] = bbox;
 
-    // Función de escala para convertir coordenadas de SVG a coordenadas geográficas
-    const scaleX = x => minLng + (x / svgWidth) * (maxLng - minLng);
-    const scaleY = y => maxLat - (y / svgHeight) * (maxLat - minLat);
+  // 1) Aceptar tanto texto SVG como elemento <svg>
+  let svgEl;
+  if (typeof svgInput === 'string') {
+    const doc = new DOMParser().parseFromString(svgInput, 'image/svg+xml');
+    const err = doc.querySelector('parsererror');
+    if (err) throw new Error('Error al parsear SVG: ' + (err.textContent || '').trim());
+    svgEl = doc.documentElement;
+  } else if (
+    svgInput &&
+    svgInput.nodeType === 1 && // Nodo elemento
+    String(svgInput.tagName).toLowerCase() === 'svg'
+  ) {
+    svgEl = svgInput;
+  } else {
+    throw new Error('svgInput debe ser texto SVG o un elemento <svg> válido.');
+  }
 
-    // Recorrer todos los elementos 'path' y construir los datos de GeoJSON
-    const features = [];
-    const paths = svgElement.querySelectorAll('path');
+  // 2) Obtener viewBox (incluyendo offset x/y). Fallback a width/height o getBBox.
+  const vb = svgEl.viewBox?.baseVal;
+  let vbX = vb ? vb.x : 0;
+  let vbY = vb ? vb.y : 0;
+  let vbW = vb ? vb.width : parseFloat(svgEl.getAttribute('width') || svgEl.clientWidth || 0);
+  let vbH = vb ? vb.height : parseFloat(svgEl.getAttribute('height') || svgEl.clientHeight || 0);
 
-    paths.forEach(pathElement => {
-        const pathData = pathElement.getAttribute('d');
-        const points = [];
-        const commands = pathData.match(/[MLHVCSQTAZ][^MLHVCSQTAZ]*/ig);
+  if (!vbW || !vbH) {
+    // Si faltan dimensiones, intentamos con getBBox (puede fallar si no está en árbol renderizable)
+    try {
+      const b = svgEl.getBBox();
+      vbX = b.x; vbY = b.y; vbW = b.width; vbH = b.height;
+      // Opcional: fijar viewBox para consistencia
+      svgEl.setAttribute('viewBox', `${vbX} ${vbY} ${vbW} ${vbH}`);
+    } catch (e) {
+      throw new Error('No se pudieron determinar las dimensiones del SVG (viewBox/width/height/getBBox).');
+    }
+  }
 
-        let x = 0, y = 0;
-        commands.forEach(command => {
-            const type = command[0];
-            const coords = command.slice(1).trim().split(/[\s,]+/).map(Number);
+  // 3) Escalas (teniendo en cuenta el offset del viewBox)
+  const scaleX = x => minLng + ((x - vbX) / vbW) * (maxLng - minLng);
+  const scaleY = y => maxLat - ((y - vbY) / vbH) * (maxLat - minLat); // invertimos Y
 
-            switch (type) {
-                case 'M':
-                case 'L':
-                    x = coords[0];
-                    y = coords[1];
-                    points.push([scaleX(x), scaleY(y)]);
-                    break;
-                case 'Z':
-                    if (points.length > 0) points.push(points[0]); // Cerrar el polígono
-                    break;
-                default:
-                    console.warn(`Comando ${type} no soportado en esta función.`);
-            }
-        });
+  // 4) Recorrer paths y construir GeoJSON
+  const features = [];
+  const paths = svgEl.querySelectorAll('path');
 
-        // Crear el feature de tipo 'Polygon' para el GeoJSON
-        if (points.length > 0) {
-            features.push({
-                type: 'Feature',
-                geometry: {
-                    type: 'Polygon',
-                    coordinates: [points]
-                },
-                properties: {}
-            });
+  paths.forEach(path => {
+    const d = path.getAttribute('d');
+    if (!d) return;
+
+    const commands = d.match(/[a-zA-Z][^a-zA-Z]*/g) || [];
+    let x = 0, y = 0;
+    const points = [];
+
+    commands.forEach(cmd => {
+      const type = cmd[0]; // respetamos mayúsc/minúsc
+      const nums = cmd.slice(1).trim().split(/[\s,]+/).filter(Boolean).map(Number);
+
+      switch (type) {
+        // Absolutos
+        case 'M':
+        case 'L': {
+          for (let i = 0; i < nums.length; i += 2) {
+            x = nums[i];
+            y = nums[i + 1];
+            points.push([scaleX(x), scaleY(y)]);
+          }
+          break;
         }
+        case 'H': {
+          nums.forEach(nx => { x = nx; points.push([scaleX(x), scaleY(y)]); });
+          break;
+        }
+        case 'V': {
+          nums.forEach(ny => { y = ny; points.push([scaleX(x), scaleY(y)]); });
+          break;
+        }
+
+        // Relativos
+        case 'm':
+        case 'l': {
+          for (let i = 0; i < nums.length; i += 2) {
+            x += nums[i];
+            y += nums[i + 1];
+            points.push([scaleX(x), scaleY(y)]);
+          }
+          break;
+        }
+        case 'h': {
+          nums.forEach(nx => { x += nx; points.push([scaleX(x), scaleY(y)]); });
+          break;
+        }
+        case 'v': {
+          nums.forEach(ny => { y += ny; points.push([scaleX(x), scaleY(y)]); });
+          break;
+        }
+
+        // Cierre
+        case 'Z':
+        case 'z': {
+          if (points.length > 0) points.push(points[0]);
+          break;
+        }
+
+        // Curvas: muestreo del path
+        default: {
+          const len = path.getTotalLength?.();
+          if (typeof len === 'number' && len > 0) {
+            for (let i = 0; i <= len; i++) {
+              const pt = path.getPointAtLength(i);
+              points.push([scaleX(pt.x), scaleY(pt.y)]);
+            }
+          } else {
+            console.warn(`Comando ${type} no soportado; se omite.`);
+          }
+          break;
+        }
+      }
     });
 
-    return {
-        type: 'FeatureCollection',
-        features: features
-    };
+    if (points.length > 0) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [points] },
+        properties: { id: path.id || null }
+      });
+    }
+  });
+
+  return { type: 'FeatureCollection', features };
 }
+
 
 
 /**
