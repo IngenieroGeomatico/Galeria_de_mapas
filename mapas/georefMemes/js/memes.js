@@ -91,6 +91,12 @@ memes = [
         long: -4.102087,
         lat: 40.650437
     },
+    { 
+        name: "Soy falangista y estoy abandonao...",
+        url: "https://www.youtube.com/watch?v=h3GJtQsYXK4",
+        long: -4.152594,
+        lat: 40.641884
+    },
 ]
 
 
