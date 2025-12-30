@@ -109,6 +109,12 @@ memes = [
         long: -5.008481,
         lat: 40.136433 
     },
+    { 
+        name: "El polémico tobogán de Estepona que no duró ni 24 horas abierto costó 28.000 euros",
+        url: "https://www.youtube.com/watch?v=XZuisT8IPOA",
+        long: -5.158724,
+        lat: 36.419576
+    },
 ]
 
 
