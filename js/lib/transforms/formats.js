@@ -75,9 +75,9 @@ function parseCSV(csvString) {
  * console.log(jsonDataNoId);
  * // Salida esperada: [ { name: "John", age: "30" }, { name: "Jane", age: "25" } ]
  */
-function csvToJson(csvString, id = false) {
+function csvToJson(csvString, id = false, headerRow=0) {
     const rows = csvString.split("\n");
-    const headers = rows[0].split(";").map(h => h.trim());
+    const headers = rows[headerRow].split(";").map(h => h.trim());
 
     const jsonData = id ? {} : [];
 
