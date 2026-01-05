@@ -143,15 +143,15 @@ CSV.then((data) => {
       codMuni = element["Municipios"].split(" ")[0];
       porcParo = element["porcParo"]
 
-      if (porcParo < 1) {
-        color = "rgba(241, 248, 236, 1)"
+      if (porcParo < 1.5) {
+        color = "rgba(202, 247, 170, 1)"
       } else if (porcParo < 3) {
-        color = "rgba(155, 253, 90, 1)"
+        color = "rgba(126, 247, 45, 1)"
       } else if (porcParo < 5) {
         color = "rgba(215, 253, 42, 1)"
-      } else if (porcParo < 7) {
+      } else if (porcParo < 8) {
         color = "rgba(253, 221, 42, 1)"
-      } else if (porcParo < 10) {
+      } else if (porcParo < 15) {
         color = "rgba(253, 169, 42, 1)"
       } else {
         color = "rgba(253, 74, 42, 1)"
@@ -250,7 +250,6 @@ async function myFunction_CSV() {
   dataParoFiltrado.forEach(obj => {
     propsAEliminar.forEach(p => delete obj[p]);
   });
-
 
 
   const myPromise_poblo_prov = new Promise(function (resolve, reject) {
@@ -381,6 +380,52 @@ async function myFunction_CSV() {
     dataPoblacionFiltrado = csv.filter(obj => obj["Periodo"] === `${añoCSV - 1}`).filter(obj => obj["Sexo"] === `Total`)
   }
 
+
+  const myPromise_poblo_TOTAL = new Promise(function (resolve, reject) {
+    const urlPoblacion = `https://servicios.ine.es/wstempus/js/es/DATOS_TABLA/56935?tip=AM&`;
+    M.remote.get(urlPoblacion).then(async function (res) {
+      try {
+        dataPoblEsp = JSON.parse(res.text)[0]["Data"][0]["Valor"] 
+        resolve(dataPoblEsp);
+      } catch (e) {
+        reject(e);
+      } finally {
+        //
+      }
+    }).catch(err => {
+      reject(err);
+    });
+  });
+  dataPoblacionEsp = await myPromise_poblo_TOTAL;
+  console.log(dataPoblacionEsp)
+
+
+    const myPromise_poblo_activa = new Promise(function (resolve, reject) {
+    const urlPoblacion = `https://servicios.ine.es/wstempus/jsCache/es/DATOS_TABLA/65949?tip=AM&`;
+    M.remote.get(urlPoblacion).then(async function (res) {
+      try {
+        dataPoblEspAct = JSON.parse(res.text)[0]["Data"][0]["Valor"] *1000
+        resolve(dataPoblEspAct);
+      } catch (e) {
+        reject(e);
+      } finally {
+        //
+      }
+    }).catch(err => {
+      reject(err);
+    });
+  });
+  dataPoblacionEspActiva = await myPromise_poblo_activa;
+  console.log(dataPoblacionEspActiva)
+
+  const porcPobAct = dataPoblacionEspActiva/dataPoblacionEsp
+
+
+
+
+
+
+
   const byIdA = new Map(dataParoFiltrado.map(o => [o["Codigo Municipio"], o]));
   for (const objB of dataPoblacionFiltrado) {
     const objA = byIdA.get(objB["Municipios"].split(" ")[0]);
@@ -398,9 +443,8 @@ async function myFunction_CSV() {
     } catch {
       totalParo = 0
     }
-    porcParo = Number(totalParo) / Number(totalPobl) * 100
-    porParo = porcParo.toFixed(2)
-
+    porParo = Number(totalParo) / (Number(totalPobl) * porcPobAct )* 100
+    porcParo = Math.trunc(porParo * 100) / 100;
 
     return { porcParo, ...obj };
   });
