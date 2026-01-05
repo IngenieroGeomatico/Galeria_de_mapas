@@ -244,7 +244,7 @@ async function myFunction_CSV() {
     dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV - 1}`)
   }
 
-  const propsAEliminar = ["mes", "Paro mujer edad >=45", "Paro mujer edad < 25", "Paro mujer edad 25 -45",
+  const propsAEliminar = ["Paro mujer edad >=45", "Paro mujer edad < 25", "Paro mujer edad 25 -45",
     "Paro hombre edad >=45", "Paro hombre edad < 25", "Paro hombre edad 25 -45",
     "Paro Sin empleo Anterior", , , ,];
   dataParoFiltrado.forEach(obj => {
