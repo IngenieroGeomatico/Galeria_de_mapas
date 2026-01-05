@@ -54,15 +54,10 @@ CSV.then((data) => {
 
   capaMVT_Municipios.on(IDEE.evt.SELECT_FEATURES, (features, m) => {
     codMuni = features[0].getAttributes().nationalcode.slice(-5)
-    console.log(codMuni);
-    console.log(features[0].getAttributes())
     filtrado = data.filter(obj => obj["Codigo Municipio"] === codMuni)
-    console.log(filtrado[0])
 
     const escape = (s) => String(s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-
 
     const filas = Object.entries(filtrado[0])
       .map(([k, v], i) => {
@@ -172,14 +167,12 @@ CSV.then((data) => {
 
   }
   estilo = createStyleforMVT()
-  // console.log(estilo)
 
   let estilo_Municipios = new IDEE.style.Polygon({
     fill: {
       color: (feature) => {
         codMuni = feature.getAttributes().nationalcode.slice(-5)
-        // console.log(codMuni)
-        // console.log(estilo[codMuni])
+
         try {
           color = estilo[codMuni].color
         } catch {
@@ -222,7 +215,6 @@ async function myFunction_CSV() {
     const urlParo = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV}_csv.csv`;
     const urlParo_1 = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV - 1}_csv.csv`;
     M.remote.get(urlParo).then(function (res) {
-      console.log(res)
       try {
         const data = csvToJson(res.text, id = false, headerRow = 1);
         resolve(data);
