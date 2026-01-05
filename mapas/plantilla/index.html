@@ -1,42 +1,49 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
-    <title>Visualizador base</title>
+  <title>Visualizador base</title>
 
-    <!-- fichero estilos -->
-    <link href="https://componentes.cnig.es/api-core/assets/css/apiign.ol.min.css" rel="stylesheet" />
+  <!-- fichero estilos -->
+  <link href="https://componentes.cnig.es/api-core/assets/css/apiign.ol.min.css" rel="stylesheet" />
 
-    <!-- Ficheros javascript de la API -->
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>          
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>        
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>   
+  <!-- Ficheros javascript de la API -->
+  <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>
+  <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>
+  <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>
 
-    <!-- Extensiones de la API-CNIG -->
+  <!-- Extensiones de la API-CNIG -->
 
-        
-    <!-- estilo básico -->
-     <link href="./css/mapa.css" 
-          rel="stylesheet" />
 
-    <!-- Importación librerías externas -->
+  <!-- estilo básico -->
+  <link href="./css/mapa.css" rel="stylesheet" />
 
-    <!-- Importación librerías propias -->
+  <!-- Importación librerías externas -->
 
-    <!-- Extensión personalizada -->
+  <!-- Importación librerías propias -->
+
+  <!-- Extensión personalizada -->
 
 </head>
+
 <body>
-   
+
+
+  <!-- Div carga -->
+  <div id="cargaSVG">
+    <img src="../../img/iconos/gear-spinner.svg">
+  </div>
+
 
   <!-- Contenedor principal del mapa -->
-    <div id="mapa"></div>
+  <div id="mapa"></div>
 
-    <script type="text/javascript"
-      src="./js/mapa.js">
-    </script>     
+  <script type="text/javascript" src="./js/mapa.js">
+  </script>
 </body>
+
 </html>

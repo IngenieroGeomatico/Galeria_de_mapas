@@ -1,8 +1,21 @@
+const SVGCarga = document.getElementById("cargaSVG")
+// window.onload = (event) => {
+//   SVGCarga.hidden = true
+// };
+
+
 mapajs = IDEE.map({
   container: "mapa",
   center: { x: -512140.0194987538, y: 4552625.8998558065 },
+  controls:["attributions"],
   zoom: 5
 });
+
+mapajs.addAttribution({
+  name: "Autor:",
+  description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
+})
+
 
 const capaMVT_Municipios = new IDEE.layer.MVT({
   url: "https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf",
@@ -10,9 +23,31 @@ const capaMVT_Municipios = new IDEE.layer.MVT({
   layers: 'municipio',
   visibility: true,
   extract: false,
+  attribution: {
+        name: "Municipios:",
+        description: "<a style='color: #0000FF' href='https://www.ign.es/web/ign/portal' target='_blank'>Instituto Geográfico Nacional</a>"
+      }
 });
 
 mapajs.addLayers(capaMVT_Municipios);
+
+const capa1 = new IDEE.layer.GeoJSON({
+  source:{},
+  attribution: {
+        name: "Paro:",
+        description: "<a style='color: #0000FF' href='https://www.sepe.es/HomeSepe/es/' target='_blank'>SEPE</a>"
+      }
+});
+mapajs.addLayers(capa1);
+
+const capa2 = new IDEE.layer.GeoJSON({
+  source:{},
+  attribution: {
+        name: "Población:",
+        description: "<a style='color: #0000FF' href='https://www.ine.es/' target='_blank'>INE</a>"
+      }
+});
+mapajs.addLayers(capa2);
 
 CSV = myFunction_CSV()
 CSV.then((data) => {
@@ -28,22 +63,78 @@ CSV.then((data) => {
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 
+
     const filas = Object.entries(filtrado[0])
-      .map(([k, v]) => `<tr><th>${escape(k)}</th><td>${escape(v)}</td></tr>`)
+      .map(([k, v], i) => {
+
+        if (k == "Total") {
+          k = "Población Total"
+        } else if (k == "Sexo") {
+          k = "Población Sexo"
+        } else if (k == "Periodo") {
+          k = "Población Periodo"
+        }
+
+        return `
+    <tr style="background:${i % 2 ? '#f7f7f7' : 'white'};">
+      <th style="text-align:left; padding:8px 12px; border-bottom:1px solid #ddd;">
+        ${escape(k)}
+      </th>
+      <td style="padding:8px 12px; border-bottom:1px solid #ddd;">
+        ${escape(v)}
+      </td>
+    </tr>
+  `})
       .join("");
 
 
-
     const featureTabOpts = {
-      'icon': 'g-cartografia-pin', // icono para mostrar en la pestaña
-      'title': 'Título de la pestaña', // título de la pestaña
-      'content':
-        `<table class="tabla-objeto">
-                      <thead><tr><th>Propiedad</th><th>Valor</th></tr></thead>
-                      <tbody>${filas}</tbody>
-                    </table>
-                  `
+      icon: 'g-cartografia-pin',
+      title: 'Título de la pestaña',
+      content: `
+    <div style="max-height:250px; overflow-y:auto; border:1px solid #ccc; border-radius:6px;">
+      <table style="width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:14px;">
+        <thead>
+          <tr>
+            <th
+              style="
+                background:#e9e9e9;
+                padding:10px 12px;
+                text-align:left;
+                border-bottom:1px solid #ccc;
+                position:sticky;
+                top:0;
+                z-index:10;
+              "
+            >
+              Propiedad
+            </th>
+            <th
+              style="
+                background:#e9e9e9;
+                padding:10px 12px;
+                text-align:left;
+                border-bottom:1px solid #ccc;
+                position:sticky;
+                top:0;
+                z-index:10;
+              "
+            >
+              Valor
+            </th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${filas}
+        </tbody>
+
+      </table>
+    </div>
+  `
     };
+
+
     // Creamos el popup
     popup = new IDEE.Popup();
     // Añadimos la pestaña al popup
@@ -103,6 +194,8 @@ CSV.then((data) => {
     },
   });
   capaMVT_Municipios.setStyle(estilo_Municipios)
+  SVGCarga.hidden = true
+
 
 
 })
@@ -130,7 +223,7 @@ async function myFunction_CSV() {
     const urlParo_1 = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV - 1}_csv.csv`;
     M.remote.get(urlParo).then(function (res) {
       try {
-        const data = csvToJson(res,text, id = false, headerRow = 1);
+        const data = csvToJson(res, text, id = false, headerRow = 1);
         resolve(data);
       } catch (e) {
         M.remote.get(urlParo_1).then(function (res) {
@@ -315,16 +408,17 @@ async function myFunction_CSV() {
       totalParo = 0
     }
     porcParo = Number(totalParo) / Number(totalPobl) * 100
-    porcParo.toFixed(2)
+    porParo = porcParo.toFixed(2)
 
-    return { ...obj, porcParo };
+
+    return { porcParo, ...obj };
   });
 
-  if( !CSV[0]["C�digo mes"]){
+  if (!CSV[0]["C�digo mes"]) {
     IDEE.toast.error('Error al obtener los datos del paro', null, 8000);
     console.error('------ 0 ---------- : Error paro')
   }
-  if( !CSV[0]["Sexo"]){
+  if (!CSV[0]["Sexo"]) {
     IDEE.toast.error('Error al obtener los datos de población', null, 8000);
     console.error('------ 1 ---------- : Error población')
   }
