@@ -4,3 +4,22 @@ body {
     padding: 0;
     height: 100%;
 }
+
+#cargaSVG {
+    height: 100%;
+    background-color: #dd61ff82;
+    position: absolute;
+    z-index: 9999;
+    width: 100%;
+  }
+#cargaSVG img{
+    height: 30vh;
+  position: unset;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: auto;
+  margin-bottom: auto;
+  top: 30%;
+  position: sticky;
+}
