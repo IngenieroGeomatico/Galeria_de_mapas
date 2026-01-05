@@ -222,8 +222,9 @@ async function myFunction_CSV() {
     const urlParo = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV}_csv.csv`;
     const urlParo_1 = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV - 1}_csv.csv`;
     M.remote.get(urlParo).then(function (res) {
+      console.log(res)
       try {
-        const data = csvToJson(res, text, id = false, headerRow = 1);
+        const data = csvToJson(res.text, id = false, headerRow = 1);
         resolve(data);
       } catch (e) {
         M.remote.get(urlParo_1).then(function (res) {
@@ -414,11 +415,11 @@ async function myFunction_CSV() {
     return { porcParo, ...obj };
   });
 
-  if (!CSV[0]["C�digo mes"]) {
+  if (!dataParoFiltrado[0]["C�digo mes"]) {
     IDEE.toast.error('Error al obtener los datos del paro', null, 8000);
     console.error('------ 0 ---------- : Error paro')
   }
-  if (!CSV[0]["Sexo"]) {
+  if (!dataPoblacionFiltrado[0]["Sexo"]) {
     IDEE.toast.error('Error al obtener los datos de población', null, 8000);
     console.error('------ 1 ---------- : Error población')
   }
