@@ -24,33 +24,21 @@ CSV.then((data) => {
     filtrado = data.filter(obj => obj["Codigo Municipio"] === codMuni)
     console.log(filtrado[0])
 
-    totalPobl = filtrado[0]["Total"].replaceAll(".", "")
-    try{
-      totalParo = filtrado[0]["total Paro Registrado"].replace("<", "")
-    }catch{
-      totalParo = 0
-    }
-    porcParo = Number(totalParo) / Number(totalPobl) * 100
-    
-    filtrado[0] = { ["Paro"]: porcParo, ...filtrado[0]  };
-
-
-    
     const escape = (s) => String(s)
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    
-        
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+
     const filas = Object.entries(filtrado[0])
-        .map(([k, v]) => `<tr><th>${escape(k)}</th><td>${escape(v)}</td></tr>`)
-        .join("");
+      .map(([k, v]) => `<tr><th>${escape(k)}</th><td>${escape(v)}</td></tr>`)
+      .join("");
 
 
 
     const featureTabOpts = {
       'icon': 'g-cartografia-pin', // icono para mostrar en la pestaña
       'title': 'Título de la pestaña', // título de la pestaña
-      'content': 
-                `<table class="tabla-objeto">
+      'content':
+        `<table class="tabla-objeto">
                       <thead><tr><th>Propiedad</th><th>Valor</th></tr></thead>
                       <tbody>${filas}</tbody>
                     </table>
@@ -69,13 +57,7 @@ CSV.then((data) => {
     paroStyle = {}
     for (const element of data) {
       codMuni = element["Municipios"].split(" ")[0];
-      totalPobl = element["Total"].replaceAll(".", "")
-      try{
-        totalParo = element["total Paro Registrado"].replace("<", "")
-      }catch{
-        totalParo = 0
-      }
-      porcParo = Number(totalParo) / Number(totalPobl) * 100
+      porcParo = element["porcParo"]
 
       if (porcParo < 1) {
         color = "rgba(241, 248, 236, 1)"
@@ -143,18 +125,21 @@ async function myFunction_CSV() {
       añoCSV = año
     }
 
+    // https://datos.gob.es/es/catalogo/ea0041513-paro-registrado-por-municipios
     const urlParo = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV}_csv.csv`;
     const urlParo_1 = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV - 1}_csv.csv`;
     M.remote.get(urlParo).then(function (res) {
       try {
-        const data = csvToJson(res.text, id = false, headerRow = 1);
+        const data = csvToJson(res,text, id = false, headerRow = 1);
         resolve(data);
       } catch (e) {
         M.remote.get(urlParo_1).then(function (res) {
           mesCSV = 12
           añoCSV = añoCSV - 1
           try {
-            const data = csvToJson(res.text, id = false, headerRow = 1);
+            const bytes = new Uint8Array([...res.text].map(ch => ch.charCodeAt(0)));
+            text = new TextDecoder('utf-8').decode(bytes);
+            const data = csvToJson(text, id = false, headerRow = 1);
             resolve(data);
           } catch (e) {
             reject(e);
@@ -169,13 +154,22 @@ async function myFunction_CSV() {
   });
 
   dataParo = await myPromise_1_CSV;
+
   dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV}`)
   if (dataParoFiltrado.length === 0) {
     dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV - 1}`)
   }
 
+  const propsAEliminar = ["mes", "Paro mujer edad >=45", "Paro mujer edad < 25", "Paro mujer edad 25 -45",
+    "Paro hombre edad >=45", "Paro hombre edad < 25", "Paro hombre edad 25 -45",
+    "Paro Sin empleo Anterior", , , ,];
+  dataParoFiltrado.forEach(obj => {
+    propsAEliminar.forEach(p => delete obj[p]);
+  });
 
-  const myPromise_poblo_prov= new Promise(function (resolve, reject) {
+
+
+  const myPromise_poblo_prov = new Promise(function (resolve, reject) {
     const urlPoblacion = `https://www.ine.es/dynt3/inebase/index.htm?padre=525`;
     M.remote.get(urlPoblacion).then(async function (res) {
       try {
@@ -214,19 +208,77 @@ async function myFunction_CSV() {
         data = [...new Set(csvUrls)];
 
         dataPobl = []
+
+        if (data.length === 0) {
+          // Si da problemas de CORS, activar extensión y pillar el array de data.
+          data = [
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2855.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2856.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2857.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2854.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2886.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2858.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2859.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2860.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2861.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2905.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2862.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2863.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2864.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2893.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2865.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2866.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2901.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2868.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2869.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2873.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2870.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2871.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2872.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2874.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2875.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2876.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2877.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2878.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2880.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2881.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2882.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2883.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2884.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2885.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2888.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2889.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2890.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2879.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2891.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2892.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2894.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2895.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2896.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2900.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2899.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2902.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2903.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2904.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2906.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2907.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2908.csv?nocab=1",
+            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2909.csv?nocab=1"
+          ]
+        }
         const Pobl = await Promise.all(
-              data.map(async (provUrl) => {
-                const r = await M.remote.get(provUrl);
-                // Ajusta firma de csvToJson si es necesario
-                csv = csvToJson(r.text, false, 0);
-                // csv = csv.filter(obj => obj["Periodo"] === `${añoCSV}`).filter(obj => obj["Sexo"] === `Total`)
-                // if (csv.length === 0) {
-                //   dataParoFiltrado = csv.filter(obj => obj["Periodo"] === `${añoCSV-1}`).filter(obj => obj["Sexo"] === `Total`)
-                // }
-                dataPobl.push(...csv)
-                return
-              })
-            );
+          data.map(async (provUrl) => {
+            const r = await M.remote.get(provUrl);
+            // Ajusta firma de csvToJson si es necesario
+            csv = csvToJson(r.text, false, 0);
+            // csv = csv.filter(obj => obj["Periodo"] === `${añoCSV}`).filter(obj => obj["Sexo"] === `Total`)
+            // if (csv.length === 0) {
+            //   dataParoFiltrado = csv.filter(obj => obj["Periodo"] === `${añoCSV-1}`).filter(obj => obj["Sexo"] === `Total`)
+            // }
+            dataPobl.push(...csv)
+            return
+          })
+        );
 
 
         resolve(dataPobl);
@@ -242,18 +294,40 @@ async function myFunction_CSV() {
   dataPoblacionFiltrado = await myPromise_poblo_prov;
   dataPoblacionFiltrado = dataPoblacionFiltrado.filter(obj => obj["Periodo"] === `${añoCSV}`).filter(obj => obj["Sexo"] === `Total`)
   if (csv.length === 0) {
-    dataPoblacionFiltrado = csv.filter(obj => obj["Periodo"] === `${añoCSV-1}`).filter(obj => obj["Sexo"] === `Total`)
+    dataPoblacionFiltrado = csv.filter(obj => obj["Periodo"] === `${añoCSV - 1}`).filter(obj => obj["Sexo"] === `Total`)
   }
 
-  const byIdA  = new Map(dataParoFiltrado.map(o => [o["Codigo Municipio"], o]));
-    for (const objB of dataPoblacionFiltrado) {
-      const objA = byIdA.get(objB["Municipios"].split(" ")[0]);
-      if (objA) {
-        Object.assign(objB, objA); // añade/actualiza propiedades en B
-      }
+  const byIdA = new Map(dataParoFiltrado.map(o => [o["Codigo Municipio"], o]));
+  for (const objB of dataPoblacionFiltrado) {
+    const objA = byIdA.get(objB["Municipios"].split(" ")[0]);
+    if (objA) {
+      Object.assign(objB, objA); // añade/actualiza propiedades en B
     }
+  }
 
-  CSV = dataPoblacionFiltrado
+
+  const CSV = dataPoblacionFiltrado.map(obj => {
+
+    totalPobl = obj["Total"].replaceAll(".", "")
+    try {
+      totalParo = obj["total Paro Registrado"].replace("<", "")
+    } catch {
+      totalParo = 0
+    }
+    porcParo = Number(totalParo) / Number(totalPobl) * 100
+    porcParo.toFixed(2)
+
+    return { ...obj, porcParo };
+  });
+
+  if( !CSV[0]["C�digo mes"]){
+    IDEE.toast.error('Error al obtener los datos del paro', null, 8000);
+    console.error('------ 0 ---------- : Error paro')
+  }
+  if( !CSV[0]["Sexo"]){
+    IDEE.toast.error('Error al obtener los datos de población', null, 8000);
+    console.error('------ 1 ---------- : Error población')
+  }
 
   return CSV
 }
