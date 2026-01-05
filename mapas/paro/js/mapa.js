@@ -85,10 +85,9 @@ CSV.then((data) => {
 
     const featureTabOpts = {
       icon: 'g-cartografia-pin',
-      title: 'Título de la pestaña',
+      title: 'Paro por Municipios',
       content: `
-    <div style="max-height:250px; overflow-y:auto; border:1px solid #ccc; border-radius:6px;">
-      <table style="width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:14px;">
+      <table style="border:1px solid #ccc; border-radius:6px; max-height:250px; width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:14px;">
         <thead>
           <tr>
             <th
@@ -125,7 +124,6 @@ CSV.then((data) => {
         </tbody>
 
       </table>
-    </div>
   `
     };
 
