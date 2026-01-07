@@ -6,6 +6,8 @@ Este proyecto está bajo la licencia [Creative Commons Attribution-NonCommercial
 
 # Galeria de mapas
 
+URL de visualización: https://ingenierogeomatico.github.io/Galeria_de_mapas/
+
 Este repositorio tiene como objetivo mostrar datos geoespaciales de forma gratuita y abierta, utilizando tecnologías accesibles y eficientes. Está basado en la API-CNIG y utiliza OpenLayers como herramienta principal.
 🎯 Objetivo
 
