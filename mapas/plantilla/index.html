@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
@@ -11,32 +12,41 @@
     <link href="https://componentes.cnig.es/api-core/assets/css/apiign.ol.min.css" rel="stylesheet" />
 
     <!-- Ficheros javascript de la API -->
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>          
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>        
-    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>   
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/vendor/browser-polyfill.js"></script>
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/apiign.ol.min.js"></script>
+    <script type="text/javascript" src="https://componentes.cnig.es/api-core/js/configuration.js"></script>
 
     <!-- Extensiones de la API-CNIG -->
 
-        
+
     <!-- estilo básico -->
-     <link href="./css/mapa.css" 
-          rel="stylesheet" />
+    <link href="./css/mapa.css" rel="stylesheet" />
 
     <!-- Importación librerías externas -->
 
     <!-- Importación librerías propias -->
 
     <!-- Extensión personalizada -->
+    <link type="text/css" rel="stylesheet" href="../../ext/cambioImpl/cambioImpl.css">
+    <script src="../../ext/cambioImpl/cambioImpl.js" type="text/javascript"></script>
+
+
 
 </head>
+
 <body>
-   
 
-  <!-- Contenedor principal del mapa -->
-    <div id="mapa"></div>
+    <!-- Div carga -->
+    <div id="cargaSVG">
+        <img src="../../img/iconos/gear-spinner.svg">
+    </div>
 
-    <script type="text/javascript"
-      src="./js/mapa.js">
-    </script>     
+    <!-- Contenedor principal del mapa -->
+    <div id="mapaDIV"></div>
+
+    <script type="text/javascript" src="./js/mapa.js">
+    </script>
+
 </body>
+
 </html>

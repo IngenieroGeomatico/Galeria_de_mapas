@@ -1,0 +1,32 @@
+.m-herramienta-container_cambImpl {
+  top: 20px;
+  left: 600px;
+}
+
+
+.buttonHerramienta_cambImpl {
+  border: 2px solid #FFF !important;
+  border-radius: 50% !important;
+  background-color: orangered !important;
+}
+
+.buttonHerramienta_cambImpl:before {
+  /*  icono a usar */
+  content: "🌐";
+  font-size: 22px;
+  font-family: none;
+  color: #FFF !important;
+}
+
+
+.buttonHerramienta_cambImpl.activated {
+  border: 2px solid #71A7D3 !important;
+  border-radius: 50% !important;
+  background-color: #ffffff !important;
+
+}
+
+.buttonHerramienta_cambImpl.activated:before {
+  background-color: #ffffff !important;
+  color: #71A7D3 !important;
+}
