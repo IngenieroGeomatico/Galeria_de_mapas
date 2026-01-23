@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <title>Visualizador base</title>
+
+  <!-- fichero estilos -->
+  <link href="https://componentes.idee.es/api-idee/assets/css/apiidee.ol.min.css" rel="stylesheet" />
+
+  <!-- Ficheros javascript de la API -->
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/vendor/browser-polyfill.js"></script>
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.ol.min.js"></script>
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>
+
+  <!-- Extensiones de la API-CNIG -->
+
+
+  <!-- estilo básico -->
+  <link href="./css/mapa.css" rel="stylesheet" />
+
+  <!-- Importación librerías externas -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+
+
+
+  <!-- Importación librerías propias -->
+  <script type="text/javascript" src="../../js/lib/transforms/formats.js"></script>
+
+
+  <!-- Extensión personalizada -->
+
+</head>
+
+<body>
+
+  <!-- Div carga -->
+  <div id="cargaSVG">
+    <img src="../../img/iconos/gear-spinner.svg">
+  </div>
+
+
+  <!-- Contenedor principal del mapa -->
+  <div id="mapa"></div>
+
+  <script type="text/javascript" src="./js/mapa.js">
+  </script>
+</body>
+
+</html>
