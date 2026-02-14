@@ -238,10 +238,16 @@ async function myFunction_CSV() {
   });
 
   dataParo = await myPromise_1_CSV;
-
-  dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV}`)
+  
+  if (mesCSV.toString().length === 1) {
+    mesCSV_S = `0${mesCSV}`
+  }
+    if ((mesCSV-1).toString().length === 1) {
+    mesCSV_1_S = `0${mesCSV-1}`
+  }
+  dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV_S}`)
   if (dataParoFiltrado.length === 0) {
-    dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV - 1}`)
+    dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV_1_S}`)
   }
 
   const propsAEliminar = ["Paro mujer edad >=45", "Paro mujer edad < 25", "Paro mujer edad 25 -45",
