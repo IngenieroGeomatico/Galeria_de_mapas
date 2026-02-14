@@ -1,39 +1,33 @@
 
-
 miPlugin_cambioImpl = new M.Plugin()
-miPlugin_cambioImpl.name = "miPlugin_cambioImpl "
+miPlugin_cambioImpl.name = "miPlugin_cambioImpl"
 
-var M_ori_ol
-var M_ori_cesium
+miPlugin_cambioImpl.addTo = (map) => {
 
+    const panelExtracontrol_cambImpl = new M.ui.Panel('toolsExtra1_cambImpl', {
+        "className": 'm-herramienta_cambImpl',
+        "collapsedButtonClass": 'm-tools',
+        "position": M.ui.position.TL
+    });
 
-const panelExtracontrol_cambImpl = new M.ui.Panel('toolsExtra1_cambImpl', {
-    "className": 'm-herramienta_cambImpl',
-    "collapsedButtonClass": 'm-tools',
-    "position": M.ui.position.TL
-});
-
-const htmlPanel =
-    `
+    const htmlPanel =
+        `
         <div class="m-control m-herramienta-container_cambImpl">
             <button id="m-herramienta-button" class="buttonHerramienta_cambImpl" title="Herramienta"></button>
         </div>
         `
 
-const control_cambImpl = new M.Control(new M.impl.Control(), 'Control_cambImpl');
-panelExtracontrol_cambImpl.addControls(control_cambImpl);
+    const control_cambImpl = new M.Control(new M.impl.Control(), 'Control_cambImpl');
+    panelExtracontrol_cambImpl.addControls(control_cambImpl);
 
-// Con esta línea, se comparte con el objeto window la variable control1
-window.control_cambImpl = control_cambImpl;
+    // Con esta línea, se comparte con el objeto window la variable control1
+    window.control_cambImpl = control_cambImpl;
 
-control_cambImpl.createView = (map) => {
-    const contenedor = document.createElement('div');
-    return contenedor;
-}
+    control_cambImpl.createView = (map) => {
+        const contenedor = document.createElement('div');
+        return contenedor;
+    }
 
-
-
-miPlugin_cambioImpl.addTo = (map) => {
 
     map.addPanels([panelExtracontrol_cambImpl]);
 
@@ -56,18 +50,12 @@ miPlugin_cambioImpl.addTo = (map) => {
     })
 
 
-    function reiniciarMapa(){
-        if (typeof IDEE.impl !== "undefined") {
-            M = IDEE
-        }
-        if (typeof M.impl !== "undefined") {
-            IDEE = M
-
-        }
+    function reiniciarMapa() {
+        M = IDEE
         /* ===============================
            3️⃣ REEMPLAZO DEL DIV DEL MAPA
         =============================== */
-        const ID_div = map.getContainer().parentElement.parentElement.id;
+        const ID_div = map.getContainer().parentElement.parentElement.id || map.getContainer().id
         const oldDiv = document.getElementById(ID_div);
 
         /* ===============================
@@ -82,7 +70,6 @@ miPlugin_cambioImpl.addTo = (map) => {
 
     control_cambImpl.activate = async () => {
         console.log('Activado');
-        delete window.M
 
         await cambioImpl("3D");
 
@@ -94,7 +81,13 @@ miPlugin_cambioImpl.addTo = (map) => {
     control_cambImpl.deactivate = async () => {
 
         console.log('Desactivado');
-        delete window.IDEE
+
+        mapaCesium = map.getMapImpl()
+        mapaCesium.useDefaultRenderLoop = false;
+        mapaCesium.screenSpaceEventHandler.destroy()
+        mapaCesium.destroy()
+        delete window.Cesium
+        delete map.getMapImpl()
 
         await cambioImpl("2D");
 
@@ -105,64 +98,44 @@ miPlugin_cambioImpl.addTo = (map) => {
 
 
 
-
     async function cambioImpl(tipo) {
+        console.log(tipo)
 
-        async function loadLibraryInIframe(url) {
+        async function loadConfig(tipo) {
+            config_c = IDEE.config
             return new Promise((resolve, reject) => {
-                const iframe = document.createElement('iframe');
-                iframe.id = 'iframeID_apiidee';
-                iframe.style.display = 'none';
-                document.body.appendChild(iframe);
+                const interval = setInterval(() => {
 
-                const idoc = iframe.contentDocument || iframe.contentWindow.document;
-                idoc.open();
-                idoc.write('<!doctype html><html><head></head><body></body></html>');
-                idoc.close();
-
-                const script = idoc.createElement('script');
-                script.src = url + '?v=' + Date.now();
-                idoc.head.appendChild(script);
-                script.onload = () => {
-                    const interval = setInterval(() => {
-                        if (typeof iframe.contentWindow.IDEE !== "undefined") {
-                            clearInterval(interval);
-                            newM = iframe.contentWindow.IDEE;
-                            document.body.removeChild(iframe);
-                            resolve(newM);
+                    if (tipo == "3D") {
+                        if (IDEE.impl.cesium == undefined) {
                             return
                         }
-                        if (typeof iframe.contentWindow.M !== "undefined") {
-                            clearInterval(interval);
-                            newM = iframe.contentWindow.M;
-                            document.body.removeChild(iframe);
-                            resolve(newM);
+                    } else if (tipo == "2D") {
+                        if (IDEE.impl.ol == undefined) {
                             return
                         }
-                    }, 100); // Check every 100ms
+                    }
 
-                };
-                script.onerror = (e) => {
-                    try { document.body.removeChild(iframe); } catch (_) {}
-                    reject(e);
-                };
-                
+                    clearInterval(interval);
+                    IDEE.config = config_c
+                    resolve(IDEE.config);
+                    return
+
+
+                }, 100); // Check every 100ms
+
             });
         }
 
-        const buscarBase = "https://componentes.cnig.es/api-core/";
-        const reemplazarBase = "https://componentes-desarrollo.idee.es/api-idee/";
 
-        const olJS = "apiign.ol.min.js";
+        const olJS = "apiidee.ol.min.js";
         const cesiumJS = "apiidee.cesium.min.js";
 
-        const olCSS = "apiign.ol.min.css";
+        const olCSS = "apiidee.ol.min.css";
         const cesiumCSS = "apiidee.cesium.min.css";
 
         const a3D = tipo === "3D";
 
-        const baseFrom = a3D ? buscarBase : reemplazarBase;
-        const baseTo = a3D ? reemplazarBase : buscarBase;
 
         const jsFrom = a3D ? olJS : cesiumJS;
         const jsTo = a3D ? cesiumJS : olJS;
@@ -177,13 +150,11 @@ miPlugin_cambioImpl.addTo = (map) => {
         for (const oldScript of scriptNodes) {
 
             if (
-                oldScript.src.includes(baseFrom) &&
-                oldScript.src.includes(jsFrom)
+                oldScript.src.includes(jsFrom) //|| oldScript.src.includes("configuration.js")
             ) {
                 const newScript = document.createElement('script');
                 newScript.src = oldScript.src
-                    .replace(baseFrom, baseTo)
-                    .replace(jsFrom, jsTo) + '?v=' + Date.now();
+                    .replace(jsFrom, jsTo)
                 newScript.defer = true;
 
                 parent = oldScript.parentNode;
@@ -192,44 +163,25 @@ miPlugin_cambioImpl.addTo = (map) => {
                 oldScript.remove();
                 parent.insertBefore(newScript, nextSibling);
 
-                M = await loadLibraryInIframe(newScript.src)
-
-            } else if (oldScript.src.includes(baseFrom)){
-                const newScript = document.createElement('script');
-                newScript.src = oldScript.src
-                    .replace(baseFrom, baseTo)
-                newScript.defer = true;
-
-                parent = oldScript.parentNode;
-                nextSibling = oldScript.nextSibling;
-
-                oldScript.remove();
-                parent.insertBefore(newScript, nextSibling);
-
+                IDEE.config = await loadConfig(tipo)
             }
+
         }
 
-        
+
         /* ===============================
            2️⃣ RECARGA DE CSS
         =============================== */
-
         document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
             if (
-                link.href.includes(baseFrom) &&
                 link.href.includes(cssFrom)
             ) {
                 link.href = link.href
-                    .replace(baseFrom, baseTo)
                     .replace(cssFrom, cssTo)
-                    .split('?')[0] + '?v=' + Date.now();
             }
         });
 
-        
     }
-
-
 
 }
 
