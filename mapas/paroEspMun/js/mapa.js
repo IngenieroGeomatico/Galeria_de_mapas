@@ -382,7 +382,7 @@ async function myFunction_CSV() {
   });
   dataPoblacionFiltrado = await myPromise_poblo_prov;
   dataPoblacionFiltrado = dataPoblacionFiltrado.filter(obj => obj["Periodo"] === `${añoCSV}`).filter(obj => obj["Sexo"] === `Total`)
-  if (csv.length === 0) {
+  if (dataPoblacionFiltrado.length === 0) {
     dataPoblacionFiltrado = csv.filter(obj => obj["Periodo"] === `${añoCSV - 1}`).filter(obj => obj["Sexo"] === `Total`)
   }
 
