@@ -22,6 +22,8 @@ class miPlugin_cambioImpl {
         }
         const sameMap = opts.sameMap || true;
 
+        const shareLayers = opts.shareLayers || false;
+
 
         const panelExtracontrol_cambImpl = new M.ui.Panel('toolsExtra1_cambImpl', {
             "className": 'm-herramienta_cambImpl',
@@ -72,22 +74,22 @@ class miPlugin_cambioImpl {
             /* ===============================
                3️⃣ REEMPLAZO DEL DIV DEL MAPA
             =============================== */
-            const ID_div = map.getContainer().parentElement.parentElement.id || map.getContainer().id
-            const oldDiv = document.getElementById(ID_div);
+            var ID_div = map.getContainer().parentElement.parentElement.id || map.getContainer().id
+            var oldDiv = document.getElementById(ID_div);
 
             /* ===============================
                4️⃣ REINICIALIZAR MAPA
             // =============================== */
             oldDiv.innerHTML = '';
-            const parent = oldDiv.parentNode;
-            const nextSibling = oldDiv.nextSibling;
-            const newDIV = document.createElement('div');
+            var parent = oldDiv.parentNode;
+            var nextSibling = oldDiv.nextSibling;
+            var newDIV = document.createElement('div');
 
             oldDiv.remove();
             parent.insertBefore(newDIV, nextSibling);
             newDIV.id = ID_div;
             // oldDiv.style.height = 'inherit';
-            mapa(); // tu función de arranque
+
             if (sameMap) {
                 mapsFunction.same();
             } else {
