@@ -1,191 +1,220 @@
 
-miPlugin_cambioImpl = new M.Plugin()
-miPlugin_cambioImpl.name = "miPlugin_cambioImpl"
+class miPlugin_cambioImpl {
+    constructor(options = {}) {
+        this.name = 'miPlugin_cambioImpl';
+        this.options = options || {};
+    }
 
-miPlugin_cambioImpl.addTo = (map) => {
+    // `addTo` será invocado por el framework cuando el plugin se añada al mapa
+    addTo(map) {
+        const opts = this.options || {};
+        const buttonTitle = opts.buttonTitle || 'Herramienta';
 
-    const panelExtracontrol_cambImpl = new M.ui.Panel('toolsExtra1_cambImpl', {
-        "className": 'm-herramienta_cambImpl',
-        "collapsedButtonClass": 'm-tools',
-        "position": M.ui.position.TL
-    });
+        // mapsFunction puede ser:
+        // - una función única: se asigna a `mapsFunction.same`
+        // - un objeto con `ol` y/o `Cesium` (cada uno puede ser función)
+        const mapsFunction = opts.mapsFunction || { ol: undefined, Cesium: undefined };
+        if (typeof opts.mapsFunction === 'function') {
+            mapsFunction.same = opts.mapsFunction;
+        } else if (opts.mapsFunction && typeof opts.mapsFunction === 'object') {
+            if (typeof opts.mapsFunction.ol === 'function') mapsFunction.ol = opts.mapsFunction.ol;
+            if (typeof opts.mapsFunction.Cesium === 'function') mapsFunction.Cesium = opts.mapsFunction.Cesium;
+        }
+        const sameMap = opts.sameMap || true;
 
-    const htmlPanel =
-        `
+
+        const panelExtracontrol_cambImpl = new M.ui.Panel('toolsExtra1_cambImpl', {
+            "className": 'm-herramienta_cambImpl',
+            "collapsedButtonClass": 'm-tools',
+            "position": M.ui.position.TL
+        });
+
+        const htmlPanel =
+            `
         <div class="m-control m-herramienta-container_cambImpl">
-            <button id="m-herramienta-button" class="buttonHerramienta_cambImpl" title="Herramienta"></button>
+            <button id="APIIDEE-herramienta-button" class="buttonHerramienta_cambImpl" title="${buttonTitle}"></button>
         </div>
         `
 
-    const control_cambImpl = new M.Control(new M.impl.Control(), 'Control_cambImpl');
-    panelExtracontrol_cambImpl.addControls(control_cambImpl);
+        const control_cambImpl = new M.Control(new M.impl.Control(), 'Control_cambImpl');
+        panelExtracontrol_cambImpl.addControls(control_cambImpl);
 
-    // Con esta línea, se comparte con el objeto window la variable control1
-    window.control_cambImpl = control_cambImpl;
+        // Con esta línea, se comparte con el objeto window la variable control1
+        window.control_cambImpl = control_cambImpl;
 
-    control_cambImpl.createView = (map) => {
-        const contenedor = document.createElement('div');
-        return contenedor;
-    }
-
-
-    map.addPanels([panelExtracontrol_cambImpl]);
-
-    div = document.querySelector('.m-herramienta_cambImpl .m-panel-controls')
-    div.innerHTML = htmlPanel
-
-    btn = document.querySelector('.buttonHerramienta_cambImpl')
-
-    divPanelol = document.querySelector('.ol-overlaycontainer-stopevent')
-
-    control_cambImpl.manageActivation(div);
-
-    btn.addEventListener('click', (e) => {
-
-        if (btn.classList.contains('activated')) {
-            control_cambImpl.deactivate();
-        } else {
-            control_cambImpl.activate();
+        control_cambImpl.createView = (map) => {
+            const contenedor = document.createElement('div');
+            return contenedor;
         }
-    })
 
 
-    function reiniciarMapa() {
-        M = IDEE
-        /* ===============================
-           3️⃣ REEMPLAZO DEL DIV DEL MAPA
-        =============================== */
-        const ID_div = map.getContainer().parentElement.parentElement.id || map.getContainer().id
-        const oldDiv = document.getElementById(ID_div);
+        map.addPanels([panelExtracontrol_cambImpl]);
 
-        /* ===============================
-           4️⃣ REINICIALIZAR MAPA
-        // =============================== */
-        oldDiv.innerHTML = '';
-        parent = oldDiv.parentNode;
-        nextSibling = oldDiv.nextSibling;
-        const newDIV = document.createElement('div');
+        const div = document.querySelector('.m-herramienta_cambImpl .m-panel-controls');
+        div.innerHTML = htmlPanel;
 
-        oldDiv.remove();
-        parent.insertBefore(newDIV, nextSibling);
-        newDIV.id = ID_div;
-        // oldDiv.style.height = 'inherit';
-        mapa(); // tu función de arranque
-    }
+        var btn = document.getElementById('APIIDEE-herramienta-button');
+
+        control_cambImpl.manageActivation(div);
+
+        btn.addEventListener('click', (e) => {
+
+            if (btn.classList.contains('activated')) {
+                control_cambImpl.deactivate();
+            } else {
+                control_cambImpl.activate();
+            }
+        })
 
 
+        async function reiniciarMapa(tipo) {
+            M = IDEE
+            /* ===============================
+               3️⃣ REEMPLAZO DEL DIV DEL MAPA
+            =============================== */
+            const ID_div = map.getContainer().parentElement.parentElement.id || map.getContainer().id
+            const oldDiv = document.getElementById(ID_div);
 
-    control_cambImpl.activate = async () => {
-        console.log('Activado');
+            /* ===============================
+               4️⃣ REINICIALIZAR MAPA
+            // =============================== */
+            oldDiv.innerHTML = '';
+            const parent = oldDiv.parentNode;
+            const nextSibling = oldDiv.nextSibling;
+            const newDIV = document.createElement('div');
 
-        await cambioImpl("3D");
-
-        await reiniciarMapa();
-
-        btn.classList.add("activated");
-    };
-
-    control_cambImpl.deactivate = async () => {
-
-        console.log('Desactivado');
-
-        mapajs.getMapImpl().scene.globe.pickWorldCoordinates = function () { }
-
-        await cambioImpl("2D");
-
-        await reiniciarMapa();
-
-        btn.classList.remove("activated");
-    }
+            oldDiv.remove();
+            parent.insertBefore(newDIV, nextSibling);
+            newDIV.id = ID_div;
+            // oldDiv.style.height = 'inherit';
+            mapa(); // tu función de arranque
+            if (sameMap) {
+                mapsFunction.same();
+            } else {
+                if (tipo == "Cesium") {
+                    mapsFunction.Cesium();
+                } else {
+                    mapsFunction.ol();
+                }
+            }
+        }
 
 
 
-    async function cambioImpl(tipo) {
-        console.log(tipo)
+        control_cambImpl.activate = async () => {
+            console.log('Activado');
 
-        async function loadConfig(tipo) {
-            config_c = IDEE.config
-            return new Promise((resolve, reject) => {
-                const interval = setInterval(() => {
+            var tipo = "Cesium"
 
-                    if (tipo == "3D") {
-                        if (IDEE.impl.cesium == undefined) {
-                            return
+            await cambioImpl(tipo);
+
+            await reiniciarMapa(tipo);
+            btn = document.getElementById('APIIDEE-herramienta-button');
+            btn.classList.add("activated");
+        };
+
+        control_cambImpl.deactivate = async () => {
+
+            console.log('Desactivado');
+
+            mapajs.getMapImpl().scene.globe.pickWorldCoordinates = function () { }
+
+            var tipo = "OL"
+
+            await cambioImpl(tipo);
+
+            await reiniciarMapa(tipo);
+
+            btn = document.getElementById('APIIDEE-herramienta-button');
+            btn.classList.remove("activated");
+        }
+
+
+
+        async function cambioImpl(tipo) {
+            console.log(tipo)
+
+            async function loadConfig(tipo) {
+                const config_c = IDEE.config
+                return new Promise((resolve, reject) => {
+                    const interval = setInterval(() => {
+
+                        if (tipo == "Cesium") {
+                            if (IDEE.impl.cesium == undefined) {
+                                return
+                            }
+                        } else if (tipo == "OL") {
+                            if (IDEE.impl.ol == undefined) {
+                                return
+                            }
                         }
-                    } else if (tipo == "2D") {
-                        if (IDEE.impl.ol == undefined) {
-                            return
-                        }
-                    }
 
-                    clearInterval(interval);
-                    IDEE.config = config_c
-                    resolve(IDEE.config);
-                    return
+                        clearInterval(interval);
+                        IDEE.config = config_c
+                        resolve(IDEE.config);
+                        return
 
 
-                }, 100); // Check every 100ms
+                    }, 100); // Check every 100ms
 
+                });
+            }
+
+
+            const olJS = "apiidee.ol.min.js";
+            const cesiumJS = "apiidee.cesium.min.js";
+
+            const olCSS = "apiidee.ol.min.css";
+            const cesiumCSS = "apiidee.cesium.min.css";
+
+            const a3D = tipo === "Cesium";
+
+
+            const jsFrom = a3D ? olJS : cesiumJS;
+            const jsTo = a3D ? cesiumJS : olJS;
+
+            const cssFrom = a3D ? olCSS : cesiumCSS;
+            const cssTo = a3D ? cesiumCSS : olCSS;
+
+            /* ===============================
+               1️⃣ RECARGA DE SCRIPTS JS
+            =============================== */
+            const scriptNodes = Array.from(document.querySelectorAll('script[src]'));
+            for (const oldScript of scriptNodes) {
+
+                if (
+                    oldScript.src.includes(jsFrom) //|| oldScript.src.includes("configuration.js")
+                ) {
+                    const newScript = document.createElement('script');
+                    newScript.src = oldScript.src
+                        .replace(jsFrom, jsTo)
+                    newScript.defer = true;
+
+                    const parent = oldScript.parentNode;
+                    const nextSibling = oldScript.nextSibling;
+
+                    oldScript.remove();
+                    parent.insertBefore(newScript, nextSibling);
+
+                    IDEE.config = await loadConfig(tipo)
+                }
+
+            }
+
+
+            /* ===============================
+               2️⃣ RECARGA DE CSS
+            =============================== */
+            document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+                if (
+                    link.href.includes(cssFrom)
+                ) {
+                    link.href = link.href
+                        .replace(cssFrom, cssTo)
+                }
             });
-        }
-
-
-        const olJS = "apiidee.ol.min.js";
-        const cesiumJS = "apiidee.cesium.min.js";
-
-        const olCSS = "apiidee.ol.min.css";
-        const cesiumCSS = "apiidee.cesium.min.css";
-
-        const a3D = tipo === "3D";
-
-
-        const jsFrom = a3D ? olJS : cesiumJS;
-        const jsTo = a3D ? cesiumJS : olJS;
-
-        const cssFrom = a3D ? olCSS : cesiumCSS;
-        const cssTo = a3D ? cesiumCSS : olCSS;
-
-        /* ===============================
-           1️⃣ RECARGA DE SCRIPTS JS
-        =============================== */
-        const scriptNodes = Array.from(document.querySelectorAll('script[src]'));
-        for (const oldScript of scriptNodes) {
-
-            if (
-                oldScript.src.includes(jsFrom) //|| oldScript.src.includes("configuration.js")
-            ) {
-                const newScript = document.createElement('script');
-                newScript.src = oldScript.src
-                    .replace(jsFrom, jsTo)
-                newScript.defer = true;
-
-                parent = oldScript.parentNode;
-                nextSibling = oldScript.nextSibling;
-
-                oldScript.remove();
-                parent.insertBefore(newScript, nextSibling);
-
-                IDEE.config = await loadConfig(tipo)
-            }
 
         }
-
-
-        /* ===============================
-           2️⃣ RECARGA DE CSS
-        =============================== */
-        document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
-            if (
-                link.href.includes(cssFrom)
-            ) {
-                link.href = link.href
-                    .replace(cssFrom, cssTo)
-            }
-        });
 
     }
-
 }
-
-
-
