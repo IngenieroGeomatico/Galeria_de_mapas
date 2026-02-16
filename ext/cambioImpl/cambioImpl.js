@@ -62,6 +62,13 @@ miPlugin_cambioImpl.addTo = (map) => {
            4️⃣ REINICIALIZAR MAPA
         // =============================== */
         oldDiv.innerHTML = '';
+        parent = oldDiv.parentNode;
+        nextSibling = oldDiv.nextSibling;
+        const newDIV = document.createElement('div');
+
+        oldDiv.remove();
+        parent.insertBefore(newDIV, nextSibling);
+        newDIV.id = ID_div;
         // oldDiv.style.height = 'inherit';
         mapa(); // tu función de arranque
     }
@@ -82,12 +89,7 @@ miPlugin_cambioImpl.addTo = (map) => {
 
         console.log('Desactivado');
 
-        mapaCesium = map.getMapImpl()
-        mapaCesium.useDefaultRenderLoop = false;
-        mapaCesium.screenSpaceEventHandler.destroy()
-        mapaCesium.destroy()
-        delete window.Cesium
-        delete map.getMapImpl()
+        mapajs.getMapImpl().scene.globe.pickWorldCoordinates = function () { }
 
         await cambioImpl("2D");
 
