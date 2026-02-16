@@ -142,6 +142,9 @@ class miPlugin_cambioImpl {
             var p1 = [bbox.x.min, bbox.y.min];
             var p2 = [bbox.x.max, bbox.y.max];
 
+            map.getMapImpl().scene.globe.pickWorldCoordinates = function () { };
+
+
             await cambioImpl(tipo);
 
             var newMap = await reiniciarMapa(tipo);
