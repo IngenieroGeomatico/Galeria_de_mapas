@@ -68,7 +68,6 @@ class miPlugin_cambioImpl {
             }
         })
 
-
         async function reiniciarMapa(tipo) {
             M = IDEE
             /* ===============================
@@ -91,12 +90,12 @@ class miPlugin_cambioImpl {
             // oldDiv.style.height = 'inherit';
 
             if (sameMap) {
-                mapsFunction.same();
+                return mapsFunction.same();
             } else {
                 if (tipo == "Cesium") {
-                    mapsFunction.Cesium();
+                    return mapsFunction.Cesium();
                 } else if (tipo == "OL") {
-                    mapsFunction.ol();
+                    return mapsFunction.ol();
                 } else {
                     console.error("Tipo no permitido");
                     return
@@ -104,37 +103,61 @@ class miPlugin_cambioImpl {
             }
         }
 
-
-
         control_cambImpl.activate = async () => {
             console.log('Activado');
 
             var tipo = "Cesium"
 
+            var bbox = map.getBbox()
+            await localStorage.setItem("EPSG_OL", map.getProjection().code);
+            var p1 = [bbox.x.min, bbox.y.min];
+            var p2 = [bbox.x.max, bbox.y.max];
+
             await cambioImpl(tipo);
 
-            await reiniciarMapa(tipo);
-            btn = document.getElementById('APIIDEE-herramienta-button');
-            btn.classList.add("activated");
+            var newMap = await reiniciarMapa(tipo);
+            btn = await document.getElementById('APIIDEE-herramienta-button');
+            await btn.classList.add("activated");
+
+            if (shareView) {
+                var p1_t = await IDEE.utils.reproject(p1, map.getProjection().code, "EPSG:4326");
+                var p2_t = await IDEE.utils.reproject(p2, map.getProjection().code, "EPSG:4326");
+                var newBbox = [p1_t[0], p1_t[1], p2_t[0], p2_t[1]];
+                await newMap.setBbox(newBbox);
+            }
+
+
         };
 
         control_cambImpl.deactivate = async () => {
 
             console.log('Desactivado');
 
-            mapajs.getMapImpl().scene.globe.pickWorldCoordinates = function () { }
+
 
             var tipo = "OL"
 
+            var bbox = map.getBbox()
+
+            var p1 = [bbox.x.min, bbox.y.min];
+            var p2 = [bbox.x.max, bbox.y.max];
+
             await cambioImpl(tipo);
 
-            await reiniciarMapa(tipo);
+            var newMap = await reiniciarMapa(tipo);
 
-            btn = document.getElementById('APIIDEE-herramienta-button');
-            btn.classList.remove("activated");
+            btn = await document.getElementById('APIIDEE-herramienta-button');
+            await btn.classList.remove("activated");
+
+            if (shareView) {
+
+                var p1_t = await IDEE.utils.reproject(p1, map.getProjection().code, localStorage.getItem("EPSG_OL", "EPSG:3857"));
+                var p2_t = await IDEE.utils.reproject(p2, map.getProjection().code, localStorage.getItem("EPSG_OL", "EPSG:3857"));
+
+                var newBbox = [p1_t[0], p1_t[1], p2_t[0], p2_t[1]];
+                await newMap.setBbox(newBbox);
+            }
         }
-
-
 
         async function cambioImpl(tipo) {
             console.log(tipo)
@@ -220,6 +243,7 @@ class miPlugin_cambioImpl {
             });
 
         }
+
 
     }
 }
