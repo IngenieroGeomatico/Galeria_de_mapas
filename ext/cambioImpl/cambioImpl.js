@@ -21,8 +21,8 @@ class miPlugin_cambioImpl {
             if (typeof opts.mapsFunction.Cesium === 'function') mapsFunction.Cesium = opts.mapsFunction.Cesium;
         }
         const sameMap = opts.sameMap || true;
-
         const shareLayers = opts.shareLayers || false;
+        const shareView = opts.shareView || false;
 
 
         const panelExtracontrol_cambImpl = new M.ui.Panel('toolsExtra1_cambImpl', {
@@ -95,8 +95,11 @@ class miPlugin_cambioImpl {
             } else {
                 if (tipo == "Cesium") {
                     mapsFunction.Cesium();
-                } else {
+                } else if (tipo == "OL") {
                     mapsFunction.ol();
+                } else {
+                    console.error("Tipo no permitido");
+                    return
                 }
             }
         }
