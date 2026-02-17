@@ -103,15 +103,31 @@ class miPlugin_cambioImpl {
             }
         }
 
+        const porcAltZoom = 2.5
+
         control_cambImpl.activate = async () => {
             console.log('Activado');
 
             var tipo = "Cesium"
 
-            var bbox = map.getBbox()
-            await localStorage.setItem("EPSG_OL", map.getProjection().code);
-            var p1 = [bbox.x.min, bbox.y.min];
-            var p2 = [bbox.x.max, bbox.y.max];
+            if (shareView) {
+                var center = map.getCenter()
+                var zoom = map.getZoom()
+                var zoomInt = parseInt(zoom)
+                var zoomInt1 = zoomInt + 1
+                var altitudeZoomInt = map.zoom_meters[zoomInt]
+                var altitudeZoomInt1 = map.zoom_meters[zoomInt1]
+                var zoomFrac = zoom - zoomInt;
+                var altitude = await altitudeZoomInt + zoomFrac * (altitudeZoomInt1 - altitudeZoomInt);
+                await localStorage.setItem("EPSG_OL", map.getProjection().code);
+                var p1 = [center.x, center.y];
+            }
+
+            if (shareLayers) {
+                var Overlaylayers = await map.getOverlayLayers();
+                var BaseLayers = await map.getBaseLayers();
+            }
+
 
             await cambioImpl(tipo);
 
@@ -121,26 +137,78 @@ class miPlugin_cambioImpl {
 
             if (shareView) {
                 var p1_t = await IDEE.utils.reproject(p1, map.getProjection().code, "EPSG:4326");
-                var p2_t = await IDEE.utils.reproject(p2, map.getProjection().code, "EPSG:4326");
-                var newBbox = [p1_t[0], p1_t[1], p2_t[0], p2_t[1]];
-                await newMap.setBbox(newBbox);
+                await newMap.setCenter(p1_t);
+                newMap.setZoom(altitude / porcAltZoom, true)
             }
 
+            if (shareLayers) {
+                var mapaCesium = newMap.getMapImpl()
+                mapaCesium.scene.globe.depthTestAgainstTerrain = true;
+                for (var i = 0; i < Overlaylayers.length; i++) {
+                    if (Overlaylayers[i].type == "Vector") {
+                        var l_source = Overlaylayers[i].toGeoJSON();
+                        var l = new IDEE.layer.GeoJSON({
+                            source: l_source
+                        })
+                        var l_styleOpt = await Overlaylayers[i].getStyle().getOptions()
+                        var l_style = new IDEE.style.Generic(l_styleOpt)
+                        l_style.getOptions().polygon.extrudedHeight = 1000
 
-        };
+                        await l.setStyle(l_style);
+                        await newMap.addLayers(l);
+
+                    }
+                }
+                // await newMap.addLayer(layers[i]);
+            }
+        }
+
+
 
         control_cambImpl.deactivate = async () => {
 
             console.log('Desactivado');
-
-
-
             var tipo = "OL"
 
-            var bbox = map.getBbox()
+            if (shareView) {
 
-            var p1 = [bbox.x.min, bbox.y.min];
-            var p2 = [bbox.x.max, bbox.y.max];
+                var center = map.getCenter()
+                var altitude = map.getZoom(true, true) * porcAltZoom
+
+                var zoomInt = null;
+                var altitudeZoomInt = null;
+                var altitudeZoomInt1 = null;
+
+                for (var i = 0; i < Object.values(map.zoom_meters).length - 1; i++) {
+                    if (
+                        map.zoom_meters[i] >= altitude &&
+                        map.zoom_meters[i + 1] <= altitude
+                    ) {
+                        zoomInt = i;
+                        altitudeZoomInt = map.zoom_meters[i];
+                        altitudeZoomInt1 = map.zoom_meters[i + 1];
+                        break;
+                    }
+                }
+
+                if (zoomInt === null) {
+                    console.warn("No se encontró tramo para la altitud:", altitude);
+                    return;
+                }
+
+                var zoomFrac =
+                    (altitude - altitudeZoomInt) /
+                    (altitudeZoomInt1 - altitudeZoomInt);
+
+                var zoom = zoomInt + zoomFrac;
+
+
+                var p1 = [center.x, center.y];
+
+
+            }
+
+
 
             map.getMapImpl().scene.globe.pickWorldCoordinates = function () { };
 
@@ -155,10 +223,9 @@ class miPlugin_cambioImpl {
             if (shareView) {
 
                 var p1_t = await IDEE.utils.reproject(p1, map.getProjection().code, localStorage.getItem("EPSG_OL", "EPSG:3857"));
-                var p2_t = await IDEE.utils.reproject(p2, map.getProjection().code, localStorage.getItem("EPSG_OL", "EPSG:3857"));
+                await newMap.setCenter(p1_t);
+                await newMap.setZoom(Number(zoom));
 
-                var newBbox = [p1_t[0], p1_t[1], p2_t[0], p2_t[1]];
-                await newMap.setBbox(newBbox);
             }
         }
 

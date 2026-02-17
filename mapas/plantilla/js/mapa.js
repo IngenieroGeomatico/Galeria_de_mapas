@@ -19,7 +19,8 @@ function mapa() {
     // o usar la misma función para ambos: mapsFunction: mapa
     mapsFunction: mapa,
     sameMap: true,
-    shareView: true
+    shareView: true,
+    shareLayers: true
   });
 
   // Añadir el plugin correctamente al mapa
