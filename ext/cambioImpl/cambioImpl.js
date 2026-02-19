@@ -157,9 +157,10 @@ class miPlugin_cambioImpl {
                         await l.setStyle(l_style);
                         await newMap.addLayers(l);
 
+                    } else {
+                        await newMap.addLayers(Overlaylayers[i]);
                     }
                 }
-                // await newMap.addLayer(layers[i]);
             }
         }
 
