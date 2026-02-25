@@ -9,7 +9,6 @@ class miPlugin_cambioImpl {
     addTo(map) {
         const opts = this.options || {};
         const buttonTitle = opts.buttonTitle || 'Herramienta';
-
         // mapsFunction puede ser:
         // - una función única: se asigna a `mapsFunction.same`
         // - un objeto con `ol` y/o `Cesium` (cada uno puede ser función)
@@ -20,9 +19,9 @@ class miPlugin_cambioImpl {
             if (typeof opts.mapsFunction.ol === 'function') mapsFunction.ol = opts.mapsFunction.ol;
             if (typeof opts.mapsFunction.Cesium === 'function') mapsFunction.Cesium = opts.mapsFunction.Cesium;
         }
-        const sameMap = opts.sameMap || true;
-        const shareLayers = opts.shareLayers || false;
-        const shareView = opts.shareView || false;
+        const sameMap = opts.sameMap ?? true;
+        const shareLayers = opts.shareLayers ?? false;
+        const shareView = opts.shareView ?? false;
 
 
         const panelExtracontrol_cambImpl = new M.ui.Panel('toolsExtra1_cambImpl', {
@@ -106,7 +105,7 @@ class miPlugin_cambioImpl {
         const porcAltZoom = 2.5
 
         control_cambImpl.activate = async () => {
-            console.log('Activado');
+            // console.log('Activado');
 
             var tipo = "Cesium"
 
@@ -130,7 +129,6 @@ class miPlugin_cambioImpl {
 
 
             await cambioImpl(tipo);
-
             var newMap = await reiniciarMapa(tipo);
             btn = await document.getElementById('APIIDEE-herramienta-button');
             await btn.classList.add("activated");
@@ -168,7 +166,7 @@ class miPlugin_cambioImpl {
 
         control_cambImpl.deactivate = async () => {
 
-            console.log('Desactivado');
+            // console.log('Desactivado');
             var tipo = "OL"
 
             if (shareView) {
@@ -231,7 +229,7 @@ class miPlugin_cambioImpl {
         }
 
         async function cambioImpl(tipo) {
-            console.log(tipo)
+            // console.log(tipo)
 
             async function loadConfig(tipo) {
                 const config_c = IDEE.config
