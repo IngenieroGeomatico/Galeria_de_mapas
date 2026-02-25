@@ -36,27 +36,67 @@ function mapa() {
   });
   mapajs.addLayers(layer1)
 
+
+  // Añadir el plugin correctamente al mapa
+  mapajs.addPlugin(pluginCamioImplFunc());
+
+  SVGCarga.hidden = true
+  console.log("--------------------------------------, 1")
+  return mapajs
+
+}
+
+
+function mapa2() {
+
+  SVGCarga.hidden = false
+
+  mapajs2 = M.map({
+    container: "mapaDIV"
+  });
+
+
+  const layer1 = new IDEE.layer.GeoJSON({
+    name: "Provincias",
+    url: "https://api-features.ign.es/collections/nuc/items?f=json"
+  }, {
+    // aplica un estilo a la capa
+    style: new IDEE.style.Generic({
+      polygon: {
+        fill: {
+          color: 'red'
+        }
+      }
+    })
+  }, {
+  });
+  mapajs2.addLayers(layer1)
+
   
 
   // Pasando opciones al plugin en el momento de registrarlo
-  const pluglinCambioImpl = new miPlugin_cambioImpl({
-    buttonTitle: 'cambiar impl',
-    // Pasar la referencia a la función sin paréntesis para evitar su ejecución inmediata
-    // mapsFunction: { ol: mapa, Cesium: mapa }
-    // o usar la misma función para ambos: mapsFunction: mapa
-    mapsFunction: mapa,
-    sameMap: true,
-    shareView: true,
-    shareLayers: true
-  });
+  
 
   // Añadir el plugin correctamente al mapa
-  mapajs.addPlugin(pluglinCambioImpl);
+  mapajs2.addPlugin(pluginCamioImplFunc());
 
   SVGCarga.hidden = true
+  console.log("--------------------------------------, 2")
+  return mapajs2
 
-  return mapajs
+}
 
+function pluginCamioImplFunc(){
+  return pluglinCambioImpl = new miPlugin_cambioImpl({
+    buttonTitle: 'cambiar impl :)',
+    // Pasar la referencia a la función sin paréntesis para evitar su ejecución inmediata
+    mapsFunction: {same:mapa, ol: mapa, Cesium: mapa2 },
+    // o usar la misma función para ambos: mapsFunction: mapa
+    // mapsFunction: mapa,
+    sameMap: false,
+    shareView: true,
+    shareLayers: false
+  });
 }
 
 mapa() 
