@@ -34,7 +34,7 @@ function mapa() {
       polygon: {
         fill: {
           color: 'orange',
-          opacity: 0.6
+          opacity: 0.4
         },
         stroke: {
           color: 'red',
@@ -93,7 +93,7 @@ function mapa2() {
       polygon: {
         fill: {
           color: 'orange',
-          opacity: 0.6
+          opacity: 0.4
         },
         stroke: {
           color: 'red',
