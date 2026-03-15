@@ -153,9 +153,33 @@ function pluginCamioImplFunc() {
 mapajs_0 = mapa()
 
 
-mapajs_0.getMapImpl().on('rendercomplete', () => {
-  capa = mapajs_0.getOverlayLayers()[0]
-  mapajs_0.setBbox(capa.getFeaturesExtent())
-  mapajs_0.setZoom(mapajs_0.getZoom() - 0.5)
-});
+function _onRenderComplete() {
+  const impl = mapajs_0.getMapImpl();
+  const capa = mapajs_0.getOverlayLayers()[0];
+  if (!capa) return;
+  mapajs_0.setBbox(capa.getFeaturesExtent());
+  mapajs_0.setZoom(mapajs_0.getZoom() - 0.5);
+
+  if (impl && typeof impl.un === 'function') {
+    impl.un('rendercomplete', _onRenderComplete);
+    return;
+  }
+  if (impl && typeof impl.off === 'function') {
+    impl.off('rendercomplete', _onRenderComplete);
+    return;
+  }
+  if (impl && typeof impl.removeListener === 'function') {
+    impl.removeListener('rendercomplete', _onRenderComplete);
+    return;
+  }
+}
+
+const _implForOn = mapajs_0.getMapImpl();
+if (_implForOn && typeof _implForOn.on === 'function') {
+  _implForOn.on('rendercomplete', _onRenderComplete);
+} else if (_implForOn && typeof _implForOn.addEventListener === 'function') {
+  _implForOn.addEventListener('rendercomplete', _onRenderComplete);
+} else {
+  console.warn('rendercomplete: no compatible add-listener method found on map impl');
+}
 
