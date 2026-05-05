@@ -120,9 +120,9 @@ const mapajs = IDEE.map({
 const mapaCesium = mapajs.getMapImpl();
 
 // --- 🔆 Añadir el efecto de lente solar (Lens Flare) ---
-  const lensFlare = mapaCesium.scene.postProcessStages.add(
-    Cesium.PostProcessStageLibrary.createLensFlareStage()
-  );
+const lensFlare = mapaCesium.scene.postProcessStages.add(
+  Cesium.PostProcessStageLibrary.createLensFlareStage()
+);
 
 
 // Skybox y ocultar Tierra/atmósfera
@@ -357,8 +357,10 @@ layerSolLuna.setStyle(estilo_layerSolLuna);
 
 mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador, layerPlanetas, layerSolLuna]);
 
-mapajs.addPlugin(miPlugin)
-mapajs.addPlugin(miPlugin2)
+pluglinCambioCapaBase = new miPlugin_baseLayer()
+mapajs.addPlugin(pluglinCambioCapaBase)
+pluginCapasSuperpuestas = new miPlugin_layerSwitcher()
+mapajs.addPlugin(pluginCapasSuperpuestas)
 
 
 
@@ -449,7 +451,7 @@ async function cargarPlanetas() {
 }
 
 async function actualizarSolYLuna(alturaCero = false) {
-  const geojsonSolLuna = await getSunAndMoonGeoJSON(alturaCero=alturaCero);
+  const geojsonSolLuna = await getSunAndMoonGeoJSON(alturaCero = alturaCero);
   if (geojsonSolLuna && geojsonSolLuna.features.length > 0) {
     layerSolLuna.setSource(geojsonSolLuna);
   } else {
@@ -685,7 +687,7 @@ function actualizarCielo(fechaJulian = null) {
       geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
       layerPlanetas.setSource(geojsonPlanets);
     }
-    actualizarSolYLuna() 
+    actualizarSolYLuna()
     return;
   }
 
@@ -714,7 +716,7 @@ function actualizarCielo(fechaJulian = null) {
         geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
         layerPlanetas.setSource(geojsonPlanets);
       }
-      actualizarSolYLuna() 
+      actualizarSolYLuna()
     }, 1000);
   }
 }

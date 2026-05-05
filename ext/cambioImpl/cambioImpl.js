@@ -104,23 +104,116 @@ class miPlugin_cambioImpl {
 
         const porcAltZoom = 2.5
 
+        /**
+         * Transfiere capas de Overlaylayers a newMap.
+         * Si addExtrusion es true, intentará añadir `extrudedHeight` a opciones de polígono.
+         */
+        async function transferOverlayLayers(newMap, Overlaylayers, { addExtrusion = false } = {}) {
+            for (var i = 0; i < Overlaylayers.length; i++) {
+                if (Overlaylayers[i].type == "Vector") {
+                    var l_source = Overlaylayers[i].toGeoJSON();
+                    var l = new IDEE.layer.GeoJSON({
+                        source: l_source
+                    })
+                    var l_styleOpt = await Overlaylayers[i].getStyle().getOptions()
+                    var l_style = new IDEE.style.Generic(l_styleOpt)
+                    if (addExtrusion) {
+                        var opts = l_style.getOptions();
+                        if (!opts.polygon) opts.polygon = {};
+                        opts.polygon.extrudedHeight = 1000;
+                    }
+
+                    await l.setStyle(l_style);
+                    await newMap.addLayers(l);
+
+                } else {
+                    var existe = newMap.getLayers().some(layer =>
+                        JSON.stringify(layer.constructorParameters?.parameters) ===
+                        JSON.stringify(Overlaylayers[i].constructorParameters?.parameters)
+                    );
+                    if (!existe) {
+                        await newMap.addLayers(Overlaylayers[i]);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Captura el estado necesario para `shareView` antes del reinicio.
+         * mode: 'activate' (a Cesium) | 'deactivate' (a OL)
+         */
+        function captureShareViewState(mode) {
+            if (!shareView) return null;
+            try {
+                const center = map.getCenter();
+                if (!center) return null;
+
+                if (mode === 'activate') {
+                    const zoom = map.getZoom();
+                    const zoomInt = parseInt(zoom);
+                    const zoomInt1 = zoomInt + 1;
+                    const altitudeZoomInt = map.zoom_meters[zoomInt];
+                    const altitudeZoomInt1 = map.zoom_meters[zoomInt1];
+                    const zoomFrac = zoom - zoomInt;
+                    const altitude = altitudeZoomInt + zoomFrac * (altitudeZoomInt1 - altitudeZoomInt);
+                    try { localStorage.setItem("EPSG_OL", map.getProjection().code); } catch (e) { }
+                    return { p1: [center.x, center.y], altitude, srcProj: map.getProjection && map.getProjection() && map.getProjection().code };
+                } else {
+                    const altitude = map.getZoom(true, true) * porcAltZoom;
+                    var zoomInt = null;
+                    var altitudeZoomInt = null;
+                    var altitudeZoomInt1 = null;
+
+                    for (var i = 0; i < Object.values(map.zoom_meters).length - 1; i++) {
+                        if (
+                            map.zoom_meters[i] >= altitude &&
+                            map.zoom_meters[i + 1] <= altitude
+                        ) {
+                            zoomInt = i;
+                            altitudeZoomInt = map.zoom_meters[i];
+                            altitudeZoomInt1 = map.zoom_meters[i + 1];
+                            break;
+                        }
+                    }
+
+                    if (zoomInt === null) {
+                        return null;
+                    }
+
+                    var zoomFrac = (altitude - altitudeZoomInt) / (altitudeZoomInt1 - altitudeZoomInt);
+                    var zoom = zoomInt + zoomFrac;
+                    return { p1: [center.x, center.y], zoom, srcProj: map.getProjection && map.getProjection() && map.getProjection().code };
+                }
+            } catch (e) {
+                console.warn('captureShareViewState fallo', e);
+                return null;
+            }
+        }
+
+        async function applyShareViewState(newMap, state, mode) {
+            if (!shareView || !state) return;
+            try {
+                const srcProj = state.srcProj || localStorage.getItem("EPSG_OL") || "EPSG:3857";
+                const targetProj = (mode === 'activate') ? "EPSG:4326" : (localStorage.getItem("EPSG_OL") || "EPSG:3857");
+                if (!state.p1) return;
+                const p1_t = await IDEE.utils.reproject(state.p1, srcProj, targetProj);
+                await newMap.setCenter(p1_t);
+                if (mode === 'activate' && state.altitude !== undefined) {
+                    newMap.setZoom(state.altitude / porcAltZoom, true);
+                } else if (mode === 'deactivate' && state.zoom !== undefined) {
+                    await newMap.setZoom(Number(state.zoom));
+                }
+            } catch (e) {
+                console.warn('applyShareViewState fallo', e);
+            }
+        }
+
         control_cambImpl.activate = async () => {
             // console.log('Activado');
 
             var tipo = "Cesium"
 
-            if (shareView) {
-                var center = map.getCenter()
-                var zoom = map.getZoom()
-                var zoomInt = parseInt(zoom)
-                var zoomInt1 = zoomInt + 1
-                var altitudeZoomInt = map.zoom_meters[zoomInt]
-                var altitudeZoomInt1 = map.zoom_meters[zoomInt1]
-                var zoomFrac = zoom - zoomInt;
-                var altitude = await altitudeZoomInt + zoomFrac * (altitudeZoomInt1 - altitudeZoomInt);
-                await localStorage.setItem("EPSG_OL", map.getProjection().code);
-                var p1 = [center.x, center.y];
-            }
+            const shareStateBefore = captureShareViewState('activate');
 
             if (shareLayers) {
                 var Overlaylayers = await map.getOverlayLayers();
@@ -133,32 +226,12 @@ class miPlugin_cambioImpl {
             btn = await document.getElementById('APIIDEE-herramienta-button');
             await btn.classList.add("activated");
 
-            if (shareView) {
-                var p1_t = await IDEE.utils.reproject(p1, map.getProjection().code, "EPSG:4326");
-                await newMap.setCenter(p1_t);
-                newMap.setZoom(altitude / porcAltZoom, true)
-            }
+            await applyShareViewState(newMap, shareStateBefore, 'activate');
 
             if (shareLayers) {
                 var mapaCesium = newMap.getMapImpl()
                 mapaCesium.scene.globe.depthTestAgainstTerrain = true;
-                for (var i = 0; i < Overlaylayers.length; i++) {
-                    if (Overlaylayers[i].type == "Vector") {
-                        var l_source = Overlaylayers[i].toGeoJSON();
-                        var l = new IDEE.layer.GeoJSON({
-                            source: l_source
-                        })
-                        var l_styleOpt = await Overlaylayers[i].getStyle().getOptions()
-                        var l_style = new IDEE.style.Generic(l_styleOpt)
-                        l_style.getOptions().polygon.extrudedHeight = 1000
-
-                        await l.setStyle(l_style);
-                        await newMap.addLayers(l);
-
-                    } else {
-                        await newMap.addLayers(Overlaylayers[i]);
-                    }
-                }
+                await transferOverlayLayers(newMap, Overlaylayers, { addExtrusion: true });
             }
         }
 
@@ -169,47 +242,16 @@ class miPlugin_cambioImpl {
             // console.log('Desactivado');
             var tipo = "OL"
 
-            if (shareView) {
-
-                var center = map.getCenter()
-                var altitude = map.getZoom(true, true) * porcAltZoom
-
-                var zoomInt = null;
-                var altitudeZoomInt = null;
-                var altitudeZoomInt1 = null;
-
-                for (var i = 0; i < Object.values(map.zoom_meters).length - 1; i++) {
-                    if (
-                        map.zoom_meters[i] >= altitude &&
-                        map.zoom_meters[i + 1] <= altitude
-                    ) {
-                        zoomInt = i;
-                        altitudeZoomInt = map.zoom_meters[i];
-                        altitudeZoomInt1 = map.zoom_meters[i + 1];
-                        break;
-                    }
-                }
-
-                if (zoomInt === null) {
-                    console.warn("No se encontró tramo para la altitud:", altitude);
-                    return;
-                }
-
-                var zoomFrac =
-                    (altitude - altitudeZoomInt) /
-                    (altitudeZoomInt1 - altitudeZoomInt);
-
-                var zoom = zoomInt + zoomFrac;
-
-
-                var p1 = [center.x, center.y];
-
-
-            }
+            const shareStateBefore = captureShareViewState('deactivate');
 
 
 
             map.getMapImpl().scene.globe.pickWorldCoordinates = function () { };
+
+            if (shareLayers) {
+                var Overlaylayers = await map.getOverlayLayers();
+                var BaseLayers = await map.getBaseLayers();
+            }
 
 
             await cambioImpl(tipo);
@@ -219,12 +261,10 @@ class miPlugin_cambioImpl {
             btn = await document.getElementById('APIIDEE-herramienta-button');
             await btn.classList.remove("activated");
 
-            if (shareView) {
+            await applyShareViewState(newMap, shareStateBefore, 'deactivate');
 
-                var p1_t = await IDEE.utils.reproject(p1, map.getProjection().code, localStorage.getItem("EPSG_OL", "EPSG:3857"));
-                await newMap.setCenter(p1_t);
-                await newMap.setZoom(Number(zoom));
-
+            if (shareLayers) {
+                await transferOverlayLayers(newMap, Overlaylayers, { addExtrusion: false });
             }
         }
 
@@ -258,11 +298,11 @@ class miPlugin_cambioImpl {
             }
 
 
-            const olJS = "apiidee.ol.min.js";
-            const cesiumJS = "apiidee.cesium.min.js";
+            const olJS = ".ol.min.js";
+            const cesiumJS = ".cesium.min.js";
 
-            const olCSS = "apiidee.ol.min.css";
-            const cesiumCSS = "apiidee.cesium.min.css";
+            const olCSS = ".ol.min.css";
+            const cesiumCSS = ".cesium.min.css";
 
             const a3D = tipo === "Cesium";
 
@@ -315,4 +355,11 @@ class miPlugin_cambioImpl {
 
 
     }
+}
+
+// Exponer la clase en el namespace `IDEE.plugin.miPlugin_cambioImpl`
+if (typeof window !== 'undefined') {
+    window.IDEE = window.IDEE || {};
+    window.IDEE.plugin = window.IDEE.plugin || {};
+    window.IDEE.plugin.miPlugin_cambioImpl = miPlugin_cambioImpl;
 }
