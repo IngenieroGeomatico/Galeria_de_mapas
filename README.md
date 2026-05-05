@@ -24,6 +24,7 @@ Proveer ejemplos de visualización cartográfica interactiva y personalizable, p
 
     JavaScript Vanilla (sin frameworks adicionales).
     OpenLayers a través de la API-CNIG.
+    Para investigar sobre el repositorio , se ha utilizado: https://deepwiki.com/Desarrollos-IDEE/API-IDEE
 
 🚀 Cómo Usarlo
 
