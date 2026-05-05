@@ -72,10 +72,10 @@ function mapa2() {
   });
   mapajs2.addLayers(layer1)
 
-  
+
 
   // Pasando opciones al plugin en el momento de registrarlo
-  
+
 
   // Añadir el plugin correctamente al mapa
   mapajs2.addPlugin(pluginCamioImplFunc());
@@ -86,14 +86,14 @@ function mapa2() {
 
 }
 
-function pluginCamioImplFunc(){
-  return pluglinCambioImpl = new miPlugin_cambioImpl({
+function pluginCamioImplFunc() {
+  return new miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     // Pasar la referencia a la función sin paréntesis para evitar su ejecución inmediata
-    mapsFunction: {same:mapa, ol: mapa, Cesium: mapa2 },
+    // mapsFunction: { same: mapa, ol: mapa, Cesium: mapa2 },
     // o usar la misma función para ambos: mapsFunction: mapa
-    // mapsFunction: mapa,
-    sameMap: false,
+    mapsFunction: mapa,
+    sameMap: true,
     shareView: true,
     shareLayers: false
   });
