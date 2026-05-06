@@ -6,7 +6,7 @@ window.onload = (event) => {
 function mapa() {
 
   SVGCarga.hidden = false
-
+  updateConfigBaseLayer()
   mapajs = M.map({
     container: "mapaDIV"
   });
@@ -37,8 +37,57 @@ function mapa() {
   mapajs.addLayers(layer1)
 
 
+  var js_Nuevacapaborrador = document.createElement("script");
+  js_Nuevacapaborrador.type = "text/javascript";
+  js_Nuevacapaborrador.async = false;
+  js_Nuevacapaborrador.src = "../../datos/Nuevacapaborrador.js";
+  document.head.appendChild(js_Nuevacapaborrador);
+  js_Nuevacapaborrador.addEventListener('load', () => {
+
+    const exists = (mapajs.getOverlayLayers() || []).some(l => {
+      try {
+        return l && (l.name === 'Nuevacapaborrador' && l.legend === 'Nuevacapaborrador' && l.source === Nuevacapaborrador);
+      } catch (e) { return false; }
+    });
+    if (exists) return;
+
+
+    mapajs.addLayers(
+      new M.layer.GeoJSON({
+        source: Nuevacapaborrador,
+        name: 'Nuevacapaborrador',
+        legend: "Nuevacapaborrador",
+        extract: true,
+      }, {
+        // aplica un estilo a la capa
+        style: new M.style.Generic({
+          point: {
+            fill: { color: 'rgb(141, 90, 153)', opacity: 1.0 },
+            stroke: { color: 'rgb(35, 35, 35)', opacity: 1.0, width: 0.26 }
+          },
+          polygon: {
+            fill: { color: 'rgb(141, 90, 153)', opacity: 1.0 },
+            stroke: { color: 'rgb(35, 35, 35)', opacity: 1.0, width: 0.26 }
+          },
+          line: {
+            fill: { color: 'rgb(141, 90, 153)', opacity: 1.0 },
+            stroke: { color: 'rgb(35, 35, 35)', opacity: 1.0, width: 0.26 }
+          }
+        }),
+        visibility: true,// capa no visible en el mapa
+
+      }, {
+        opacity: 1 // aplica opacidad a la capa
+      })
+    );
+
+  });
+
+
   // Añadir el plugin correctamente al mapa
   mapajs.addPlugin(pluginCamioImplFunc());
+  mapajs.addPlugin(pluginCapasBaseFunc());
+  mapajs.addPlugin(pluginCapasSuperpuestasFunc());
 
   SVGCarga.hidden = true
   console.log("--------------------------------------, 1")
@@ -50,7 +99,7 @@ function mapa() {
 function mapa2() {
 
   SVGCarga.hidden = false
-
+  updateConfigBaseLayer()
   mapajs2 = M.map({
     container: "mapaDIV"
   });
@@ -79,12 +128,15 @@ function mapa2() {
 
   // Añadir el plugin correctamente al mapa
   mapajs2.addPlugin(pluginCamioImplFunc());
+  mapajs2.addPlugin(pluginCapasBaseFunc());
+  mapajs2.addPlugin(pluginCapasSuperpuestasFunc());
 
   SVGCarga.hidden = true
   console.log("--------------------------------------, 2")
   return mapajs2
 
 }
+
 
 function pluginCamioImplFunc() {
   return new miPlugin_cambioImpl({
@@ -95,8 +147,61 @@ function pluginCamioImplFunc() {
     mapsFunction: mapa,
     sameMap: true,
     shareView: true,
-    shareLayers: false
+    shareLayers: true
   });
+}
+
+function pluginCapasBaseFunc() {
+  return new miPlugin_baseLayer()
+}
+
+function pluginCapasSuperpuestasFunc() {
+  return new miPlugin_layerSwitcher()
+}
+
+function updateConfigBaseLayer() {
+  Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
+    url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
+    legend: 'IGNBaseTodo_2',
+    visible: true,
+    isBase: true,
+    tileGridMaxZoom: 17,
+    name: 'IGNBaseTodo_2',
+    attribution: '<p><b>Mapa base</b>: <a style="color: #0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
+  }, {
+    crossOrigin: 'anonymous',
+    displayInLayerSwitcher: false,
+  })
+
+  IDEE.addQuickLayers({
+    Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2
+  })
+
+  tms_2 = {
+    "base": "QUICK*Base_IGNBaseTodo_TMS_2"
+  }
+
+  IDEE.config("tms", tms_2)
+  IDEE.config.backgroundlayers = [
+    {
+      "id": "mapa",
+      "title": "Callejero",
+      "layers": [
+        "QUICK*Base_IGNBaseTodo_TMS_2"
+      ]
+    },
+    {
+      "id": "imagen",
+      "title": "Imagen",
+      "layers": [
+        "QUICK*BASE_PNOA_MA_TMS"
+      ]
+    }
+  ]
+
+  IDEE.proxy(false);
+
+  return
 }
 
 mapa() 

@@ -50,28 +50,38 @@ class miPlugin_layerSwitcher {
 
     IDEE.utils.draggabillyPlugin(panelExtra, '#m-herramienta-title-layerSwitcher');
 
-    control.activate = () => {
-      const visibleLayers = mapajs.getLayers().filter(layer => {
-        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true; } catch (e) { return false; }
-      });
+    const renderLayerList = async () => {
+      try {
+        const allLayers = await map.getOverlayLayers();
+        const visibleLayers = (allLayers || []).filter(l => {
+          try {
+            return !(l && (l._type === 'Terrain' || l.type === 'Terrain'));
+          } catch (e) { return true; }
+        });
+        const htmlList = visibleLayers.map(layer => {
+          const layerName = layer.legend || layer.name || 'Sin nombre';
+          const index = layer.idLayer;
+          const isChecked = layer.isVisible() ? 'checked' : '';
+          const inputId = `layer_${index}_layerSwitcher`;
+          return `
+            <li>
+              <label>
+                <input id="${inputId}" type="checkbox" ${isChecked} onchange="toggleLayerVisibility('${index}')">
+                ${layerName}
+              </label>
+            </li>`;
+        }).join('');
 
-      const htmlList = visibleLayers.map(layer => {
-        const layerName = layer.legend || layer.name || 'Sin nombre';
-        const index = layer.idLayer;
-        const isChecked = layer.isVisible() ? 'checked' : '';
-        const inputId = `layer_${index}_layerSwitcher`;
-        return `
-          <li>
-            <label>
-              <input id="${inputId}" type="checkbox" ${isChecked} onchange="toggleLayerVisibility('${index}')">
-              ${layerName}
-            </label>
-          </li>`;
-      }).join('');
+        control.htmlView = `<ul class="overlay-layer-selector">${htmlList}</ul>`;
+        const preview = document.querySelector('#m-herramienta-previews-layerSwitcher');
+        if (preview) preview.innerHTML = control.htmlView;
+      } catch (e) {
+        console.warn('layerSwitcher: error rendering layer list', e);
+      }
+    };
 
-      control.htmlView = `<ul class="overlay-layer-selector">${htmlList}</ul>`;
-      const preview = document.querySelector('#m-herramienta-previews-layerSwitcher');
-      if (preview) preview.innerHTML = control.htmlView;
+    control.activate = async () => {
+      await renderLayerList();
     };
 
     control.deactivate = () => { };
@@ -83,6 +93,17 @@ class miPlugin_layerSwitcher {
       const layer = matches[0];
       if (layer && layer.isVisible && layer.setVisible) layer.setVisible(!layer.isVisible());
     };
+
+    // Update the list whenever a layer is added to the map
+    try {
+      if (map && typeof map.on === 'function' && IDEE && IDEE.evt) {
+        map.on(IDEE.evt.ADDED_LAYER, async (capas) => {
+          await renderLayerList();
+        });
+      }
+    } catch (e) {
+      console.warn('layerSwitcher: could not attach ADDED_LAYER listener', e);
+    }
 
     control.activate();
   }

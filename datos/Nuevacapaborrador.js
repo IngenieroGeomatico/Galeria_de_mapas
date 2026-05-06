@@ -1,0 +1,1 @@
+var Nuevacapaborrador = { "type": "FeatureCollection", "name": "Nuevacapaborrador", "features": [{ "type": "Feature", "properties": { "zxczc": "xzcxzc" }, "geometry": { "type": "Polygon", "coordinates": [[[-6.333398, 41.278925], [-6.413625, 39.584471], [0.104786, 41.474576], [-6.333398, 41.278925]]] } }] }
