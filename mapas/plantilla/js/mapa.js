@@ -11,6 +11,19 @@ function mapa() {
     container: "mapaDIV"
   });
 
+  try {
+    const layer3 = new IDEE.layer.MapLibre({
+      url: 'https://vt-btn.idee.es/files/styles/BTN_Completa.json',
+      name: 'BTN',
+      visibility: true,
+      legend: 'BTN',
+    })
+    mapajs.addLayers(layer3)
+  } catch (error) {
+    console.log(error)
+  }
+
+
   const layer2 = new IDEE.layer.WMS({
     url: 'https://www.ign.es/wms-inspire/unidades-administrativas?',
     name: 'AU.AdministrativeUnit',
@@ -145,7 +158,7 @@ function pluginCamioImplFunc() {
     mapsFunction: { same: mapa, ol: mapa, Cesium: mapa2 },
     // o usar la misma función para ambos: mapsFunction: mapa
     // mapsFunction: mapa,
-    sameMap: false,
+    sameMap: true,
     shareView: true,
     shareLayers: true
   });

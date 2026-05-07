@@ -132,28 +132,31 @@ class miPlugin_cambioImpl {
                         JSON.stringify(Overlaylayers[i].constructorParameters?.parameters)
                     );
                     if (!existe) {
-                        const original = Overlaylayers[i];
-                        const l_styleOpt = await original.getStyle().getOptions();
-                        const l_style = new IDEE.style.Generic(l_styleOpt);
+                        try {
+                            const original = Overlaylayers[i];
+                            const l_styleOpt = await original.getStyle().getOptions();
+                            const l_style = new IDEE.style.Generic(l_styleOpt);
+                            // Añadir la capa al nuevo mapa
+                            await newMap.addLayers(original);
 
-                        // Añadir la capa al nuevo mapa
-                        await newMap.addLayers(original);
+                            // Obtener la referencia de la capa ya añadida en newMap
+                            let layersList = newMap.getLayers();
+                            if (layersList && typeof layersList.then === 'function') layersList = await layersList;
 
-                        // Obtener la referencia de la capa ya añadida en newMap
-                        let layersList = newMap.getLayers();
-                        if (layersList && typeof layersList.then === 'function') layersList = await layersList;
+                            const added = (layersList || []).find(layer =>
+                                JSON.stringify(layer.constructorParameters?.parameters) ===
+                                JSON.stringify(original.constructorParameters?.parameters)
+                            ) || (layersList || []).find(layer => layer.name === original.name || layer.legend === original.legend) || original;
 
-                        const added = (layersList || []).find(layer =>
-                            JSON.stringify(layer.constructorParameters?.parameters) ===
-                            JSON.stringify(original.constructorParameters?.parameters)
-                        ) || (layersList || []).find(layer => layer.name === original.name || layer.legend === original.legend) || original;
+                            // Aplicar estilo a la instancia encontrada en newMap
+                            if (added && added.setStyle) {
+                                const setRes = added.setStyle(l_style);
+                                if (setRes && typeof setRes.then === 'function') await setRes;
+                            }
 
-                        // Aplicar estilo a la instancia encontrada en newMap
-                        if (added && added.setStyle) {
-                            const setRes = added.setStyle(l_style);
-                            if (setRes && typeof setRes.then === 'function') await setRes;
+                        } catch (error) {
+                            console.log(error)
                         }
-
                     }
                 }
             }
