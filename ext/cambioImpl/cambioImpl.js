@@ -111,8 +111,8 @@ class miPlugin_cambioImpl {
         async function transferOverlayLayers(newMap, Overlaylayers, { addExtrusion = false } = {}) {
             for (var i = 0; i < Overlaylayers.length; i++) {
                 if (Overlaylayers[i].type == "Vector") {
-                    var l_source = Overlaylayers[i].toGeoJSON();
-                    var l = new IDEE.layer.GeoJSON({
+                    var l_source = await Overlaylayers[i].toGeoJSON();
+                    var l = await new IDEE.layer.GeoJSON({
                         source: l_source
                     })
                     var l_styleOpt = await Overlaylayers[i].getStyle().getOptions()
@@ -127,12 +127,33 @@ class miPlugin_cambioImpl {
                     await newMap.addLayers(l);
 
                 } else {
-                    var existe = newMap.getLayers().some(layer =>
+                    var existe = await newMap.getLayers().some(layer =>
                         JSON.stringify(layer.constructorParameters?.parameters) ===
                         JSON.stringify(Overlaylayers[i].constructorParameters?.parameters)
                     );
                     if (!existe) {
-                        await newMap.addLayers(Overlaylayers[i]);
+                        const original = Overlaylayers[i];
+                        const l_styleOpt = await original.getStyle().getOptions();
+                        const l_style = new IDEE.style.Generic(l_styleOpt);
+
+                        // Añadir la capa al nuevo mapa
+                        await newMap.addLayers(original);
+
+                        // Obtener la referencia de la capa ya añadida en newMap
+                        let layersList = newMap.getLayers();
+                        if (layersList && typeof layersList.then === 'function') layersList = await layersList;
+
+                        const added = (layersList || []).find(layer =>
+                            JSON.stringify(layer.constructorParameters?.parameters) ===
+                            JSON.stringify(original.constructorParameters?.parameters)
+                        ) || (layersList || []).find(layer => layer.name === original.name || layer.legend === original.legend) || original;
+
+                        // Aplicar estilo a la instancia encontrada en newMap
+                        if (added && added.setStyle) {
+                            const setRes = added.setStyle(l_style);
+                            if (setRes && typeof setRes.then === 'function') await setRes;
+                        }
+
                     }
                 }
             }
