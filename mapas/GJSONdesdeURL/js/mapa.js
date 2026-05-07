@@ -81,18 +81,85 @@ function mapa() {
 
 }
 
-mapajs_0 = mapa()
+function mapa2() {
 
+  SVGCarga.hidden = false
+
+  const gjsonUrl = getQueryParam('gjson_url');
+
+  updateConfigBaseLayer()
+
+  mapajs2 = M.map({
+    container: "mapaDIV"
+  });
+
+  if (gjsonUrl) {
+    const layer1 = new IDEE.layer.GeoJSON({
+      name: "capa_gjson",
+      url: gjsonUrl
+    }, {
+      // aplica un estilo a la capa
+      style: new IDEE.style.Generic({
+        polygon: {
+          fill: {
+            color: 'orange',
+            opacity: 0.4
+          },
+          stroke: {
+            color: 'red',
+            width: 2
+          },
+          heightReference: IDEE.style.heightReference.RELATIVE_TO_GROUND,
+          perPositionHeight: false,
+          extrudedHeight: 20,
+          extrudedHeightReference: IDEE.style.heightReference.RELATIVE_TO_GROUND
+        },
+        point: {
+          radius: 5,
+          fill: {
+            color: 'orange',
+            opacity: 0.5
+          },
+          stroke: {
+            color: '#FF0000'
+          }
+        },
+        line: {
+          fill: {
+            color: 'orange',
+            width: 2
+          }
+        }
+      })
+    }, {
+    });
+    mapajs2.addLayers(layer1)
+  }
+
+  // Añadir el plugin correctamente al mapa
+  mapajs2.addPlugin(pluginCamioImplFunc());
+  mapajs2.addPlugin(pluginCapasBaseFunc());
+  mapajs2.addPlugin(pluginCapasSuperpuestasFunc());
+
+
+  SVGCarga.hidden = true
+  console.log("--------------------------------------, 2")
+  return mapajs2
+
+}
+
+mapajs_0 = mapa()
+mapa()
 
 // # Definición de funciones de extensiones
 function pluginCamioImplFunc() {
   return new miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     // Pasar la referencia a la función sin paréntesis para evitar su ejecución inmediata
-    // mapsFunction: { same: mapa, ol: mapa, Cesium: mapa2 },
+    mapsFunction: { same: mapa, ol: mapa, Cesium: mapa2 },
     // o usar la misma función para ambos: mapsFunction: mapa
-    mapsFunction: mapa,
-    sameMap: true,
+    // mapsFunction: mapa,
+    sameMap: false,
     shareView: true,
     shareLayers: true
   });
