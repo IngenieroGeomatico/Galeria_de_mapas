@@ -22,7 +22,7 @@ function mapa() {
 
   updateConfigBaseLayer()
 
-  mapajs = M.map({
+  mapajs = IDEE.map({
     container: "mapaDIV"
   });
 
@@ -89,7 +89,7 @@ function mapa2() {
 
   updateConfigBaseLayer()
 
-  mapajs2 = M.map({
+  mapajs2 = IDEE.map({
     container: "mapaDIV"
   });
 
@@ -149,7 +149,6 @@ function mapa2() {
 }
 
 mapajs_0 = mapa()
-mapa()
 
 // # Definición de funciones de extensiones
 function pluginCamioImplFunc() {
@@ -161,13 +160,14 @@ function pluginCamioImplFunc() {
     // mapsFunction: mapa,
     sameMap: false,
     shareView: true,
-    shareLayers: true
+    shareLayers: false
   });
 }
 
 function pluginCapasBaseFunc() {
   return new miPlugin_baseLayer()
 }
+
 
 function pluginCapasSuperpuestasFunc() {
   return new miPlugin_layerSwitcher()

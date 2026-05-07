@@ -80,8 +80,8 @@ class miPlugin_baseLayer {
       if (!selected) return;
 
       // Ocultar todas las capas base y añadir la seleccionada
-      mapajs.removeLayers(mapajs.getBaseLayers()[0]);
-      mapajs.addLayers(selected.layers);
+      map.removeLayers(map.getBaseLayers()[0]);
+      map.addLayers(selected.layers);
       localStorage.setItem('baseLayer_ID', `${layerId}_baseLayerID`);
     };
 

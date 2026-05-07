@@ -7,7 +7,7 @@ function mapa() {
 
   SVGCarga.hidden = false
   updateConfigBaseLayer()
-  mapajs = M.map({
+  mapajs = IDEE.map({
     container: "mapaDIV"
   });
 
@@ -53,7 +53,7 @@ function mapa() {
 
 
     mapajs.addLayers(
-      new M.layer.GeoJSON({
+      new IDEE.layer.GeoJSON({
         source: Nuevacapaborrador,
         name: 'Nuevacapaborrador',
         legend: "Nuevacapaborrador",
@@ -100,7 +100,7 @@ function mapa2() {
 
   SVGCarga.hidden = false
   updateConfigBaseLayer()
-  mapajs2 = M.map({
+  mapajs2 = IDEE.map({
     container: "mapaDIV"
   });
 
@@ -142,10 +142,10 @@ function pluginCamioImplFunc() {
   return new miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     // Pasar la referencia a la función sin paréntesis para evitar su ejecución inmediata
-    // mapsFunction: { same: mapa, ol: mapa, Cesium: mapa2 },
+    mapsFunction: { same: mapa, ol: mapa, Cesium: mapa2 },
     // o usar la misma función para ambos: mapsFunction: mapa
-    mapsFunction: mapa,
-    sameMap: true,
+    // mapsFunction: mapa,
+    sameMap: false,
     shareView: true,
     shareLayers: true
   });
