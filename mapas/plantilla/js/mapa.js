@@ -46,7 +46,7 @@ function mapa() {
 
     const exists = (mapajs.getOverlayLayers() || []).some(l => {
       try {
-        return l && (l.name === 'Nuevacapaborrador' && l.legend === 'Nuevacapaborrador' && l.source === Nuevacapaborrador);
+        return l && (l.name === 'Nuevacapaborrador' && l.legend === 'Nuevacapaborrador' && l.constructorParameters.parameters.type === "GeoJSON")
       } catch (e) { return false; }
     });
     if (exists) return;
@@ -60,7 +60,7 @@ function mapa() {
         extract: true,
       }, {
         // aplica un estilo a la capa
-        style: new M.style.Generic({
+        style: new IDEE.style.Generic({
           point: {
             fill: { color: 'rgb(141, 90, 153)', opacity: 1.0 },
             stroke: { color: 'rgb(35, 35, 35)', opacity: 1.0, width: 0.26 }
