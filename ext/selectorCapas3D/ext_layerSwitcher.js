@@ -87,7 +87,7 @@ class miPlugin_layerSwitcher {
     control.deactivate = () => { };
 
     window.toggleLayerVisibility = function (index) {
-      const matches = mapajs.getLayers().filter(layer => {
+      const matches = map.getLayers().filter(layer => {
         try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
       });
       const layer = matches[0];
