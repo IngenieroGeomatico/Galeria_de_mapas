@@ -1,0 +1,18 @@
+{
+"type": "FeatureCollection",
+"name": "Indicaciones",
+"features": [
+{ "type": "Feature", "properties": { "id": 510, "indicaciones": "Seguir las señales para hacer el menor daño posible y poder disfrutar de esta maravilla de la naturaleza." }, "geometry": { "type": "Point", "coordinates": [ -9.1489525944344, 43.187448647938368 ] } },
+{ "type": "Feature", "properties": { "id": 511, "indicaciones": "Bosque do Trece: Pequeño bosque de pinos, perfecto para avituallamiento." }, "geometry": { "type": "Point", "coordinates": [ -9.167228577474848, 43.182531754618964 ] } },
+{ "type": "Feature", "properties": { "id": 513, "indicaciones": "Praias de Reira: Cruce hacia las playas, Pedra do Oso y tramo que que alterna senderos y playa." }, "geometry": { "type": "Point", "coordinates": [ -9.178776855239635, 43.167912310024178 ] } },
+{ "type": "Feature", "properties": { "id": 541, "indicaciones": "Monte Pedroso:  Pequeña subida bastante empinada." }, "geometry": { "type": "Point", "coordinates": [ -9.188442707960176, 43.159665369425113 ] } },
+{ "type": "Feature", "properties": { "id": 515, "indicaciones": "AGUAAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.210733515026131, 43.15978941226836 ] } },
+{ "type": "Feature", "properties": { "id": 516, "indicaciones": "AGUAAAA: Hay que desviarse unos 300 metros" }, "geometry": { "type": "Point", "coordinates": [ -9.212366064957259, 43.15600307190423 ] } },
+{ "type": "Feature", "properties": { "id": 502, "indicaciones": "Salida playa Arou" }, "geometry": { "type": "Point", "coordinates": [ -9.11121409846422, 43.185120202266603 ] } },
+{ "type": "Feature", "properties": { "id": 503, "indicaciones": "Cruce Enseada Xan Ferreiro   - Cruce a la derecha a la salida de Arou para recorrer toda la ensenada hasta el mirador." }, "geometry": { "type": "Point", "coordinates": [ -9.114930299311911, 43.189094970379557 ] } },
+{ "type": "Feature", "properties": { "id": 506, "indicaciones": "Tramo de rocas." }, "geometry": { "type": "Point", "coordinates": [ -9.11779729080725, 43.19407373753689 ] } },
+{ "type": "Feature", "properties": { "id": 507, "indicaciones": "Acercarse hasta la explanada del puerto para ver las vistas." }, "geometry": { "type": "Point", "coordinates": [ -9.133966682414501, 43.193099303852648 ] } },
+{ "type": "Feature", "properties": { "id": 508, "indicaciones": "Coído de bolos que hay que cruzar con cuidado." }, "geometry": { "type": "Point", "coordinates": [ -9.133661352768467, 43.192274234186222 ] } },
+{ "type": "Feature", "properties": { "id": 509, "indicaciones": "POR ATAJO: El punto más sensible medioambientalmente de todo O Camiño dos Faros.Obligatorio ir en fila de a uno, sin\nsalirse fuera del sendero y sin pisar los tapices vegetales que han llevado años formarse. También podréis ver las\ncaramiñas, especie en peligro de extinción.Tanto la subida como la bajada tienen bastante pendiente. Tomaros con\ncalma la subida, haciendo las paradas que considereis oportunas y OJO a las caídas en la bajada." }, "geometry": { "type": "Point", "coordinates": [ -9.143190397968542, 43.191294525840966 ] } }
+]
+}

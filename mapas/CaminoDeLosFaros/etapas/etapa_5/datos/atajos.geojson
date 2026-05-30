@@ -1,0 +1,10 @@
+{
+"type": "FeatureCollection",
+"name": "atajos",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"xy_coordinate_resolution": 1e-07,
+"features": [
+{ "type": "Feature", "properties": { "name": "Duna de Monte Branco", "cmt": "El punto más sensible medioambientalmente de todo O Camiño dos Faros.Obligatorio ir en fila de a uno, sin\nsalirse fuera del sendero y sin pisar los tapices vegetales que han llevado años formarse. También podréis ver las\ncaramiñas, especie en peligro de extinción.Tanto la subida como la bajada tienen bastante pendiente. Tomaros con\ncalma la subida, haciendo las paradas que considereis oportunas y OJO a las caídas en la bajada.", "peligrosidad_dificultad": "p0-d2" }, "geometry": { "type": "MultiLineString", "coordinates": [ [ [ -9.1433927, 43.1910733, 0.0 ], [ -9.143713, 43.1908398, 0.0 ], [ -9.1444547, 43.1907538, 0.0 ], [ -9.1457021, 43.1909627, 0.0 ], [ -9.1459887, 43.1910856, 0.0 ], [ -9.1466293, 43.1910118, 0.0 ], [ -9.1469159, 43.1905694, 0.0 ], [ -9.1475059, 43.1904096, 0.0 ], [ -9.1481802, 43.1903727, 0.0 ], [ -9.1489556, 43.1901884, 0.0 ] ] ] } },
+{ "type": "Feature", "properties": { "name": "Monte Pedroso", "cmt": "Pequeña subida bastante empinada.", "peligrosidad_dificultad": "p0-d2" }, "geometry": { "type": "MultiLineString", "coordinates": [ [ [ -9.1884627, 43.1593494, 0.0 ], [ -9.18904, 43.1590967, 0.0 ], [ -9.1897712, 43.1590827, 0.0 ], [ -9.1904255, 43.1586195, 0.0 ], [ -9.1910605, 43.1581843, 0.0 ], [ -9.1915031, 43.1577492, 0.0 ], [ -9.1918687, 43.1572158, 0.0 ], [ -9.1925229, 43.1564999, 0.0 ] ] ] } }
+]
+}
