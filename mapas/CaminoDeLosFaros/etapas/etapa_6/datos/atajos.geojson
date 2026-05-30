@@ -1,0 +1,12 @@
+{
+"type": "FeatureCollection",
+"name": "atajos",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"xy_coordinate_resolution": 1e-07,
+"features": [
+{ "type": "Feature", "properties": { "name": "Entrada en A Insua", "cmt": "Entrada en A Insua", "peligrosidad_dificultad": "p0-d0" }, "geometry": { "type": "MultiLineString", "coordinates": [ [ [ -9.1634187, 43.152077, 0.0 ], [ -9.1611581, 43.1500493, 0.0 ], [ -9.1602595, 43.1495897, 0.0 ], [ -9.15919, 43.1477641, 0.0 ], [ -9.1592127, 43.1468842, 0.0 ], [ -9.1603277, 43.1463695, 0.0 ], [ -9.1620115, 43.1452738, 0.0 ], [ -9.1628456, 43.1439904, 0.0 ], [ -9.1636382, 43.1438185, 0.0 ], [ -9.164388, 43.1426618, 0.0 ] ] ] } },
+{ "type": "Feature", "properties": { "name": "Dor", "cmt": "Dor", "peligrosidad_dificultad": "p0-d0" }, "geometry": { "type": "MultiLineString", "coordinates": [ [ [ -9.1399038, 43.1370408, 0.0 ], [ -9.1391401, 43.1368486, 0.0 ], [ -9.1377443, 43.138386, 0.0 ], [ -9.1372439, 43.1393469, 0.0 ], [ -9.1347157, 43.1401924, 0.0 ], [ -9.1296329, 43.1405576, 0.0 ] ] ] } },
+{ "type": "Feature", "properties": { "name": "Carretera Praia do Lago", "cmt": "Carretera Praia do Lago", "peligrosidad_dificultad": "p3-d0" }, "geometry": { "type": "MultiLineString", "coordinates": [ [ [ -9.1330139, 43.1276143, 0.0 ], [ -9.1353883, 43.1278719, 0.0 ], [ -9.1361904, 43.1274972, 0.0 ], [ -9.1374097, 43.1278953, 0.0 ], [ -9.1396557, 43.1263497, 0.0 ], [ -9.1397841, 43.1246168, 0.0 ], [ -9.1406504, 43.1248509, 0.0 ], [ -9.1420301, 43.1252725, 0.0 ], [ -9.1456879, 43.1248978, 0.0 ] ] ] } },
+{ "type": "Feature", "properties": { "name": "Paseo do Río Negro (molinos)", "cmt": "Paseo do Río Negro (molinos)", "peligrosidad_dificultad": "p0-d0" }, "geometry": { "type": "MultiLineString", "coordinates": [ [ [ -9.1870442, 43.0878374, 0.0 ], [ -9.1875112, 43.0887113, 0.0 ], [ -9.1903713, 43.0892441, 0.0 ], [ -9.1926185, 43.0903098, 0.0 ], [ -9.1950117, 43.091823, 0.0 ] ] ] } }
+]
+}

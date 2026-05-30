@@ -1,0 +1,31 @@
+{
+"type": "FeatureCollection",
+"name": "Indicaciones",
+"features": [
+{ "type": "Feature", "properties": { "id": 604, "indicaciones": "Vamos por la zona intermareal, OJO al pisar las piedras mojadas llenas de musgo" }, "geometry": { "type": "Point", "coordinates": [ -9.170890205307535, 43.140600538666028 ] } },
+{ "type": "Feature", "properties": { "id": 605, "indicaciones": "Pequeño tramo de carretera con un arcen pequeño" }, "geometry": { "type": "Point", "coordinates": [ -9.169287837741953, 43.14257109725424 ] } },
+{ "type": "Feature", "properties": { "id": 605, "indicaciones": "Pequeño tramo de carretera con un arcen pequeño" }, "geometry": { "type": "Point", "coordinates": [ -9.167868587297122, 43.149972609974625 ] } },
+{ "type": "Feature", "properties": { "id": 606, "indicaciones": "Cruce a la derecha en Xaviña. Fijarse en las señales" }, "geometry": { "type": "Point", "coordinates": [ -9.158951250932986, 43.147793261856492 ] } },
+{ "type": "Feature", "properties": { "id": 608, "indicaciones": "AGUAAAAAAAAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.156718145100893, 43.130554206242657 ] } },
+{ "type": "Feature", "properties": { "id": 609, "indicaciones": "Cruce de Ariño: Hay que cruzar la carretera en una curva.    AGUAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.149876458930471, 43.138904090810136 ] } },
+{ "type": "Feature", "properties": { "id": 610, "indicaciones": "AGUAAAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.147413914078207, 43.138739652548018 ] } },
+{ "type": "Feature", "properties": { "id": 611, "indicaciones": "OJO con la señalización, ya que hay varios cruces (atentos a las flechas)" }, "geometry": { "type": "Point", "coordinates": [ -9.143301129665851, 43.135753204819615 ] } },
+{ "type": "Feature", "properties": { "id": 612, "indicaciones": "AGUAAAAAAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.114800100820013, 43.13779679541021 ] } },
+{ "type": "Feature", "properties": { "id": 613, "indicaciones": "Tramo de carretera sin arcen, pero con tráfico lento. Ir por el arcen de la izquierda hasta entrar en Cereixo por la casa\nde las pintadas" }, "geometry": { "type": "Point", "coordinates": [ -9.120838394717161, 43.13438276933833 ] } },
+{ "type": "Feature", "properties": { "id": 614, "indicaciones": "Mucho cuidado con el tramo de maderas, se resbala. Andar con paso corto. FIN DE ETAPA MEDIA" }, "geometry": { "type": "Point", "coordinates": [ -9.124699863597922, 43.132764020592916 ] } },
+{ "type": "Feature", "properties": { "id": 615, "indicaciones": "Tramo de carretera sin arcen y con tráfico medio. Ir por la derecha" }, "geometry": { "type": "Point", "coordinates": [ -9.127834806636374, 43.131512968199495 ] } },
+{ "type": "Feature", "properties": { "id": 616, "indicaciones": "Cruce a la derecha" }, "geometry": { "type": "Point", "coordinates": [ -9.12842334712507, 43.129135055397477 ] } },
+{ "type": "Feature", "properties": { "id": 617, "indicaciones": "Tramo de carretera (500 m) sin arcenes y poca visibilidad." }, "geometry": { "type": "Point", "coordinates": [ -9.129548596768609, 43.12801236986823 ] } },
+{ "type": "Feature", "properties": { "id": 618, "indicaciones": "Cruce a Praia de Area Grande: Salimos de la carretera por un cruce a la derecha para bajar a la playa" }, "geometry": { "type": "Point", "coordinates": [ -9.136318774161953, 43.127216173970162 ] } },
+{ "type": "Feature", "properties": { "id": 620, "indicaciones": "NULLSalimos de la carretera por un cruce a la derecha para bajar a la playa" }, "geometry": { "type": "Point", "coordinates": [ -9.163512140339606, 43.113729048598721 ] } },
+{ "type": "Feature", "properties": { "id": 622, "indicaciones": "Pinar Playa de Lago. AGUAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.163929906858185, 43.104708711650503 ] } },
+{ "type": "Feature", "properties": { "id": 625, "indicaciones": "2 kilómetros de carretera sin arcenes" }, "geometry": { "type": "Point", "coordinates": [ -9.178309695117518, 43.09906075896874 ] } },
+{ "type": "Feature", "properties": { "id": 626, "indicaciones": "Cruce a la derecha, desvío en Os Muiños para coger el río. OJO Señalización." }, "geometry": { "type": "Point", "coordinates": [ -9.188624222517891, 43.084155338273547 ] } },
+{ "type": "Feature", "properties": { "id": 627, "indicaciones": "Fonte da Tella: AGUAAAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.185601388086967, 43.086501491484839 ] } },
+{ "type": "Feature", "properties": { "id": 628, "indicaciones": "OJO pasarelas húmedas. El camino desemboca a la playa (OJO salida)" }, "geometry": { "type": "Point", "coordinates": [ -9.186635651514985, 43.087666904055894 ] } },
+{ "type": "Feature", "properties": { "id": 630, "indicaciones": "El camino continua al final de la playa. OJO señalización" }, "geometry": { "type": "Point", "coordinates": [ -9.195128412227932, 43.092121345412593 ] } },
+{ "type": "Feature", "properties": { "id": 633, "indicaciones": "Porto de Muxía: AGUAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.21629052725506, 43.106108580961241 ] } },
+{ "type": "Feature", "properties": { "id": 634, "indicaciones": "El camino sube por el campanario de la iglesia de Santa María al Corpiño" }, "geometry": { "type": "Point", "coordinates": [ -9.217631187506539, 43.108465069935555 ] } },
+{ "type": "Feature", "properties": { "id": 602, "indicaciones": "Debemos hacerla por la acera hasta el paso de cebra de la estatua de la palilleira" }, "geometry": { "type": "Point", "coordinates": [ -9.179805833072146, 43.130116526437121 ] } }
+]
+}
