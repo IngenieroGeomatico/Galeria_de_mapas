@@ -1,0 +1,18 @@
+{
+"type": "FeatureCollection",
+"name": "Indicaciones",
+"features": [
+{ "type": "Feature", "properties": { "id": 703, "indicaciones": "Carretera sin arcenes pero con buena visibilidad" }, "geometry": { "type": "Point", "coordinates": [ -9.219311450944247, 43.102145010312249 ] } },
+{ "type": "Feature", "properties": { "id": 704, "indicaciones": "Cruce a la playa de Lourido. OJO en la bajada por las piedras" }, "geometry": { "type": "Point", "coordinates": [ -9.219487786746157, 43.088872330934976 ] } },
+{ "type": "Feature", "properties": { "id": 707, "indicaciones": "La subida más dura del camino. Son 750 metros pero con una gran pendiente. Hacer varios descansos, darse la\nvuelta y disfrutar de las vistas" }, "geometry": { "type": "Point", "coordinates": [ -9.233340277064016, 43.089956996689665 ] } },
+{ "type": "Feature", "properties": { "id": 710, "indicaciones": "Subir por el pinar. Subida corta pero intensa" }, "geometry": { "type": "Point", "coordinates": [ -9.243937034551704, 43.082889231677576 ] } },
+{ "type": "Feature", "properties": { "id": 714, "indicaciones": "Tramo estrecho cerca del acantilado poco desbrozado" }, "geometry": { "type": "Point", "coordinates": [ -9.249992691270194, 43.080199626757945 ] } },
+{ "type": "Feature", "properties": { "id": 715, "indicaciones": "OJO, después del regato al final de Cuño el camino se mete en el monte. No seguir por la costa porque es imposible." }, "geometry": { "type": "Point", "coordinates": [ -9.248913572737239, 43.073283053368549 ] } },
+{ "type": "Feature", "properties": { "id": 716, "indicaciones": "Subida prolongado durante 2 km hasta los 264 metros del Monte Pedrouzo" }, "geometry": { "type": "Point", "coordinates": [ -9.248736645957568, 43.066456626005717 ] } },
+{ "type": "Feature", "properties": { "id": 719, "indicaciones": "La bajada con más pendiente del camino. OJO a las caídas y a los pasos por las rocas en días de lluvia, que\npueden resbalar." }, "geometry": { "type": "Point", "coordinates": [ -9.256391960508807, 43.051216911892986 ] } },
+{ "type": "Feature", "properties": { "id": 722, "indicaciones": "Cruce a la derecha para recorrer el sendero del Cabo Touriñán" }, "geometry": { "type": "Point", "coordinates": [ -9.289920437416788, 43.050766256007854 ] } },
+{ "type": "Feature", "properties": { "id": 723, "indicaciones": "OJO no acercarse muchos a los acantilados" }, "geometry": { "type": "Point", "coordinates": [ -9.292324273505866, 43.056086257335927 ] } },
+{ "type": "Feature", "properties": { "id": 725, "indicaciones": "Punto más al oeste de O Camiño dos Faros (9°17'52.65\"O)" }, "geometry": { "type": "Point", "coordinates": [ -9.298275584850645, 43.049497518692419 ] } },
+{ "type": "Feature", "properties": { "id": 728, "indicaciones": "Cruce a la derecha para coger la pista de tierra que baja a Nemiña por Talón" }, "geometry": { "type": "Point", "coordinates": [ -9.277742323208422, 43.022902746206782 ] } }
+]
+}

@@ -1,0 +1,29 @@
+{
+"type": "FeatureCollection",
+"name": "Indicaciones",
+"features": [
+{ "type": "Feature", "properties": { "id": 802, "indicaciones": "Tramo de carretera sin apenas tráfico" }, "geometry": { "type": "Point", "coordinates": [ -9.261865860621295, 43.011017693960483 ] } },
+{ "type": "Feature", "properties": { "id": 803, "indicaciones": "Cruce que hay que tomar a la derecha camino de Lires" }, "geometry": { "type": "Point", "coordinates": [ -9.247419196481914, 43.011575594664116 ] } },
+{ "type": "Feature", "properties": { "id": 805, "indicaciones": "Lires- AGUAAAAAAA" }, "geometry": { "type": "Point", "coordinates": [ -9.243418300817391, 42.998533249888901 ] } },
+{ "type": "Feature", "properties": { "id": 806, "indicaciones": "Carretera sin apenas tráfico" }, "geometry": { "type": "Point", "coordinates": [ -9.246771101339098, 42.996946406573421 ] } },
+{ "type": "Feature", "properties": { "id": 808, "indicaciones": "Hay que tomar la pista de tierra y no ir por el borde del mar, ya que no tiene salida" }, "geometry": { "type": "Point", "coordinates": [ -9.259883983268576, 43.000637402632236 ] } },
+{ "type": "Feature", "properties": { "id": 809, "indicaciones": "Pequeña subida" }, "geometry": { "type": "Point", "coordinates": [ -9.258167910742623, 42.99506396106645 ] } },
+{ "type": "Feature", "properties": { "id": 810, "indicaciones": "Cruce para bajar al acantilado de Lagoa" }, "geometry": { "type": "Point", "coordinates": [ -9.257895370960304, 42.989477484976049 ] } },
+{ "type": "Feature", "properties": { "id": 811, "indicaciones": "Acantilado que se cruza y se vuelve a salir al camino de arriba" }, "geometry": { "type": "Point", "coordinates": [ -9.260256504421177, 42.989239692714456 ] } },
+{ "type": "Feature", "properties": { "id": 812, "indicaciones": "Cruce para bajar al acantilado de Mexadoira" }, "geometry": { "type": "Point", "coordinates": [ -9.260068980330749, 42.979866937084985 ] } },
+{ "type": "Feature", "properties": { "id": 813, "indicaciones": "Acantilado por el que tenemos que tener cuidado, no acercarnos nunca al borde. Al final, está la cascada en la que\nhay que tener cuidado, ya que tiene una caída libre" }, "geometry": { "type": "Point", "coordinates": [ -9.260880157555196, 42.979251322891322 ] } },
+{ "type": "Feature", "properties": { "id": 814, "indicaciones": "Cruce para bajar a la playa del Rostro" }, "geometry": { "type": "Point", "coordinates": [ -9.25941643774107, 42.976520995650176 ] } },
+{ "type": "Feature", "properties": { "id": 816, "indicaciones": "Buen sitio para hacer una parada de descanso" }, "geometry": { "type": "Point", "coordinates": [ -9.272451838251946, 42.961138993292892 ] } },
+{ "type": "Feature", "properties": { "id": 817, "indicaciones": "Si sigues la ruta sin salir del sendero no hay problema. OJO no arrimarse al borde en algunos sitios que pasamos\ncerca, como la Punta do Rostro." }, "geometry": { "type": "Point", "coordinates": [ -9.275817262988367, 42.961921467832042 ] } },
+{ "type": "Feature", "properties": { "id": 818, "indicaciones": "Aquí fue donde embarrancó el buque Casón." }, "geometry": { "type": "Point", "coordinates": [ -9.276864923605858, 42.957885557201848 ] } },
+{ "type": "Feature", "properties": { "id": 819, "indicaciones": "A la derecha sale el sendero para subir al castro. Merece la pena ver el acantilado desde allí arriba" }, "geometry": { "type": "Point", "coordinates": [ -9.280242427284929, 42.955048530109082 ] } },
+{ "type": "Feature", "properties": { "id": 819, "indicaciones": "A la derecha sale el sendero para subir al castro. Merece la pena ver el acantilado desde allí arriba" }, "geometry": { "type": "Point", "coordinates": [ -9.282140850660756, 42.953718057907615 ] } },
+{ "type": "Feature", "properties": { "id": 820, "indicaciones": "A la derecha sale el sendero para subir al castro. Merece la pena ver el acantilado desde allí arriba" }, "geometry": { "type": "Point", "coordinates": [ -9.282897700306687, 42.952591217783471 ] } },
+{ "type": "Feature", "properties": { "id": 821, "indicaciones": "Tramo de acantilados seguros que nos llevan hasta la Praia da Arnela" }, "geometry": { "type": "Point", "coordinates": [ -9.281604112526749, 42.949795532867952 ] } },
+{ "type": "Feature", "properties": { "id": 822, "indicaciones": "Cruce a la derecha para dirigirse a los acantilados de la Nave" }, "geometry": { "type": "Point", "coordinates": [ -9.279364363395553, 42.939816159047339 ] } },
+{ "type": "Feature", "properties": { "id": 823, "indicaciones": "Acantilados exigentes físicamente y espectaculares. Tomárselo con tranquilidad" }, "geometry": { "type": "Point", "coordinates": [ -9.288072896569018, 42.942748848297398 ] } },
+{ "type": "Feature", "properties": { "id": 826, "indicaciones": "Salimos de la costa y el camino continua por la pasarela de madera camino de la Insua" }, "geometry": { "type": "Point", "coordinates": [ -9.275406417706847, 42.910519483530969 ] } },
+{ "type": "Feature", "properties": { "id": 830, "indicaciones": "En la bifurcación, tomar la derecha para continuar por la costa" }, "geometry": { "type": "Point", "coordinates": [ -9.273867618680653, 42.902274758623584 ] } },
+{ "type": "Feature", "properties": { "id": 831, "indicaciones": "Ultima subida del camino, corta pero exigente" }, "geometry": { "type": "Point", "coordinates": [ -9.27914160821971, 42.893295862461926 ] } }
+]
+}
