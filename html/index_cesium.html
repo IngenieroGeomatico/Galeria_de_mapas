@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="cnig" content="yes">
+  <title>Visualizador base</title>
+    <!-- fichero estilos -->
+    <link href="https://componentes.idee.es/api-idee/assets/css/apiidee.cesium.min.css" rel="stylesheet" />
+
+    <!-- CRÍTICO (debe ir ANTES de API-IDEE / MapLibre):
+         Fuerza preserveDrawingBuffer:true en TODO contexto WebGL. MapLibre GL
+         crea su canvas con preserveDrawingBuffer:false, lo que hace que
+         drawImage()/texImage2D() del canvas de MapLibre devuelva píxeles vacíos.
+         Sin esto, la capa MapLibre NO aparece en el anaglifo. -->
+    <script type="text/javascript">
+      (function () {
+        var orig = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (type, attrs) {
+          if (type === "webgl" || type === "webgl2" ||
+              type === "experimental-webgl") {
+            attrs = attrs || {};
+            attrs.preserveDrawingBuffer = true;
+          }
+          return orig.call(this, type, attrs);
+        };
+      })();
+    </script>
+
+    <!-- Ficheros javascript de la API -->
+    <script type="text/javascript" src="https://componentes.idee.es/api-idee/vendor/browser-polyfill.js"></script>          
+    <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.cesium.min.js"></script>        
+    <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>         
+
+    <!-- geotiff.js: decodificación del MDT (GeoTIFF) del WCS del IGN para la estereoscopía sintética -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
+
+    <!-- estilo básico -->
+    <style>
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;   /* evita scrolls si algún canvas sobresale */
+    }
+
+    /* Contenedor a pantalla completa y fijo. */
+    body {
+        position: fixed;
+        inset: 0;
+    }
+
+    #map {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    /* Panel de controles de estereoscopía */
+    #stereo-controls {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.92);
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    #stereo-controls .stereo-btn {
+        cursor: pointer;
+        border: 1px solid #b0b0b0;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #1a1a1a;
+        background: #fff;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    #stereo-controls .stereo-btn:hover {
+        background: #eef4ff;
+        border-color: #3b6fd4;
+    }
+
+    #stereo-controls .stereo-btn.active {
+        background: #3b6fd4;
+        border-color: #3b6fd4;
+        color: #fff;
+    }
+
+    /* Control de exageración vertical (profundidad del relieve) */
+    #stereo-controls .exag-control {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding-top: 6px;
+        margin-top: 2px;
+        border-top: 1px solid #e0e0e0;
+        font-size: 12px;
+        color: #1a1a1a;
+    }
+
+    #stereo-controls .exag-control label {
+        font-weight: 600;
+    }
+
+    #stereo-controls .exag-control .exag-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #stereo-controls .exag-control input[type="range"] {
+        flex: 1;
+        cursor: pointer;
+    }
+
+    #stereo-controls .exag-control #exag-value {
+        min-width: 34px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: #3b6fd4;
+        font-weight: 600;
+    }
+
+    /* Posado: filas etiqueta -> valor -> control */
+    #stereo-controls .exag-control .cota-row {
+        justify-content: space-between;
+        gap: 6px;
+        padding-top: 2px;
+    }
+
+    #stereo-controls .exag-control .cota-label {
+        font-size: 12px;
+        font-weight: 400;
+        color: #1a1a1a;
+    }
+
+    /* Valores numéricos (altitud del plano, posado, cota del puntero) */
+    #stereo-controls .exag-control #plano-altitud-value,
+    #stereo-controls .exag-control #posado-value,
+    #stereo-controls .exag-control #cursor-cota-value {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+        color: #3b6fd4;
+        font-weight: 600;
+    }
+
+    /* Botón candado del plano de referencia */
+    #stereo-controls .exag-control .plano-lock {
+        cursor: pointer;
+        border: 1px solid #b0b0b0;
+        border-radius: 6px;
+        background: #fff;
+        padding: 2px 6px;
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    #stereo-controls .exag-control .plano-lock[aria-pressed="true"] {
+        background: #3b6fd4;
+        border-color: #3b6fd4;
+    }
+
+    #stereo-controls .exag-control .posado-reset {
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    #stereo-controls .exag-control .posado-hint {
+        font-size: 11px;
+        font-weight: 400;
+        color: #6b6b6b;
+    }
+
+    /* Cursores centrales fijos (vista partida): dos cruces finas, una por mitad,
+       posicionadas por JS. Su centro (13,13) se alinea con translate(-50%,-50%). */
+    .center-cursor {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 1100;
+        pointer-events: none;
+        display: none;
+        transform: translate(-50%, -50%);
+    }
+
+    .center-cursor line,
+    .center-cursor circle {
+        stroke: #ff2d2d;
+        stroke-width: 1.5;
+        /* Halo blanco para verse sobre cualquier fondo del mapa. */
+        paint-order: stroke;
+        filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);
+    }
+
+    .center-cursor circle {
+        fill: #ff2d2d;
+    }
+
+    /* Cabecera del panel con título + botón de configuración (engranaje) */
+    #stereo-controls .stereo-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    #stereo-controls .stereo-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #1a1a1a;
+    }
+
+    #stereo-controls .settings-btn {
+        cursor: pointer;
+        border: 1px solid #b0b0b0;
+        border-radius: 6px;
+        background: #fff;
+        padding: 2px 8px;
+        font-size: 15px;
+        line-height: 1.2;
+        color: #1a1a1a;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    #stereo-controls .settings-btn:hover {
+        background: #eef4ff;
+        border-color: #3b6fd4;
+    }
+
+    #stereo-controls .settings-btn.active {
+        background: #3b6fd4;
+        border-color: #3b6fd4;
+        color: #fff;
+    }
+
+    /* Panel de configuración desplegable */
+    #stereo-controls .settings-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        margin-top: 2px;
+        background: #f4f6fa;
+        border: 1px solid #d8dde6;
+        border-radius: 6px;
+    }
+
+    /* El atributo [hidden] debe ganar al display:flex de arriba: si no, el
+       panel se vería siempre (display explícito anula el hidden nativo). */
+    #stereo-controls .settings-panel[hidden] {
+        display: none;
+    }
+
+    #stereo-controls .settings-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 12px;
+        color: #1a1a1a;
+    }
+
+    #stereo-controls .settings-row input[type="number"] {
+        width: 68px;
+        padding: 3px 6px;
+        border: 1px solid #b0b0b0;
+        border-radius: 4px;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+    #stereo-controls .settings-reset {
+        margin-top: 2px;
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+</style>
+</head>
+<body>
+  <!-- Contenedor principal del mapa (Cesium Viewer). -->
+    <div id="map"></div>
+
+    <!-- Cursores centrales fijos (vista partida): dos retículas inmóviles, una
+         en el centro de cada mitad. En Cesium la escena se renderiza dos veces
+         con scissorRectangle (una mitad por ojo); ambos ojos convergen sobre el
+         punto central del terreno. El zoom se hace hacia ese punto. Ocultos por
+         defecto. -->
+    <svg class="center-cursor" id="center-cursor-left" width="26" height="26"
+         viewBox="0 0 26 26" aria-hidden="true">
+      <line x1="13" y1="2"  x2="13" y2="9"  />
+      <line x1="13" y1="17" x2="13" y2="24" />
+      <line x1="2"  y1="13" x2="9"  y2="13" />
+      <line x1="17" y1="13" x2="24" y2="13" />
+      <circle cx="13" cy="13" r="1.5" />
+    </svg>
+    <svg class="center-cursor" id="center-cursor-right" width="26" height="26"
+         viewBox="0 0 26 26" aria-hidden="true">
+      <line x1="13" y1="2"  x2="13" y2="9"  />
+      <line x1="13" y1="17" x2="13" y2="24" />
+      <line x1="2"  y1="13" x2="9"  y2="13" />
+      <line x1="17" y1="13" x2="24" y2="13" />
+      <circle cx="13" cy="13" r="1.5" />
+    </svg>
+
+    <!-- El anaglifo se compone con un PostProcessStage nativo de Cesium sobre
+         la propia escena (no hay canvas overlay separado). -->
+
+    <!-- Controles de visualización estereoscópica -->
+    <div id="stereo-controls">
+        <!-- Cabecera con botón de configuración (engranaje). -->
+        <div class="stereo-header">
+            <span class="stereo-title">Estereoscopía</span>
+            <button type="button" id="btn-settings" class="settings-btn"
+                    title="Configuración" aria-label="Configuración"
+                    onclick="toggleSettings()">⚙</button>
+        </div>
+
+        <button type="button" id="btn-anaglyph" class="stereo-btn" onclick="toggleAnaglyph()">
+            Anaglifo (rojo/cian)
+        </button>
+        <button type="button" id="btn-split" class="stereo-btn" onclick="toggleSplitView()">
+            Vista partida
+        </button>
+
+        <!-- Panel de configuración (oculto por defecto). -->
+        <div id="settings-panel" class="settings-panel" hidden>
+            <div class="settings-row">
+                <label for="cfg-exag-min">Exageración mín.</label>
+                <input type="number" id="cfg-exag-min" step="0.05" min="0" value="0">
+            </div>
+            <div class="settings-row">
+                <label for="cfg-exag-max">Exageración máx.</label>
+                <input type="number" id="cfg-exag-max" step="0.05" min="0.1" value="2">
+            </div>
+            <div class="settings-row">
+                <label for="cfg-posado-step">Sensibilidad posado</label>
+                <input type="number" id="cfg-posado-step" step="1" min="1" value="25">
+            </div>
+            <button type="button" class="stereo-btn settings-reset"
+                    onclick="resetSettings()">Restaurar valores</button>
+        </div>
+
+        <!-- Exageración vertical: controla la profundidad percibida.
+             En M1 modula el desplazamiento estático; en M4/M5 será el
+             factor de magnificación del paralaje real del MDT. -->
+        <div class="exag-control">
+            <label for="exag-range">Exageración vertical</label>
+            <div class="exag-row">
+                <input type="range" id="exag-range"
+                       min="0" max="2" step="0.05" value="0.5"
+                       oninput="setExaggeration(this.value)">
+                <span id="exag-value">0.50</span>
+            </div>
+        </div>
+
+        <!-- Posado: plano de referencia (paralaje 0). Se ajusta con Shift+rueda
+             del ratón sobre el mapa; el botón "Centrar" reinicia el posado a 0. -->
+        <div class="exag-control">
+            <label>Posado (plano de referencia)</label>
+
+            <!-- Altitud ABSOLUTA del plano de referencia = zRef efectivo =
+                 cota del centro del viewport + posado. El candado 🔒 congela la
+                 cota base para que NO cambie al hacer pan/zoom en el mapa. -->
+            <div class="exag-row cota-row">
+                <span class="cota-label">Altitud del plano:</span>
+                <span id="plano-altitud-value">—</span>
+                <button type="button" id="btn-plano-lock"
+                        class="plano-lock" title="Bloquear el plano (no cambia al hacer pan)"
+                        aria-pressed="false" onclick="togglePlanoLock()">🔓</button>
+            </div>
+
+            <!-- Altitud del plano RELATIVA al MDT del centro = posado (offset).
+                 Positivo = plano por encima del terreno del centro. -->
+            <div class="exag-row cota-row">
+                <span class="cota-label">offset al plano de referencia:</span>
+                <span id="posado-value">0 m</span>
+                <button type="button" id="btn-posado-reset"
+                        class="stereo-btn posado-reset"
+                        onclick="resetPosado()">Centrar</button>
+            </div>
+
+            <!-- Cota del terreno (MDT) bajo el puntero del ratón. -->
+            <div class="exag-row cota-row">
+                <span class="cota-label">Cota en el Terreno:</span>
+                <span id="cursor-cota-value">—</span>
+            </div>
+
+            <!-- Cota en el Posado = altitud del plano - offset = cota base del
+                 terreno (zRefBase). Coincide con la cota del terreno cuando te
+                 posas a ras de suelo; si te posas sobre un edificio/estructura
+                 (que el MDT no recoge), comparándola con la altitud del plano se
+                 obtiene la altura del objeto. -->
+            <div class="exag-row cota-row">
+                <span class="cota-label">Cota en el Posado:</span>
+                <span id="posado-cota-value">—</span>
+            </div>
+
+            <span class="posado-hint">Shift + rueda del ratón para subir/bajar</span>
+        </div>
+
+        <!-- Debug M3: pinta la elevación (MDT) en grises sobre el mapa para
+             verificar que la textura de elevación se alinea con el viewport. -->
+        <div class="exag-control">
+            <label class="exag-row" style="font-weight:400;cursor:pointer;">
+                <input type="checkbox" id="chk-debug-elev"
+                       onchange="setDebugElev(this.checked)">
+                <span>Ver MDT (alineación)</span>
+            </label>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+      // =====================================================================
+      //  ESTEREOSCOPÍA SOBRE CESIUM (API-IDEE)  —  Port de la versión OpenLayers
+      //  --------------------------------------------------------------------
+      //  A diferencia de la versión OL (mapa plano + shader que FINGE paralaje),
+      //  aquí Cesium ofrece RELIEVE 3D REAL con cámara perspectiva, así que el
+      //  paralaje estereoscópico es físico. Toda la maquinaria de OL (módulo
+      //  Elevation/WCS, geotiff.js, motor WebGL de composición, shiftPx/zRef/
+      //  metersPerPixel, segundo mapa oculto) se sustituye por APIs nativas:
+      //    - Exageración        -> scene.verticalExaggeration
+      //    - Anaglifo           -> doble render + PostProcessStage (left.r/right.gb)
+      //    - Vista partida      -> scene.scissorRectangle por mitad
+      //    - Cotas              -> scene.pickPosition / globe.getHeight
+      //    - Posado/convergencia-> distancia de convergencia (toe-in)
+      //
+      //  Cliente: apiidee.cesium.min.js (CesiumJS 1.118).
+      //  mapajs.getMapImpl() -> Cesium.Viewer nativo.
+      //  Terreno IGN nativo por defecto (config "terrain": "QUICK*MDT_TERRAIN").
+      // =====================================================================
+      mapajs = IDEE.map({
+        container: "map",
+        // controls: ["scaleline", "scale"],
+      });
+
+      // Referencias al Viewer/Scene/Camera nativos de Cesium. Se rellenan al
+      // dispararse IDEE.evt.COMPLETED (el mapa ya está inicializado).
+      var viewer = null, scene = null, camera = null, globe = null;
+
+      // =====================================================================
+      //  Configuración de usuario (persistida en localStorage). Igual que en la
+      //  versión OL: límites del slider de exageración y paso del posado.
+      // =====================================================================
+      var AppConfig = (function () {
+        // v2: posadoStep pasó de PÍXELES (v1) a METROS. Nueva clave para no
+        // arrastrar el valor antiguo en px guardado por versiones anteriores.
+        var STORAGE_KEY = "estereoscopia.config.v2";
+        // posadoStep = SENSIBILIDAD del posado (Shift+rueda). El paso real en
+        // metros escala con la altura de cámara: metros/muesca ≈ altura·(sens/1000).
+        // 25 => ~2.5% de la altura por muesca (converge en pocas vueltas a
+        // cualquier zoom). Valores mayores = posado más rápido.
+        var DEFAULTS = { exagMin: 0, exagMax: 2, posadoStep: 25 };
+        var cfg = Object.assign({}, DEFAULTS);
+
+        function load() {
+          try {
+            var raw = window.localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+              var parsed = JSON.parse(raw);
+              if (typeof parsed.exagMin === "number") cfg.exagMin = parsed.exagMin;
+              if (typeof parsed.exagMax === "number") cfg.exagMax = parsed.exagMax;
+              if (typeof parsed.posadoStep === "number") cfg.posadoStep = parsed.posadoStep;
+            }
+          } catch (e) { /* localStorage no disponible: usamos defaults */ }
+        }
+        function save() {
+          try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); }
+          catch (e) { /* ignorar */ }
+        }
+        load();
+        return {
+          get exagMin() { return cfg.exagMin; },
+          get exagMax() { return cfg.exagMax; },
+          get posadoStep() { return cfg.posadoStep; },
+          set: function (k, v) { cfg[k] = v; save(); },
+          reset: function () { cfg = Object.assign({}, DEFAULTS); save(); },
+          defaults: DEFAULTS
+        };
+      })();
+
+      // --- Panel de configuración (engranaje) ------------------------------
+      // Aplica los límites del slider de exageración desde AppConfig y sincroniza
+      // los inputs del panel de ajustes.
+      function applyExagLimits() {
+        var range = document.getElementById("exag-range");
+        if (!range) return;
+        range.min = AppConfig.exagMin;
+        range.max = AppConfig.exagMax;
+        if (parseFloat(range.value) > AppConfig.exagMax) {
+          range.value = AppConfig.exagMax;
+          setExaggeration(range.value);
+        }
+      }
+
+      function syncSettingsInputs() {
+        var min = document.getElementById("cfg-exag-min");
+        var max = document.getElementById("cfg-exag-max");
+        var step = document.getElementById("cfg-posado-step");
+        if (min) min.value = AppConfig.exagMin;
+        if (max) max.value = AppConfig.exagMax;
+        if (step) step.value = AppConfig.posadoStep;
+      }
+
+      function toggleSettings() {
+        var panel = document.getElementById("settings-panel");
+        var btn = document.getElementById("btn-settings");
+        if (!panel) return;
+        var willShow = panel.hasAttribute("hidden");
+        if (willShow) { panel.removeAttribute("hidden"); syncSettingsInputs(); }
+        else { panel.setAttribute("hidden", ""); }
+        if (btn) btn.classList.toggle("active", willShow);
+      }
+
+      function resetSettings() {
+        AppConfig.reset();
+        syncSettingsInputs();
+        applyExagLimits();
+      }
+
+      // Persistencia en vivo de los inputs del panel de ajustes.
+      document.addEventListener("DOMContentLoaded", function () {
+        var min = document.getElementById("cfg-exag-min");
+        var max = document.getElementById("cfg-exag-max");
+        var step = document.getElementById("cfg-posado-step");
+        if (min) min.addEventListener("change", function () {
+          var v = parseFloat(min.value); if (!isNaN(v)) { AppConfig.set("exagMin", v); applyExagLimits(); }
+        });
+        if (max) max.addEventListener("change", function () {
+          var v = parseFloat(max.value); if (!isNaN(v) && v >= 0.1) { AppConfig.set("exagMax", v); applyExagLimits(); }
+        });
+        if (step) step.addEventListener("change", function () {
+          var v = parseFloat(step.value); if (!isNaN(v) && v >= 1) AppConfig.set("posadoStep", v);
+        });
+        syncSettingsInputs();
+      });
+
+      // Capa del ojo derecho (vista partida): ortofoto PNOA (WMTS del IGN).
+      // En Cesium la vista partida NO usa un segundo mapa: se renderiza la misma
+      // escena dos veces con scissorRectangle. Esta capa se usará más adelante
+      // (C6) si se quiere mostrar capas distintas por ojo.
+      var capaPNOA = new IDEE.layer.WMTS({
+        url: "https://www.ign.es/wmts/pnoa-ma",
+        name: "OI.OrthoimageCoverage",
+        legend: "PNOA Ortofoto",
+        matrixSet: "GoogleMapsCompatible",
+        format: "image/jpeg"
+      });
+      // mapajs.addLayers([capaPNOA]);
+
+      // =====================================================================
+      //  C1 — Arranque: obtener el Viewer nativo y confirmar el terreno 3D.
+      //  --------------------------------------------------------------------
+      //  IMPORTANTE (timing): en la build Cesium, IDEE.evt.COMPLETED puede
+      //  dispararse ANTES de que registremos el listener (el mapa completa muy
+      //  rápido). Por eso initEstereo() es IDEMPOTENTE y se invoca por DOS vías:
+      //   1) el evento COMPLETED (caso normal), y
+      //   2) un sondeo inmediato/con reintento por si el evento ya pasó.
+      // =====================================================================
+      var _estereoInit = false;
+
+      function initEstereo() {
+        if (_estereoInit) return true;
+        var v;
+        try {
+          v = mapajs.getMapImpl();          // Cesium.Viewer
+        } catch (e) { return false; }
+        // El viewer puede existir pero aún sin scene/camera utilizables.
+        if (!v || !v.scene || !v.camera) return false;
+
+        viewer = v;
+        scene  = viewer.scene;
+        camera = viewer.camera;
+        globe  = scene.globe;
+        _estereoInit = true;
+
+        // Necesario para que pickPosition y el estéreo respeten el relieve.
+        scene.depthTestAgainstTerrain = true;
+
+        // --- Verificación del terreno nativo (C1) --------------------------
+        var tp = viewer.terrainProvider;
+        var isFlat = !tp || (window.Cesium &&
+          tp instanceof window.Cesium.EllipsoidTerrainProvider);
+        console.log("[estereoscopia] Cesium Viewer listo. Terreno:",
+          isFlat ? "PLANO (Ellipsoid) — revisar config terrain"
+                 : ("3D nativo (" + (tp.constructor && tp.constructor.name) +
+                    ", availability=" + !!(tp && tp.availability) + ")"));
+        console.log("[estereoscopia] depthTestAgainstTerrain =",
+          scene.depthTestAgainstTerrain,
+          "| pickPositionSupported =", scene.pickPositionSupported);
+
+        // Exponer para depuración manual desde la consola del navegador.
+        window.__estereo = { viewer: viewer, scene: scene, camera: camera, globe: globe };
+
+        // Aplica los límites del slider de exageración desde AppConfig.
+        if (typeof applyExagLimits === "function") applyExagLimits();
+
+        // --- POSADO: Shift + rueda del ratón (C5) --------------------------
+        // Solo con un modo estéreo activo y Shift pulsado. Interceptamos en
+        // CAPTURA sobre el canvas para adelantarnos al zoom de Cesium y evitarlo.
+        scene.canvas.addEventListener("wheel", function (e) {
+          if (typeof isStereoActive !== "function" || !isStereoActive()) return;
+          if (!e.shiftKey) return;   // sin Shift => zoom normal de Cesium
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          // Paso del posado PROPORCIONAL a la altura de cámara: un paso fijo en
+          // metros es imperceptible desde vistas altas (a 12 km, 25 m no mueve
+          // nada) e inmenso desde vistas bajas. Escalando con la altura, cada
+          // muesca mueve el plano un % constante de la escena, así converge en
+          // pocas vueltas a CUALQUIER zoom. AppConfig.posadoStep actúa como
+          // sensibilidad fina (25 -> ~2.5% de la altura por muesca).
+          var h = (camera.positionCartographic &&
+                   camera.positionCartographic.height) || 1000;
+          var sens = (window.AppConfig && AppConfig.posadoStep) || 25;
+          var step = h * (sens / 1000);   // metros por muesca ~ h·sens/1000
+          var dir = e.deltaY > 0 ? -1 : 1;
+          if (typeof Cotas !== "undefined") Cotas.nudgePosado(dir * step);
+          // El posado hace DOS cosas acopladas:
+          //  1) mueve el plano pivote de la exageración (deformación geométrica),
+          applyReferencePlane();
+          //  2) reajusta la convergencia del par estéreo sobre ese plano.
+          if (typeof SplitView !== "undefined") SplitView.refresh();
+        }, { capture: true, passive: false });
+
+        // --- Recalcular zRefBase y cotas cuando la cámara deja de moverse ---
+        camera.moveEnd.addEventListener(function () {
+          if (typeof isStereoActive === "function" && isStereoActive() &&
+              typeof Cotas !== "undefined") {
+            Cotas.onMoveEnd();
+            // Al cambiar el terreno del centro, el plano pivote (que sigue a
+            // effectiveZRef) se recoloca salvo que el candado esté puesto.
+            applyReferencePlane();
+          }
+        });
+
+        // El terreno IGN de API-IDEE llega ASÍNCRONO (evento LOAD_TERRAIN): al
+        // arrancar, terrainProvider aún es el elipsoide. NO forzamos exageración
+        // hasta que el provider real esté cargado, para evitar el error de
+        // Cesium "scale must be a finite number" que detiene el render.
+        try {
+          mapajs.on(IDEE.evt.LOAD_TERRAIN, function () {
+            console.log("[estereoscopia] Terreno IGN cargado (LOAD_TERRAIN).");
+            setExaggeration(document.getElementById("exag-range").value);
+          });
+        } catch (e) { /* si el evento no existe, seguimos */ }
+
+        // Aplica la exageración inicial solo cuando el terreno ya no es plano.
+        // (Reintento acotado para el caso de que LOAD_TERRAIN ya se disparara.)
+        (function waitTerrain(tries) {
+          var t = viewer.terrainProvider;
+          var flat = !t || (window.Cesium &&
+            t instanceof window.Cesium.EllipsoidTerrainProvider);
+          if (!flat) { setExaggeration(document.getElementById("exag-range").value); return; }
+          if (tries <= 0) return;
+          setTimeout(function () { waitTerrain(tries - 1); }, 300);
+        })(40);
+
+        // Los cursores centrales de la vista partida son fijos (centro de cada
+        // mitad); solo hay que recolocarlos si cambia el tamaño de la ventana.
+        window.addEventListener("resize", function () {
+          if (typeof updateCenterCursors === "function") updateCenterCursors();
+        });
+        return true;
+      }
+
+      // Vía 1: evento oficial.
+      mapajs.on(IDEE.evt.COMPLETED, initEstereo);
+
+      // Vía 2: sondeo por si COMPLETED ya se había disparado. Reintenta hasta
+      // que el viewer esté listo (máx. ~10 s) y luego se detiene.
+      (function pollInit(tries) {
+        if (initEstereo()) return;
+        if (tries <= 0) {
+          console.warn("[estereoscopia] Viewer no disponible tras el sondeo inicial.");
+          return;
+        }
+        setTimeout(function () { pollInit(tries - 1); }, 250);
+      })(40);
+
+      // =====================================================================
+      //  C2 — Exageración vertical del relieve (nativa de Cesium).
+      //  El slider comparte rango con la versión OL (0..2). En Cesium NO
+      //  desplaza píxeles: escala el RELIEVE REAL vía scene.verticalExaggeration.
+      //  Mapeamos [0..2] del slider a un factor [1..EXAG_MAX_FACTOR] para que el
+      //  efecto sea perceptible (1 = terreno real, sin exagerar).
+      // =====================================================================
+      var EXAG_MAX_FACTOR = 5.0;   // factor de relieve cuando el slider está al máx.
+
+      // Convierte el valor del slider (0..2) al factor de verticalExaggeration.
+      //   slider 0   -> 1.0 (relieve real)
+      //   slider max -> EXAG_MAX_FACTOR
+      function sliderToExagFactor(sliderValue) {
+        var range = document.getElementById("exag-range");
+        var maxSlider = parseFloat(range.max) || 2;
+        var v = parseFloat(sliderValue);
+        if (isNaN(v)) v = 0;
+        var t = maxSlider > 0 ? v / maxSlider : 0;      // 0..1
+        return 1.0 + t * (EXAG_MAX_FACTOR - 1.0);
+      }
+
+      // Fija el PLANO PIVOTE de la exageración vertical (verticalExaggerationRelativeHeight)
+      // a la altitud del plano de referencia del posado (effectiveZRef = terreno
+      // del centro + posado). Así "posarse" sube/baja el plano sobre el que pivota
+      // el relieve: el terreno por encima del plano se estira hacia arriba y por
+      // debajo se hunde. Es un efecto GEOMÉTRICO REAL, visible en anaglifo y en
+      // vista partida. Con posado 0 el pivote está en el terreno del centro.
+      function applyReferencePlane() {
+        if (!scene) return;
+        var zRef = 0.0;
+        if (typeof Cotas !== "undefined" && Cotas.hasBase && Cotas.hasBase()) {
+          var z = Cotas.effectiveZRef();
+          if (z !== null && isFinite(z)) zRef = z;
+        }
+        scene.verticalExaggerationRelativeHeight = zRef;
+      }
+
+      // Handler del slider (mismo nombre/onclick que la versión OL).
+      function setExaggeration(value) {
+        var v = parseFloat(value);
+        if (isNaN(v)) return;
+        var lbl = document.getElementById("exag-value");
+        if (lbl) lbl.textContent = v.toFixed(2);
+        if (scene) {
+          scene.verticalExaggeration = sliderToExagFactor(v);
+          applyReferencePlane();   // pivote de exageración = plano del posado
+          scene.requestRender && scene.requestRender();
+          // Anaglyph puede no estar aún definido si esto se llama muy pronto.
+          if (typeof Anaglyph !== "undefined" && Anaglyph && Anaglyph.markDirty) {
+            Anaglyph.markDirty();
+          }
+          // En vista partida la exageración modula la separación interocular.
+          if (typeof SplitView !== "undefined" && SplitView.refresh) {
+            SplitView.refresh();
+          }
+        }
+      }
+
+      // =====================================================================
+      //  Estado de modos estereoscópicos (exclusión mutua, igual que en OL).
+      // =====================================================================
+      var STEREO_MODES = ["anaglyph", "split"];
+      var currentStereoMode = null;
+
+      function isStereoActive() {
+        return currentStereoMode === "anaglyph" || currentStereoMode === "split";
+      }
+
+      function setStereoMode(mode) {
+        STEREO_MODES.forEach(function (m) {
+          var btn = document.getElementById("btn-" + m);
+          if (btn) btn.classList.toggle("active", m === mode);
+        });
+        currentStereoMode = mode;
+        console.log("[estereoscopia] Modo activo:", mode || "ninguno");
+        // Exclusión mutua: solo un motor estéreo activo a la vez. Cada motor
+        // controla el modo de render de la escena (el anaglifo usa
+        // requestRenderMode + bucle rAF propio; la vista partida usa el render
+        // continuo nativo con useWebVR). APAGAMOS PRIMERO el saliente y luego
+        // encendemos el entrante, para no dejar la escena en un estado híbrido.
+        if (mode !== "anaglyph") Anaglyph.setEnabled(false);
+        if (mode !== "split" && typeof SplitView !== "undefined") SplitView.setEnabled(false);
+        if (mode === "anaglyph") Anaglyph.setEnabled(true);
+        if (mode === "split" && typeof SplitView !== "undefined") SplitView.setEnabled(true);
+        // Cotas/posado: activo mientras haya un modo estéreo.
+        if (typeof Cotas !== "undefined") Cotas.setActive(isStereoActive());
+        // Plano pivote de la exageración: sigue al posado mientras hay estéreo;
+        // al SALIR del estéreo lo devolvemos a 0 (nivel del mar) para no dejar el
+        // terreno deformado en la vista monoscópica normal.
+        if (isStereoActive()) {
+          applyReferencePlane();
+        } else if (scene) {
+          scene.verticalExaggerationRelativeHeight = 0.0;
+        }
+        // Cursores centrales: solo en vista partida.
+        if (typeof updateCenterCursors === "function") updateCenterCursors();
+      }
+
+      function toggleAnaglyph() {
+        setStereoMode(currentStereoMode === "anaglyph" ? null : "anaglyph");
+      }
+
+      function toggleSplitView() {
+        setStereoMode(currentStereoMode === "split" ? null : "split");
+      }
+
+      // --- Cursores centrales fijos (solo vista partida) ------------------
+      // Dos retículas en el centro geométrico de cada mitad: (25%,50%) izquierda
+      // y (75%,50%) derecha. Son puntos de mira fijos hacia los que converge el
+      // par estéreo; el zoom se hace hacia el centro de la escena.
+      function updateCenterCursors() {
+        var cL = document.getElementById("center-cursor-left");
+        var cR = document.getElementById("center-cursor-right");
+        if (!cL || !cR) return;
+        if (currentStereoMode !== "split") {
+          cL.style.display = "none"; cR.style.display = "none";
+          return;
+        }
+        var mapDiv = document.getElementById("map");
+        var W = mapDiv.clientWidth, H = mapDiv.clientHeight;
+        cL.style.left = (W * 0.25) + "px"; cL.style.top = (H / 2) + "px";
+        cL.style.display = "block";
+        cR.style.left = (W * 0.75) + "px"; cR.style.top = (H / 2) + "px";
+        cR.style.display = "block";
+      }
+
+      // =====================================================================
+      //  Convergencia compartida (anaglifo y vista partida).
+      //  --------------------------------------------------------------------
+      //  Presupuesto máximo de paralaje del fondo (fracción del ancho de pantalla)
+      //  al posar. Limita la separación del punto en el infinito a algo fusible sin
+      //  cortar el rango útil del posado. ~4% del ancho es cómodo y amplio.
+      var MAX_BG_PARALLAX_FRAC = 0.04;
+      //
+      //  Profundidad D (m) a lo largo del EJE ÓPTICO del PLANO DE PARALAJE CERO
+      //  (el "posado"). Ambos motores estéreo la usan:
+      //    - Anaglifo: paralaje del ojo izq = IOD/(D·2·tan(fovY/2)·aspect).
+      //    - Vista partida: scene.focalLength = D.
+      //  D DEBE cambiar con el posado: al subir/bajar el plano, el punto posado
+      //  del centro debe quedar a paralaje cero (rojo y cian coinciden ahí).
+      //
+      //  Geometría: se toma el punto del terreno bajo el CENTRO de la pantalla
+      //  (sobre el eje óptico) y se AVANZA POR EL RAYO DEL CENTRO hasta la altitud
+      //  del plano (effectiveZRef = terreno + posado), NO en vertical. Así el
+      //  punto de convergencia se mantiene sobre el eje óptico. La profundidad es
+      //  la proyección del vector cámara->punto sobre la dirección de la cámara.
+      //  Devuelve null si no hay terreno/base bajo el centro.
+      // Profundidad (m) del TERRENO bajo el centro, a lo largo del eje óptico.
+      // Siempre positiva. Es la referencia ESTABLE para el IOD (fuerza del 3D):
+      // no cambia al posar, así el relieve mantiene su profundidad mientras mueves
+      // el plano de fusión. Devuelve null si no hay terreno bajo el centro.
+      function terrainDepthAtCenter() {
+        var C = window.Cesium;
+        var w = scene.canvas.clientWidth, h = scene.canvas.clientHeight;
+        var center = new C.Cartesian2(w / 2, h / 2);
+        var ray = camera.getPickRay(center);
+        if (!ray) return null;
+        var ground = null;
+        try { ground = scene.pickPosition(center); } catch (e) { ground = null; }
+        if (!C.defined(ground)) {
+          var hit = C.IntersectionTests.rayEllipsoid(ray, scene.globe.ellipsoid);
+          if (hit) ground = C.Ray.getPoint(ray, hit.start);
+        }
+        if (!C.defined(ground)) return null;
+        var toG = C.Cartesian3.subtract(ground, camera.positionWC, new C.Cartesian3());
+        var d = C.Cartesian3.dot(toG, camera.directionWC);
+        return (d > 1 && isFinite(d)) ? d : null;
+      }
+
+      // Inverso de la profundidad del PLANO DE PARALAJE CERO (invD = 1/D).
+      //
+      // CLAVE: invD debe ser LINEAL en el posado para cruzar la convergencia sin
+      // salto. Si derivásemos d desde la altitud del plano y luego hiciéramos 1/d,
+      // cuando d cruza cero (plano pasando por la cámara) 1/d saltaría de +∞ a −∞.
+      // Por eso NO calculamos d: parametrizamos invD DIRECTAMENTE como función
+      // lineal del posado:
+      //     invD(posado) = 1/Dterreno − posado · pendiente
+      // - posado 0  -> invD = 1/Dterreno  (plano justo en el terreno del centro).
+      // - subir posado -> invD baja, cruza 0 (plano al infinito) y se hace
+      //   negativo (paralaje invertido) de forma CONTINUA.
+      // La pendiente se calibra con la geometría local (dHdt) para que 1 m de
+      // posado mueva el plano de forma coherente, pero SIN la división que salta.
+      // Se acota invD (no d) para mantener el paralaje del fondo fusible.
+      function convergencePlaneInvDepth() {
+        var C = window.Cesium;
+        if (typeof Cotas === "undefined" || !Cotas.hasBase()) return null;
+        var w = scene.canvas.clientWidth, h = scene.canvas.clientHeight;
+        var center = new C.Cartesian2(w / 2, h / 2);
+        var ray = camera.getPickRay(center);
+        if (!ray) return null;
+        var ground = null;
+        try { ground = scene.pickPosition(center); } catch (e) { ground = null; }
+        if (!C.defined(ground)) {
+          var hit = C.IntersectionTests.rayEllipsoid(ray, scene.globe.ellipsoid);
+          if (hit) ground = C.Ray.getPoint(ray, hit.start);
+        }
+        if (!C.defined(ground)) return null;
+        var groundCarto = C.Cartographic.fromCartesian(ground);
+        var groundH = groundCarto.height;
+        var baseDist = C.Cartesian3.distance(camera.positionWC, ground);
+        // Profundidad óptica del terreno del centro (referencia, posado 0).
+        var toG = C.Cartesian3.subtract(ground, camera.positionWC, new C.Cartesian3());
+        var Dterr = C.Cartesian3.dot(toG, camera.directionWC);
+        if (!(Dterr > 1) || !isFinite(Dterr)) return null;
+        var invTerr = 1 / Dterr;
+
+        // Pendiente d(invD)/d(posado). El plano a altitud (terreno+posado) está a
+        // profundidad d ≈ Dterr + posado/dHdt; su derivada de invD en posado 0 es
+        //   d(1/d)/dposado |_0 = -(1/Dterr²)·(1/dHdt).
+        // Usamos esa pendiente LINEAL (constante) para todo el rango: así invD es
+        // exactamente lineal en el posado y cruza cero sin singularidad.
+        var stepM = 1000.0;
+        var probe = C.Ray.getPoint(ray, baseDist + stepM);
+        var probeH = C.Cartographic.fromCartesian(probe).height;
+        var dHdt = (probeH - groundH) / stepM;
+        var posado = Cotas.posadoMeters ? Cotas.posadoMeters() : 0;
+        var slope = 0;
+        if (Math.abs(dHdt) > 1e-6) slope = -(1 / (Dterr * Dterr)) * (1 / dHdt);
+        var invD = invTerr + posado * slope;
+
+        // Clamp de invD basado en un PRESUPUESTO DE PARALAJE EN PÍXELES: limita la
+        // separación del fondo (punto en el infinito) a algo fusible, pero deja al
+        // posado responder en TODO el rango cómodo (no un tope arbitrario que se
+        // quedaba corto). Paralaje del infinito = IOD_ref·invD·K, con
+        // K = anchoPx/(2·tan(fovX/2)). Despejamos invD para el presupuesto en px.
+        // Deja cruzar cero libremente (el signo se invierte suavemente).
+        var f = camera.frustum;
+        var IODref = stereoIOD(Dterr);
+        var fovX = 2 * Math.atan(Math.tan(f.fov / 2) * (f.aspectRatio || 1));
+        var wPx = (scene.canvas && scene.canvas.width) ? scene.canvas.width : 1000;
+        var K = wPx / (2 * Math.tan(fovX / 2));
+        var maxParallaxPx = wPx * MAX_BG_PARALLAX_FRAC;   // p.ej. 4% del ancho
+        var maxInvD = (IODref > 0 && K > 0)
+          ? maxParallaxPx / (IODref * K)
+          : 1 / Math.max(Dterr * 0.05, f.near || 1);
+        if (invD > maxInvD) invD = maxInvD;
+        if (invD < -maxInvD) invD = -maxInvD;
+        return invD;
+      }
+
+      // Separación interocular de referencia (m), FIJA respecto al posado: define
+      // la FUERZA del 3D. Se basa en un paralaje objetivo en px a la profundidad
+      // del TERRENO del centro (estable), no del plano de fusión (que se mueve al
+      // posar). Así "cuánto relieve se ve" no cambia mientras mueves la fusión.
+      //   IOD_ref = targetPx · (2·Dterreno·tan(fovY/2)·aspect) / anchoCanvasPx
+      // targetPx escala con la exageración del slider.
+      var TARGET_PARALLAX_PX_MIN = 8.0;    // exageración mínima
+      var TARGET_PARALLAX_PX_MAX = 22.0;   // exageración máxima
+      function stereoIOD(Dref) {
+        var exag = scene ? (scene.verticalExaggeration || 1) : 1;
+        var maxExag = (typeof EXAG_MAX_FACTOR === "number") ? EXAG_MAX_FACTOR : 5;
+        var t = maxExag > 1 ? (exag - 1) / (maxExag - 1) : 0;
+        t = Math.max(0, Math.min(1, t));
+        var targetPx = TARGET_PARALLAX_PX_MIN +
+                       t * (TARGET_PARALLAX_PX_MAX - TARGET_PARALLAX_PX_MIN);
+        var f = camera.frustum;
+        var fov = (f && f.fov) ? f.fov : 0.6;
+        var aspect = (f && f.aspectRatio) ? f.aspectRatio : 1;
+        var wPx = (scene.canvas && scene.canvas.width) ? scene.canvas.width :
+                  (scene.context ? scene.context.drawingBufferWidth : 1000);
+        var metersPerPixelAtD = (2 * Dref * Math.tan(fov / 2) * aspect) / wPx;
+        return targetPx * metersPerPixelAtD;
+      }
+
+      // =====================================================================
+      //  C3 — Motor ANAGLIFO nativo Cesium (doble render + PostProcessStage).
+      //  --------------------------------------------------------------------
+      //  En cada recomposición renderizamos la escena DOS veces desplazando la
+      //  cámara media distancia interocular a cada lado (camera.moveRight):
+      //   1) OJO IZQUIERDO: se renderiza con el PostProcessStage DESACTIVADO
+      //      (frame de color limpio) y se copia el framebuffer a una
+      //      Cesium.Texture GPU (leftEyeTexture) con copyFromFramebuffer.
+      //   2) OJO DERECHO: se renderiza con el stage ACTIVADO; el shader combina
+      //      colorTexture (ojo der) + u_leftEye (textura ojo izq): R=izq, GB=der.
+      //
+      //  IMPORTANTE: el uniform u_leftEye devuelve una Cesium.Texture REAL, no un
+      //  HTMLCanvasElement. Pasar un canvas como uniform da textura negra en 1.118
+      //  (el anaglifo salía todo cian, left.r=0). copyFromFramebuffer en GPU es
+      //  el patrón robusto y sin coste de readback a CPU.
+      // =====================================================================
+      var Anaglyph = (function () {
+        var enabled = false;
+        var stage = null;              // Cesium.PostProcessStage
+        var leftEyeTexture = null;     // Cesium.Texture GPU con el ojo izquierdo
+        var texW = 0, texH = 0;        // dimensiones actuales de la textura
+        var rafId = null;
+        var savedFrustum = null;       // frustum original (restaurar al apagar)
+
+        // No-op: el bucle es continuo (recompone cada frame), así que ya no hay
+        // que marcar nada como "sucio". Se conserva porque setExaggeration() aún
+        // lo invoca (compatibilidad); recomponer en vivo lo hace ya frame().
+        function markDirty() { /* no-op: render continuo */ }
+
+        // No-op de compatibilidad: markDirty ya está arriba.
+
+        // Separación interocular (fuerza del 3D). Se basa en la profundidad del
+        // TERRENO del centro (estable), NO en el plano de fusión (que se mueve al
+        // posar): así el relieve mantiene su intensidad mientras mueves la fusión.
+        // Reutiliza stereoIOD() (compartida con la vista partida). Sin terreno,
+        // cae a la altura de cámara como último recurso.
+        function interocular() {
+          var Dref = terrainDepthAtCenter();
+          if (Dref !== null) return stereoIOD(Dref);
+          var h = camera.positionCartographic
+            ? camera.positionCartographic.height : 1000;
+          return stereoIOD(h);
+        }
+
+        // Shader del PostProcessStage: combina ojo izq (textura) + der (color).
+        // u_shift: desplazamiento horizontal (en UV) de la muestra del ojo
+        // izquierdo. Mueve el PLANO DE PARALAJE CERO ("posado") en 2D, sin tocar
+        // la cámara ni el frustum (intercambiar el frustum colgaba el render en
+        // este bundle). El punto a la distancia de convergencia D queda a paralaje
+        // cero cuando u_shift compensa su paralaje.
+        var FS = [
+          "uniform sampler2D colorTexture;",     // ojo DERECHO (render vivo)
+          "uniform sampler2D u_leftEye;",        // ojo IZQUIERDO (Cesium.Texture)
+          "uniform float u_shift;",              // shift horizontal en UV (posado)
+          "in vec2 v_textureCoordinates;",
+          "void main() {",
+          "  vec2 leftUV = v_textureCoordinates + vec2(u_shift, 0.0);",
+          "  vec4 right = texture(colorTexture, v_textureCoordinates);",
+          "  vec4 left  = texture(u_leftEye, leftUV);",
+          "  out_FragColor = vec4(left.r, right.g, right.b, 1.0);",
+          "}"
+        ].join("\n");
+
+        // Shift horizontal (UV) actual del ojo izquierdo, lo fija frame().
+        var shiftUV = 0.0;
+
+        // Crea/redimensiona la Cesium.Texture del ojo izquierdo para que coincida
+        // con el drawing buffer actual. Devuelve false si Cesium no está listo.
+        function ensureLeftTexture() {
+          var C = window.Cesium;
+          var ctx = scene.context;
+          var w = ctx.drawingBufferWidth, h = ctx.drawingBufferHeight;
+          if (!w || !h) return false;
+          if (leftEyeTexture && (texW !== w || texH !== h)) {
+            leftEyeTexture.destroy();
+            leftEyeTexture = null;
+          }
+          if (!leftEyeTexture) {
+            // La textura destino DEBE ser UNSIGNED_BYTE: Cesium 1.118 prohíbe
+            // explícitamente copyFromFramebuffer() sobre texturas HALF_FLOAT
+            // ("Cannot call copyFromFramebuffer when the texture pixel data type
+            // is HALF_FLOAT"). Para que la copia byte<-framebuffer sea válida, el
+            // framebuffer de color TAMBIÉN debe ser RGBA8, lo que se garantiza
+            // desactivando el pipeline HDR (ver setEnabled: highDynamicRange=false).
+            leftEyeTexture = new C.Texture({
+              context: ctx,
+              width: w, height: h,
+              pixelFormat: C.PixelFormat.RGBA,
+              pixelDatatype: C.PixelDatatype.UNSIGNED_BYTE
+            });
+            texW = w; texH = h;
+          }
+          return true;
+        }
+
+        // Copia el frame ya pintado en el CANVAS de Cesium a la textura del ojo
+        // izquierdo. Se usa copyFrom({source: canvas}) en vez de
+        // copyFromFramebuffer() por dos motivos de Cesium 1.118:
+        //   1) copyFromFramebuffer() sobre texturas HALF_FLOAT está PROHIBIDO, y
+        //      con un PostProcessStage activo el framebuffer de color es HDR/float.
+        //   2) Con cualquier PostProcessStage en la colección, scene.render()
+        //      dibuja en un framebuffer OFFSCREEN, no en el canvas/framebuffer
+        //      por defecto. Por eso copyFromFramebuffer() leía un buffer vacío y
+        //      la textura salía NEGRA (anaglifo solo cian). El canvas, en cambio,
+        //      sí contiene los píxeles presentados (preserveDrawingBuffer:true),
+        //      siempre que el ojo izquierdo se haya renderizado con el pipeline de
+        //      post-proceso DESACTIVADO (ver frame()).
+        function captureLeftEye() {
+          if (!ensureLeftTexture()) return;
+          leftEyeTexture.copyFrom({ source: scene.canvas });
+        }
+
+        // Bucle de render CONTINUO (un doble-pase por frame de animación).
+        // Mantenemos scene.requestRenderMode = true para que Cesium NO renderice
+        // por su cuenta: si lo hiciera durante un pan/zoom/inercia, pintaría el
+        // canvas con un ÚNICO pase (mapa plano, sin paralaje) y "se perderían los
+        // colores" del anaglifo. Con este loop como única autoridad de render, el
+        // efecto se mantiene estable durante Y después del movimiento.
+        // NOTA: NO se puede llamar a scene.render() desde eventos de Cesium
+        // Shift horizontal (en UV) del ojo izquierdo para poner a PARALAJE CERO
+        // el plano de convergencia. Usa invD = 1/D (LINEAL) en vez de D, de modo
+        // que al posar cruzando la convergencia el shift pasa por cero de forma
+        // CONTINUA y cambia de signo (rojo/cian se invierten suavemente) sin el
+        // salto de +∞/−∞ que daría dividir por D≈0.
+        //   baseUV = iod · invD / (2·tan(fovY/2)·aspect)
+        function computeShiftUV(iod) {
+          var f = camera.frustum;
+          if (!(f instanceof window.Cesium.PerspectiveFrustum)) return 0;
+          var invD = convergencePlaneInvDepth();   // 1/D del plano (lineal, con signo)
+          if (invD === null) return 0;
+          var tanHalfFovY = Math.tan(f.fov / 2);
+          var aspect = f.aspectRatio || 1;
+          var baseUV = (iod * invD) / (2 * tanHalfFovY * aspect);
+          return isFinite(baseUV) ? -baseUV : 0;
+        }
+
+        function frame() {
+          if (!enabled) { rafId = null; return; }
+
+          // Con requestRenderMode=true, scene.render() no ejecuta el update
+          // completo; initializeFrame() prepara el FrameState. El frustum ya es
+          // uno limpio (lo sustituimos en setEnabled), así que aspectRatio está
+          // bien definido y computeCullingVolume no falla.
+          scene.initializeFrame();
+
+          // Mantén el aspecto del frustro limpio sincronizado con el canvas por
+          // si cambia el tamaño de ventana mientras el anaglifo está activo.
+          var dbw = scene.drawingBufferWidth, dbh = scene.drawingBufferHeight;
+          if (dbw > 0 && dbh > 0) camera.frustum.aspectRatio = dbw / dbh;
+
+          var iod = interocular();
+
+          // Convergencia (posado): shift 2D en el shader. NO tocamos cámara ni
+          // frustum (hacerlo colgaba el render en este bundle).
+          // u_shift es una uniform escalar con valor inicial numérico; se
+          // actualiza por asignación directa cada frame (Cesium infiere el tipo
+          // float del valor inicial 0.0, no de una función).
+          shiftUV = computeShiftUV(iod);
+          if (stage && stage.uniforms) stage.uniforms.u_shift = shiftUV;
+
+          // --- PASE OJO IZQUIERDO (limpio, al canvas) --------------------
+          if (stage) stage.enabled = false;
+          camera.moveRight(-iod / 2);
+          scene.render();
+          captureLeftEye();            // canvas (ojo izq) -> leftEyeTexture
+
+          // --- PASE OJO DERECHO (compone el anaglifo) --------------------
+          if (stage) stage.enabled = true;
+          camera.moveRight(iod);       // de -IOD/2 a +IOD/2
+          scene.render();
+          camera.moveRight(-iod / 2);  // restaurar posición al centro
+
+          rafId = requestAnimationFrame(frame);
+        }
+
+        return {
+          setEnabled: function (on) {
+            if (!scene) return;
+            on = !!on;
+            if (on === enabled) return;   // idempotente
+            enabled = on;
+            if (enabled) {
+              // CRÍTICO (frustum corrupto): en este bundle, el paso previo por
+              // useWebVR (vista partida / init) deja camera.frustum con
+              // PROPIEDADES DE DATOS PROPIAS (fov/aspectRatio/near/far) que TAPAN
+              // los accessors del prototipo => computeCullingVolume lee undefined
+              // y el render se detiene. Solución robusta (Oracle): sustituir el
+              // frustum por uno NUEVO y LIMPIO durante el anaglifo y restaurar el
+              // original al salir. Un PerspectiveFrustum recién creado tiene el
+              // prototipo intacto y aspectRatio correcto.
+              savedFrustum = camera.frustum;
+              var dbw = scene.drawingBufferWidth, dbh = scene.drawingBufferHeight;
+              var aspect = (dbw > 0 && dbh > 0) ? dbw / dbh : 1;
+              camera.frustum = new window.Cesium.PerspectiveFrustum({
+                fov: (savedFrustum && savedFrustum.fov) ? savedFrustum.fov
+                     : window.Cesium.Math.toRadians(60),
+                aspectRatio: aspect,
+                near: (savedFrustum && savedFrustum.near) ? savedFrustum.near : 0.1,
+                far: (savedFrustum && savedFrustum.far) ? savedFrustum.far : 1e10
+              });
+              // CRÍTICO: impedir que Cesium renderice por su cuenta. Nuestro loop
+              // frame() será la ÚNICA autoridad de render (doble pase por frame).
+              scene.requestRenderMode = true;
+              if (!stage) {
+                stage = scene.postProcessStages.add(new window.Cesium.PostProcessStage({
+                  name: "anaglyph",
+                  fragmentShader: FS,
+                  uniforms: {
+                    u_leftEye: function () { return leftEyeTexture; },
+                    u_shift: 0.0
+                  }
+                }));
+              }
+              stage.enabled = true;
+              scene.postProcessStages.enabled = true;   // master switch ON (fijo)
+              // Arranca el bucle continuo si no está corriendo.
+              if (!rafId) frame();
+            } else {
+              // El loop se detiene solo al ver enabled=false; cancelamos el frame
+              // pendiente. Apagamos solo NUESTRO stage (no la colección, para no
+              // destruir sus framebuffers internos) y devolvemos el control del
+              // render a Cesium.
+              if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+              if (stage) stage.enabled = false;
+              // Restaura el frustum original que teníamos antes del anaglifo.
+              if (savedFrustum) { camera.frustum = savedFrustum; savedFrustum = null; }
+              scene.requestRenderMode = false;
+              scene.requestRender && scene.requestRender();
+            }
+          },
+          markDirty: markDirty
+        };
+      })();
+
+      // =====================================================================
+      //  C6 — VISTA PARTIDA (side-by-side, visión paralela) — NATIVA de Cesium.
+      //  --------------------------------------------------------------------
+      //  El plan original preveía scene.scissorRectangle, pero esa propiedad NO
+      //  existe en Cesium 1.118 (scissorRectangle solo existe en PostProcessStage),
+      //  y frustum.aspectRatio se reasigna cada frame desde el tamaño del canvas.
+      //  Por suerte Cesium tiene un modo estéreo NATIVO (el mismo que usa el
+      //  vrButton / el ejemplo "Cardboard" del Sandcastle):
+      //
+      //     scene.useWebVR = true;   // render side-by-side, un ojo por mitad
+      //
+      //  Cesium duplica la cámara (_cameraVR), corrige el aspecto de cada mitad
+      //  (_aspectRatioVR) y desplaza cada ojo media separación interocular. Todo
+      //  el aspecto/culling/picking lo gestiona el motor: es MUCHO más robusto
+      //  que componer a mano con render-a-textura, y no toca el frustum (lo que
+      //  colgaba el render en este bundle).
+      //
+      //  Mapeo a la UI existente (mismos controles que el anaglifo):
+      //   - Separación interocular -> scene.eyeSeparation (m) = D/30 · factor de
+      //     exageración (regla clásica), con D = distancia de convergencia. La
+      //     EXAGERACIÓN vertical la modula: a más exageración, más profundidad.
+      //   - Convergencia / "posado" -> scene.focalLength (MULTIPLICADOR de near:
+      //     fo = near·focalLength). Se fija a Dplano/near para situar el plano de
+      //     paralaje cero a Dplano metros. El posado (Shift+rueda) lo sube/baja.
+      //
+      //  Igual que el anaglifo, es EXCLUSIVO: solo un motor estéreo a la vez.
+      // =====================================================================
+      var SplitView = (function () {
+        var enabled = false;
+        var removeListener = null;   // quita el hook preRender al desactivar
+
+        // Separación interocular (fuerza del 3D). Igual que el anaglifo: se basa
+        // en la profundidad del TERRENO del centro (estable), no en el plano de
+        // fusión. Así el relieve mantiene su intensidad mientras se posa.
+        function computeEyeSeparation() {
+          var Dref = terrainDepthAtCenter();
+          if (Dref !== null) return stereoIOD(Dref);
+          var h = camera.positionCartographic
+            ? camera.positionCartographic.height : 1000;
+          return stereoIOD(h);
+        }
+
+        // scene.focalLength en el modo WebVR de Cesium NO son metros: es un
+        // MULTIPLICADOR de camera.frustum.near (la distancia focal real es
+        // fo = near · focalLength). Por eso pasar metros (1/invD ≈ 15000) daba
+        // fo astronómico y el posado NO tenía efecto en la vista doble.
+        // Conversión correcta: focalLength = Dplane / near, con Dplane = 1/invD.
+        // El modo nativo no admite divergencia (plano detrás), así que acotamos
+        // invD a un mínimo positivo (el plano puede ir de cerca hasta el infinito).
+        function computeFocalLength() {
+          var near = camera.frustum && camera.frustum.near ? camera.frustum.near : 1;
+          var invD = convergencePlaneInvDepth();
+          if (invD === null) return 5.0;   // default de Cesium (fo = near·5)
+          var MIN_INV_D = 1e-6;            // evita plano detrás / div por cero
+          if (invD < MIN_INV_D) invD = MIN_INV_D;
+          var Dplane = 1 / invD;
+          var focal = Dplane / near;       // multiplicador unitless que espera Cesium
+          return isFinite(focal) && focal > 0 ? focal : 5.0;
+        }
+
+        // Aplica separación y convergencia en vivo. Se llama en cada preRender
+        // mientras el modo está activo (la altura de cámara cambia con el zoom).
+        function applyStereoParams() {
+          if (!scene) return;
+          scene.eyeSeparation = computeEyeSeparation();
+          scene.focalLength = computeFocalLength();
+        }
+
+        return {
+          setEnabled: function (on) {
+            if (!scene) return;
+            on = !!on;
+            // Idempotente: si no cambia el estado, NO tocamos scene.useWebVR.
+            // Poner useWebVR=false cuando ya era false corrompe el frustum de la
+            // cámara en este bundle (props propias que tapan los accessors), lo
+            // que luego rompe el anaglifo. Por eso salimos temprano.
+            if (on === enabled) return;
+            enabled = on;
+            if (enabled) {
+              applyStereoParams();
+              scene.useWebVR = true;   // render estéreo side-by-side nativo
+              // Reajusta separación/convergencia cada frame (altura variable).
+              if (!removeListener) {
+                removeListener = scene.preRender.addEventListener(applyStereoParams);
+              }
+            } else {
+              if (removeListener) { removeListener(); removeListener = null; }
+              scene.useWebVR = false;  // vuelve al render monoscópico normal
+            }
+          },
+          // Fuerza un reajuste inmediato (p.ej. al mover el slider de exageración
+          // o el posado) sin esperar al siguiente frame.
+          refresh: function () { if (enabled) applyStereoParams(); }
+        };
+      })();
+
+      // =====================================================================
+      //  C4/C5 — COTAS y POSADO (plano de referencia) — nativo Cesium.
+      //  --------------------------------------------------------------------
+      //  En Cesium el relieve y el paralaje son REALES. El "posado" define el
+      //  PLANO DE CONVERGENCIA (paralaje cero): posarse = subir/bajar ese plano
+      //  sobre el terreno del centro, es decir acercar/alejar el plano de fusión.
+      //  Ambos motores estéreo lo usan: el anaglifo ajusta el shift de convergencia
+      //  y la vista partida ajusta scene.focalLength a esa distancia.
+      //    - zRefBase   = cota del terreno en el CENTRO del viewport (m). Se
+      //                   recalcula en camera.moveEnd salvo que el candado esté
+      //                   bloqueado.
+      //    - zRefOffset = "posado": desplazamiento manual del plano (Shift+rueda),
+      //                   en METROS sobre el terreno del centro.
+      //    - Altitud del plano  = zRefBase + zRefOffset  (plano-altitud-value)
+      //    - Cota en el Posado  = zRefBase               (posado-cota-value)
+      //  Cotas bajo cursor: scene.pickPosition(pixel) -> Cartographic.height.
+      // =====================================================================
+      var Cotas = (function () {
+        var zRefBase = null;      // cota del centro (m); null = desconocida
+        var zRefOffset = 0.0;     // posado (m)
+        var zRefLocked = false;   // candado: congela zRefBase en pan/zoom
+        var handler = null;       // ScreenSpaceEventHandler (MOUSE_MOVE)
+
+        function fmt(z) {
+          return (z === null || z === undefined || isNaN(z))
+            ? "\u2014" : (Math.round(z) + " m");
+        }
+
+        // Cota del terreno bajo un pixel de pantalla (Cartesian2). Devuelve
+        // metros o null si no hay intersección con el terreno.
+        function cotaAtPixel(pixel) {
+          if (!scene || !scene.pickPositionSupported) return null;
+          var C = window.Cesium;
+          try {
+            var cart = scene.pickPosition(pixel);
+            if (!C.defined(cart)) return null;
+            var carto = C.Cartographic.fromCartesian(cart);
+            return carto ? carto.height : null;
+          } catch (e) { return null; }
+        }
+
+        // Cota en el CENTRO del viewport (para zRefBase y para el modo split).
+        function cotaAtCenter() {
+          if (!scene) return null;
+          var C = window.Cesium;
+          var w = scene.canvas.clientWidth, h = scene.canvas.clientHeight;
+          return cotaAtPixel(new C.Cartesian2(w / 2, h / 2));
+        }
+
+        // Posado en METROS: el plano de convergencia (paralaje cero) parte del
+        // terreno del centro (zRefBase) y el posado lo sube/baja sobre él. Así
+        // "posarse" = acercar/alejar el plano de fusión respecto al terreno.
+        //   effectiveZRef = zRefBase + zRefOffset  (altitud del plano, en m).
+        // Posado +  => plano por encima del terreno => terreno se percibe hundido.
+        // Posado 0  => plano justo en el terreno del centro (posado a ras).
+        function effectiveZRef() {
+          return (zRefBase === null ? 0 : zRefBase) + zRefOffset;
+        }
+
+        // Recalcula zRefBase desde la cota del centro (si no está bloqueado).
+        function recomputeZRefBase() {
+          if (zRefLocked) return;
+          var z = cotaAtCenter();
+          if (z !== null) zRefBase = z;
+        }
+
+        // Refresca los valores del panel de posado.
+        function updatePlanoAltitud() {
+          var planoEl = document.getElementById("plano-altitud-value");
+          var posadoCotaEl = document.getElementById("posado-cota-value");
+          var posadoEl = document.getElementById("posado-value");
+          var stereoOn = (typeof isStereoActive === "function") && isStereoActive();
+          if (!stereoOn || zRefBase === null) {
+            if (planoEl) planoEl.textContent = "\u2014";
+            if (posadoCotaEl) posadoCotaEl.textContent = "\u2014";
+          } else {
+            // "Altitud del plano" = plano de convergencia = zRefBase + posado.
+            // "Cota en el Posado" = cota base del terreno del centro (zRefBase).
+            // Comparándolas se lee cuánto has subido/bajado el plano de fusión.
+            if (planoEl) planoEl.textContent = fmt(zRefBase + zRefOffset);
+            if (posadoCotaEl) posadoCotaEl.textContent = fmt(zRefBase);
+          }
+          // Posado en metros sobre el terreno del centro (signo explícito).
+          if (posadoEl) {
+            var v = Math.round(zRefOffset);
+            posadoEl.textContent = (v > 0 ? "+" : "") + v + " m";
+          }
+        }
+
+        // Cota mostrada bajo el cursor. En split se ignora el ratón y se muestra
+        // la cota del centro (las dos mitades se fusionan en el centro).
+        function updateCursorCota(pixel) {
+          var el = document.getElementById("cursor-cota-value");
+          if (!el) return;
+          var stereoOn = (typeof isStereoActive === "function") && isStereoActive();
+          if (!stereoOn) { el.textContent = "\u2014"; return; }
+          var split = (typeof currentStereoMode !== "undefined") &&
+                      currentStereoMode === "split";
+          var z = (split || !pixel) ? cotaAtCenter() : cotaAtPixel(pixel);
+          el.textContent = fmt(z);
+        }
+
+        return {
+          setActive: function (on) {
+            var C = window.Cesium;
+            if (on) {
+              recomputeZRefBase();
+              if (!handler && scene) {
+                handler = new C.ScreenSpaceEventHandler(scene.canvas);
+                handler.setInputAction(function (movement) {
+                  updateCursorCota(movement.endPosition);
+                }, C.ScreenSpaceEventType.MOUSE_MOVE);
+              }
+              updatePlanoAltitud();
+              updateCursorCota(null);
+            } else {
+              if (handler) { handler.destroy(); handler = null; }
+              updatePlanoAltitud();
+              updateCursorCota(null);
+            }
+          },
+          onMoveEnd: function () {
+            recomputeZRefBase();
+            updatePlanoAltitud();
+            updateCursorCota(null);
+          },
+          nudgePosado: function (deltaMeters) {
+            zRefOffset += deltaMeters;
+            updatePlanoAltitud();
+          },
+          resetPosado: function () {
+            zRefOffset = 0.0;
+            updatePlanoAltitud();
+          },
+          toggleLock: function () {
+            zRefLocked = !zRefLocked;
+            if (!zRefLocked) recomputeZRefBase();
+            updatePlanoAltitud();
+            return zRefLocked;
+          },
+          isLocked: function () { return zRefLocked; },
+          refresh: function () { updatePlanoAltitud(); },
+          // Altitud (m) del plano de paralaje cero = zRefBase + posado. La usan
+          // ambos motores estéreo para converger el par en ese plano/altitud.
+          effectiveZRef: function () { return effectiveZRef(); },
+          zRefBase: function () { return zRefBase; },
+          // Posado en METROS sobre el terreno del centro (Shift+rueda).
+          posadoMeters: function () { return zRefOffset; },
+          hasBase: function () { return zRefBase !== null; }
+        };
+      })();
+
+      // --- Funciones globales del panel (referenciadas por onclick del HTML) ---
+      function resetPosado() {
+        Cotas.resetPosado();
+        // Recoloca el plano pivote de la exageración y la convergencia al terreno.
+        applyReferencePlane();
+        if (typeof SplitView !== "undefined") SplitView.refresh();
+      }
+
+      function togglePlanoLock() {
+        var locked = Cotas.toggleLock();
+        var btn = document.getElementById("btn-plano-lock");
+        if (btn) {
+          btn.setAttribute("aria-pressed", locked ? "true" : "false");
+          btn.textContent = locked ? "\uD83D\uDD12" : "\uD83D\uDD13"; // 🔒 / 🔓
+        }
+        // Al bloquear/desbloquear puede cambiar zRefBase => recoloca el plano.
+        applyReferencePlane();
+        if (typeof SplitView !== "undefined") SplitView.refresh();
+      }
+
+      // "Ver MDT": en OL pintaba la elevación en grises para validar alineación.
+      // En Cesium el relieve 3D ya es visible; de momento no-op (no rompe el
+      // checkbox del panel).
+      function setDebugElev(on) {
+        console.log("[estereoscopia] Ver MDT:", on, "(no aplica en Cesium 3D)");
+      }
+    </script>
+</body>
+</html>

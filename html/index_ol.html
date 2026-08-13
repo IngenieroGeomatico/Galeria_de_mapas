@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="cnig" content="yes">
+  <title>Visualizador base</title>
+    <!-- fichero estilos -->
+    <link href="https://componentes.idee.es/api-idee/assets/css/apiidee.ol.min.css" rel="stylesheet" />
+
+    <!-- CRÍTICO (debe ir ANTES de API-IDEE / MapLibre):
+         Fuerza preserveDrawingBuffer:true en TODO contexto WebGL. MapLibre GL
+         crea su canvas con preserveDrawingBuffer:false, lo que hace que
+         drawImage()/texImage2D() del canvas de MapLibre devuelva píxeles vacíos.
+         Sin esto, la capa MapLibre NO aparece en el anaglifo. -->
+    <script type="text/javascript">
+      (function () {
+        var orig = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (type, attrs) {
+          if (type === "webgl" || type === "webgl2" ||
+              type === "experimental-webgl") {
+            attrs = attrs || {};
+            attrs.preserveDrawingBuffer = true;
+          }
+          return orig.call(this, type, attrs);
+        };
+      })();
+    </script>
+
+    <!-- Ficheros javascript de la API -->
+    <script type="text/javascript" src="https://componentes.idee.es/api-idee/vendor/browser-polyfill.js"></script>          
+    <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.ol.min.js"></script>        
+    <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>         
+
+    <!-- geotiff.js: decodificación del MDT (GeoTIFF) del WCS del IGN para la estereoscopía sintética -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
+
+    <!-- estilo básico -->
+    <style>
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;   /* evita scrolls si algún canvas sobresale */
+    }
+
+    /* Contenedor a pantalla completa y fijo: aunque el canvas overlay
+       (oversized y rotado) sobresalga, este contenedor recorta y no
+       genera barras de scroll. */
+    body {
+        position: fixed;
+        inset: 0;
+    }
+
+    #map {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;   /* recorta el canvas overlay oversized/rotado */
+    }
+
+    /* Segundo mapa (ojo derecho): fuera de la pantalla pero RENDERIZABLE.
+       No usamos display:none/visibility:hidden porque impedirían que OL pinte
+       su canvas (que necesitamos capturar como textura). Lo sacamos del
+       viewport con left negativo y tamaño igual al mapa principal (por JS). */
+    #map-right {
+        position: absolute;
+        top: 0;
+        left: -20000px;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        pointer-events: none;
+    }
+
+    /* Canvas WebGL del anaglifo. Se inserta como hermano de .ol-layers (justo
+       después) dentro de .ol-viewport, por lo que queda sobre el mapa base pero
+       bajo los controles de API-IDEE.
+       pointer-events:none => el mapa sigue siendo interactivo por debajo. */
+    #anaglyph-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+        display: none;
+    }
+
+    /* Panel de controles de estereoscopía */
+    #stereo-controls {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.92);
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    #stereo-controls .stereo-btn {
+        cursor: pointer;
+        border: 1px solid #b0b0b0;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #1a1a1a;
+        background: #fff;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    #stereo-controls .stereo-btn:hover {
+        background: #eef4ff;
+        border-color: #3b6fd4;
+    }
+
+    #stereo-controls .stereo-btn.active {
+        background: #3b6fd4;
+        border-color: #3b6fd4;
+        color: #fff;
+    }
+
+    /* Control de exageración vertical (profundidad del relieve) */
+    #stereo-controls .exag-control {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding-top: 6px;
+        margin-top: 2px;
+        border-top: 1px solid #e0e0e0;
+        font-size: 12px;
+        color: #1a1a1a;
+    }
+
+    #stereo-controls .exag-control label {
+        font-weight: 600;
+    }
+
+    #stereo-controls .exag-control .exag-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #stereo-controls .exag-control input[type="range"] {
+        flex: 1;
+        cursor: pointer;
+    }
+
+    #stereo-controls .exag-control #exag-value {
+        min-width: 34px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: #3b6fd4;
+        font-weight: 600;
+    }
+
+    /* Posado: filas etiqueta -> valor -> control */
+    #stereo-controls .exag-control .cota-row {
+        justify-content: space-between;
+        gap: 6px;
+        padding-top: 2px;
+    }
+
+    #stereo-controls .exag-control .cota-label {
+        font-size: 12px;
+        font-weight: 400;
+        color: #1a1a1a;
+    }
+
+    /* Valores numéricos (altitud del plano, posado, cota del puntero) */
+    #stereo-controls .exag-control #plano-altitud-value,
+    #stereo-controls .exag-control #posado-value,
+    #stereo-controls .exag-control #cursor-cota-value {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+        color: #3b6fd4;
+        font-weight: 600;
+    }
+
+    /* Botón candado del plano de referencia */
+    #stereo-controls .exag-control .plano-lock {
+        cursor: pointer;
+        border: 1px solid #b0b0b0;
+        border-radius: 6px;
+        background: #fff;
+        padding: 2px 6px;
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    #stereo-controls .exag-control .plano-lock[aria-pressed="true"] {
+        background: #3b6fd4;
+        border-color: #3b6fd4;
+    }
+
+    #stereo-controls .exag-control .posado-reset {
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    #stereo-controls .exag-control .posado-hint {
+        font-size: 11px;
+        font-weight: 400;
+        color: #6b6b6b;
+    }
+
+    /* Cursores centrales fijos (vista partida): dos cruces finas, una por mitad,
+       posicionadas por JS. Su centro (13,13) se alinea con translate(-50%,-50%). */
+    .center-cursor {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 1100;
+        pointer-events: none;
+        display: none;
+        transform: translate(-50%, -50%);
+    }
+
+    .center-cursor line,
+    .center-cursor circle {
+        stroke: #ff2d2d;
+        stroke-width: 1.5;
+        /* Halo blanco para verse sobre cualquier fondo del mapa. */
+        paint-order: stroke;
+        filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);
+    }
+
+    .center-cursor circle {
+        fill: #ff2d2d;
+    }
+
+    /* Cabecera del panel con título + botón de configuración (engranaje) */
+    #stereo-controls .stereo-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    #stereo-controls .stereo-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #1a1a1a;
+    }
+
+    #stereo-controls .settings-btn {
+        cursor: pointer;
+        border: 1px solid #b0b0b0;
+        border-radius: 6px;
+        background: #fff;
+        padding: 2px 8px;
+        font-size: 15px;
+        line-height: 1.2;
+        color: #1a1a1a;
+        transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    #stereo-controls .settings-btn:hover {
+        background: #eef4ff;
+        border-color: #3b6fd4;
+    }
+
+    #stereo-controls .settings-btn.active {
+        background: #3b6fd4;
+        border-color: #3b6fd4;
+        color: #fff;
+    }
+
+    /* Panel de configuración desplegable */
+    #stereo-controls .settings-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px;
+        margin-top: 2px;
+        background: #f4f6fa;
+        border: 1px solid #d8dde6;
+        border-radius: 6px;
+    }
+
+    /* El atributo [hidden] debe ganar al display:flex de arriba: si no, el
+       panel se vería siempre (display explícito anula el hidden nativo). */
+    #stereo-controls .settings-panel[hidden] {
+        display: none;
+    }
+
+    #stereo-controls .settings-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 12px;
+        color: #1a1a1a;
+    }
+
+    #stereo-controls .settings-row input[type="number"] {
+        width: 68px;
+        padding: 3px 6px;
+        border: 1px solid #b0b0b0;
+        border-radius: 4px;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+    #stereo-controls .settings-reset {
+        margin-top: 2px;
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+</style>
+</head>
+<body>
+  <!-- Contenedor principal del mapa (ojo izquierdo). -->
+    <div id="map"></div>
+
+    <!-- Segundo mapa OL (ojo derecho), OCULTO fuera de pantalla. Comparte la
+         MISMA vista que el principal; solo cambian sus capas. Su canvas se
+         captura cada frame como textura para la mitad derecha de la vista
+         partida. Mismo tamaño que #map (se ajusta por JS). -->
+    <div id="map-right" aria-hidden="true"></div>
+
+    <!-- Cursores centrales fijos (vista partida): dos retículas inmóviles, una
+         en el centro de cada mitad, separadas según el paralaje del MDT del punto
+         central, para que al fusionar ambas vistas converjan sobre el terreno.
+         El zoom con rueda se hace hacia este punto central. Ocultos por defecto. -->
+    <svg class="center-cursor" id="center-cursor-left" width="26" height="26"
+         viewBox="0 0 26 26" aria-hidden="true">
+      <line x1="13" y1="2"  x2="13" y2="9"  />
+      <line x1="13" y1="17" x2="13" y2="24" />
+      <line x1="2"  y1="13" x2="9"  y2="13" />
+      <line x1="17" y1="13" x2="24" y2="13" />
+      <circle cx="13" cy="13" r="1.5" />
+    </svg>
+    <svg class="center-cursor" id="center-cursor-right" width="26" height="26"
+         viewBox="0 0 26 26" aria-hidden="true">
+      <line x1="13" y1="2"  x2="13" y2="9"  />
+      <line x1="13" y1="17" x2="13" y2="24" />
+      <line x1="2"  y1="13" x2="9"  y2="13" />
+      <line x1="17" y1="13" x2="24" y2="13" />
+      <circle cx="13" cy="13" r="1.5" />
+    </svg>
+
+    <!-- El canvas del anaglifo se crea dinámicamente y se inserta DENTRO de
+         .ol-layers del mapa, para quedar por encima del mapa base pero por
+         debajo de los controles de API-IDEE (.m-areas). -->
+
+
+    <!-- Controles de visualización estereoscópica -->
+    <div id="stereo-controls">
+        <!-- Cabecera con botón de configuración (engranaje). -->
+        <div class="stereo-header">
+            <span class="stereo-title">Estereoscopía</span>
+            <button type="button" id="btn-settings" class="settings-btn"
+                    title="Configuración" aria-label="Configuración"
+                    onclick="toggleSettings()">⚙</button>
+        </div>
+
+        <button type="button" id="btn-anaglyph" class="stereo-btn" onclick="toggleAnaglyph()">
+            Anaglifo (rojo/cian)
+        </button>
+        <button type="button" id="btn-split" class="stereo-btn" onclick="toggleSplitView()">
+            Vista partida
+        </button>
+
+        <!-- Panel de configuración (oculto por defecto). -->
+        <div id="settings-panel" class="settings-panel" hidden>
+            <div class="settings-row">
+                <label for="cfg-exag-min">Exageración mín.</label>
+                <input type="number" id="cfg-exag-min" step="0.05" min="0" value="0">
+            </div>
+            <div class="settings-row">
+                <label for="cfg-exag-max">Exageración máx.</label>
+                <input type="number" id="cfg-exag-max" step="0.05" min="0.1" value="2">
+            </div>
+            <div class="settings-row">
+                <label for="cfg-posado-step">Paso posado (m)</label>
+                <input type="number" id="cfg-posado-step" step="1" min="1" value="25">
+            </div>
+            <button type="button" class="stereo-btn settings-reset"
+                    onclick="resetSettings()">Restaurar valores</button>
+        </div>
+
+        <!-- Exageración vertical: controla la profundidad percibida.
+             En M1 modula el desplazamiento estático; en M4/M5 será el
+             factor de magnificación del paralaje real del MDT. -->
+        <div class="exag-control">
+            <label for="exag-range">Exageración vertical</label>
+            <div class="exag-row">
+                <input type="range" id="exag-range"
+                       min="0" max="2" step="0.05" value="0.5"
+                       oninput="setExaggeration(this.value)">
+                <span id="exag-value">0.50</span>
+            </div>
+        </div>
+
+        <!-- Posado: plano de referencia (paralaje 0). Se ajusta con Shift+rueda
+             del ratón sobre el mapa; el botón "Centrar" reinicia el posado a 0. -->
+        <div class="exag-control">
+            <label>Posado (plano de referencia)</label>
+
+            <!-- Altitud ABSOLUTA del plano de referencia = zRef efectivo =
+                 cota del centro del viewport + posado. El candado 🔒 congela la
+                 cota base para que NO cambie al hacer pan/zoom en el mapa. -->
+            <div class="exag-row cota-row">
+                <span class="cota-label">Altitud del plano:</span>
+                <span id="plano-altitud-value">—</span>
+                <button type="button" id="btn-plano-lock"
+                        class="plano-lock" title="Bloquear el plano (no cambia al hacer pan)"
+                        aria-pressed="false" onclick="togglePlanoLock()">🔓</button>
+            </div>
+
+            <!-- Altitud del plano RELATIVA al MDT del centro = posado (offset).
+                 Positivo = plano por encima del terreno del centro. -->
+            <div class="exag-row cota-row">
+                <span class="cota-label">offset al plano de referencia:</span>
+                <span id="posado-value">0 m</span>
+                <button type="button" id="btn-posado-reset"
+                        class="stereo-btn posado-reset"
+                        onclick="resetPosado()">Centrar</button>
+            </div>
+
+            <!-- Cota del terreno (MDT) bajo el puntero del ratón. -->
+            <div class="exag-row cota-row">
+                <span class="cota-label">Cota en el Terreno:</span>
+                <span id="cursor-cota-value">—</span>
+            </div>
+
+            <!-- Cota en el Posado = altitud del plano - offset = cota base del
+                 terreno (zRefBase). Coincide con la cota del terreno cuando te
+                 posas a ras de suelo; si te posas sobre un edificio/estructura
+                 (que el MDT no recoge), comparándola con la altitud del plano se
+                 obtiene la altura del objeto. -->
+            <div class="exag-row cota-row">
+                <span class="cota-label">Cota en el Posado:</span>
+                <span id="posado-cota-value">—</span>
+            </div>
+
+            <span class="posado-hint">Shift + rueda del ratón para subir/bajar</span>
+        </div>
+
+        <!-- Debug M3: pinta la elevación (MDT) en grises sobre el mapa para
+             verificar que la textura de elevación se alinea con el viewport. -->
+        <div class="exag-control">
+            <label class="exag-row" style="font-weight:400;cursor:pointer;">
+                <input type="checkbox" id="chk-debug-elev"
+                       onchange="setDebugElev(this.checked)">
+                <span>Ver MDT (alineación)</span>
+            </label>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+      mapajs = IDEE.map({
+        container: "map",
+        controls: ["scaleline", "scale"],
+      });
+
+      // =====================================================================
+      //  Configuración de usuario (persistida en localStorage)
+      //   - exagMin / exagMax: límites del slider de exageración vertical.
+      //   - posadoStep: paso fijo en metros por muesca del posado (Shift+rueda).
+      // =====================================================================
+      var AppConfig = (function () {
+        var STORAGE_KEY = "estereoscopia.config.v1";
+        var DEFAULTS = { exagMin: 0, exagMax: 2, posadoStep: 25 };
+        var cfg = Object.assign({}, DEFAULTS);
+
+        function load() {
+          try {
+            var raw = window.localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+              var parsed = JSON.parse(raw);
+              if (typeof parsed.exagMin === "number") cfg.exagMin = parsed.exagMin;
+              if (typeof parsed.exagMax === "number") cfg.exagMax = parsed.exagMax;
+              if (typeof parsed.posadoStep === "number") cfg.posadoStep = parsed.posadoStep;
+            }
+          } catch (e) { /* localStorage no disponible: usamos defaults */ }
+        }
+        function save() {
+          try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); }
+          catch (e) { /* ignorar */ }
+        }
+        load();
+        return {
+          get exagMin() { return cfg.exagMin; },
+          get exagMax() { return cfg.exagMax; },
+          get posadoStep() { return cfg.posadoStep; },
+          set: function (k, v) { cfg[k] = v; save(); },
+          reset: function () { cfg = Object.assign({}, DEFAULTS); save(); },
+          defaults: DEFAULTS
+        };
+      })();
+
+      capaMAplibre= new IDEE.layer.MapLibre({
+          url: 'https://vt-mapabase.idee.es/files/styles/mapaBase_scn_color1_CNIG.json',
+          name: 'Mapa Libre',
+          legend: 'Mapa Libre'
+      })
+      //mapajs.addLayers(capaMAplibre);
+
+      var provincias = new IDEE.layer.GeoJSON({
+              name: "Provincias", 
+              url: "https://www.ideandalucia.es/services/CDAV_01_limites_administrativos/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=CDAV_01_limites_administrativos:cav_01_g13_01_Provincia&maxFeatures=50&outputFormat=application%2Fjson",
+              extract:false
+          });
+      // mapajs.addLayers(provincias);
+
+      // =====================================================================
+      //  SEGUNDO MAPA (ojo derecho) para la VISTA PARTIDA con capas distintas.
+      //  Vive en #map-right (oculto fuera de pantalla) y COMPARTE la misma
+      //  ol.View que el mapa principal => sincronización perfecta de
+      //  centro/zoom/rotación. De momento las capas de cada lado son FIJAS:
+      //   - Ojo izquierdo (mapajs): el mapa base por defecto de API-IDEE.
+      //   - Ojo derecho (mapaRight): ortofoto PNOA (WMTS del IGN).
+      //  Más adelante cada mapa podrá llevar su propio layerSwitcher.
+      // =====================================================================
+      var mapaRight = IDEE.map({ container: "map-right" });
+
+      // Capa del ojo derecho: ortofoto PNOA (máxima actualidad).
+      var capaPNOA = new IDEE.layer.WMTS({
+        url: "https://www.ign.es/wmts/pnoa-ma",
+        name: "OI.OrthoimageCoverage",
+        legend: "PNOA Ortofoto",
+        matrixSet: "GoogleMapsCompatible",
+        format: "image/jpeg"
+      }, { isBase: true });
+      mapaRight.addLayers([capaPNOA]);
+
+      // =====================================================================
+      //  ESTEREOSCOPÍA SINTÉTICA - Anaglifo (rojo/cian) sobre OpenLayers
+      //  Arquitectura: canvas WebGL superpuesto que, en cada 'postrender'
+      //  del mapa OL, toma el canvas del mapa como textura y compone el
+      //  anaglifo en un fragment shader.
+      //
+      //  Milestones:
+      //   M1 (ESTE)  desplazamiento HORIZONTAL ESTÁTICO rojo/cian (pipeline).
+      //   M2..M5     paralaje real por-píxel a partir del MDT (WCS del IGN).
+      // =====================================================================
+
+      // --------- Estado de modos (exclusión mutua, ya validado) ------------
+      var STEREO_MODES = ["anaglyph", "split"];
+      var currentStereoMode = null;
+
+      // ¿Hay algún modo estereoscópico activo (anaglifo o vista partida)?
+      // Ambos usan el motor WebGL, el MDT, el posado y los indicadores del panel.
+      function isStereoActive() {
+        return currentStereoMode === "anaglyph" || currentStereoMode === "split";
+      }
+
+      function setStereoMode(mode) {
+        STEREO_MODES.forEach(function (m) {
+          var btn = document.getElementById("btn-" + m);
+          btn.classList.toggle("active", m === mode);
+        });
+        currentStereoMode = mode;
+        console.log("[estereoscopia] Modo activo:", mode || "ninguno");
+        // El motor WebGL se usa tanto para anaglifo como para vista partida;
+        // ambos necesitan el MDT. splitView selecciona qué compone el shader.
+        var stereoOn = (mode === "anaglyph" || mode === "split");
+        Anaglyph.setSplitView(mode === "split");
+        Anaglyph.setEnabled(stereoOn);
+        Elevation.setActive(stereoOn);
+        // Refresca la altitud del plano en el panel ("—" si se apaga).
+        if (typeof updatePlanoAltitud === "function") updatePlanoAltitud();
+        // Cursores centrales: solo en vista partida. Ocúltalos y, si procede,
+        // recolócalos (el MDT puede tardar; también se refrescan en moveend).
+        if (typeof clearCenterCursors === "function") clearCenterCursors();
+        if (mode === "split" && typeof updateCenterCursors === "function") {
+          updateCenterCursors();
+        }
+        // Refresca la cota mostrada (en split = cota central; si no, se limpia).
+        if (typeof updateCursorCota === "function") updateCursorCota(null, null);
+      }
+
+      function toggleAnaglyph() {
+        setStereoMode(currentStereoMode === "anaglyph" ? null : "anaglyph");
+      }
+
+      function toggleSplitView() {
+        setStereoMode(currentStereoMode === "split" ? null : "split");
+      }
+
+      // =====================================================================
+      //  Módulo Anaglyph: motor WebGL de composición del anaglifo (M1)
+      // =====================================================================
+      var Anaglyph = (function () {
+        // --- Shaders --------------------------------------------------------
+        // Quad a pantalla completa.
+        var VERT_SRC = [
+          "attribute vec2 a_pos;",
+          "varying vec2 v_uv;",
+          "void main() {",
+          // a_pos en [-1,1]; UV en [0,1]. Y invertida para que la textura del
+          // canvas OL (origen arriba-izquierda) quede correctamente orientada.
+          "  v_uv = vec2((a_pos.x + 1.0) * 0.5, (1.0 - a_pos.y) * 0.5);",
+          "  gl_Position = vec4(a_pos, 0.0, 1.0);",
+          "}"
+        ].join("\n");
+
+        // Fragment shader: estereoscopía sintética real.
+        //  - u_map:       canvas del mapa OL (EPSG:3857).
+        //  - u_elev:      textura de elevación (rejilla regular en EPSG:4326).
+        //  - u_mapCenter: centro del viewport en 3857 (m); permite reconstruir
+        //                 la coordenada de cada píxel teniendo en cuenta rotación.
+        //  - u_rotation:  rotación de la vista (rad).
+        //  - u_elevExt:   extent de la textura de elevación en 4326
+        //                 [minLon,minLat,maxLon,maxLat] (grados).
+        //  - u_zRange:    [zMin, zMax] para desnormalizar la elevación (0..1 -> m).
+        //  - u_zRef:      elevación de referencia (paralaje 0) en metros.
+        //  - u_metersPerPixel: resolución del mapa en m/px (para el shift).
+        //  - u_magnification:  factor de exageración vertical.
+        //  - u_debugElev: 1.0 => pinta la elevación en grises (M3); 0.0 => anaglifo (M4).
+        //
+        // Alineación: para cada píxel se pasa de UV(3857) a lon/lat(4326) mediante
+        // la proyección inversa de Web Mercator, y de ahí a UV de la textura MDT.
+        // Enfoque final: el overlay TIENE el mismo tamaño y el MISMO transform
+        // CSS que el canvas de OL (así se ve rotado igual que el mapa, sin
+        // cizalla). Internamente trabajamos en el espacio del canvas de OL (sin
+        // rotar): muestreo directo del mapa con v_uv, y el MDT con el extent NO
+        // rotado del canvas de OL. Ambos en el mismo espacio => alineados.
+        // Los scrolls se evitan con overflow:hidden en #map y body.
+        var FRAG_SRC = [
+          "precision highp float;",
+          "varying vec2 v_uv;",         // UV del canvas de OL (0..1), Y=0 arriba
+          "uniform sampler2D u_map;",       // fuente del ojo izquierdo
+          "uniform sampler2D u_mapRight;",  // fuente del ojo derecho (split)
+          "uniform sampler2D u_elev;",
+          "uniform vec4 u_mapExt;",     // extent NO rotado del canvas de OL (3857)
+          "uniform vec4 u_elevExt;",
+          "uniform vec2 u_zRange;",
+          "uniform float u_zRef;",
+          "uniform float u_metersPerPixel;",
+          "uniform float u_magnification;",
+          "uniform vec2 u_viewport;",   // tamaño overlay (px backing = canvas OL)
+          "uniform float u_debugElev;",
+          "uniform float u_hasElev;",
+          "uniform float u_splitView;", // 1.0 => vista partida (side-by-side)
+          "uniform float u_rotation;",  // rotación de la vista (rad); el canvas se",
+                                        // rota por CSS, así que contrarrotamos el",
+                                        // shift para que sea HORIZONTAL EN PANTALLA.",
+
+          "const float PI = 3.14159265358979;",
+          "const float R = 6378137.0;",
+
+          "float mercY2lat(float y) { return degrees(2.0 * atan(exp(y / R)) - PI * 0.5); }",
+          "float mercX2lon(float x) { return degrees(x / R); }",
+
+          // Elevación (m) para una UV del canvas de OL (0..1, Y=0 arriba).
+          "float sampleElev(vec2 uv) {",
+          "  float mx = mix(u_mapExt.x, u_mapExt.z, uv.x);",
+          "  float my = mix(u_mapExt.w, u_mapExt.y, uv.y);",   // uv.y=0 arriba=maxY
+          "  float lon = mercX2lon(mx);",
+          "  float lat = mercY2lat(my);",
+          "  vec2 elevUV = vec2((lon - u_elevExt.x) / (u_elevExt.z - u_elevExt.x),",
+          "                     (lat - u_elevExt.y) / (u_elevExt.w - u_elevExt.y));",
+          "  if (elevUV.x < 0.0 || elevUV.x > 1.0 || elevUV.y < 0.0 || elevUV.y > 1.0) return u_zRef;",
+          "  float n = texture2D(u_elev, vec2(elevUV.x, 1.0 - elevUV.y)).r;",
+          "  return mix(u_zRange.x, u_zRange.y, n);",
+          "}",
+
+          "void main() {",
+          "  if (u_hasElev < 0.5) {",
+          "    gl_FragColor = texture2D(u_map, v_uv);",
+          "    return;",
+          "  }",
+
+          "  float z = sampleElev(v_uv);",
+
+          "  if (u_debugElev > 0.5) {",
+          "    float g = clamp((z - u_zRange.x) / max(u_zRange.y - u_zRange.x, 1.0), 0.0, 1.0);",
+          "    vec4 base = texture2D(u_map, v_uv);",
+          "    gl_FragColor = vec4(mix(base.rgb, vec3(1.0, 0.0, 0.0), g * 0.6), 1.0);",
+          "    return;",
+          "  }",
+
+          // ===== VISTA PARTIDA (side-by-side, visión paralela) ==============
+          // Dos medias imágenes: mitad izquierda = ojo izquierdo, mitad derecha =
+          // ojo derecho. Cada mitad tiene aspecto ~ (W/2 x H). Para NO aplastar el
+          // terreno, cada mitad muestra una VENTANA del mapa con ese mismo aspecto
+          // (recorte central de ancho 0.5 en UV), en vez de comprimir todo el
+          // ancho a media pantalla. Así 1 UV horizontal ocupa lo mismo que en el
+          // mapa original y el terreno mantiene su proporción.
+          //   pantalla X [0,0.5]  -> UV mapa [0.25, 0.75]  (ojo izq)
+          //   pantalla X [0.5,1]  -> UV mapa [0.25, 0.75]  (ojo der)
+          // El paralaje horizontal se toma del MDT (mismo shiftPx que el anaglifo).
+          // Nota: en split ignoramos la rotación de la división (caso poco común).
+          "  if (u_splitView > 0.5) {",
+          "    float eyeSign = (v_uv.x < 0.5) ? -1.0 : 1.0;",   // izq=-1, der=+1
+          "    float halfX = (v_uv.x < 0.5) ? 0.0 : 0.5;",
+          // localX en [0,1] dentro de la mitad; lo mapeamos a [0.25,0.75] (ancho
+          // 0.5) para conservar el aspecto y centrar la ventana en el viewport.
+          "    float localX = (v_uv.x - halfX) * 2.0;",
+          "    vec2 uv = vec2(0.25 + localX * 0.5, v_uv.y);",
+          "    float zc = sampleElev(uv);",
+          "    float sp = (zc - u_zRef) * u_magnification / max(u_metersPerPixel, 0.0001);",
+          "    float sU = sp / u_viewport.x;",   // shift en UV completo del mapa
+          "    vec2 sampleUV = vec2(uv.x + eyeSign * sU, uv.y);",
+          // Cada mitad muestrea SU PROPIA fuente: izquierda = u_map (ojo izq),
+          // derecha = u_mapRight (ojo der, con capas distintas). Así se pueden
+          // mostrar capas diferentes por ojo manteniendo el mismo paralaje.
+          "    if (v_uv.x < 0.5) {",
+          "      gl_FragColor = texture2D(u_map, sampleUV);",
+          "    } else {",
+          "      gl_FragColor = texture2D(u_mapRight, sampleUV);",
+          "    }",
+          "    return;",
+          "  }",
+
+          "  float shiftPx = (z - u_zRef) * u_magnification / max(u_metersPerPixel, 0.0001);",
+
+          // El paralaje debe ser HORIZONTAL EN PANTALLA (separación rojo/cian que
+          // ven las gafas). Pero el shader trabaja en el espacio del canvas SIN
+          // rotar, y luego OL rota el canvas por CSS con +u_rotation. Para que el
+          // desplazamiento acabe siendo horizontal en pantalla, aplicamos aquí el
+          // vector contrarrotado: d_canvas = R(-θ)·(1,0) = (cosθ, -sinθ) (UV con
+          // Y hacia abajo). Rotamos en PÍXELES y convertimos a UV por eje para no
+          // distorsionar por el aspect ratio del viewport.
+          "  float c = cos(u_rotation);",
+          "  float s = sin(u_rotation);",
+          "  vec2 dirPx = vec2(c, -s);",                 // (1,0) contrarrotado -θ
+          "  vec2 dPx = dirPx * shiftPx * 0.5;",
+          "  vec2 dUV = vec2(dPx.x / u_viewport.x, dPx.y / u_viewport.y);",
+          "  vec4 left  = texture2D(u_map, v_uv - dUV);",
+          "  vec4 right = texture2D(u_map, v_uv + dUV);",
+          "  gl_FragColor = vec4(left.r, right.g, right.b, 1.0);",
+          "}"
+        ].join("\n");
+
+        // --- Estado interno -------------------------------------------------
+        var canvas, gl, program, texture, textureRight, elevTexture, quadBuffer;
+        var aPosLoc;
+        var U = {};   // localizaciones de uniforms por nombre
+        var olMap = null;
+        var olMapRight = null;   // ol.Map del mapa derecho (vista partida)
+        var enabled = false;
+        var initialized = false;
+        var debugElev = false;   // M3: pintar elevación en grises para validar
+        var splitView = false;   // vista partida (side-by-side) en vez de anaglifo
+        var hasElev = false;     // hay textura de elevación subida
+        // Canvas 2D intermedio: OL puede pintar en varios <canvas> apilados
+        // (una capa por canvas). Los aplanamos aquí en uno solo para subirlo
+        // como textura, evitando además problemas de preserveDrawingBuffer.
+        var composeCanvas = document.createElement("canvas");
+        var composeCtx = composeCanvas.getContext("2d");
+        // Segundo canvas intermedio para el mapa derecho (vista partida).
+        var composeCanvasRight = document.createElement("canvas");
+        var composeCtxRight = composeCanvasRight.getContext("2d");
+
+        // Magnificación base para exageración = 1.0. El paralaje en píxeles es
+        // shiftPx = (z - zRef) * (BASE_MAGNIFICATION * exageración) / (m/px).
+        // BASE_MAGNIFICATION escala el efecto a algo visible manteniendo el
+        // slider en el rango intuitivo 0..2.
+        var BASE_MAGNIFICATION = 5.0;
+
+        // Exageración vertical actual (0..2). Controlada por el slider.
+        var exaggeration = 0.5;
+
+        // Elevación de referencia (paralaje 0), en metros.
+        //   zRefBase   = cota del centro del viewport (recalculada en cada
+        //                moveend, M5). Es el "suelo" automático.
+        //   zRefOffset = "posado": desplazamiento manual del plano de referencia
+        //                controlado por Shift+rueda. Positivo = sube el plano.
+        //   zRef efectivo (el que ve el shader) = zRefBase + zRefOffset.
+        // Subir el plano de referencia hace que las cotas por debajo se perciban
+        // hundidas (detrás de la pantalla) y viceversa.
+        var zRefBase = 0.0;
+        var zRefOffset = 0.0;
+        // Candado: si está bloqueado, zRefBase NO se recalcula al hacer pan/zoom
+        // (se congela la cota base actual). El posado (Shift+rueda) sigue activo.
+        var zRefLocked = false;
+        function effectiveZRef() { return zRefBase + zRefOffset; }
+
+        function compile(type, src) {
+          var s = gl.createShader(type);
+          gl.shaderSource(s, src);
+          gl.compileShader(s);
+          if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+            throw new Error("Shader: " + gl.getShaderInfoLog(s));
+          }
+          return s;
+        }
+
+        function initGL() {
+          // Crea el canvas del anaglifo y lo inserta como HERMANO de .ol-layers
+          // (justo después) dentro del .ol-viewport de OpenLayers.
+          //
+          // IMPORTANTE: NO debe insertarse DENTRO de .ol-layers. OpenLayers
+          // gestiona ese contenedor de forma exclusiva y en cada render elimina
+          // cualquier nodo ajeno (nuestro canvas desaparecía tras el primer
+          // render => el anaglifo no se veía).
+          //
+          // Orden de apilamiento en .ol-viewport (todos position:absolute,
+          // z-index:0 => manda el orden del DOM):
+          //   1) .ol-layers                    (mapa base)
+          //   2) #anaglyph-canvas              (AQUÍ: sobre el mapa)
+          //   3) .ol-overlaycontainer          (overlays)
+          //   4) .ol-overlaycontainer-stopevent(controles API-IDEE / .m-areas)
+          // Así el anaglifo queda SOBRE el mapa base y BAJO los controles, que
+          // se mantienen visibles y clicables. pointer-events:none (CSS) deja
+          // el mapa interactivo por debajo.
+          canvas = document.createElement("canvas");
+          canvas.id = "anaglyph-canvas";
+          var mapDiv = document.getElementById("map");
+          var olLayers = mapDiv.querySelector(".ol-layers");
+          if (olLayers) {
+            olLayers.insertAdjacentElement("afterend", canvas);
+          } else {
+            // Fallback: dentro del viewport, o del propio #map.
+            var vp = mapDiv.querySelector(".ol-viewport") || mapDiv;
+            vp.appendChild(canvas);
+          }
+
+          gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+          if (!gl) {
+            console.error("[estereoscopia] WebGL no disponible.");
+            return false;
+          }
+
+          var vs = compile(gl.VERTEX_SHADER, VERT_SRC);
+          var fs = compile(gl.FRAGMENT_SHADER, FRAG_SRC);
+          program = gl.createProgram();
+          gl.attachShader(program, vs);
+          gl.attachShader(program, fs);
+          gl.linkProgram(program);
+          if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            throw new Error("Program: " + gl.getProgramInfoLog(program));
+          }
+
+          aPosLoc = gl.getAttribLocation(program, "a_pos");
+          [ "u_map", "u_mapRight", "u_elev", "u_mapExt", "u_elevExt", "u_zRange", "u_zRef",
+            "u_metersPerPixel", "u_magnification", "u_viewport",
+            "u_debugElev", "u_hasElev", "u_splitView", "u_rotation" ].forEach(function (name) {
+            U[name] = gl.getUniformLocation(program, name);
+          });
+
+          // Quad cubriendo el clip-space [-1,1].
+          quadBuffer = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1, -1,  1, -1, -1, 1,
+            -1,  1,  1, -1,  1, 1
+          ]), gl.STATIC_DRAW);
+
+          // Textura del mapa izquierdo (unidad 0).
+          texture = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+
+          // Textura del mapa derecho (unidad 2) para la vista partida con capas
+          // distintas. Se rellena en render() con el canvas del mapa oculto.
+          textureRight = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, textureRight);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+          // Textura de elevación (unidad 1). Se rellena en uploadElevation().
+          elevTexture = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, elevTexture);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+          initialized = true;
+          return true;
+        }
+
+        // Sube el raster de elevación como textura (unidad 1), normalizando a
+        // 0..255 en el rango [zMin,zMax]. data = { raster, width, height,
+        // extent4326:[minLon,minLat,maxLon,maxLat], min, max }.
+        var elevExt = [0, 0, 0, 0], zRange = [0, 1];
+        function uploadElevation(data) {
+          if (!initialized || !data) return;
+          var w = data.width, h = data.height;
+          var raster = data.raster;
+          var min = data.min, max = data.max;
+          var range = (max - min) || 1;
+          // Empaquetamos la elevación normalizada en el canal R (LUMINANCE).
+          var bytes = new Uint8Array(w * h);
+          for (var i = 0; i < w * h; i++) {
+            var z = raster[i];
+            if (z <= -1000 || isNaN(z)) z = min;   // NoData -> mínimo
+            bytes[i] = Math.round(((z - min) / range) * 255);
+          }
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindTexture(gl.TEXTURE_2D, elevTexture);
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, w, h, 0,
+                        gl.LUMINANCE, gl.UNSIGNED_BYTE, bytes);
+          elevExt = data.extent4326.slice();
+          zRange = [min, max];
+          hasElev = true;
+          if (enabled && olMap) olMap.render();
+        }
+
+        // Ajusta el overlay para COINCIDIR con el canvas de OL: mismo backing
+        // store, mismo tamaño CSS y mismo transform (incluye la rotación). Así
+        // el overlay se superpone y rota exactamente igual que el mapa. El
+        // contenido lo dibuja el shader en el espacio SIN rotar del canvas de OL.
+        function syncToOLCanvas(olCanvas) {
+          if (canvas.width !== olCanvas.width || canvas.height !== olCanvas.height) {
+            canvas.width = olCanvas.width;
+            canvas.height = olCanvas.height;
+          }
+          var cs = window.getComputedStyle(olCanvas);
+          canvas.style.width = olCanvas.style.width || (olCanvas.clientWidth + "px");
+          canvas.style.height = olCanvas.style.height || (olCanvas.clientHeight + "px");
+          canvas.style.transformOrigin = cs.transformOrigin;
+          canvas.style.transform = olCanvas.style.transform || "none";
+        }
+
+        // Aplana todos los <canvas> de un contenedor de mapa (OL 2D + MapLibre
+        // WebGL) en un canvas 2D, EXCLUYENDO nuestro propio canvas del anaglifo.
+        // Todos los canvas cubren el mismo viewport CSS, así que se dibujan al
+        // mismo tamaño de referencia. MapLibre aparece porque forzamos
+        // preserveDrawingBuffer:true (ver interceptor en <head>).
+        //   mapDiv:  contenedor (#map o #map-right).
+        //   outCanvas/outCtx: destino (composeCanvas o composeCanvasRight).
+        function flattenContainer(mapDiv, outCanvas, outCtx) {
+          if (!mapDiv) return null;
+          var all = mapDiv.querySelectorAll("canvas");
+          if (!all.length) return null;
+
+          var canvases = [];
+          for (var i = 0; i < all.length; i++) {
+            if (all[i] === canvas) continue;          // excluir el anaglifo
+            if (all[i].width === 0 || all[i].height === 0) continue;
+            canvases.push(all[i]);
+          }
+          if (!canvases.length) return null;
+
+          var dpr = window.devicePixelRatio || 1;
+          var w = Math.round(mapDiv.clientWidth * dpr);
+          var h = Math.round(mapDiv.clientHeight * dpr);
+          if (w === 0 || h === 0) return null;
+
+          if (outCanvas.width !== w || outCanvas.height !== h) {
+            outCanvas.width = w;
+            outCanvas.height = h;
+          }
+          outCtx.clearRect(0, 0, w, h);
+          for (var j = 0; j < canvases.length; j++) {
+            var c = canvases[j];
+            var op = parseFloat(c.style.opacity);
+            outCtx.globalAlpha = isNaN(op) ? 1 : op;
+            outCtx.drawImage(c, 0, 0, w, h);
+          }
+          outCtx.globalAlpha = 1;
+          return outCanvas;
+        }
+
+        // Aplana el mapa principal (ojo izquierdo).
+        function flattenMapCanvases() {
+          return flattenContainer(document.getElementById("map"),
+                                  composeCanvas, composeCtx);
+        }
+
+        // Aplana el mapa derecho (ojo derecho, oculto).
+        function flattenMapCanvasesRight() {
+          return flattenContainer(document.getElementById("map-right"),
+                                  composeCanvasRight, composeCtxRight);
+        }
+
+        // Localiza el canvas de OL de referencia (el que está en .ol-layer,
+        // excluyendo el de MapLibre y nuestro overlay).
+        function getOLCanvas() {
+          var mapDiv = document.getElementById("map");
+          if (!mapDiv) return null;
+          var cs = mapDiv.querySelectorAll(".ol-layer > canvas");
+          for (var i = 0; i < cs.length; i++) {
+            if (cs[i] !== canvas && cs[i].width > 0 && cs[i].height > 0) return cs[i];
+          }
+          // Fallback: cualquier canvas que no sea el overlay ni MapLibre.
+          var all = mapDiv.querySelectorAll("canvas");
+          for (var k = 0; k < all.length; k++) {
+            if (all[k] !== canvas &&
+                !all[k].classList.contains("maplibregl-canvas") &&
+                all[k].width > 0) return all[k];
+          }
+          return null;
+        }
+
+        // Composición de un frame: sube el canvas aplanado como textura y dibuja.
+        function render() {
+          if (!initialized || !enabled) return;
+          var src = flattenMapCanvases();
+          if (!src) return;
+          var olCanvas = getOLCanvas();
+          if (!olCanvas) return;
+
+          syncToOLCanvas(olCanvas);
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.useProgram(program);
+
+          // Textura del mapa izquierdo (canvas de OL SIN rotar) -> unidad 0.
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+          gl.uniform1i(U.u_map, 0);
+
+          // Textura de elevación -> unidad 1.
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindTexture(gl.TEXTURE_2D, elevTexture);
+          gl.uniform1i(U.u_elev, 1);
+
+          // Textura del mapa derecho -> unidad 2. Solo se necesita en vista
+          // partida. Forzamos su render síncrono para capturar el frame actual
+          // (comparte la vista, así que ya está sincronizado geográficamente).
+          // Si no hay frame válido, reutilizamos la textura izquierda como
+          // fallback para no dejar la mitad derecha en negro.
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, textureRight);
+          if (splitView && olMapRight) {
+            try { olMapRight.renderSync(); } catch (e) { /* ignorar */ }
+            var srcR = flattenMapCanvasesRight();
+            if (srcR) {
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, srcR);
+            } else {
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+            }
+          } else {
+            // Fuera de split, la unidad 2 no se usa; súbela con el frame izq
+            // para tener una textura válida asignada.
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+          }
+          gl.uniform1i(U.u_mapRight, 2);
+
+          var view = olMap.getView();
+          var center = view.getCenter();
+          var res = view.getResolution();  // m/px en px CSS
+          var size = olMap.getSize();      // tamaño del mapa en px CSS [w,h]
+
+          // Extent NO rotado que cubre EXACTAMENTE el viewport visible, centrado
+          // en el centro de la vista y de tamaño (tamañoCSS * res) en metros.
+          //
+          // IMPORTANTE: derivamos el extent del tamaño CSS del mapa (getSize) y
+          // de la resolución, NO del backing store del canvas dividido por dpr.
+          // API-IDEE configura el ol.Map con pixelRatio=1, así que el backing del
+          // canvas (canvas.width) es igual al tamaño CSS, NO CSS*devicePixelRatio.
+          // Asumir dpr encogía el extent en un factor dpr (1.25 => ~270 km de
+          // desfase) y desalineaba el MDT respecto al mapa base.
+          var halfW = size[0] * res / 2;
+          var halfH = size[1] * res / 2;
+          var mapExt = [center[0] - halfW, center[1] - halfH,
+                        center[0] + halfW, center[1] + halfH];
+
+          // m/px en el espacio del backing del canvas (para el paralaje).
+          // = ancho del extent (m) / ancho del backing (px). No depende de dpr.
+          var metersPerPixelBacking = (size[0] * res) / canvas.width;
+
+          gl.uniform4f(U.u_mapExt, mapExt[0], mapExt[1], mapExt[2], mapExt[3]);
+          gl.uniform4f(U.u_elevExt, elevExt[0], elevExt[1], elevExt[2], elevExt[3]);
+          gl.uniform2f(U.u_zRange, zRange[0], zRange[1]);
+          gl.uniform1f(U.u_zRef, effectiveZRef());
+          gl.uniform1f(U.u_metersPerPixel, metersPerPixelBacking);
+          gl.uniform1f(U.u_magnification, BASE_MAGNIFICATION * exaggeration);
+          gl.uniform2f(U.u_viewport, canvas.width, canvas.height);
+          gl.uniform1f(U.u_debugElev, debugElev ? 1.0 : 0.0);
+          gl.uniform1f(U.u_hasElev, hasElev ? 1.0 : 0.0);
+          gl.uniform1f(U.u_splitView, splitView ? 1.0 : 0.0);
+          // Rotación de la vista: el canvas se rota por CSS con este ángulo, así
+          // que el shader contrarrota el shift para que el paralaje sea
+          // horizontal EN PANTALLA (ver FRAG_SRC).
+          gl.uniform1f(U.u_rotation, view.getRotation());
+
+          gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+          gl.enableVertexAttribArray(aPosLoc);
+          gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
+
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+        // Se engancha al render del ol.Map para recomponer cada frame.
+        // En API-IDEE, mapajs.getMapImpl() devuelve el ol.Map nativo.
+        // 'postrender' se dispara en cada frame (también durante pan/zoom).
+        function attachToOL() {
+          olMap = mapajs.getMapImpl();
+          // Mapa derecho (vista partida). Puede no existir en versiones sin él.
+          try {
+            if (typeof mapaRight !== "undefined" && mapaRight) {
+              olMapRight = mapaRight.getMapImpl();
+            }
+          } catch (e) { olMapRight = null; }
+          olMap.on("postrender", function () {
+            if (!enabled) return;
+            render();
+          });
+          attachPosadoWheel();
+        }
+
+        // "Posado" con Shift + rueda del ratón: sube/baja el plano de referencia
+        // (zRefOffset). Solo actúa con el modo anaglifo activo y con Shift pulsado,
+        // así el zoom normal del mapa (rueda sin Shift) sigue funcionando igual.
+        function attachPosadoWheel() {
+          var mapDiv = document.getElementById("map");
+          if (!mapDiv) return;
+          // IMPORTANTE: OpenLayers registra su handler de 'wheel' (zoom) sobre el
+          // .ol-viewport. Para adelantarnos a él y evitar que haga zoom, hay que
+          // escuchar EN CAPTURA (capture:true) sobre ese mismo elemento y cortar
+          // la propagación con stopImmediatePropagation ANTES de que OL lo vea.
+          // Un listener normal en #map (fase de burbuja) se ejecuta demasiado
+          // tarde: OL ya habría procesado el zoom.
+          var viewport = mapDiv.querySelector(".ol-viewport") || mapDiv;
+          viewport.addEventListener("wheel", function (e) {
+            if (!enabled) return;          // solo en modo estéreo
+
+            // --- Shift + rueda: POSADO (sube/baja el plano de referencia) ----
+            if (e.shiftKey) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              // Paso fijo en metros por muesca (configurable en ajustes).
+              var step = (window.AppConfig && AppConfig.posadoStep) || 25;
+              var dir = e.deltaY > 0 ? -1 : 1;
+              zRefOffset += dir * step;
+              if (enabled && olMap) olMap.render();
+              if (typeof onPosadoChange === "function") onPosadoChange(zRefOffset);
+              return;
+            }
+
+            // --- Rueda sin Shift en VISTA PARTIDA: zoom hacia el CENTRO -------
+            // El zoom se hace siempre hacia el punto central (donde están los
+            // cursores centrales fijos), no hacia el ratón. Como el centro de la
+            // vista ya es ese punto, basta con cambiar la resolución dejando el
+            // centro quieto. Interceptamos para que OL no haga su zoom-al-cursor.
+            if (splitView) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              zoomSplitAtCenter(e.deltaY);
+              return;
+            }
+            // Anaglifo (o sin split): dejamos que OL haga su zoom normal.
+          }, { passive: false, capture: true });
+        }
+
+        // Zoom hacia el centro de la vista (vista partida). No mueve el centro.
+        function zoomSplitAtCenter(deltaY) {
+          var view = olMap.getView();
+          var factor = deltaY > 0 ? 1.0 / 1.15 : 1.15;
+          var res = view.getResolution();
+          var newRes = view.constrainResolution
+            ? view.constrainResolution(res / factor)
+            : res / factor;
+          view.setResolution(newRes);   // centro intacto => zoom al centro
+          if (enabled && olMap) olMap.render();
+        }
+
+        // Callback opcional para que la UI refleje el posado actual.
+        var onPosadoChange = null;
+
+        return {
+          init: function () {
+            // Idempotente: IDEE.evt.COMPLETED puede dispararse varias veces
+            // y no queremos crear múltiples contextos/listeners.
+            if (initialized) return;
+            if (!initGL()) return;
+            attachToOL();
+            console.log("[estereoscopia] Motor anaglifo WebGL inicializado (M1).");
+          },
+          setEnabled: function (on) {
+            enabled = !!on;
+            if (!canvas) return;
+            canvas.style.display = enabled ? "block" : "none";
+            if (enabled && olMap) {
+              // Fuerza un render inmediato para que aparezca sin esperar interacción.
+              olMap.render();
+            }
+          },
+          // Ajusta la exageración vertical y repinta si el modo está activo.
+          setExaggeration: function (value) {
+            exaggeration = value;
+            if (enabled && olMap) olMap.render();
+          },
+          // Sube el raster de elevación (desde el módulo Elevation).
+          uploadElevation: uploadElevation,
+          // M3: alterna la visualización de la elevación en grises.
+          setDebugElev: function (on) {
+            debugElev = !!on;
+            if (enabled && olMap) olMap.render();
+          },
+          // Alterna la vista partida (side-by-side) vs anaglifo.
+          setSplitView: function (on) {
+            splitView = !!on;
+            if (enabled && olMap) olMap.render();
+          },
+          // Paralaje horizontal EN METROS DE MAPA para una cota, por OJO.
+          // Derivado de la fórmula del shader en split:
+          //   sp = (z - zRef)*mag/mppBacking  [px]; sU = sp/W [UV de la mitad];
+          //   shiftMetros = sU * (size[0]*res)  =>  se simplifica a (z-zRef)*mag.
+          // Es el desplazamiento (en metros, eje X del mapa SIN rotar) que el
+          // shader aplica al muestrear el mapa para UN ojo. eyeSign lo aplica el
+          // llamante. Independiente de píxeles CSS/backing.
+          splitShiftMetersForCota: function (cota) {
+            var mag = BASE_MAGNIFICATION * exaggeration;
+            return (cota - effectiveZRef()) * mag;
+          },
+          // M5: fija la cota base de referencia (paralaje 0 automático), en m.
+          // El posado (zRefOffset) se conserva: el plano efectivo = base + offset.
+          // Si el candado está bloqueado, se ignora (zRefBase queda congelado).
+          setZRef: function (z) {
+            if (zRefLocked) return;
+            zRefBase = z;
+            if (enabled && olMap) olMap.render();
+          },
+          // Candado del plano: on=true congela zRefBase (no cambia con pan/zoom).
+          setZRefLocked: function (on) { zRefLocked = !!on; },
+          isZRefLocked: function () { return zRefLocked; },
+          // "Posado": desplaza el plano de referencia en +/- deltaMeters.
+          // Devuelve el nuevo offset (metros). Positivo = plano más alto.
+          nudgePosado: function (deltaMeters) {
+            zRefOffset += deltaMeters;
+            if (enabled && olMap) olMap.render();
+            return zRefOffset;
+          },
+          // Offset de posado actual (metros).
+          getPosado: function () { return zRefOffset; },
+          // Cota de referencia efectiva (plano de paralaje 0), en metros.
+          // = zRefBase (centro del viewport) + zRefOffset (posado manual).
+          getEffectiveZRef: function () { return effectiveZRef(); },
+          // Reinicia el posado a 0 (plano vuelve a la cota del centro).
+          resetPosado: function () {
+            zRefOffset = 0.0;
+            if (enabled && olMap) olMap.render();
+            return zRefOffset;
+          },
+          // Registra un callback (offsetMetros) => void para que la UI muestre
+          // el posado actual cuando cambia con Shift+rueda.
+          setOnPosadoChange: function (fn) { onPosadoChange = fn; }
+        };
+      })();
+
+      // --- Control de exageración vertical (slider) ------------------------
+      function setExaggeration(value) {
+        var v = parseFloat(value);
+        document.getElementById("exag-value").textContent = v.toFixed(2);
+        Anaglyph.setExaggeration(v);
+      }
+
+      // --- Configuración (engranaje) --------------------------------------
+      // Aplica los límites de exageración al slider (respetando el valor actual
+      // dentro del nuevo rango) y sincroniza el paso de posado.
+      function applyConfigToUI() {
+        var range = document.getElementById("exag-range");
+        var minV = AppConfig.exagMin, maxV = AppConfig.exagMax;
+        // Salvaguarda: min < max.
+        if (maxV <= minV) maxV = minV + 0.05;
+        range.min = minV;
+        range.max = maxV;
+        // Recorta el valor actual al nuevo rango y refresca el motor/etiqueta.
+        var cur = parseFloat(range.value);
+        var clamped = Math.min(maxV, Math.max(minV, cur));
+        if (clamped !== cur) { range.value = clamped; }
+        setExaggeration(range.value);
+      }
+
+      // Sincroniza los inputs del panel con la configuración actual.
+      function syncSettingsInputs() {
+        document.getElementById("cfg-exag-min").value = AppConfig.exagMin;
+        document.getElementById("cfg-exag-max").value = AppConfig.exagMax;
+        document.getElementById("cfg-posado-step").value = AppConfig.posadoStep;
+      }
+
+      // Abre/cierra el panel de configuración.
+      function toggleSettings() {
+        var panel = document.getElementById("settings-panel");
+        var btn = document.getElementById("btn-settings");
+        var willShow = panel.hidden;
+        panel.hidden = !willShow;
+        btn.classList.toggle("active", willShow);
+        if (willShow) syncSettingsInputs();
+      }
+
+      // Restaura los valores por defecto.
+      function resetSettings() {
+        AppConfig.reset();
+        syncSettingsInputs();
+        applyConfigToUI();
+      }
+
+      // Engancha los inputs del panel para guardar y aplicar en vivo.
+      function wireSettingsInputs() {
+        var min = document.getElementById("cfg-exag-min");
+        var max = document.getElementById("cfg-exag-max");
+        var step = document.getElementById("cfg-posado-step");
+        min.addEventListener("change", function () {
+          var v = parseFloat(min.value);
+          if (!isNaN(v) && v >= 0) { AppConfig.set("exagMin", v); applyConfigToUI(); }
+        });
+        max.addEventListener("change", function () {
+          var v = parseFloat(max.value);
+          if (!isNaN(v) && v > 0) { AppConfig.set("exagMax", v); applyConfigToUI(); }
+        });
+        step.addEventListener("change", function () {
+          var v = parseFloat(step.value);
+          if (!isNaN(v) && v >= 1) { AppConfig.set("posadoStep", v); }
+        });
+      }
+
+      // --- Debug M3: ver la elevación en grises para validar alineación ----
+      function setDebugElev(on) {
+        Anaglyph.setDebugElev(on);
+      }
+
+      // --- Posado: plano de referencia (Shift + rueda) --------------------
+      // Actualiza el indicador del panel con el offset actual (metros).
+      function updatePosadoLabel(offset) {
+        var el = document.getElementById("posado-value");
+        if (el) {
+          var v = Math.round(offset);
+          el.textContent = (v > 0 ? "+" : "") + v + " m";
+        }
+        // El posado cambia el zRef efectivo => refresca la altitud del plano.
+        updatePlanoAltitud();
+      }
+
+      // Botón "Centrar": reinicia el posado a 0. Además, si el candado NO está
+      // puesto, reobtiene la altitud del plano recalculando la cota base con el
+      // centro actual del viewport (por si quedó desactualizada). Con el candado
+      // puesto, respetamos el bloqueo y no tocamos la cota base.
+      function resetPosado() {
+        var off = Anaglyph.resetPosado();
+        if (!Anaglyph.isZRefLocked()) {
+          Elevation.recomputeZRef();
+        }
+        updatePosadoLabel(off);
+      }
+
+      // --- Altitud del plano de referencia --------------------------------
+      // Muestra la altitud ABSOLUTA del plano de paralaje 0 = zRef efectivo =
+      // cota del centro del viewport (zRefBase) + posado (zRefOffset). No depende
+      // del cursor; solo cambia al desplazarte por el mapa o ajustar el posado.
+      function updatePlanoAltitud() {
+        var el = document.getElementById("plano-altitud-value");
+        var elCota = document.getElementById("posado-cota-value");
+        if (!el) return;
+        if (!isStereoActive() || !Elevation.getData()) {
+          el.textContent = "—";
+          if (elCota) elCota.textContent = "—";
+          return;
+        }
+        var zRef = Anaglyph.getEffectiveZRef();
+        el.textContent = Math.round(zRef) + " m";
+        // Cota en el Posado = altitud del plano - offset = cota base (zRefBase).
+        if (elCota) {
+          elCota.textContent = Math.round(zRef - Anaglyph.getPosado()) + " m";
+        }
+      }
+
+      // Candado del plano de referencia: al bloquear, la altitud del plano deja
+      // de recalcularse con la cota del centro al hacer pan/zoom (se congela).
+      function togglePlanoLock() {
+        var locked = !Anaglyph.isZRefLocked();
+        Anaglyph.setZRefLocked(locked);
+        var btn = document.getElementById("btn-plano-lock");
+        if (btn) {
+          btn.textContent = locked ? "🔒" : "🔓";
+          btn.setAttribute("aria-pressed", locked ? "true" : "false");
+          btn.title = locked
+            ? "Plano bloqueado (no cambia al hacer pan). Clic para desbloquear."
+            : "Bloquear el plano (no cambia al hacer pan)";
+        }
+      }
+
+      // --- Cota del terreno (MDT) --------------------------------------------
+      //  - Anaglifo: cota del terreno bajo el ratón (coord3857 del evento).
+      //  - Vista partida: cota del PUNTO CENTRAL (centro de la vista, donde están
+      //    las retículas fijas). No sigue al ratón, porque en split puntos a la
+      //    misma posición relativa en cada mitad muestran terrenos distintos por
+      //    el paralaje; mostrar el central es estable y es el punto que se posa.
+      function updateCursorCota(pixel, coord3857) {
+        var el = document.getElementById("cursor-cota-value");
+        if (!el) return;
+        if (!isStereoActive()) { el.textContent = "—"; return; }
+
+        var cota;
+        if (currentStereoMode === "split") {
+          if (!Elevation.getData()) { el.textContent = "—"; return; }
+          // Cota del centro del viewport (el punto que fusionas/posas).
+          cota = Elevation.sampleCota3857(mapajs.getMapImpl().getView().getCenter());
+        } else {
+          cota = Elevation.sampleCota3857(coord3857);
+        }
+
+        el.textContent = (cota === null) ? "—" : Math.round(cota) + " m";
+      }
+
+      function clearCursorCota() {
+        var el = document.getElementById("cursor-cota-value");
+        if (el) el.textContent = "—";
+      }
+
+      // --- Cursor fantasma (solo vista partida) ---------------------------
+      // Marca en la OTRA mitad el MISMO punto del terreno que ves bajo el ratón,
+      // para que al fusionar las dos vistas el cursor quede sobre ese punto 3D.
+      //
+      // Geometría (recomendación del Oracle): el paralaje depende de la cota del
+      // punto de TERRENO realmente dibujado bajo el cursor, no del píxel. El
+      // shader, en el ojo actual, dibuja en el píxel del ratón el terreno situado
+      // en  mapPoint = coordCursor + eyeSign*shiftMeters(z)  (eje X del mapa).
+      // Resolvemos mapPoint por iteración (z depende de la posición). Luego ese
+      // mismo mapPoint se dibuja en el OTRO ojo en:
+      //   coordGhost = mapPoint + eyeSign*shiftMeters(z_target)
+      // Con el ratón quieto, mapPoint es constante => el fantasma NO salta.
+      // --- Cursores centrales fijos (solo vista partida) ------------------
+      // Dos retículas SIEMPRE en el centro geométrico exacto de cada mitad,
+      // inmóviles: (25% del ancho, 50% del alto) para la izquierda y (75%, 50%)
+      // para la derecha. No se desplazan con el paralaje: son puntos de mira fijos
+      // y el zoom se hace hacia ellos (centro de la vista).
+      function updateCenterCursors() {
+        var cL = document.getElementById("center-cursor-left");
+        var cR = document.getElementById("center-cursor-right");
+        if (!cL || !cR) return;
+        if (currentStereoMode !== "split") {
+          cL.style.display = "none"; cR.style.display = "none";
+          return;
+        }
+        var W = document.getElementById("map").clientWidth;
+        var H = document.getElementById("map").clientHeight;
+        cL.style.left = (W * 0.25) + "px"; cL.style.top = (H / 2) + "px";
+        cL.style.display = "block";
+        cR.style.left = (W * 0.75) + "px"; cR.style.top = (H / 2) + "px";
+        cR.style.display = "block";
+      }
+
+      function clearCenterCursors() {
+        var cL = document.getElementById("center-cursor-left");
+        var cR = document.getElementById("center-cursor-right");
+        if (cL) cL.style.display = "none";
+        if (cR) cR.style.display = "none";
+      }
+
+      // =====================================================================
+      //  Módulo Elevation (M2): descarga y decodificación del MDT del IGN
+      //  vía WCS 2.0.1 GetCoverage (GeoTIFF) para el área visible.
+      //  El mapa está en EPSG:3857; el WCS que usamos es EPSG:4326, así que
+      //  transformamos el extent con ol.proj.transformExtent.
+      // =====================================================================
+      var Elevation = (function () {
+        var WCS_URL = "https://servicios.idee.es/wcs-inspire/mdt";
+        // Cobertura ligera para pruebas (1000 m, EPSG:4326). Ejes: Lat, Long.
+        var COVERAGE = "Elevacion4326_1000";
+
+        // Límites de la cobertura (de DescribeCoverage) para recortar peticiones
+        // y no pedir fuera de la Península/Canarias.
+        var COV_BOUNDS = { minLon: -18.22, minLat: 27.63, maxLon: 4.94, maxLat: 43.95 };
+
+        var olMap = null;
+        var lastData = null;   // { raster:Float32Array, width, height, extent4326, min, max }
+        var pending = false;
+
+        function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+        // Construye la URL WCS GetCoverage para un extent en EPSG:4326.
+        // ext4326 = [minLon, minLat, maxLon, maxLat].
+        function buildUrl(ext4326) {
+          var minLon = clamp(ext4326[0], COV_BOUNDS.minLon, COV_BOUNDS.maxLon);
+          var minLat = clamp(ext4326[1], COV_BOUNDS.minLat, COV_BOUNDS.maxLat);
+          var maxLon = clamp(ext4326[2], COV_BOUNDS.minLon, COV_BOUNDS.maxLon);
+          var maxLat = clamp(ext4326[3], COV_BOUNDS.minLat, COV_BOUNDS.maxLat);
+          // El eje del coverage es Lat primero, Long después.
+          var params = [
+            "SERVICE=WCS", "VERSION=2.0.1", "REQUEST=GetCoverage",
+            "COVERAGEID=" + COVERAGE,
+            "SUBSET=Lat(" + minLat + "," + maxLat + ")",
+            "SUBSET=Long(" + minLon + "," + maxLon + ")",
+            "FORMAT=image/tiff"
+          ];
+          return { url: WCS_URL + "?" + params.join("&"),
+                   ext: [minLon, minLat, maxLon, maxLat] };
+        }
+
+        // Devuelve la elevación (m) en una posición lon/lat, muestreando el
+        // raster por su extent real. Corrige el zRef inestable: antes se usaba
+        // el centro del raster descargado (recortado a la cobertura), no el
+        // centro real de la vista. lon/lat -> índice de columna/fila.
+        // extent4326 = [minLon,minLat,maxLon,maxLat]; fila 0 = norte.
+        function sampleAt(data, lon, lat) {
+          var e = data.extent4326;
+          var u = (lon - e[0]) / (e[2] - e[0]);          // 0..1 O->E
+          var v = (lat - e[1]) / (e[3] - e[1]);          // 0..1 S->N
+          if (u < 0 || u > 1 || v < 0 || v > 1) return (data.min + data.max) / 2;
+          var col = clamp(Math.round(u * (data.width - 1)), 0, data.width - 1);
+          // fila 0 = norte => invertimos v.
+          var row = clamp(Math.round((1 - v) * (data.height - 1)), 0, data.height - 1);
+          var z = data.raster[row * data.width + col];
+          if (z <= -1000 || isNaN(z)) z = (data.min + data.max) / 2;
+          return z;
+        }
+
+        // Elevación en el centro real del viewport (paralaje 0 estable).
+        function sampleViewportCenter(data) {
+          var c3857 = olMap.getView().getCenter();
+          var c4326 = window.ol.proj.transform(c3857, "EPSG:3857", "EPSG:4326");
+          return sampleAt(data, c4326[0], c4326[1]);
+        }
+
+        // Área mínima (grados) de la petición WCS. La cobertura MDT es de 1000 m
+        // (~0.009°/celda); si al hacer mucho zoom pedimos un extent más pequeño
+        // que unas pocas celdas, el WCS responde HTTP 400 (Bad Request). Forzamos
+        // un mínimo de ~0.12° (~13 km) para tener siempre varias celdas válidas.
+        var MIN_REQUEST_DEG = 0.12;
+
+        // Expande un extent 4326 hasta un tamaño mínimo, manteniendo su centro.
+        function ensureMinExtent(ext) {
+          var cLon = (ext[0] + ext[2]) / 2, cLat = (ext[1] + ext[3]) / 2;
+          var w = ext[2] - ext[0], h = ext[3] - ext[1];
+          var halfW = Math.max(w, MIN_REQUEST_DEG) / 2;
+          var halfH = Math.max(h, MIN_REQUEST_DEG) / 2;
+          return [cLon - halfW, cLat - halfH, cLon + halfW, cLat + halfH];
+        }
+
+        // Descarga y decodifica el MDT del área visible actual.
+        function update() {
+          if (pending || !olMap) return;
+          var view = olMap.getView();
+          var ext3857 = view.calculateExtent(olMap.getSize());
+          var ext4326 = window.ol.proj.transformExtent(ext3857, "EPSG:3857", "EPSG:4326");
+
+          // Si el área visible no intersecta la cobertura, no pedimos.
+          if (ext4326[2] < COV_BOUNDS.minLon || ext4326[0] > COV_BOUNDS.maxLon ||
+              ext4326[3] < COV_BOUNDS.minLat || ext4326[1] > COV_BOUNDS.maxLat) {
+            console.warn("[estereoscopia] Vista fuera de la cobertura del MDT.");
+            return;
+          }
+
+          // Garantiza un área mínima para no provocar HTTP 400 con mucho zoom.
+          var req = buildUrl(ensureMinExtent(ext4326));
+          pending = true;
+          console.log("[estereoscopia] MDT GetCoverage:", req.url);
+
+          fetch(req.url)
+            .then(function (r) {
+              if (!r.ok) throw new Error("HTTP " + r.status);
+              return r.arrayBuffer();
+            })
+            .then(function (buf) { return GeoTIFF.fromArrayBuffer(buf); })
+            .then(function (tiff) { return tiff.getImage(); })
+            .then(function (image) {
+              var w = image.getWidth();
+              var h = image.getHeight();
+              return image.readRasters().then(function (rasters) {
+                var raster = rasters[0];
+                var min = Infinity, max = -Infinity;
+                for (var i = 0; i < raster.length; i++) {
+                  var z = raster[i];
+                  if (z <= -1000 || isNaN(z)) continue;
+                  if (z < min) min = z;
+                  if (z > max) max = z;
+                }
+                if (min === Infinity) { min = 0; max = 1; }
+                lastData = { raster: raster, width: w, height: h,
+                             extent4326: req.ext, min: min, max: max };
+
+                // Sube la elevación al motor WebGL (M3) y fija la cota de
+                // referencia (paralaje 0) con la elevación del centro del
+                // viewport (M5), no del centro del raster descargado.
+                Anaglyph.uploadElevation(lastData);
+                var zRef = sampleViewportCenter(lastData);
+                Anaglyph.setZRef(zRef);
+                // Ya hay MDT y nueva cota central => refresca la altitud del plano.
+                if (typeof updatePlanoAltitud === "function") updatePlanoAltitud();
+
+                console.log("[estereoscopia] MDT OK " + w + "x" + h +
+                  " z:[" + Math.round(min) + "," + Math.round(max) + "]m" +
+                  " zRef:" + Math.round(zRef) + "m");
+                pending = false;
+              });
+            })
+            .catch(function (err) {
+              pending = false;
+              console.error("[estereoscopia] Error MDT:", err.message);
+            });
+        }
+
+        return {
+          init: function () {
+            olMap = mapajs.getMapImpl();
+            olMap.on("moveend", function () {
+              if (isStereoActive()) update();
+            });
+          },
+          // Fuerza una descarga del MDT al activar el modo anaglifo.
+          setActive: function (on) {
+            if (on) update();
+          },
+          getData: function () { return lastData; },
+          // Cota del terreno (m) en una coordenada EPSG:3857. Devuelve null si
+          // aún no hay MDT o el punto cae fuera del raster descargado.
+          sampleCota3857: function (coord3857) {
+            if (!lastData) return null;
+            var ll = window.ol.proj.transform(coord3857, "EPSG:3857", "EPSG:4326");
+            var e = lastData.extent4326;
+            if (ll[0] < e[0] || ll[0] > e[2] || ll[1] < e[1] || ll[1] > e[3]) return null;
+            return sampleAt(lastData, ll[0], ll[1]);
+          },
+          // Recalcula la cota base de referencia con la cota del centro actual
+          // del viewport y la reenvía al motor (respeta el candado en Anaglyph).
+          // Si no hay MDT descargado, lanza una descarga que fijará el zRef.
+          recomputeZRef: function () {
+            if (!lastData) { update(); return; }
+            Anaglyph.setZRef(sampleViewportCenter(lastData));
+          }
+        };
+      })();
+
+      // Inicializa el motor cuando el mapa OL esté listo.
+      mapajs.on(IDEE.evt.COMPLETED, function () {
+        Anaglyph.init();
+        Elevation.init();
+
+        // Comparte la MISMA ol.View entre ambos mapas => centro/zoom/rotación
+        // sincronizados sin código extra. El mapa derecho ya tiene sus capas.
+        try {
+          mapaRight.getMapImpl().setView(mapajs.getMapImpl().getView());
+          // Asegura que el mapa oculto tenga el mismo tamaño en píxeles.
+          mapaRight.getMapImpl().updateSize();
+        } catch (e) {
+          console.error("[estereoscopia] No se pudo compartir la vista:", e);
+        }
+
+        // Aplica la configuración guardada (límites del slider) y engancha los
+        // inputs del panel de ajustes. Debe ir antes del setExaggeration inicial.
+        applyConfigToUI();
+        syncSettingsInputs();
+        wireSettingsInputs();
+        // Sincroniza el estado inicial del slider con el motor.
+        setExaggeration(document.getElementById("exag-range").value);
+        // Refleja el posado (Shift+rueda) en el panel y muestra el valor inicial.
+        Anaglyph.setOnPosadoChange(updatePosadoLabel);
+        updatePosadoLabel(Anaglyph.getPosado());
+
+        // La altitud del plano de referencia cambia al desplazarse por el mapa
+        // (nueva cota central). Refrescamos tras cada moveend, dando margen a que
+        // el MDT del nuevo encuadre se descargue.
+        var olMapImpl = mapajs.getMapImpl();
+        olMapImpl.on("moveend", function () {
+          setTimeout(function () {
+            updatePlanoAltitud();
+            // En split la cota mostrada es la del centro: refréscala tras mover.
+            if (currentStereoMode === "split") updateCursorCota(null, null);
+          }, 400);
+        });
+        // Los cursores centrales son fijos (centro de cada mitad); solo hay que
+        // reposicionarlos si cambia el tamaño del mapa.
+        window.addEventListener("resize", function () {
+          if (currentStereoMode === "split") updateCenterCursors();
+        });
+        updatePlanoAltitud();
+
+        // Cota del terreno (MDT) para el panel. En anaglifo sigue al ratón; en
+        // split muestra la cota del centro (ver updateCursorCota).
+        olMapImpl.on("pointermove", function (evt) {
+          if (evt.dragging) return;
+          updateCursorCota(evt.pixel, evt.coordinate);
+        });
+        var mapDiv = document.getElementById("map");
+        if (mapDiv) mapDiv.addEventListener("pointerleave", function () {
+          // Solo limpiamos si NO es split (en split la cota central sigue válida).
+          if (currentStereoMode !== "split") clearCursorCota();
+        });
+      });
+    </script>
+</body>
+</html>
