@@ -1,0 +1,45 @@
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    /* evita scrolls si algún canvas (overlay oversized/rotado) sobresale */
+    overflow: hidden;
+}
+
+/* Contenedor a pantalla completa y fijo: aunque el canvas overlay del anaglifo
+   sobresalga, este contenedor recorta y no genera barras de scroll. */
+body {
+    position: fixed;
+    inset: 0;
+}
+
+/* Contenedor del mapa: relative + overflow:hidden para que el canvas WebGL del
+   anaglifo (insertado dentro de .ol-viewport) quede recortado y alineado. */
+#mapaDIV {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Spinner de carga (patrón común del resto de visualizadores). */
+#cargaSVG {
+    height: 100%;
+    background-color: #dd61ff82;
+    position: absolute;
+    z-index: 9999;
+    width: 100%;
+}
+
+#cargaSVG img {
+    height: 30vh;
+    position: sticky;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: auto;
+    margin-bottom: auto;
+    top: 30%;
+}
