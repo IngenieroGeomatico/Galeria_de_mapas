@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="cnig" content="yes">
+
+  <title>Vuelo Fotogramétrico</title>
+
+  <!-- fichero estilos de la API (implementación OpenLayers de arranque) -->
+  <link href="https://componentes.idee.es/api-idee/assets/css/apiidee.ol.min.css" rel="stylesheet" />
+
+  <!-- Ficheros javascript de la API (arranque en OpenLayers; cambioImpl
+       intercambia .ol.min <-> .cesium.min al pulsar el botón). -->
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/vendor/browser-polyfill.js"></script>
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.ol.min.js"></script>
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>
+
+  <!-- proj4: reproyección de coordenadas proyectadas (p.ej. ETRS89 UTM 30N
+       EPSG:25830) a geográficas WGS84 para pintar los datos en el mapa. -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
+
+  <!-- SheetJS (xlsx): lectura de ficheros Excel (.xlsx/.xls) en cliente. El
+       CSV se parsea con código propio del plugin (sin dependencia extra). -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- estilo propio del visualizador -->
+  <link href="./css/mapa.css" rel="stylesheet" />
+
+  <!-- Extensión: cambio de implementación (OL <-> Cesium) -->
+  <link type="text/css" rel="stylesheet" href="../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../ext/cambioImpl/cambioImpl.js" type="text/javascript"></script>
+
+  <!-- Extensión: vuelo fotogramétrico (importador de vuelos) -->
+  <link type="text/css" rel="stylesheet" href="../../ext/vueloFotogrametrico/vueloFotogrametrico.css">
+  <script src="../../ext/vueloFotogrametrico/vueloFotogrametrico.js" type="text/javascript"></script>
+
+</head>
+
+<body>
+
+  <!-- Div carga -->
+  <div id="cargaSVG">
+    <img src="../../img/iconos/gear-spinner.svg">
+  </div>
+
+  <!-- Contenedor principal del mapa -->
+  <div id="mapaDIV"></div>
+
+  <script type="text/javascript" src="./js/mapa.js"></script>
+
+</body>
+
+</html>
