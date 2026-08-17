@@ -732,32 +732,37 @@
       "    gl_FragColor = vec4(mix(base.rgb, vec3(1.0, 0.0, 0.0), g * 0.6), 1.0); return;",
       "  }",
       "  if (u_splitView > 0.5) {",
-      "    float eyeSign = (v_uv.x < 0.5) ? -1.0 : 1.0;",
-      "    float halfX = (v_uv.x < 0.5) ? 0.0 : 0.5;",
-      "    float localX = (v_uv.x - halfX) * 2.0;",
-      "    vec2 uv = vec2(0.25 + localX * 0.5, v_uv.y);",
-      "    float zc = sampleElev(uv);",
-      // Cota del CENTRO de la ventana (retícula), a la misma altura de fila.
-      // Sirve de ancla: el paralaje se separa en (relieve relativo al centro)
-      // + (paralaje absoluto del centro respecto al plano de referencia).
-      "    float zCenter = sampleElev(vec2(0.5, v_uv.y));",
-      // Relieve del píxel respecto al centro (esto es lo que da profundidad).
-      "    float spRelief = (zc - zCenter) * u_magnification / max(u_metersPerPixel, 0.0001);",
-      // Paralaje del punto central respecto al plano de referencia (posado):
-      // al posar, el centro deja de estar a paralaje 0 y el par converge en
-      // otra cota => el efecto del posado SÍ se percibe (no es un pan uniforme).
-      "    float spCenter = (zCenter - u_zRef) * u_magnification / max(u_metersPerPixel, 0.0001);",
-      // Paralaje total por ojo. Se divide por 2 para igualar la intensidad del
-      // anaglifo (en split cada mitad ocupa media pantalla mostrando una ventana
-      // UV de ancho 0.5 => 1 UV = 1 px de viewport completo, el doble que en el
-      // anaglifo; por eso /2 iguala la sensación de profundidad).
-      "    float sp = spRelief + spCenter;",
-      "    float sU = sp / (2.0 * u_viewport.x);",
-      "    vec2 sampleUV = vec2(uv.x + eyeSign * sU, uv.y);",
-      "    if (v_uv.x < 0.5) { gl_FragColor = texture2D(u_map, sampleUV); }",
-      "    else { gl_FragColor = texture2D(u_mapRight, sampleUV); }",
-      "    return;",
-      "  }",
+       // Para facilitar el posado en free-viewing dejamos la mitad IZQUIERDA FIJA
+       // como referencia (eyeSign = 0) y aplicamos TODO el paralaje a la mitad
+       // derecha (eyeSign = 2). Antes cada ojo llevaba +/-1 (mitad cada uno); al
+       // anclar la izquierda y duplicar la derecha se conserva la MISMA disparidad
+       // relativa entre las dos vistas, pero con un ancla visual estable.
+       "    float eyeSign = (v_uv.x < 0.5) ? 0.0 : 2.0;",
+       "    float halfX = (v_uv.x < 0.5) ? 0.0 : 0.5;",
+       "    float localX = (v_uv.x - halfX) * 2.0;",
+       "    vec2 uv = vec2(0.25 + localX * 0.5, v_uv.y);",
+       "    float zc = sampleElev(uv);",
+       // Cota del CENTRO de la ventana (retícula), a la misma altura de fila.
+       // Sirve de ancla: el paralaje se separa en (relieve relativo al centro)
+       // + (paralaje absoluto del centro respecto al plano de referencia).
+       "    float zCenter = sampleElev(vec2(0.5, v_uv.y));",
+       // Relieve del píxel respecto al centro (esto es lo que da profundidad).
+       "    float spRelief = (zc - zCenter) * u_magnification / max(u_metersPerPixel, 0.0001);",
+       // Paralaje del punto central respecto al plano de referencia (posado):
+       // al posar, el centro deja de estar a paralaje 0 y el par converge en
+       // otra cota => el efecto del posado SÍ se percibe (no es un pan uniforme).
+       "    float spCenter = (zCenter - u_zRef) * u_magnification / max(u_metersPerPixel, 0.0001);",
+       // Paralaje total por ojo. Se divide por 2 para igualar la intensidad del
+       // anaglifo (en split cada mitad ocupa media pantalla mostrando una ventana
+       // UV de ancho 0.5 => 1 UV = 1 px de viewport completo, el doble que en el
+       // anaglifo; por eso /2 iguala la sensación de profundidad).
+       "    float sp = spRelief + spCenter;",
+       "    float sU = sp / (2.0 * u_viewport.x);",
+       "    vec2 sampleUV = vec2(uv.x + eyeSign * sU, uv.y);",
+       "    if (v_uv.x < 0.5) { gl_FragColor = texture2D(u_map, sampleUV); }",
+       "    else { gl_FragColor = texture2D(u_mapRight, sampleUV); }",
+       "    return;",
+       "  }",
       "  float shiftPx = (z - u_zRef) * u_magnification / max(u_metersPerPixel, 0.0001);",
       "  float c = cos(u_rotation);",
       "  float s = sin(u_rotation);",
@@ -1169,6 +1174,7 @@
 
     this.EXAG_MAX_FACTOR = 5.0;
     this.MAX_BG_PARALLAX_FRAC = 0.04;
+    this.COMFORT_PARALLAX_FRAC = 0.03;
     this.TARGET_PARALLAX_PX_MIN = 8.0;
     this.TARGET_PARALLAX_PX_MAX = 22.0;
 
@@ -1178,6 +1184,7 @@
     this._loadTerrainHandler = null;
 
     this.Anaglyph = null; this.SplitView = null; this.Cotas = null;
+    this._splitHitStage = null;   // PostProcessStage HIT del posado en vista partida
   }
 
   CesiumStereoEngine.prototype.isAnaglyph = function () { return this.currentMode === "anaglyph"; };
@@ -1215,16 +1222,25 @@
     var self = this, IDEE = this.IDEE, C = window.Cesium;
 
     // Posado: Shift + rueda.
+    // El posado ya NO mueve el terreno (verticalExaggerationRelativeHeight usa
+    // solo la cota base). Ahora el posado es una TRASLACION HORIZONTAL DE IMAGEN
+    // (HIT: Horizontal Image Translation), el metodo estandar de control de
+    // convergencia estereoscopica: desplaza el plano de paralaje cero en
+    // PIXELES de disparidad, empujando toda la escena "hacia dentro" o "hacia
+    // fuera" de la pantalla sin deformar la geometria. posadoStep es el control
+    // de sensibilidad (compartido con OpenLayers, donde son metros); en Cesium lo
+    // escalamos a PIXELES de disparidad por muesca con POSADO_PX_PER_STEP.
+    var POSADO_PX_PER_STEP = 0.2;   // sens 25 (default) -> 5 px/muesca
     this._wheelHandler = function (e) {
       if (!self.isStereoActive()) return;
       if (!e.shiftKey) return;
       e.preventDefault(); e.stopImmediatePropagation();
-      var h = (self.camera.positionCartographic && self.camera.positionCartographic.height) || 1000;
       var sens = (self.AppConfig && self.AppConfig.posadoStep) || 25;
-      var step = h * (sens / 1000);
+      var stepPx = sens * POSADO_PX_PER_STEP;
       var dir = e.deltaY > 0 ? -1 : 1;
-      self.Cotas.nudgePosado(dir * step);
+      self.Cotas.nudgePosado(dir * stepPx);
       self._applyReferencePlane();
+      if (self.Anaglyph && self.Anaglyph.markDirty) self.Anaglyph.markDirty();
       self.SplitView.refresh();
     };
     this.scene.canvas.addEventListener("wheel", this._wheelHandler, { capture: true, passive: false });
@@ -1267,10 +1283,19 @@
 
   CesiumStereoEngine.prototype._applyReferencePlane = function () {
     if (!this.scene) return;
+    // El pivote de la exageracion vertical (verticalExaggerationRelativeHeight)
+    // usa SOLO la cota base del terreno en el centro (zRefBase), NUNCA el posado
+    // (zRefOffset). Cesium transforma la cota como h' = (h - r) * s + r, de modo
+    // que cambiar r con s>1 reescala/mueve TODO el terreno alrededor del nuevo
+    // pivote. Si aqui incluyeramos el posado, cada Shift+rueda desplazaria el
+    // plano/terreno (bug reportado). El posado debe afectar UNICAMENTE al plano
+    // de convergencia (paralaje) via _convergencePlaneInvDepth(), que ya consume
+    // Cotas.posadoMeters(). Asi el terreno queda fijo y el posado solo hace
+    // paralaje.
     var zRef = 0.0;
     if (this.Cotas && this.Cotas.hasBase && this.Cotas.hasBase()) {
-      var z = this.Cotas.effectiveZRef();
-      if (z !== null && isFinite(z)) zRef = z;
+      var zBase = this.Cotas.zRefBase();
+      if (zBase !== null && isFinite(zBase)) zRef = zBase;
     }
     this.scene.verticalExaggerationRelativeHeight = zRef;
   };
@@ -1390,32 +1415,43 @@
       if (hit) ground = C.Ray.getPoint(ray, hit.start);
     }
     if (!C.defined(ground)) return null;
-    var groundCarto = C.Cartographic.fromCartesian(ground);
-    var groundH = groundCarto.height;
-    var baseDist = C.Cartesian3.distance(camera.positionWC, ground);
     var toG = C.Cartesian3.subtract(ground, camera.positionWC, new C.Cartesian3());
     var Dterr = C.Cartesian3.dot(toG, camera.directionWC);
     if (!(Dterr > 1) || !isFinite(Dterr)) return null;
     var invTerr = 1 / Dterr;
-    var stepM = 1000.0;
-    var probe = C.Ray.getPoint(ray, baseDist + stepM);
-    var probeH = C.Cartographic.fromCartesian(probe).height;
-    var dHdt = (probeH - groundH) / stepM;
-    var posado = this.Cotas.posadoMeters ? this.Cotas.posadoMeters() : 0;
-    var slope = 0;
-    if (Math.abs(dHdt) > 1e-6) slope = -(1 / (Dterr * Dterr)) * (1 / dHdt);
-    var invD = invTerr + posado * slope;
+
+    // Esta funcion devuelve UNICAMENTE la convergencia derivada del RELIEVE del
+    // terreno (invTerr), con su clamp de seguridad para que el fondo lejano no
+    // diverja. El posado del usuario NO entra aqui: se aplica aparte como una
+    // traslacion horizontal de imagen (HIT) en pixeles, independiente del zoom
+    // y sin este clamp (ver _posadoShiftUV y computeShiftUV / SplitView).
     var f = camera.frustum;
     var IODref = this._stereoIOD(Dterr);
     var fovX = 2 * Math.atan(Math.tan(f.fov / 2) * (f.aspectRatio || 1));
-    var wPx = (scene.canvas && scene.canvas.width) ? scene.canvas.width : 1000;
+    var wPx = (scene.canvas && scene.canvas.clientWidth) ? scene.canvas.clientWidth :
+              ((scene.canvas && scene.canvas.width) ? scene.canvas.width : 1000);
     var K = wPx / (2 * Math.tan(fovX / 2));
     var maxParallaxPx = wPx * this.MAX_BG_PARALLAX_FRAC;
     var maxInvD = (IODref > 0 && K > 0) ? maxParallaxPx / (IODref * K)
       : 1 / Math.max(Dterr * 0.05, f.near || 1);
+    var invD = invTerr;
     if (invD > maxInvD) invD = maxInvD;
     if (invD < -maxInvD) invD = -maxInvD;
     return invD;
+  };
+
+  // Posado como TRASLACION HORIZONTAL DE IMAGEN (HIT). Devuelve el desplazamiento
+  // de convergencia en unidades UV (fraccion del ancho), EXACTAMENTE posadoPx/wPx:
+  // es independiente del zoom (no depende de Dterr) y NO pasa por el clamp del
+  // relieve, de modo que el posado se conserva al hacer zoom y responde de forma
+  // lineal a la rueda.
+  CesiumStereoEngine.prototype._posadoShiftUV = function () {
+    var posadoPx = (this.Cotas && this.Cotas.posadoMeters) ? this.Cotas.posadoMeters() : 0;
+    if (Math.abs(posadoPx) < 1e-2) return 0;
+    var wPx = (this.scene && this.scene.canvas && this.scene.canvas.clientWidth)
+      ? this.scene.canvas.clientWidth : 0;
+    if (wPx < 1) return 0;
+    return posadoPx / wPx;
   };
 
   // ---- Subm�dulos Cesium (Anaglyph / SplitView / Cotas) ------------------
@@ -1474,12 +1510,23 @@
       function computeShiftUV(iod) {
         var f = camera.frustum;
         if (!(f instanceof C.PerspectiveFrustum)) return 0;
+        // 1) Paralaje del RELIEVE (clampeado) -> UV.
         var invD = engine._convergencePlaneInvDepth();
-        if (invD === null) return 0;
+        if (invD === null) invD = 0;
         var tanHalfFovY = Math.tan(f.fov / 2);
         var aspect = f.aspectRatio || 1;
         var baseUV = (iod * invD) / (2 * tanHalfFovY * aspect);
-        return isFinite(baseUV) ? -baseUV : 0;
+        var terrainShiftUV = isFinite(baseUV) ? -baseUV : 0;
+        // 2) Posado del usuario (HIT, independiente del zoom) -> UV.
+        var posadoShiftUV = engine._posadoShiftUV();
+        // 3) Combinar y aplicar clamp de CONFORT sobre el paralaje total (evita
+        //    fatiga visual), permitiendo que el posado mueva toda la ventana de
+        //    confort en vez de quedar recortado por el limite del relieve.
+        var totalShiftUV = terrainShiftUV - posadoShiftUV;
+        var COMFORT = engine.COMFORT_PARALLAX_FRAC || 0.03;
+        if (totalShiftUV > COMFORT) totalShiftUV = COMFORT;
+        if (totalShiftUV < -COMFORT) totalShiftUV = -COMFORT;
+        return totalShiftUV;
       }
 
       function frame() {
@@ -1549,6 +1596,37 @@
     // ===== SplitView (useWebVR nativo) ===================================
     this.SplitView = (function () {
       var enabled = false, removeListener = null;
+
+      // PostProcessStage que aplica el POSADO como traslacion horizontal de
+      // imagen (HIT) sobre el framebuffer YA dividido por useWebVR: la mitad
+      // izquierda (x<0.5) es el ojo izquierdo y la derecha (x>=0.5) el derecho.
+      // Para facilitar el posado en free-viewing dejamos la mitad IZQUIERDA FIJA
+      // como referencia y movemos SOLO la derecha con el desplazamiento completo.
+      // u_posadoShiftUV = posadoPx/wPx (UV sobre el ANCHO COMPLETO); al aplicarlo
+      // integro a la mitad derecha, esta se traslada posadoPx px => disparidad
+      // total percibida = posadoPx, igual que el anaglifo. Es independiente del
+      // zoom (UV puro) y no toca la geometria del terreno.
+      var HIT_FS = [
+        "uniform sampler2D colorTexture;",
+        "uniform float u_posadoShiftUV;",
+        "in vec2 v_textureCoordinates;",
+        "void main() {",
+        "  vec2 uv = v_textureCoordinates;",
+        "  if (uv.x >= 0.5) { uv.x = uv.x + u_posadoShiftUV; }",
+        "  out_FragColor = texture(colorTexture, uv);",
+        "}"
+      ].join("\n");
+      if (!engine._splitHitStage) {
+        try {
+          engine._splitHitStage = scene.postProcessStages.add(new C.PostProcessStage({
+            name: "posadoSplitHIT",
+            fragmentShader: HIT_FS,
+            uniforms: { u_posadoShiftUV: 0.0 }
+          }));
+          engine._splitHitStage.enabled = false;
+        } catch (e) { engine._splitHitStage = null; }
+      }
+
       function computeEyeSeparation() {
         var Dref = engine._terrainDepthAtCenter();
         if (Dref !== null) return engine._stereoIOD(Dref);
@@ -1556,6 +1634,12 @@
         return engine._stereoIOD(h);
       }
       function computeFocalLength() {
+        // focalLength (useWebVR) fija SOLO la convergencia base del relieve. El
+        // posado NO se aplica aqui: en Cesium el control de convergencia via
+        // focalLength es poco fiable (no produce un HIT perceptible). El posado se
+        // aplica como PostProcessStage que traslada horizontalmente cada mitad
+        // (ver _splitHitStage), garantizando el mismo efecto que en el anaglifo,
+        // independiente del zoom.
         var near = camera.frustum && camera.frustum.near ? camera.frustum.near : 1;
         var invD = engine._convergencePlaneInvDepth();
         if (invD === null) return 5.0;
@@ -1569,6 +1653,12 @@
         if (!scene) return;
         scene.eyeSeparation = computeEyeSeparation();
         scene.focalLength = computeFocalLength();
+        // Posado como HIT (traslacion horizontal de cada mitad), independiente
+        // del zoom. Mismo signo/magnitud que el anaglifo para una experiencia
+        // consistente entre modos.
+        if (engine._splitHitStage) {
+          engine._splitHitStage.uniforms.u_posadoShiftUV = engine._posadoShiftUV();
+        }
       }
       return {
         setEnabled: function (on) {
@@ -1579,9 +1669,11 @@
           if (enabled) {
             applyStereoParams();
             scene.useWebVR = true;
+            if (engine._splitHitStage) engine._splitHitStage.enabled = true;
             if (!removeListener) removeListener = scene.preRender.addEventListener(applyStereoParams);
           } else {
             if (removeListener) { removeListener(); removeListener = null; }
+            if (engine._splitHitStage) engine._splitHitStage.enabled = false;
             scene.useWebVR = false;
           }
         },
@@ -1589,6 +1681,13 @@
         _teardown: function () {
           if (removeListener) { try { removeListener(); } catch (e) {} removeListener = null; }
           try { if (enabled) scene.useWebVR = false; } catch (e) {}
+          try {
+            if (engine._splitHitStage) {
+              engine._splitHitStage.enabled = false;
+              scene.postProcessStages.remove(engine._splitHitStage);
+              engine._splitHitStage = null;
+            }
+          } catch (e) { engine._splitHitStage = null; }
           enabled = false;
         }
       };
