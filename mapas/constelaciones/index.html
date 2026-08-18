@@ -57,6 +57,10 @@
   <!-- Controles personalizados de la API-IDEE -->
   <link type="text/css" rel="stylesheet" href="../../ext/controlClampToGroundLayers/ext.css">
   <script src="../../ext/controlClampToGroundLayers/ext.js" type="text/javascript"></script>
+  <script type="text/javascript">
+    // El plugin se carga tras mapa.js (donde se crea 'mapajs' y las capas).
+    mapajs.addPlugin(new miPlugin_clampToGround());
+  </script>
 
 
 

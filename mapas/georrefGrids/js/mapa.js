@@ -2,4 +2,4 @@
         container: "mapa"
       });
 
-mapajs.addPlugin(miPlugin)
+mapajs.addPlugin(new miPlugin_georrefTeselas())
