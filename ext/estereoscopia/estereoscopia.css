@@ -1,9 +1,20 @@
 /* =====================================================================
-   Estereoscopía — estilos del plugin (panel + retículas + canvas overlay)
-   Extraído de los <style> de html/index_ol.html y html/index_cesium.html.
-   El panel #stereo-controls se inyecta en document.body (position:absolute),
-   así sobrevive al ciclo destruir/recrear del div del mapa (cambioImpl).
+   Estereoscopía — estilos del plugin
+   --------------------------------------------------------------------
+   El panel de controles se integra en el sistema de paneles de API-IDEE
+   (IDEE.ui.Panel), igual que ext_backgorundLayers.js: contenedor
+   .m-control.m-container.m-herramienta con cabecera .m-herramienta-header.
+   El contenido dinámico cuelga de #m-herramienta-contents-estereo.
+
+   Los OVERLAYS del mapa (canvas WebGL del anaglifo, segundo mapa del ojo
+   derecho y retículas SVG de la vista partida) NO forman parte del panel:
+   se cuelgan del body / viewport con position:absolute y los gestiona el
+   motor activo (OL/Cesium).
    ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   OVERLAYS DEL MAPA (independientes del panel)
+   --------------------------------------------------------------------- */
 
 /* Canvas WebGL del anaglifo (solo implementación OpenLayers). Se inserta como
    hermano de .ol-layers dentro de .ol-viewport: sobre el mapa base, bajo los
@@ -27,130 +38,6 @@
     height: 100%;
     overflow: hidden;
     pointer-events: none;
-}
-
-/* Panel de controles de estereoscopía */
-#stereo-controls {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.92);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-#stereo-controls .stereo-btn {
-    cursor: pointer;
-    border: 1px solid #b0b0b0;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #1a1a1a;
-    background: #fff;
-    transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-#stereo-controls .stereo-btn:hover {
-    background: #eef4ff;
-    border-color: #3b6fd4;
-}
-
-#stereo-controls .stereo-btn.active {
-    background: #3b6fd4;
-    border-color: #3b6fd4;
-    color: #fff;
-}
-
-/* Control de exageración vertical (profundidad del relieve) */
-#stereo-controls .exag-control {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding-top: 6px;
-    margin-top: 2px;
-    border-top: 1px solid #e0e0e0;
-    font-size: 12px;
-    color: #1a1a1a;
-}
-
-#stereo-controls .exag-control label {
-    font-weight: 600;
-}
-
-#stereo-controls .exag-control .exag-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-#stereo-controls .exag-control input[type="range"] {
-    flex: 1;
-    cursor: pointer;
-}
-
-#stereo-controls .exag-control #exag-value {
-    min-width: 34px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    color: #3b6fd4;
-    font-weight: 600;
-}
-
-/* Posado: filas etiqueta -> valor -> control */
-#stereo-controls .exag-control .cota-row {
-    justify-content: space-between;
-    gap: 6px;
-    padding-top: 2px;
-}
-
-#stereo-controls .exag-control .cota-label {
-    font-size: 12px;
-    font-weight: 400;
-    color: #1a1a1a;
-}
-
-/* Valores numéricos (altitud del plano, posado, cota del puntero) */
-#stereo-controls .exag-control #plano-altitud-value,
-#stereo-controls .exag-control #posado-value,
-#stereo-controls .exag-control #cursor-cota-value {
-    margin-left: auto;
-    font-variant-numeric: tabular-nums;
-    color: #3b6fd4;
-    font-weight: 600;
-}
-
-/* Botón candado del plano de referencia */
-#stereo-controls .exag-control .plano-lock {
-    cursor: pointer;
-    border: 1px solid #b0b0b0;
-    border-radius: 6px;
-    background: #fff;
-    padding: 2px 6px;
-    font-size: 14px;
-    line-height: 1;
-}
-
-#stereo-controls .exag-control .plano-lock[aria-pressed="true"] {
-    background: #3b6fd4;
-    border-color: #3b6fd4;
-}
-
-#stereo-controls .exag-control .posado-reset {
-    padding: 4px 10px;
-    font-size: 12px;
-}
-
-#stereo-controls .exag-control .posado-hint {
-    font-size: 11px;
-    font-weight: 400;
-    color: #6b6b6b;
 }
 
 /* Cursores centrales fijos (vista partida): dos cruces finas, una por mitad,
@@ -178,21 +65,194 @@
     fill: #ff2d2d;
 }
 
-/* Cabecera del panel con título + botón de configuración (engranaje) */
-#stereo-controls .stereo-header {
+/* ---------------------------------------------------------------------
+   PANEL DE CONTROLES (integrado en IDEE.ui.Panel)
+   --------------------------------------------------------------------- */
+
+/* Icono del botón colapsado del panel (m-tools del framework) */
+.g-herramienta_estereo .m-tools:before {
+    content: "\1F453";
+    /* gafas 👓 */
+    font-size: 20px;
+    font-family: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Override del fondo que impone la API-IDEE a los paneles (#71a7d3). Sin esto,
+   el panel abierto se ve azul en lugar de blanco. Scopeado a este plugin. */
+.m-areas>div.m-area>div.m-panel.g-herramienta_estereo.opened {
+    background-color: transparent !important;
+}
+
+/* Quitar la sombra que impone la API-IDEE al panel y su botón (scopeado). */
+.m-areas>div.m-area>div.m-panel.g-herramienta_estereo,
+.m-panel.g-herramienta_estereo>button {
+    box-shadow: none;
+}
+
+/* Fondo del botón del panel con el color del resto de plugins (orangered). */
+.m-areas>div.m-area>div.m-panel.g-herramienta_estereo.no-collapsible>div.m-panel-controls>div.m-control>button,
+.m-areas>div.m-area>div.m-panel.g-herramienta_estereo>button.m-panel-btn {
+    background-color: orangered !important;
+}
+
+/* Contenedor del plugin (estructura del framework) */
+.g-herramienta_estereo .m-control.m-container.m-herramienta {
+    width: 260px;
+    display: flex !important;
+    flex-direction: column;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #1a1a1a;
+}
+
+/* Cabecera / título del panel (arrastrable) */
+.g-herramienta_estereo .m-herramienta-header {
+    background-color: orangered;
+    color: #fff;
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    height: 40px;
+    line-height: 40px;
+    padding: 0 5px;
+    text-align: center;
+    width: 100%;
+    cursor: move;
+}
+
+/* Contenido dinámico del plugin */
+.g-herramienta_estereo #m-herramienta-contents-estereo {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    background-color: #f9f9f9;
+}
+
+.g-herramienta_estereo .stereo-btn {
+    cursor: pointer;
+    border: 1px solid #b0b0b0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a1a;
+    background: #fff;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.g-herramienta_estereo .stereo-btn:hover {
+    background: #eef4ff;
+    border-color: #3b6fd4;
+}
+
+.g-herramienta_estereo .stereo-btn.active {
+    background: #3b6fd4;
+    border-color: #3b6fd4;
+    color: #fff;
+}
+
+/* Control de exageración vertical (profundidad del relieve) */
+.g-herramienta_estereo .exag-control {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 6px;
+    margin-top: 2px;
+    border-top: 1px solid #e0e0e0;
+    font-size: 12px;
+    color: #1a1a1a;
+}
+
+.g-herramienta_estereo .exag-control label {
+    font-weight: 600;
+}
+
+.g-herramienta_estereo .exag-control .exag-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.g-herramienta_estereo .exag-control input[type="range"] {
+    flex: 1;
+    cursor: pointer;
+}
+
+.g-herramienta_estereo .exag-control #exag-value {
+    min-width: 34px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: #3b6fd4;
+    font-weight: 600;
+}
+
+/* Posado: filas etiqueta -> valor -> control */
+.g-herramienta_estereo .exag-control .cota-row {
+    justify-content: space-between;
+    gap: 6px;
+    padding-top: 2px;
+}
+
+.g-herramienta_estereo .exag-control .cota-label {
+    font-size: 12px;
+    font-weight: 400;
+    color: #1a1a1a;
+}
+
+/* Valores numéricos (altitud del plano, posado, cota del puntero) */
+.g-herramienta_estereo .exag-control #plano-altitud-value,
+.g-herramienta_estereo .exag-control #posado-value,
+.g-herramienta_estereo .exag-control #cursor-cota-value {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: #3b6fd4;
+    font-weight: 600;
+}
+
+/* Botón candado del plano de referencia */
+.g-herramienta_estereo .exag-control .plano-lock {
+    cursor: pointer;
+    border: 1px solid #b0b0b0;
+    border-radius: 6px;
+    background: #fff;
+    padding: 2px 6px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.g-herramienta_estereo .exag-control .plano-lock[aria-pressed="true"] {
+    background: #3b6fd4;
+    border-color: #3b6fd4;
+}
+
+.g-herramienta_estereo .exag-control .posado-reset {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.g-herramienta_estereo .exag-control .posado-hint {
+    font-size: 11px;
+    font-weight: 400;
+    color: #6b6b6b;
+}
+
+/* Cabecera del contenido con título + botón de configuración (engranaje) */
+.g-herramienta_estereo .stereo-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
 }
 
-#stereo-controls .stereo-title {
+.g-herramienta_estereo .stereo-title {
     font-size: 13px;
     font-weight: 700;
     color: #1a1a1a;
 }
 
-#stereo-controls .settings-btn {
+.g-herramienta_estereo .settings-btn {
     cursor: pointer;
     border: 1px solid #b0b0b0;
     border-radius: 6px;
@@ -204,19 +264,19 @@
     transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-#stereo-controls .settings-btn:hover {
+.g-herramienta_estereo .settings-btn:hover {
     background: #eef4ff;
     border-color: #3b6fd4;
 }
 
-#stereo-controls .settings-btn.active {
+.g-herramienta_estereo .settings-btn.active {
     background: #3b6fd4;
     border-color: #3b6fd4;
     color: #fff;
 }
 
 /* Panel de configuración desplegable */
-#stereo-controls .settings-panel {
+.g-herramienta_estereo .settings-panel {
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -229,11 +289,11 @@
 
 /* El atributo [hidden] debe ganar al display:flex de arriba: si no, el
    panel se vería siempre (display explícito anula el hidden nativo). */
-#stereo-controls .settings-panel[hidden] {
+.g-herramienta_estereo .settings-panel[hidden] {
     display: none;
 }
 
-#stereo-controls .settings-row {
+.g-herramienta_estereo .settings-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -242,7 +302,7 @@
     color: #1a1a1a;
 }
 
-#stereo-controls .settings-row input[type="number"] {
+.g-herramienta_estereo .settings-row input[type="number"] {
     width: 68px;
     padding: 3px 6px;
     border: 1px solid #b0b0b0;
@@ -252,7 +312,7 @@
     text-align: right;
 }
 
-#stereo-controls .settings-reset {
+.g-herramienta_estereo .settings-reset {
     margin-top: 2px;
     padding: 5px 10px;
     font-size: 12px;

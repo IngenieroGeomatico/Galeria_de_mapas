@@ -1,65 +1,79 @@
 /* =====================================================================
    Vuelo Fotogramétrico — estilos del plugin (panel de importación)
-   El panel #vuelo-controls se inyecta en document.body (position:absolute),
-   así sobrevive al ciclo destruir/recrear del div del mapa (cambioImpl).
+   --------------------------------------------------------------------
+   El panel se integra en el sistema de paneles de API-IDEE (IDEE.ui.Panel),
+   igual que ext_backgorundLayers.js: contenedor .m-control.m-container.
+   m-herramienta con cabecera .m-herramienta-header. El contenido dinámico
+   del plugin cuelga de #m-herramienta-contents-vuelo.
    ===================================================================== */
 
-#vuelo-controls {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 12px;
+/* Icono del botón colapsado del panel (m-tools del framework) */
+.g-herramienta_vuelo .m-tools:before {
+    content: "\2708";
+    /* avión ✈ */
+    font-size: 20px;
+    font-family: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Override del fondo que impone la API-IDEE a los paneles (#71a7d3). Sin esto,
+   el panel abierto se ve azul en lugar de blanco. Scopeado a este plugin. */
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo.opened {
+    background-color: transparent !important;
+}
+
+/* Quitar la sombra que impone la API-IDEE al panel y su botón (scopeado). */
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo,
+.m-panel.g-herramienta_vuelo>button {
+    box-shadow: none;
+}
+
+/* Fondo del botón del panel con el color del resto de plugins (orangered). */
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo.no-collapsible>div.m-panel-controls>div.m-control>button,
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo>button.m-panel-btn {
+    background-color: orangered !important;
+}
+
+/* Contenedor del plugin (estructura del framework) */
+.g-herramienta_vuelo .m-control.m-container.m-herramienta {
     width: 300px;
-    max-height: calc(100vh - 24px);
-    overflow-y: auto;
-    background: rgba(255, 255, 255, 0.94);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    display: flex !important;
+    flex-direction: column;
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     font-size: 13px;
     color: #1a1a1a;
 }
 
-/* Cabecera con título + botón colapsar */
-#vuelo-controls .vuelo-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-#vuelo-controls .vuelo-title {
-    font-size: 14px;
+/* Cabecera / título del panel (arrastrable) */
+.g-herramienta_vuelo .m-herramienta-header {
+    background-color: orangered;
+    color: #fff;
+    display: block;
+    font-size: 15px;
     font-weight: 700;
+    height: 40px;
+    line-height: 40px;
+    padding: 0 5px;
+    text-align: center;
+    width: 100%;
+    cursor: move;
 }
 
-#vuelo-controls .vuelo-collapse {
-    cursor: pointer;
-    border: 1px solid #b0b0b0;
-    border-radius: 6px;
-    background: #fff;
-    padding: 2px 8px;
-    font-size: 14px;
-    line-height: 1.2;
+/* Contenido dinámico del plugin */
+.g-herramienta_vuelo #m-herramienta-contents-vuelo {
+    padding: 12px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    background-color: #f9f9f9;
 }
 
-/* Cuerpo colapsable */
-#vuelo-controls .vuelo-body {
+.g-herramienta_vuelo .vuelo-body {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
-#vuelo-controls .vuelo-body[hidden] {
-    display: none;
-}
-
 /* Zona de arrastre / carga de archivo */
-#vuelo-controls .vuelo-drop {
+.g-herramienta_vuelo .vuelo-drop {
     border: 2px dashed #9aa7bd;
     border-radius: 8px;
     padding: 14px 10px;
@@ -71,23 +85,23 @@
     font-size: 12px;
 }
 
-#vuelo-controls .vuelo-drop:hover,
-#vuelo-controls .vuelo-drop.dragover {
+.g-herramienta_vuelo .vuelo-drop:hover,
+.g-herramienta_vuelo .vuelo-drop.dragover {
     background: #eef4ff;
     border-color: #3b6fd4;
     color: #1a1a1a;
 }
 
-#vuelo-controls .vuelo-drop strong {
+.g-herramienta_vuelo .vuelo-drop strong {
     color: #3b6fd4;
 }
 
-#vuelo-controls input[type="file"] {
+.g-herramienta_vuelo input[type="file"] {
     display: none;
 }
 
 /* Secciones (mapeo de columnas, opciones footprint) */
-#vuelo-controls .vuelo-section {
+.g-herramienta_vuelo .vuelo-section {
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -95,28 +109,28 @@
     border-top: 1px solid #e0e0e0;
 }
 
-#vuelo-controls .vuelo-section-title {
+.g-herramienta_vuelo .vuelo-section-title {
     font-weight: 600;
     font-size: 12px;
     color: #2d3748;
 }
 
-#vuelo-controls .vuelo-row {
+.g-herramienta_vuelo .vuelo-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
 }
 
-#vuelo-controls .vuelo-row label {
+.g-herramienta_vuelo .vuelo-row label {
     font-size: 12px;
     color: #2d3748;
     flex: 0 0 42%;
 }
 
-#vuelo-controls .vuelo-row select,
-#vuelo-controls .vuelo-row input[type="number"],
-#vuelo-controls .vuelo-row input[type="text"] {
+.g-herramienta_vuelo .vuelo-row select,
+.g-herramienta_vuelo .vuelo-row input[type="number"],
+.g-herramienta_vuelo .vuelo-row input[type="text"] {
     flex: 1;
     min-width: 0;
     padding: 4px 6px;
@@ -126,13 +140,13 @@
     background: #fff;
 }
 
-#vuelo-controls .vuelo-row input[type="number"] {
+.g-herramienta_vuelo .vuelo-row input[type="number"] {
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
 
 /* Botones */
-#vuelo-controls .vuelo-btn {
+.g-herramienta_vuelo .vuelo-btn {
     cursor: pointer;
     border: 1px solid #b0b0b0;
     border-radius: 6px;
@@ -144,28 +158,28 @@
     transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-#vuelo-controls .vuelo-btn:hover {
+.g-herramienta_vuelo .vuelo-btn:hover {
     background: #eef4ff;
     border-color: #3b6fd4;
 }
 
-#vuelo-controls .vuelo-btn.primary {
+.g-herramienta_vuelo .vuelo-btn.primary {
     background: #3b6fd4;
     border-color: #3b6fd4;
     color: #fff;
 }
 
-#vuelo-controls .vuelo-btn.primary:hover {
+.g-herramienta_vuelo .vuelo-btn.primary:hover {
     background: #2f5cb8;
 }
 
-#vuelo-controls .vuelo-btn:disabled {
+.g-herramienta_vuelo .vuelo-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
 /* Checkbox de capas visibles */
-#vuelo-controls .vuelo-check {
+.g-herramienta_vuelo .vuelo-check {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -174,16 +188,16 @@
 }
 
 /* Mensaje de estado */
-#vuelo-controls .vuelo-status {
+.g-herramienta_vuelo .vuelo-status {
     font-size: 12px;
     color: #4a5568;
     min-height: 16px;
 }
 
-#vuelo-controls .vuelo-status.error {
+.g-herramienta_vuelo .vuelo-status.error {
     color: #c53030;
 }
 
-#vuelo-controls .vuelo-status.ok {
+.g-herramienta_vuelo .vuelo-status.ok {
     color: #2f855a;
 }

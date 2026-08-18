@@ -12,13 +12,13 @@
      - Huella / footprint de cada fotograma (rectángulo en el suelo),
        calculado a partir de focal + altura de vuelo + tamaño de sensor.
 
-   El panel de importación (#vuelo-controls) se inyecta en document.body
-   (position:absolute), de modo que SOBREVIVE al ciclo destruir/recrear del
-   div del mapa que hace miPlugin_cambioImpl al alternar OL <-> Cesium.
-   Cada vez que cambioImpl recrea el mapa se instancia de nuevo este plugin;
-   un singleton guard (window.__vueloActivePlugin) reengancha el panel al
-   nuevo mapa y RE-PINTA los datos ya importados (que viven en memoria en el
-   propio plugin), sin volver a pedir el fichero.
+   El panel de importación se crea con el sistema de paneles de API-IDEE
+   (IDEE.ui.Panel + IDEE.Control + map.addPanels), siguiendo el protocolo de
+   ext_backgorundLayers.js. Cada vez que miPlugin_cambioImpl recrea el mapa al
+   alternar OL <-> Cesium se instancia de nuevo este plugin y se reconstruye el
+   panel; un singleton guard (window.__vueloActivePlugin) limpia la instancia
+   anterior y RE-PINTA los datos ya importados (que persisten en memoria en
+   window.__vueloSharedData), sin volver a pedir el fichero.
 
    NOTA (fases futuras): la arquitectura deja preparados los ganchos para
    PLANIFICACIÓN de vuelos nuevos (GSD, solape, cámara, altura, dirección) y
@@ -79,8 +79,18 @@
 
   // ###################################################################
   //  SHELL DEL PLUGIN
+  //  --------------------------------------------------------------------
+  //  Definido como CLASE ES6 (constructor + addTo) igual que
+  //  miPlugin_cambioImpl, para poder instanciarse e importarse con
+  //  mapajs.addPlugin(new miPlugin_vueloFotogrametrico()).
+  //  Nota: todo el render y el encuadre usan EXCLUSIVAMENTE métodos de
+  //  API-IDEE (IDEE.layer.GeoJSON, setStyle, extract, map.setBbox,
+  //  layer.getFeaturesExtent), abstraídos por la API => el comportamiento es
+  //  idéntico en las dos implementaciones (OpenLayers 2D y Cesium 3D) sin
+  //  código específico por motor.
   // ###################################################################
-  function miPlugin_vueloFotogrametrico(options) {
+  class miPlugin_vueloFotogrametrico {
+    constructor(options = {}) {
     this.name = "miPlugin_vueloFotogrametrico";
     this.options = options || {};
     this.map = null;
@@ -105,12 +115,27 @@
     this._layers = { puntos: null, lineas: null, footprints: null };
   }
 
-  // Nota: todo el render y el encuadre usan EXCLUSIVAMENTE métodos de API-IDEE
-  // (IDEE.layer.GeoJSON, setStyle, extract, map.setBbox, layer.getFeaturesExtent),
-  // que están abstraídos por la API => el comportamiento es idéntico en las dos
-  // implementaciones (OpenLayers 2D y Cesium 3D) sin código específico por motor.
+  // Ayuda del plugin (protocolo API-IDEE: getHelp devuelve {title, content}).
+  getHelp() {
+    const IDEE = api();
+    return {
+      title: 'Vuelo fotogramétrico',
+      content: new Promise((success) => {
+        let html =
+          '<div>' +
+          '<p>Importa un vuelo fotogramétrico ya realizado desde un fichero ' +
+          '<strong>CSV</strong> o <strong>Excel</strong> (p.ej. centros de fotograma del IGN) ' +
+          'y lo visualiza sobre el mapa en 2D (OpenLayers) y 3D (Cesium).</p>' +
+          '<p>Genera hasta tres capas: centros de fotograma, líneas de pasada y ' +
+          'huellas de fotograma (calculadas con focal, altura de vuelo y tamaño de sensor).</p>' +
+          '</div>';
+        html = IDEE.utils.stringToHtml(html);
+        success(html);
+      }),
+    };
+  }
 
-  miPlugin_vueloFotogrametrico.prototype.addTo = function (map) {
+  addTo(map) {
     this.map = map;
 
     // Singleton guard: limpia la instancia anterior (cambioImpl crea una nueva
@@ -120,7 +145,7 @@
     }
     window.__vueloActivePlugin = this;
 
-    this.createOrReusePanel();
+    this.buildPanel(map);
     this.bindPanelEvents();
     this.syncUIFromData();
 
@@ -131,24 +156,55 @@
     try { this.map.on(IDEE.evt.COMPLETED, repintar); } catch (e) { /* ignora */ }
     // Reintento por si COMPLETED ya se disparó.
     setTimeout(repintar, 800);
-  };
+  }
 
-  // ---- Panel: se crea una sola vez en document.body y se reutiliza. --------
-  miPlugin_vueloFotogrametrico.prototype.createOrReusePanel = function () {
-    var panel = document.getElementById("vuelo-controls");
-    if (!panel) {
-      panel = document.createElement("div");
-      panel.id = "vuelo-controls";
-      panel.innerHTML = this.buildPanelHTML();
-      document.body.appendChild(panel);
-    }
-    this.panel = panel;
-    // El popup de los fotogramas lo aporta la propia API-IDEE (extract:true al
-    // crear las capas GeoJSON), que funciona igual en OpenLayers y en Cesium.
-    // No necesitamos un popup propio ni tratar cada implementación por separado.
-  };
+  // ---- Panel: se crea con el sistema de paneles de API-IDEE (protocolo) -----
+  //  Sigue el patrón de ext_backgorundLayers.js: IDEE.ui.Panel + IDEE.Control +
+  //  map.addPanels, con la estructura de clases del framework (m-control /
+  //  m-container / m-herramienta + header). El panel se reconstruye en cada
+  //  addTo (cambioImpl recrea el mapa al alternar OL<->Cesium); el estado
+  //  importado vive en window.__vueloSharedData y se re-hidrata en syncUIFromData.
+  buildPanel(map) {
+    const IDEE = api();
 
-  miPlugin_vueloFotogrametrico.prototype.buildPanelHTML = function () {
+    const panelVuelo = new IDEE.ui.Panel('toolsExtra_vuelo', {
+      collapsible: true,
+      collapsed: false,
+      className: 'g-herramienta_vuelo',
+      collapsedButtonClass: 'm-tools',
+      position: IDEE.ui.position.TR,
+      order: 1,
+    });
+
+    const htmlPanel =
+      '<div aria-label="Vuelo fotogramétrico" role="menuitem" ' +
+      'id="div-contenedor-herramienta-vuelo" class="m-control m-container m-herramienta">' +
+      '  <header role="heading" tabindex="0" id="m-herramienta-title-vuelo" ' +
+      '          class="m-herramienta-header">Vuelo fotogramétrico</header>' +
+      '  <div id="m-herramienta-contents-vuelo"></div>' +
+      '</div>';
+
+    const controlVuelo = new IDEE.Control(new IDEE.impl.Control(), 'controlVuelo');
+    controlVuelo.createView = () => document.createElement('div');
+
+    panelVuelo.addControls(controlVuelo);
+    map.addPanels(panelVuelo);
+
+    document.querySelector('.g-herramienta_vuelo .m-panel-controls').innerHTML = htmlPanel;
+    document.querySelector('#m-herramienta-contents-vuelo').appendChild(controlVuelo.getElement());
+
+    IDEE.utils.draggabillyPlugin(panelVuelo, '#m-herramienta-title-vuelo');
+
+    // Contenido dinámico del plugin dentro del elemento del control. A partir de
+    // aquí, this.panel es la raíz sobre la que consultan el resto de métodos
+    // (querySelector('#id')), igual que antes con el div de body.
+    const contenido = controlVuelo.getElement();
+    contenido.innerHTML = this.buildPanelHTML();
+    this.panel = contenido;
+    this._iueePanel = panelVuelo;
+  }
+
+  buildPanelHTML() {
     var crsOptions = CRS_PRESETS.map(function (c) {
       return '<option value="' + c.code + '">' + c.label + "</option>";
     }).join("");
@@ -162,10 +218,6 @@
     }).join("");
 
     return '' +
-      '<div class="vuelo-header">' +
-      '  <span class="vuelo-title">Vuelo fotogramétrico</span>' +
-      '  <button type="button" id="vf-collapse" class="vuelo-collapse" title="Contraer/expandir">▾</button>' +
-      '</div>' +
       '<div class="vuelo-body" id="vf-body">' +
       '  <div class="vuelo-drop" id="vf-drop">' +
       '    Arrastra aquí un <strong>CSV</strong> o <strong>Excel</strong><br>o haz clic para elegir archivo' +
@@ -206,30 +258,21 @@
   };
 
   // ---- Enlace de eventos del panel ---------------------------------------
-  miPlugin_vueloFotogrametrico.prototype.bindPanelEvents = function () {
+  bindPanelEvents() {
     var self = this;
     var p = this.panel;
 
-    // Clonamos nodos interactivos antes de reenganchar, para no acumular
-    // listeners de instancias previas tras un swap.
-    function rebind(id, evt, handler) {
+    // El panel se reconstruye fresco en cada addTo (el sistema de paneles de
+    // API-IDEE lo recrea al recargar el mapa en cambioImpl), así que basta con
+    // enganchar listeners directamente: no hay nodos previos con listeners.
+    function bind(id, evt, handler) {
       var el = p.querySelector("#" + id);
       if (!el) return null;
-      var fresh = el.cloneNode(true);
-      el.parentNode.replaceChild(fresh, el);
-      fresh.addEventListener(evt, handler);
-      return fresh;
+      el.addEventListener(evt, handler);
+      return el;
     }
 
-    rebind("vf-collapse", "click", function () {
-      var body = p.querySelector("#vf-body");
-      if (!body) return;
-      var hidden = body.hasAttribute("hidden");
-      if (hidden) { body.removeAttribute("hidden"); this.textContent = "▾"; }
-      else { body.setAttribute("hidden", ""); this.textContent = "▸"; }
-    });
-
-    var drop = rebind("vf-drop", "click", function () {
+    var drop = bind("vf-drop", "click", function () {
       var input = p.querySelector("#vf-file");
       if (input) input.click();
     });
@@ -244,38 +287,38 @@
       });
     }
 
-    rebind("vf-file", "change", function () {
+    bind("vf-file", "change", function () {
       if (this.files && this.files.length) self.handleFile(this.files[0]);
     });
 
-    rebind("vf-crs", "change", function () { self.data.crs = this.value; });
+    bind("vf-crs", "change", function () { self.data.crs = this.value; });
 
     // Selects de mapeo de columnas.
     CAMPOS.forEach(function (c) {
-      rebind("vf-col-" + c.key, "change", function () {
+      bind("vf-col-" + c.key, "change", function () {
         self.data.mapping[c.key] = this.value || null;
       });
     });
 
     // Parámetros de footprint.
-    rebind("vf-fp-focal", "change", function () { self.data.footprint.focal_mm = parseFloat(this.value) || 0; });
-    rebind("vf-fp-sw", "change", function () { self.data.footprint.sensor_w_mm = parseFloat(this.value) || 0; });
-    rebind("vf-fp-sh", "change", function () { self.data.footprint.sensor_h_mm = parseFloat(this.value) || 0; });
-    rebind("vf-fp-alt", "change", function () { self.data.footprint.altura_m = parseFloat(this.value) || 0; });
-    rebind("vf-fp-usez", "change", function () { self.data.footprint.usarZ = this.checked; });
+    bind("vf-fp-focal", "change", function () { self.data.footprint.focal_mm = parseFloat(this.value) || 0; });
+    bind("vf-fp-sw", "change", function () { self.data.footprint.sensor_w_mm = parseFloat(this.value) || 0; });
+    bind("vf-fp-sh", "change", function () { self.data.footprint.sensor_h_mm = parseFloat(this.value) || 0; });
+    bind("vf-fp-alt", "change", function () { self.data.footprint.altura_m = parseFloat(this.value) || 0; });
+    bind("vf-fp-usez", "change", function () { self.data.footprint.usarZ = this.checked; });
 
     // Visibilidad de capas.
-    rebind("vf-lyr-puntos", "change", function () { self.data.visible.puntos = this.checked; self.applyVisibility(); });
-    rebind("vf-lyr-lineas", "change", function () { self.data.visible.lineas = this.checked; self.applyVisibility(); });
-    rebind("vf-lyr-footprints", "change", function () { self.data.visible.footprints = this.checked; self.applyVisibility(); });
+    bind("vf-lyr-puntos", "change", function () { self.data.visible.puntos = this.checked; self.applyVisibility(); });
+    bind("vf-lyr-lineas", "change", function () { self.data.visible.lineas = this.checked; self.applyVisibility(); });
+    bind("vf-lyr-footprints", "change", function () { self.data.visible.footprints = this.checked; self.applyVisibility(); });
 
     // Acciones.
-    rebind("vf-render", "click", function () { self.render(); });
-    rebind("vf-clear", "click", function () { self.clearData(); });
-  };
+    bind("vf-render", "click", function () { self.render(); });
+    bind("vf-clear", "click", function () { self.clearData(); });
+  }
 
   // Refleja el estado de datos en la UI (tras un swap, o al reabrir).
-  miPlugin_vueloFotogrametrico.prototype.syncUIFromData = function () {
+  syncUIFromData() {
     var p = this.panel;
     var d = this.data;
     var crs = p.querySelector("#vf-crs"); if (crs) crs.value = d.crs;
@@ -298,14 +341,14 @@
   };
 
   // ---- Estado / mensajes -------------------------------------------------
-  miPlugin_vueloFotogrametrico.prototype.setStatus = function (msg, cls) {
+  setStatus(msg, cls) {
     var el = this.panel && this.panel.querySelector("#vf-status");
     if (!el) return;
     el.textContent = msg || "";
     el.className = "vuelo-status" + (cls ? " " + cls : "");
   };
 
-  miPlugin_vueloFotogrametrico.prototype.showConfigSections = function (on) {
+  showConfigSections(on) {
     var ids = ["#vf-section-map", "#vf-section-fp", "#vf-section-layers", "#vf-section-actions"];
     var p = this.panel;
     ids.forEach(function (id) {
@@ -317,7 +360,7 @@
   // ###################################################################
   //  CARGA Y PARSEO DE FICHERO (solo cliente)
   // ###################################################################
-  miPlugin_vueloFotogrametrico.prototype.handleFile = function (file) {
+  handleFile(file) {
     var self = this;
     if (!file) return;
     var name = (file.name || "").toLowerCase();
@@ -358,7 +401,7 @@
   // Parser CSV propio: detecta separador (coma / punto y coma / tabulador),
   // respeta comillas dobles y saltos de línea entre comillas. Devuelve matriz
   // de filas (array de arrays de strings).
-  miPlugin_vueloFotogrametrico.prototype.parseCSV = function (text) {
+  parseCSV(text) {
     // Quita BOM.
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
     // Detecta separador contando ocurrencias fuera de comillas en la 1ª línea.
@@ -397,7 +440,7 @@
 
   // Recibe una matriz [ [cabeceras...], [fila1...], ... ], monta headers + rows
   // (objetos), autodetecta el mapeo de columnas y muestra la configuración.
-  miPlugin_vueloFotogrametrico.prototype.ingestMatrix = function (matrix) {
+  ingestMatrix(matrix) {
     if (!matrix || matrix.length < 2) {
       this.setStatus("El archivo no tiene datos suficientes (cabecera + filas).", "error");
       return;
@@ -427,7 +470,7 @@
   };
 
   // Autodetección de columnas por nombre (sin acentos, minúsculas).
-  miPlugin_vueloFotogrametrico.prototype.autodetectMapping = function (headers) {
+  autodetectMapping(headers) {
     function norm(s) {
       return String(s).toLowerCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -456,7 +499,7 @@
   };
 
   // Rellena los <select> de mapeo con las cabeceras y aplica el mapping actual.
-  miPlugin_vueloFotogrametrico.prototype.fillColumnSelects = function (headers, mapping) {
+  fillColumnSelects(headers, mapping) {
     var p = this.panel;
     CAMPOS.forEach(function (c) {
       var sel = p.querySelector("#vf-col-" + c.key);
@@ -476,7 +519,7 @@
 
   // Reproyecta [x,y] del CRS origen a [lon,lat] WGS84. Si el CRS es 4326,
   // devuelve tal cual. Requiere proj4 para CRS proyectados.
-  miPlugin_vueloFotogrametrico.prototype.toLonLat = function (x, y, crs) {
+  toLonLat(x, y, crs) {
     if (crs === "EPSG:4326") return [x, y];
     if (typeof proj4 === "undefined") return [x, y]; // sin proj4, asume ya lon/lat
     var preset = CRS_PRESETS.filter(function (c) { return c.code === crs; })[0];
@@ -489,7 +532,7 @@
   };
 
   // Convierte los datos importados en tres FeatureCollections GeoJSON.
-  miPlugin_vueloFotogrametrico.prototype.buildGeoJSON = function () {
+  buildGeoJSON() {
     var d = this.data;
     var m = d.mapping;
     if (!d.rows || !m.x || !m.y) {
@@ -564,7 +607,7 @@
   // Calcula el rectángulo de huella en el suelo. Tamaño en el suelo:
   //   S_x = altura * sensor_w / focal ;  S_y = altura * sensor_h / focal
   // Devuelve un anillo cerrado de 5 puntos [lon,lat] centrado en (lon,lat).
-  miPlugin_vueloFotogrametrico.prototype.footprintPolygon = function (lon, lat, z, index) {
+  footprintPolygon(lon, lat, z, index) {
     var fp = this.data.footprint;
     if (!fp || !fp.focal_mm) return null;
     var altura = fp.altura_m;
@@ -596,7 +639,7 @@
   };
 
   // Color por pasada (índice cíclico en la paleta).
-  miPlugin_vueloFotogrametrico.prototype.colorForPasada = function (pasadaId, pasadaIds) {
+  colorForPasada(pasadaId, pasadaIds) {
     var idx = pasadaIds.indexOf(pasadaId);
     if (idx < 0) idx = 0;
     return PALETA[idx % PALETA.length];
@@ -605,7 +648,7 @@
   // ###################################################################
   //  RENDER EN EL MAPA (capas GeoJSON API-IDEE)
   // ###################################################################
-  miPlugin_vueloFotogrametrico.prototype.render = function () {
+  render() {
     var IDEE = api();
     if (!this.map || !IDEE) return;
     if (!this.data.rows) return; // nada importado todavía
@@ -678,7 +721,7 @@
   // Ajusta la vista al extent de la capa de puntos con la API-IDEE. El mismo
   // código vale para OpenLayers y Cesium: map.setBbox + layer.getFeaturesExtent
   // están abstraídos por la API (patrón usado en GJSONdesdeURL / CaminoDeLosFaros).
-  miPlugin_vueloFotogrametrico.prototype.zoomToData = function (capaPuntos) {
+  zoomToData(capaPuntos) {
     if (!this.map || !capaPuntos) return;
     var self = this;
     var doFit = function () {
@@ -699,14 +742,14 @@
     })();
   };
 
-  miPlugin_vueloFotogrametrico.prototype.applyVisibility = function () {
+  applyVisibility() {
     var d = this.data;
     if (this._layers.puntos) try { this._layers.puntos.setVisible(!!d.visible.puntos); } catch (e) {}
     if (this._layers.lineas) try { this._layers.lineas.setVisible(!!d.visible.lineas); } catch (e) {}
     if (this._layers.footprints) try { this._layers.footprints.setVisible(!!d.visible.footprints); } catch (e) {}
   };
 
-  miPlugin_vueloFotogrametrico.prototype.removeLayers = function () {
+  removeLayers() {
     var self = this;
     ["footprints", "lineas", "puntos"].forEach(function (k) {
       var lyr = self._layers[k];
@@ -717,7 +760,7 @@
     });
   };
 
-  miPlugin_vueloFotogrametrico.prototype.clearData = function () {
+  clearData() {
     this.removeLayers();
     this.data.rows = null;
     this.data.headers = null;
@@ -730,19 +773,28 @@
   };
 
   // ---- Ciclo de vida ------------------------------------------------------
-  // cleanup: se llama cuando cambioImpl recrea el mapa. Quitamos las capas del
-  // mapa antiguo (el nuevo mapa las re-pintará), pero conservamos los DATOS en
-  // memoria (this.data / window.__vueloSharedData) y el panel en el DOM.
-  miPlugin_vueloFotogrametrico.prototype.cleanup = function () {
+  // cleanup: se llama cuando cambioImpl recrea el mapa. Quitamos las capas y el
+  // panel del mapa antiguo (el nuevo mapa/instancia los re-crea), pero
+  // conservamos los DATOS en memoria (this.data / window.__vueloSharedData),
+  // que la nueva instancia re-hidrata en syncUIFromData.
+  cleanup() {
     this.removeLayers();
-  };
+    // Soltar el panel del mapa anterior (protocolo: como destroy de layerswitcher).
+    try {
+      if (this.map && this._iueePanel && this.map.removePanel) {
+        this.map.removePanel(this._iueePanel);
+      }
+    } catch (e) { /* el div del mapa suele destruirse con el swap; ignora */ }
+    this._iueePanel = null;
+  }
 
-  miPlugin_vueloFotogrametrico.prototype.destroy = function () {
+  destroy() {
     this.cleanup();
     if (window.__vueloActivePlugin === this) window.__vueloActivePlugin = null;
-  };
+  }
 
-  miPlugin_vueloFotogrametrico.prototype.getAPIRest = function () { return ""; };
+  getAPIRest() { return ""; }
+  }
 
   // Exponer la clase como GLOBAL DIRECTO (window.miPlugin_vueloFotogrametrico):
   // el plugin cambioImpl recarga el bundle de la API al alternar OL<->Cesium, lo

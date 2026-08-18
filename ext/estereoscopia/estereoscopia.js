@@ -7,10 +7,14 @@
    Cesium (relieve 3D real + PostProcessStage / useWebVR nativos).
 
    El plugin:
-     - Inyecta el panel de controles #stereo-controls en document.body
-       (position:absolute), de modo que SOBREVIVE al ciclo destruir/recrear
-       del div del mapa que hace el plugin miPlugin_cambioImpl al alternar
-       OL <-> Cesium.
+     - Crea el panel de controles con el sistema de paneles de API-IDEE
+       (IDEE.ui.Panel + IDEE.Control + map.addPanels), siguiendo el protocolo
+       de ext_backgorundLayers.js. El panel se reconstruye en cada _boot cuando
+       miPlugin_cambioImpl recrea el div del mapa al alternar OL <-> Cesium; los
+       ajustes persisten en AppConfig (localStorage) y se re-hidratan.
+     - Los overlays del mapa (canvas WebGL del anaglifo, segundo mapa del ojo
+       derecho y retículas SVG) se cuelgan del body/viewport (position:absolute)
+       y los gestiona el motor; NO forman parte del panel.
      - Detecta la implementación activa mirando el mapa nativo
        (map.getMapImpl()): ol.Map -> tiene getView(); Cesium.Viewer -> tiene
        scene/camera.
@@ -161,20 +165,25 @@
 
   // ###################################################################
   //  SHELL DEL PLUGIN
+  //  --------------------------------------------------------------------
+  //  Definido como CLASE ES6 (constructor + addTo) igual que
+  //  miPlugin_cambioImpl, para poder instanciarse e importarse con
+  //  mapajs.addPlugin(new miPlugin_estereoscopia()).
   // ###################################################################
-  function miPlugin_estereoscopia(options) {
+  class miPlugin_estereoscopia {
+    constructor(options = {}) {
     this.name = "miPlugin_estereoscopia";
     this.options = options || {};
     this.map = null;
     this.engine = null;
-    this.panel = null;         // #stereo-controls
+    this.panel = null;         // contenido del control dentro del IDEE.ui.Panel
     this.cursorsInjected = false;
   }
 
   // Detecta la implementación activa a partir del mapa nativo. Es lo más
   // robusto: no depende del timing de carga de scripts ni de IDEE.impl (que
   // puede quedar obsoleto durante el swap asíncrono de cambioImpl).
-  miPlugin_estereoscopia.prototype.detectImpl = function () {
+  detectImpl() {
     var impl = null;
     try { impl = this.map.getMapImpl(); } catch (e) { impl = null; }
     if (!impl) return null;
@@ -183,7 +192,7 @@
     return null;
   };
 
-  miPlugin_estereoscopia.prototype.addTo = function (map) {
+  addTo(map) {
     this.map = map;
 
     // --- Singleton guard: limpia la instancia anterior (cambioImpl crea una
@@ -214,8 +223,29 @@
     this._boot(impl);
   };
 
-  miPlugin_estereoscopia.prototype._boot = function (impl) {
-    this.createOrReusePanel();
+  // Ayuda del plugin (protocolo API-IDEE: getHelp devuelve {title, content}).
+  getHelp() {
+    var IDEE = api();
+    return {
+      title: 'Estereoscopía',
+      content: new Promise(function (success) {
+        var html =
+          '<div>' +
+          '<p>Visualización estereoscópica del relieve en <strong>anaglifo</strong> ' +
+          '(rojo/cian) y <strong>vista partida</strong>, tanto en 2D (OpenLayers, ' +
+          'estereoscopía sintética sobre el MDT del IGN) como en 3D (Cesium, relieve real).</p>' +
+          '<p>Ajusta la exageración vertical y el plano de posado; usa ' +
+          '<em>Shift + rueda</em> para subir/bajar el plano de referencia. ' +
+          'El modo anaglifo requiere gafas rojo/cian.</p>' +
+          '</div>';
+        html = IDEE.utils.stringToHtml(html);
+        success(html);
+      }),
+    };
+  }
+
+  _boot(impl) {
+    this.buildPanel(this.map);
     if (impl === "ol") {
       this.engine = new OlStereoEngine(this, AppConfig);
     } else if (impl === "cesium") {
@@ -230,16 +260,56 @@
     console.log("[estereoscopia] Plugin activo. Implementación:", impl);
   };
 
-  // ---- Panel: se crea una sola vez en document.body y se reutiliza. --------
-  miPlugin_estereoscopia.prototype.createOrReusePanel = function () {
-    var panel = document.getElementById("stereo-controls");
-    if (!panel) {
-      panel = document.createElement("div");
-      panel.id = "stereo-controls";
-      panel.innerHTML = PANEL_HTML;
-      document.body.appendChild(panel);
-    }
-    this.panel = panel;
+  // ---- Panel: se crea con el sistema de paneles de API-IDEE (protocolo) -----
+  //  Sigue el patrón de ext_backgorundLayers.js: IDEE.ui.Panel + IDEE.Control +
+  //  map.addPanels, con la estructura de clases del framework (m-control /
+  //  m-container / m-herramienta + header). El panel se reconstruye en cada
+  //  _boot (cambioImpl recrea el mapa al alternar OL<->Cesium); los ajustes se
+  //  re-hidratan desde AppConfig (localStorage) en applyConfigToUI.
+  //  Los overlays del mapa (canvas del anaglifo y retículas SVG) NO forman parte
+  //  del panel: los gestiona el motor / se cuelgan del body (position:absolute).
+  buildPanel(map) {
+    var IDEE = api();
+
+    var panelEstereo = new IDEE.ui.Panel('toolsExtra_estereo', {
+      collapsible: true,
+      collapsed: false,
+      className: 'g-herramienta_estereo',
+      collapsedButtonClass: 'm-tools',
+      position: IDEE.ui.position.TR,
+      order: 0,
+    });
+
+    var htmlPanel =
+      '<div aria-label="Estereoscopía" role="menuitem" ' +
+      'id="div-contenedor-herramienta-estereo" class="m-control m-container m-herramienta">' +
+      '  <header role="heading" tabindex="0" id="m-herramienta-title-estereo" ' +
+      '          class="m-herramienta-header">Estereoscopía</header>' +
+      '  <div id="m-herramienta-contents-estereo"></div>' +
+      '</div>';
+
+    var controlEstereo = new IDEE.Control(new IDEE.impl.Control(), 'controlEstereo');
+    controlEstereo.createView = function () { return document.createElement('div'); };
+
+    panelEstereo.addControls(controlEstereo);
+    map.addPanels(panelEstereo);
+
+    document.querySelector('.g-herramienta_estereo .m-panel-controls').innerHTML = htmlPanel;
+    document.querySelector('#m-herramienta-contents-estereo').appendChild(controlEstereo.getElement());
+
+    IDEE.utils.draggabillyPlugin(panelEstereo, '#m-herramienta-title-estereo');
+
+    // Contenido dinámico del plugin dentro del elemento del control. A partir de
+    // aquí, this.panel es la raíz sobre la que consultan el resto de métodos y
+    // los motores (this.$('id') / this.panel.querySelector).
+    var contenido = controlEstereo.getElement();
+    contenido.innerHTML = PANEL_HTML;
+    this.panel = contenido;
+    this._iueePanel = panelEstereo;
+
+    // Retículas centrales de la vista partida: son OVERLAYS del mapa (no del
+    // panel). Se inyectan una sola vez en el body con position:absolute; su
+    // visibilidad la gobierna el motor activo.
     if (!document.getElementById("center-cursor-left")) {
       var wrap = document.createElement("div");
       wrap.innerHTML = CURSORS_HTML;
@@ -248,48 +318,47 @@
     this.cursorsInjected = true;
   };
 
-  // Enlaza los controles del panel a métodos de ESTA instancia. Para no
-  // acumular listeners de instancias previas, clonamos cada nodo interactivo
-  // (elimina todos sus listeners) antes de enganchar los nuevos.
-  miPlugin_estereoscopia.prototype.bindPanelEvents = function () {
+  // Enlaza los controles del panel a métodos de ESTA instancia. El panel se
+  // reconstruye fresco en cada _boot (el sistema de paneles de API-IDEE lo
+  // recrea al recargar el mapa en cambioImpl), así que basta con enganchar
+  // listeners directamente: no hay nodos previos con listeners que acumular.
+  bindPanelEvents() {
     var self = this;
     var p = this.panel;
 
-    function rebind(id, evt, handler) {
+    function bind(id, evt, handler) {
       var el = p.querySelector("#" + id);
       if (!el) return null;
-      var fresh = el.cloneNode(true);
-      el.parentNode.replaceChild(fresh, el);
-      fresh.addEventListener(evt, handler);
-      return fresh;
+      el.addEventListener(evt, handler);
+      return el;
     }
 
-    rebind("btn-anaglyph", "click", function () { self.engine.toggleAnaglyph(); });
-    rebind("btn-split", "click", function () { self.engine.toggleSplitView(); });
-    rebind("btn-settings", "click", function () { self.toggleSettings(); });
-    rebind("btn-settings-reset", "click", function () { self.resetSettings(); });
-    rebind("btn-posado-reset", "click", function () { self.engine.resetPosado(); });
-    rebind("btn-plano-lock", "click", function () { self.engine.togglePlanoLock(); });
-    rebind("exag-range", "input", function () { self.setExaggeration(this.value); });
-    rebind("chk-debug-elev", "change", function () { self.engine.setDebugElev(this.checked); });
+    bind("btn-anaglyph", "click", function () { self.engine.toggleAnaglyph(); });
+    bind("btn-split", "click", function () { self.engine.toggleSplitView(); });
+    bind("btn-settings", "click", function () { self.toggleSettings(); });
+    bind("btn-settings-reset", "click", function () { self.resetSettings(); });
+    bind("btn-posado-reset", "click", function () { self.engine.resetPosado(); });
+    bind("btn-plano-lock", "click", function () { self.engine.togglePlanoLock(); });
+    bind("exag-range", "input", function () { self.setExaggeration(this.value); });
+    bind("chk-debug-elev", "change", function () { self.engine.setDebugElev(this.checked); });
 
     // Inputs del panel de ajustes (persistencia en vivo).
-    rebind("cfg-exag-min", "change", function () {
+    bind("cfg-exag-min", "change", function () {
       var v = parseFloat(this.value);
       if (!isNaN(v) && v >= 0) { AppConfig.set("exagMin", v); self.applyConfigToUI(); }
     });
-    rebind("cfg-exag-max", "change", function () {
+    bind("cfg-exag-max", "change", function () {
       var v = parseFloat(this.value);
       if (!isNaN(v) && v > 0) { AppConfig.set("exagMax", v); self.applyConfigToUI(); }
     });
-    rebind("cfg-posado-step", "change", function () {
+    bind("cfg-posado-step", "change", function () {
       var v = parseFloat(this.value);
       if (!isNaN(v) && v >= 1) AppConfig.set("posadoStep", v);
     });
   };
 
   // ---- Handlers de UI comunes (no dependen del motor) ---------------------
-  miPlugin_estereoscopia.prototype.setExaggeration = function (value) {
+  setExaggeration(value) {
     var v = parseFloat(value);
     if (isNaN(v)) return;
     var lbl = this.panel.querySelector("#exag-value");
@@ -297,7 +366,7 @@
     if (this.engine) this.engine.setExaggeration(v);
   };
 
-  miPlugin_estereoscopia.prototype.applyConfigToUI = function () {
+  applyConfigToUI() {
     var range = this.panel.querySelector("#exag-range");
     if (!range) return;
     var minV = AppConfig.exagMin, maxV = AppConfig.exagMax;
@@ -311,7 +380,7 @@
     this.setExaggeration(range.value);
   };
 
-  miPlugin_estereoscopia.prototype.syncSettingsInputs = function () {
+  syncSettingsInputs() {
     var min = this.panel.querySelector("#cfg-exag-min");
     var max = this.panel.querySelector("#cfg-exag-max");
     var step = this.panel.querySelector("#cfg-posado-step");
@@ -320,7 +389,7 @@
     if (step) step.value = AppConfig.posadoStep;
   };
 
-  miPlugin_estereoscopia.prototype.toggleSettings = function () {
+  toggleSettings() {
     var panel = this.panel.querySelector("#settings-panel");
     var btn = this.panel.querySelector("#btn-settings");
     if (!panel) return;
@@ -330,34 +399,43 @@
     if (btn) btn.classList.toggle("active", willShow);
   };
 
-  miPlugin_estereoscopia.prototype.resetSettings = function () {
+  resetSettings() {
     AppConfig.reset();
     this.applyConfigToUI();
-  };
+  }
 
   // Utilidades para que los motores actualicen el panel sin acceder al DOM
   // global (usan el panel de la instancia).
-  miPlugin_estereoscopia.prototype.$ = function (id) {
+  $(id) {
     return this.panel ? this.panel.querySelector("#" + id) : null;
-  };
+  }
 
   // ---- Ciclo de vida ------------------------------------------------------
-  miPlugin_estereoscopia.prototype.cleanup = function () {
+  cleanup() {
     if (this.engine) {
       try { this.engine.deactivate(); } catch (e) { /* ignora */ }
       this.engine = null;
     }
-    // El panel y las retículas se dejan en el DOM (los reutiliza la próxima
-    // instancia). El clon de nodos en bindPanelEvents evita listeners duplicados.
+    // Soltar el panel del mapa anterior (protocolo: como destroy de layerswitcher).
+    // El nuevo _boot crea un panel nuevo; los ajustes persisten en AppConfig.
+    try {
+      if (this.map && this._iueePanel && this.map.removePanel) {
+        this.map.removePanel(this._iueePanel);
+      }
+    } catch (e) { /* el div del mapa suele destruirse con el swap; ignora */ }
+    this._iueePanel = null;
+    // Las retículas SVG (overlays del mapa) se dejan en el DOM: las reutiliza la
+    // próxima instancia y su visibilidad la gobierna el motor.
   };
 
   // API-IDEE puede invocar destroy() al eliminar el plugin en algunos flujos.
-  miPlugin_estereoscopia.prototype.destroy = function () {
+  destroy() {
     this.cleanup();
     if (window.__estereoActivePlugin === this) window.__estereoActivePlugin = null;
-  };
+  }
 
-  miPlugin_estereoscopia.prototype.getAPIRest = function () { return ""; };
+  getAPIRest() { return ""; }
+  }
 
   // Exponer la clase. IMPORTANTE: el plugin cambioImpl recarga el bundle de la
   // API al alternar OL<->Cesium, lo que REINICIALIZA IDEE.plugin (borrando este
