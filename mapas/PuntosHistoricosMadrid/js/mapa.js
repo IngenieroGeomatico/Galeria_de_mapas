@@ -484,7 +484,8 @@ geojsonData.then(() => {
   });
   mapajs.addLayers(capaStolpersteine)
 
-
+  // Oculta el spinner de carga cuando ya están añadidas todas las capas.
+  SVGCarga.hidden = true
 
 })
 
@@ -588,7 +589,7 @@ const ext_Modal = new M.plugin.Modal({
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
 
-mapajs.addPlugin(miPlugin)
+mapajs.addPlugin(new miPlugin_filtroCapas())
 
 
 
