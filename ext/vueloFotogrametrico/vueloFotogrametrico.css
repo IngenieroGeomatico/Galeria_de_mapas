@@ -33,6 +33,12 @@
     background-color: orangered !important;
 }
 
+/* El atributo [hidden] debe ganar a las reglas display:flex de secciones y
+   tab-panels (si no, se quedan visibles pese a estar ocultas lógicamente). */
+.g-herramienta_vuelo [hidden] {
+    display: none !important;
+}
+
 /* Contenedor del plugin (estructura del framework) */
 .g-herramienta_vuelo .m-control.m-container.m-herramienta {
     width: 300px;
@@ -185,6 +191,84 @@
     gap: 6px;
     font-size: 12px;
     cursor: pointer;
+}
+
+/* Selector de modo (Vuelo ya hecho / Cálculo) */
+.g-herramienta_vuelo .vuelo-modes {
+    display: flex;
+    gap: 6px;
+}
+
+.g-herramienta_vuelo .vuelo-mode {
+    flex: 1;
+    cursor: pointer;
+    border: 1px solid #b0b0b0;
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #2d3748;
+    background: #fff;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.g-herramienta_vuelo .vuelo-mode:hover {
+    background: #eef4ff;
+    border-color: #3b6fd4;
+}
+
+.g-herramienta_vuelo .vuelo-mode.active {
+    background: orangered;
+    border-color: orangered;
+    color: #fff;
+}
+
+/* Sub-pestañas de fuente (CSV / OGC API) */
+.g-herramienta_vuelo .vuelo-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid #e0e0e0;
+    margin-bottom: 4px;
+}
+
+.g-herramienta_vuelo .vuelo-tab {
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5568;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.g-herramienta_vuelo .vuelo-tab:hover {
+    color: #3b6fd4;
+}
+
+.g-herramienta_vuelo .vuelo-tab.active {
+    color: #3b6fd4;
+    border-bottom-color: #3b6fd4;
+}
+
+.g-herramienta_vuelo .vuelo-tab-panel,
+.g-herramienta_vuelo .vuelo-mode-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Texto de ayuda dentro de los paneles */
+.g-herramienta_vuelo .vuelo-hint {
+    font-size: 12px;
+    color: #4a5568;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.g-herramienta_vuelo .vuelo-hint strong {
+    color: #c53030;
 }
 
 /* Mensaje de estado */

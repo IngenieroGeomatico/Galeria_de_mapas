@@ -1,0 +1,94 @@
+{
+  "id": "BsqFotogramas",
+  "_comentario": "Respuesta REAL de ejemplo del proceso OGC API bsq-fotogramas del IGN (completo=true), capturada el 2026-08-19 para el area de busqueda POLYGON en EPSG:3857 sobre Extremadura, fechas 06/06/2022-12/06/2022. Recorte a 8 fotogramas para pruebas offline del plugin. Los fotocentros vienen en UTM ETRS89 (huso 30N / EPSG:25830, autodetectado por longitud). NO hay campo de URL de imagen: solo nom_fichero (identificador para la Fototeca Digital).",
+  "fotogramas": [
+    {
+      "id_copia_digital": 2314373,
+      "nom_fichero": "h50_0778_fot_54-2670_cog",
+      "fecha_fotograma": "12/06/2022",
+      "x_fotocentro_at": 236912.033,
+      "y_fotocentro_at": 4308981.801,
+      "z_fotocentro_at": 4001.1,
+      "giro_w_at": 0.137966,
+      "giro_phi_at": -0.097587,
+      "giro_k_at": -1.085032
+    },
+    {
+      "id_copia_digital": 2314374,
+      "nom_fichero": "h50_0778_fot_54-2671_cog",
+      "fecha_fotograma": "12/06/2022",
+      "x_fotocentro_at": 238142.633,
+      "y_fotocentro_at": 4308927.779,
+      "z_fotocentro_at": 3981.808,
+      "giro_w_at": 0.193771,
+      "giro_phi_at": -0.121341,
+      "giro_k_at": -1.130465
+    },
+    {
+      "id_copia_digital": 2314375,
+      "nom_fichero": "h50_0778_fot_54-2672_cog",
+      "fecha_fotograma": "12/06/2022",
+      "x_fotocentro_at": 239362.101,
+      "y_fotocentro_at": 4308931.112,
+      "z_fotocentro_at": 3996.883,
+      "giro_w_at": 0.154073,
+      "giro_phi_at": -0.105547,
+      "giro_k_at": -1.137995
+    },
+    {
+      "id_copia_digital": 2318113,
+      "nom_fichero": "h50_0778_fot_54-2673_cog",
+      "fecha_fotograma": "12/06/2022",
+      "x_fotocentro_at": 240599.767,
+      "y_fotocentro_at": 4308935.361,
+      "z_fotocentro_at": 4013.24,
+      "giro_w_at": 0.087731,
+      "giro_phi_at": -0.08165,
+      "giro_k_at": -0.959356
+    },
+    {
+      "id_copia_digital": 2318114,
+      "nom_fichero": "h50_0778_fot_54-2674_cog",
+      "fecha_fotograma": "12/06/2022",
+      "x_fotocentro_at": 241838.934,
+      "y_fotocentro_at": 4308910.095,
+      "z_fotocentro_at": 4020.281,
+      "giro_w_at": 0.424244,
+      "giro_phi_at": 0.298644,
+      "giro_k_at": -1.192032
+    },
+    {
+      "id_copia_digital": 2318115,
+      "nom_fichero": "h50_0778_fot_54-2675_cog",
+      "fecha_fotograma": "12/06/2022",
+      "x_fotocentro_at": 243075.266,
+      "y_fotocentro_at": 4308856.393,
+      "z_fotocentro_at": 4016.547,
+      "giro_w_at": 0.123598,
+      "giro_phi_at": -0.046262,
+      "giro_k_at": -0.990044
+    },
+    {
+      "id_copia_digital": 2318116,
+      "nom_fichero": "h50_0778_fot_54-2676_cog",
+      "fecha_fotograma": "12/06/2022",
+      "x_fotocentro_at": 244297.127,
+      "y_fotocentro_at": 4308830.414,
+      "z_fotocentro_at": 4005.982,
+      "giro_w_at": 0.856354,
+      "giro_phi_at": 0.639029,
+      "giro_k_at": -0.985184
+    },
+    {
+      "id_copia_digital": 2318117,
+      "nom_fichero": "h50_0778_fot_54-2677_cog",
+      "fecha_fotograma": "12/06/2022",
+      "x_fotocentro_at": 245517.84,
+      "y_fotocentro_at": 4308800.731,
+      "z_fotocentro_at": 4002.72,
+      "giro_w_at": 0.084354,
+      "giro_phi_at": -0.120909,
+      "giro_k_at": -1.001522
+    }
+  ]
+}
