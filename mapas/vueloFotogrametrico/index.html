@@ -26,6 +26,12 @@
        CSV se parsea con código propio del plugin (sin dependencia extra). -->
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
+  <!-- geotiff.js: decodificación del MDT (GeoTIFF) del WCS del IGN. Se usa para
+       obtener la cota del terreno en cada esquina de la huella (footprint), de
+       modo que la huella se dibuje sobre el terreno y no a la altura de vuelo.
+       (Misma librería y versión que el visualizador de estereoscopía.) -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
+
   <!-- estilo propio del visualizador -->
   <link href="./css/mapa.css" rel="stylesheet" />
 
