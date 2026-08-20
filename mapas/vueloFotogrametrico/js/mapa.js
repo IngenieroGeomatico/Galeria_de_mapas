@@ -86,9 +86,22 @@ function mapa() {
   return mapajs;
 }
 
-// Fija el encuadre inicial (España peninsular) una vez el mapa está listo.
+// Fija el encuadre inicial (España peninsular) SOLO cuando no hay datos de vuelo
+// cargados. Actúa como respaldo para el arranque en frío; si ya hay datos
+// importados (p.ej. al volver de Cesium a OL), NO toca la vista: de eso se
+// encargan cambioImpl (shareView) y el zoomToData del plugin de vuelo. Así se
+// evita que este encuadre machaque la vista compartida en cada swap.
 function encuadreInicial(m) {
+  // Si ya hay un vuelo importado, respeta la vista (shareView / zoomToData).
+  const hayDatos = !!(window.__vueloSharedData && window.__vueloSharedData.rows &&
+    window.__vueloSharedData.rows.length);
+  if (hayDatos) return;
+
   const aplicar = function () {
+    // Reevalúa por si los datos llegaron entre el registro y el disparo.
+    const hayDatosAhora = !!(window.__vueloSharedData && window.__vueloSharedData.rows &&
+      window.__vueloSharedData.rows.length);
+    if (hayDatosAhora) return;
     try {
       const impl = m.getMapImpl();
       // Implementación OpenLayers: reproyecta lon/lat a la proyección del mapa.
@@ -101,8 +114,6 @@ function encuadreInicial(m) {
     } catch (e) { /* si falla, se queda con la vista por defecto */ }
   };
   try { m.on(IDEE.evt.COMPLETED, aplicar); } catch (e) {}
-  // Reintento por si COMPLETED ya se disparó.
-  setTimeout(aplicar, 1500);
 }
 
 // Implementación Cesium (3D real).

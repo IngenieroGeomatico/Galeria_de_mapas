@@ -151,6 +151,17 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* Selector de vuelos (resultado de la búsqueda OGC). A ancho completo. */
+.g-herramienta_vuelo .vuelo-select-vuelo {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #b0b0b0;
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+    color: #1a1a1a;
+}
+
 /* Botones */
 .g-herramienta_vuelo .vuelo-btn {
     cursor: pointer;
@@ -182,6 +193,18 @@
 .g-herramienta_vuelo .vuelo-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* Controles de animación del avión (Reproducir / Reiniciar) */
+.g-herramienta_vuelo .vuelo-anim-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.g-herramienta_vuelo .vuelo-anim-controls .vuelo-btn {
+    flex: 1;
+    padding: 8px 6px;
+    white-space: nowrap;
 }
 
 /* Checkbox de capas visibles */
