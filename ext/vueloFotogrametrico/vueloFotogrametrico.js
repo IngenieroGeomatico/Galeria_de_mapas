@@ -175,13 +175,24 @@
   //  El símbolo se elige según la implementación activa en tiempo de ejecución.
   // ---------------------------------------------------------------------
   var AVION_SVG = "../../img/iconos/plane.svg";       // icono 2D (nariz al norte)
-  var AVION_GLB = "https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/CesiumAir/glTF-Binary/CesiumAir.glb"; // modelo 3D
+  // Modelo 3D (glTF binario). Se sirve desde el repositorio oficial de CesiumGS
+  // vía jsDelivr (el antiguo KhronosGroup/glTF-Sample-Models fue archivado y su
+  // ruta CesiumAir.glb devuelve 404). Este "Cesium_Air.glb" es el avión clásico
+  // de los ejemplos de Cesium. Su morro apunta a +X (Este) en el marco local, por
+  // lo que al orientar por rumbo se aplica un desfase de -90° (ver AVION_GLB_HEADING_OFFSET).
+  var AVION_GLB = "https://cdn.jsdelivr.net/gh/CesiumGS/cesium@main/Apps/SampleData/models/CesiumAir/Cesium_Air.glb"; // modelo 3D
   // Duración fija (ms) para recorrer la línea completa, independiente de su
   // longitud (UX predecible: el vuelo se ve entero en ~este tiempo).
   var AVION_DURACION_MS = 20000;
   var AVION_SVG_SCALE = 0.5;      // escala del icono 2D
   var AVION_GLB_SCALE = 1.0;      // escala del modelo 3D
-  var AVION_GLB_MINPX = 48;       // tamaño mínimo en píxeles del modelo 3D
+  var AVION_GLB_MINPX = 64;       // tamaño mínimo en píxeles del modelo 3D
+  // Desfase de rumbo del modelo: el Cesium_Air.glb apunta a +X (Este) por defecto;
+  // para que el morro siga el rumbo (0 = Norte) hay que girarlo -90°.
+  var AVION_GLB_HEADING_OFFSET = -Math.PI / 2;
+  // Id fijo del Cesium.Entity del avión (gestionado directamente en el viewer,
+  // no por la capa GeoJSON). Permite recuperarlo/eliminarlo de forma fiable.
+  var AVION_ENTITY_ID = "vueloFotogrametrico-avion-3d";
 
   // ###################################################################
   //  SHELL DEL PLUGIN
@@ -2256,7 +2267,10 @@
       this.startAnimation(true /* reanudar desde data.anim.t */);
     } else if (this._flightLine) {
       // Coloca el avión en la posición inicial (t actual) aunque esté en pausa.
-      this.updateAvionAt(this.data.anim ? this.data.anim.t : 0);
+      // En Cesium el entity puede no existir aún tras recrear el mapa (swap
+      // OL<->Cesium): reintenta unas veces hasta que el modelo quede adjunto, para
+      // que el avión se vea sin necesidad de reproducir la animación.
+      this.placeAvionInicial(this.data.anim ? this.data.anim.t : 0);
     }
 
     // Encuadre a los datos SOLO la primera vez que se visualiza un vuelo. En los
@@ -2385,11 +2399,21 @@
     return Math.atan2(y, x);
   };
 
-  // Crea la capa GeoJSON del avión (un punto móvil). En OL se estiliza como
-  // icono SVG; en Cesium el modelo glTF se adjunta al entity en updateAvionAt.
+  // Prepara el avión móvil. En OpenLayers (2D) se usa una capa GeoJSON de 1 punto
+  // estilizada como icono SVG (funciona bien). En Cesium (3D) NO se usa capa
+  // GeoJSON (su DataSource no materializa el entity de forma fiable tras el swap):
+  // el modelo glTF se gestiona como Cesium.Entity propio en _updateAvionCesium.
   crearCapaAvion() {
     var IDEE = api();
     if (!IDEE || !this.map || !this._flightLine) return;
+
+    // En Cesium no se crea capa GeoJSON: el entity del avión lo gestiona el viewer
+    // directamente (ver _updateAvionCesium). Solo aseguramos el estado limpio.
+    if (this._isCesium()) {
+      this._removeAvionCesiumEntity();
+      this._layers.avion = null;
+      return;
+    }
 
     var start = this._flightLine[0];
     var src = {
@@ -2432,9 +2456,35 @@
   // geometría/orientación en la implementación activa (OL icono / Cesium modelo).
   updateAvionAt(t) {
     var st = this.getInterpolatedState(t);
-    if (!st || !this._layers.avion) return;
-    if (this._isCesium()) this._updateAvionCesium(st);
-    else this._updateAvionOL(st);
+    if (!st) return;
+    if (this._isCesium()) {
+      // En Cesium el avión es un entity propio del viewer (no la capa GeoJSON).
+      this._updateAvionCesium(st);
+    } else {
+      if (!this._layers.avion) return;
+      this._updateAvionOL(st);
+    }
+  };
+
+  // Coloca el avión en su posición inicial. En OL pinta el icono al momento; en
+  // Cesium crea (si no existe) y posiciona el entity propio del avión de forma
+  // síncrona en updateAvionAt, por lo que no hace falta sondear la materialización
+  // de ninguna capa. Se reintenta un par de veces por si el viewer aún no está
+  // listo justo tras recrear el mapa en el swap.
+  placeAvionInicial(t) {
+    var self = this;
+    this.updateAvionAt(t);
+    if (!this._isCesium()) return; // en OL el icono se pinta al momento
+    if (this._avionInitPoll) { clearTimeout(this._avionInitPoll); this._avionInitPoll = null; }
+    var tries = 8;
+    (function poll() {
+      if (self._avionEntity || (self.data.anim && self.data.anim.playing) || --tries <= 0) {
+        self._avionInitPoll = null;
+        return;
+      }
+      self.updateAvionAt(t);
+      self._avionInitPoll = setTimeout(poll, 200);
+    })();
   };
 
   // Actualiza el avión en OpenLayers: mueve el punto y rota el icono por rumbo.
@@ -2470,29 +2520,60 @@
     } catch (e) { /* la capa puede no estar lista todavía */ }
   };
 
-  // Actualiza el avión en Cesium: adjunta el modelo glTF la primera vez y mueve
-  // el entity; la orientación la deriva Cesium de la velocidad (VelocityOrientation).
+  // Actualiza el avión en Cesium gestionando un Cesium.Entity PROPIO a través del
+  // viewer (map.getMapImpl() es el Cesium.Viewer en este wrapper). No se usa el
+  // entity autogenerado por la capa GeoJSON porque el DataSource no lo materializa
+  // de forma fiable tras el swap OL<->Cesium (entities.values queda vacío). Se crea
+  // el entity una vez (con id fijo) y en cada frame se mueve y ORIENTA por rumbo.
+  // La orientación se calcula con Transforms.headingPitchRollQuaternion (marco ENU);
+  // no se usa VelocityOrientationProperty porque la posición es estática por frame.
   _updateAvionCesium(st) {
     try {
-      var cesLayer = this._layers.avion.getImpl().getLayer();
-      var ent = cesLayer && cesLayer.entities && cesLayer.entities.values[0];
-      if (!ent) return; // el entity aún no existe; el rAF reintentará
-      if (!this._avionEntityReady) {
-        ent.billboard = undefined;
-        ent.point = undefined;
-        ent.model = new Cesium.ModelGraphics({
-          uri: AVION_GLB,
-          scale: AVION_GLB_SCALE,
-          minimumPixelSize: AVION_GLB_MINPX
-        });
-        // Orienta el modelo según su vector de velocidad (auto por posición).
-        ent.orientation = new Cesium.VelocityOrientationProperty(
-          new Cesium.CallbackProperty(function () { return ent.position.getValue(Cesium.JulianDate.now()); }, false)
-        );
+      if (typeof Cesium === "undefined") return;
+      var viewer = this.map.getMapImpl(); // en este wrapper, el impl ES el Viewer
+      if (!viewer || !viewer.entities) return;
+
+      var ent = this._avionEntity;
+      if (!ent) {
+        // Reutiliza uno previo con el mismo id si quedara (defensivo), o créalo.
+        ent = viewer.entities.getById(AVION_ENTITY_ID) ||
+          viewer.entities.add({
+            id: AVION_ENTITY_ID,
+            model: new Cesium.ModelGraphics({
+              uri: AVION_GLB,
+              scale: AVION_GLB_SCALE,
+              minimumPixelSize: AVION_GLB_MINPX
+            })
+          });
+        this._avionEntity = ent;
         this._avionEntityReady = true;
       }
-      ent.position = Cesium.Cartesian3.fromDegrees(st.lon, st.lat, st.z || 0);
+
+      var position = Cesium.Cartesian3.fromDegrees(st.lon, st.lat, st.z || 0);
+      ent.position = position;
+
+      // Orientación por rumbo: heading en radianes (horario desde el norte). El
+      // modelo Cesium_Air apunta a +X (Este) por defecto => desfase -90°.
+      var heading = (st.headingRad || 0) + AVION_GLB_HEADING_OFFSET;
+      var hpr = new Cesium.HeadingPitchRoll(heading, 0, 0);
+      var quat = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
+      ent.orientation = new Cesium.ConstantProperty(quat);
     } catch (e) { /* impl aún no lista */ }
+  };
+
+  // Elimina el entity propio del avión del viewer de Cesium (si existe). Se llama
+  // al quitar capas y en cleanup para no duplicar el avión tras cada swap.
+  _removeAvionCesiumEntity() {
+    try {
+      if (typeof Cesium === "undefined") return;
+      var viewer = this.map && this.map.getMapImpl();
+      if (viewer && viewer.entities && viewer.entities.getById) {
+        var prev = viewer.entities.getById(AVION_ENTITY_ID);
+        if (prev) viewer.entities.remove(prev);
+      }
+    } catch (e) { /* el viewer puede haberse destruido en el swap */ }
+    this._avionEntity = null;
+    this._avionEntityReady = false;
   };
 
   // Arranca la animación (rAF). Si resume=true, continúa desde data.anim.t.
@@ -2587,6 +2668,7 @@
     // Detiene la animación (rAF) antes de quitar la capa del avión, sin borrar
     // el estado playing/t (para poder reanudar tras un swap).
     this._stopRAF();
+    if (this._avionInitPoll) { try { clearTimeout(this._avionInitPoll); } catch (e) {} this._avionInitPoll = null; }
     ["footprints", "lineas", "puntos", "avion"].forEach(function (k) {
       var lyr = self._layers[k];
       if (lyr) {
@@ -2594,7 +2676,9 @@
         self._layers[k] = null;
       }
     });
-    this._avionEntityReady = false; // el modelo Cesium se re-adjunta al re-crear
+    // Elimina también el entity propio del avión en Cesium (el que gestiona el
+    // viewer directamente), para no duplicarlo tras el swap/re-render.
+    this._removeAvionCesiumEntity();
   };
 
   clearData() {
