@@ -282,6 +282,45 @@
     gap: 10px;
 }
 
+/* Generador Demo: botón "Limpiar demo" a ancho completo bajo los controles. */
+.g-herramienta_vuelo #vf-demo-clear {
+    width: 100%;
+}
+
+/* Cámara: desplegable de preset a ancho completo del control (no solo 58%). */
+.g-herramienta_vuelo #vf-cam-preset {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid #b0b0b0;
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+}
+
+/* Botón "Añadir cámara" a ancho completo. */
+.g-herramienta_vuelo #vf-cam-add-toggle {
+    width: 100%;
+}
+
+/* Mini-formulario de alta de cámara: bloque destacado dentro de la sección. */
+.g-herramienta_vuelo .vuelo-cam-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px dashed #9aa7bd;
+    border-radius: 6px;
+    background: #f7f9fc;
+}
+
+/* Generador Demo: texto informativo (nº de fotogramas / pasadas). */
+.g-herramienta_vuelo #vf-demo-info {
+    font-weight: 600;
+    color: #2d3748;
+    min-height: 16px;
+}
+
 /* Texto de ayuda dentro de los paneles */
 .g-herramienta_vuelo .vuelo-hint {
     font-size: 12px;
