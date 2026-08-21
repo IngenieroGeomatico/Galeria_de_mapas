@@ -62,18 +62,22 @@
   //  focal_mm = distancia focal de la lente instalada. El usuario puede editar
   //  cualquier valor tras elegir un preset, o añadir cámaras propias (que se
   //  guardan en localStorage) desde el botón "Añadir cámara".
+  // Cada preset lleva ademas el numero de pixeles del sensor (px_w = across-track
+  // = ancho; px_h = along-track = alto), necesario para el modo Calculo: el
+  // tamano de pixel = sensor_mm / n_pixeles, y la altura de vuelo H = GSD * focal
+  // / pixel_pitch. Valores de cameras.json del plugin flight_planner (JMG30).
   var CAMARA_PRESETS = [
-    { name: "Vexcel UltraCam-D",        focal_mm: 100, sensor_w_mm: 103.5, sensor_h_mm: 67.5 },
-    { name: "Vexcel UltraCam-X",        focal_mm: 100, sensor_w_mm: 103.9, sensor_h_mm: 67.8 },
-    { name: "Vexcel UltraCam-Xp",       focal_mm: 100, sensor_w_mm: 103.9, sensor_h_mm: 67.9 },
-    { name: "Vexcel UltraCam Eagle 80mm",  focal_mm: 80,  sensor_w_mm: 104.1, sensor_h_mm: 68.0 },
-    { name: "Vexcel UltraCam Eagle 210mm", focal_mm: 210, sensor_w_mm: 104.1, sensor_h_mm: 68.0 },
-    { name: "Z/I·Leica DMC II 140",     focal_mm: 92,  sensor_w_mm: 87.1,  sensor_h_mm: 80.6 },
-    { name: "Z/I·Leica DMC II 230",     focal_mm: 92,  sensor_w_mm: 87.1,  sensor_h_mm: 79.2 },
-    { name: "Z/I·Leica DMC II 250",     focal_mm: 92,  sensor_w_mm: 93.9,  sensor_h_mm: 78.5 },
-    { name: "Leica DMC III",            focal_mm: 92,  sensor_w_mm: 100.3, sensor_h_mm: 56.9 },
-    { name: "Phase One IXU 1000",       focal_mm: 55,  sensor_w_mm: 53.4,  sensor_h_mm: 40.1 },
-    { name: "DJI Zenmuse P1 (35mm)",    focal_mm: 35,  sensor_w_mm: 36.0,  sensor_h_mm: 24.0 }
+    { name: "Vexcel UltraCam-D",        focal_mm: 100, sensor_w_mm: 103.5, sensor_h_mm: 67.5, px_w: 11500, px_h: 7500 },
+    { name: "Vexcel UltraCam-X",        focal_mm: 100, sensor_w_mm: 103.9, sensor_h_mm: 67.8, px_w: 14430, px_h: 9420 },
+    { name: "Vexcel UltraCam-Xp",       focal_mm: 100, sensor_w_mm: 103.9, sensor_h_mm: 67.9, px_w: 17310, px_h: 11310 },
+    { name: "Vexcel UltraCam Eagle 80mm",  focal_mm: 80,  sensor_w_mm: 104.1, sensor_h_mm: 68.0, px_w: 20010, px_h: 13080 },
+    { name: "Vexcel UltraCam Eagle 210mm", focal_mm: 210, sensor_w_mm: 104.1, sensor_h_mm: 68.0, px_w: 20010, px_h: 13080 },
+    { name: "Z/I·Leica DMC II 140",     focal_mm: 92,  sensor_w_mm: 87.1,  sensor_h_mm: 80.6, px_w: 12096, px_h: 11200 },
+    { name: "Z/I·Leica DMC II 230",     focal_mm: 92,  sensor_w_mm: 87.1,  sensor_h_mm: 79.2, px_w: 15552, px_h: 14140 },
+    { name: "Z/I·Leica DMC II 250",     focal_mm: 92,  sensor_w_mm: 93.9,  sensor_h_mm: 78.5, px_w: 16768, px_h: 14016 },
+    { name: "Leica DMC III",            focal_mm: 92,  sensor_w_mm: 100.3, sensor_h_mm: 56.9, px_w: 25728, px_h: 14592 },
+    { name: "Phase One IXU 1000",       focal_mm: 55,  sensor_w_mm: 53.4,  sensor_h_mm: 40.1, px_w: 11608, px_h: 8708 },
+    { name: "DJI Zenmuse P1 (35mm)",    focal_mm: 35,  sensor_w_mm: 36.0,  sensor_h_mm: 24.0, px_w: 8192,  px_h: 5460 }
   ];
 
   // Clave de localStorage donde se guardan las cámaras que añade el usuario.
@@ -229,7 +233,11 @@
       headers: null,
       mapping: {},
       crs: "EPSG:25830",
-      footprint: { focal_mm: 100, sensor_w_mm: 53.4, sensor_h_mm: 40.0 },
+      // Cámara: focal + tamaño de sensor (mm) y nº de píxeles del sensor (px_w
+      // across-track = ancho; px_h along-track = alto). Los píxeles se usan en el
+      // modo Cálculo para derivar altura de vuelo desde el GSD (pixel pitch =
+      // sensor_mm/n_px; H = GSD·focal/pixel_pitch). Por defecto, Phase One IXU 1000.
+      footprint: { focal_mm: 100, sensor_w_mm: 53.4, sensor_h_mm: 40.0, px_w: 11608, px_h: 8708 },
       // Todas las capas visibles por defecto; su visibilidad la gestiona el
       // plugin externo de gestión de capas (layerswitcher).
       visible: { puntos: true, lineas: true, footprints: true },
@@ -262,6 +270,26 @@
         pasada: 1,
         nFrame: 0,
         lastPassStart: null
+      },
+      // Modo CÁLCULO: planificación de un vuelo nuevo. A partir del área (BBOX de
+      // la pantalla o polígono de un feature de capa), el GSD deseado, los solapes
+      // y la cámara (footprint), calcula la altura de vuelo y la malla de pasadas
+      // y fotogramas que cubren el área, y la dibuja (fotocentros, huellas, líneas).
+      //   areaSrc: "bbox" (área visible) | "feature" (polígono de capa).
+      //   capa: nombre de la capa elegida cuando areaSrc="feature".
+      //   gsd: tamaño de píxel en el terreno deseado (cm).
+      //   solapeLong/solapeTrans: solapes longitudinal (entre fotogramas) y
+      //   transversal (entre pasadas) en % (0..99).
+      //   rumbo: dirección de las pasadas (grados). resultados: última salida.
+      calc: {
+        areaSrc: "bbox",
+        capa: "",
+        feature: "",      // índice del feature elegido dentro de la capa ("" = toda)
+        gsd: 25,          // cm/píxel deseado en el terreno
+        solapeLong: 60,   // % solape longitudinal (entre fotogramas de una pasada)
+        solapeTrans: 30,  // % solape transversal (entre pasadas)
+        rumbo: 0,         // dirección de las pasadas (grados, 0 = Norte)
+        resultados: null  // {altura, sepFoto, sepPasada, nPasadas, nFotos, ...}
       },
       // Modo OGC: lista de vuelos agrupados de la última búsqueda y clave del
       // vuelo seleccionado (persisten entre swaps OL<->Cesium).
@@ -469,9 +497,45 @@
       '    <p class="vuelo-hint" id="vf-demo-info"></p>' +
       '  </div>' +
 
-      // ==================== MODO: CÁLCULO (placeholder) ==================
+      // ==================== MODO: CÁLCULO (planificación) ================
+      // A partir del área (BBOX visible o polígono de un feature de capa), el GSD
+      // deseado, los solapes y la cámara, calcula la altura de vuelo y la malla de
+      // pasadas/fotogramas que cubren el área, y la dibuja. La cámara se elige en
+      // la sección Cámara (compartida). Los píxeles del sensor dan el pixel pitch.
       '  <div class="vuelo-mode-panel" id="vf-mode-calculo" hidden>' +
-      '    <p class="vuelo-hint">Planificación de vuelos nuevos (GSD, solape, cámara, altura y dirección de pasadas). <strong>Próximamente.</strong></p>' +
+      '    <p class="vuelo-hint">Planifica un vuelo nuevo a partir del <strong>GSD</strong> deseado, los solapes y la cámara. Define el área con el encuadre del mapa o un polígono de una capa.</p>' +
+      // Ancla donde se REUBICA la sección Cámara al entrar en modo Cálculo (el GSD
+      // depende de la cámara: focal + tamaño y nº de píxeles del sensor).
+      '    <div id="vf-cam-anchor-calc"></div>' +
+      // Origen del área de vuelo.
+      '    <div class="vuelo-row">' +
+      '      <label for="vf-calc-areasrc">Área</label>' +
+      '      <select id="vf-calc-areasrc">' +
+      '        <option value="bbox">Encuadre del mapa</option>' +
+      '        <option value="feature">Polígono de capa</option>' +
+      '      </select>' +
+      '    </div>' +
+      // Selector de capa (solo visible cuando areaSrc = feature). El listado se
+      // refresca al desplegar el select (mousedown/focus), sin botón aparte.
+      '    <div class="vuelo-row" id="vf-calc-capa-row" hidden>' +
+      '      <label for="vf-calc-capa">Capa</label>' +
+      '      <select id="vf-calc-capa" class="vuelo-select-vuelo"><option value="">— Elige una capa —</option></select>' +
+      '    </div>' +
+      // Selector de feature dentro de la capa elegida (polígonos). Permite calcular
+      // sobre un feature concreto; "todos" usa la envolvente de la capa entera.
+      '    <div class="vuelo-row" id="vf-calc-feature-row" hidden>' +
+      '      <label for="vf-calc-feature">Elemento</label>' +
+      '      <select id="vf-calc-feature" class="vuelo-select-vuelo"><option value="">— Toda la capa —</option></select>' +
+      '    </div>' +
+      // Parámetros de planificación.
+      '    <div class="vuelo-row"><label for="vf-calc-gsd">GSD (cm/píxel)</label><input type="number" id="vf-calc-gsd" step="1" min="1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-calc-solapel">Solape long. (%)</label><input type="number" id="vf-calc-solapel" step="5" min="0" max="95"></div>' +
+      '    <div class="vuelo-row"><label for="vf-calc-solapet">Solape trans. (%)</label><input type="number" id="vf-calc-solapet" step="5" min="0" max="95"></div>' +
+      '    <div class="vuelo-row"><label for="vf-calc-rumbo">Rumbo pasadas (°)</label><input type="number" id="vf-calc-rumbo" step="1" min="0" max="360"></div>' +
+      '    <button type="button" id="vf-calc-run" class="vuelo-btn primary">Calcular vuelo</button>' +
+      '    <button type="button" id="vf-calc-clear" class="vuelo-btn">Limpiar</button>' +
+      // Resultados numéricos del cálculo.
+      '    <div class="vuelo-calc-results" id="vf-calc-results" hidden></div>' +
       '  </div>' +
 
       // ==================== SECCIONES COMPARTIDAS (hecho + demo) =========
@@ -498,6 +562,8 @@
       '    <div class="vuelo-row"><label for="vf-fp-focal">Focal (mm)</label><input type="number" id="vf-fp-focal" step="1" min="1"></div>' +
       '    <div class="vuelo-row"><label for="vf-fp-sw">Sensor ancho (mm)</label><input type="number" id="vf-fp-sw" step="0.1" min="0.1"></div>' +
       '    <div class="vuelo-row"><label for="vf-fp-sh">Sensor alto (mm)</label><input type="number" id="vf-fp-sh" step="0.1" min="0.1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-fp-pxw">Píxeles ancho</label><input type="number" id="vf-fp-pxw" step="1" min="1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-fp-pxh">Píxeles alto</label><input type="number" id="vf-fp-pxh" step="1" min="1"></div>' +
       '    <button type="button" id="vf-cam-add-toggle" class="vuelo-btn">＋ Añadir cámara</button>' +
       // Mini-formulario para dar de alta una cámara nueva (se guarda en caché).
       '    <div class="vuelo-cam-form" id="vf-cam-form" hidden>' +
@@ -505,6 +571,8 @@
       '      <div class="vuelo-row"><label for="vf-cam-focal">Focal (mm)</label><input type="number" id="vf-cam-focal" step="1" min="1"></div>' +
       '      <div class="vuelo-row"><label for="vf-cam-sw">Sensor ancho (mm)</label><input type="number" id="vf-cam-sw" step="0.1" min="0.1"></div>' +
       '      <div class="vuelo-row"><label for="vf-cam-sh">Sensor alto (mm)</label><input type="number" id="vf-cam-sh" step="0.1" min="0.1"></div>' +
+      '      <div class="vuelo-row"><label for="vf-cam-pxw">Píxeles ancho</label><input type="number" id="vf-cam-pxw" step="1" min="1"></div>' +
+      '      <div class="vuelo-row"><label for="vf-cam-pxh">Píxeles alto</label><input type="number" id="vf-cam-pxh" step="1" min="1"></div>' +
       '      <div class="vuelo-anim-controls">' +
       '        <button type="button" id="vf-cam-save" class="vuelo-btn primary">Guardar cámara</button>' +
       '        <button type="button" id="vf-cam-cancel" class="vuelo-btn">Cancelar</button>' +
@@ -645,6 +713,8 @@
     bind("vf-fp-focal", "change", function () { self.data.footprint.focal_mm = parseFloat(this.value) || 0; self.markCustomPreset(); });
     bind("vf-fp-sw", "change", function () { self.data.footprint.sensor_w_mm = parseFloat(this.value) || 0; self.markCustomPreset(); });
     bind("vf-fp-sh", "change", function () { self.data.footprint.sensor_h_mm = parseFloat(this.value) || 0; self.markCustomPreset(); });
+    bind("vf-fp-pxw", "change", function () { self.data.footprint.px_w = parseInt(this.value, 10) || 0; self.markCustomPreset(); });
+    bind("vf-fp-pxh", "change", function () { self.data.footprint.px_h = parseInt(this.value, 10) || 0; self.markCustomPreset(); });
 
     // Desplegable de preset de cámara: al elegir un modelo rellena focal + sensor.
     bind("vf-cam-preset", "change", function () { self.applyCameraPreset(this.value); });
@@ -653,6 +723,31 @@
     bind("vf-cam-add-toggle", "click", function () { self.toggleCameraForm(); });
     bind("vf-cam-save", "click", function () { self.saveNewCamera(); });
     bind("vf-cam-cancel", "click", function () { self.toggleCameraForm(false); });
+
+    // Parámetros del modo CÁLCULO.
+    bind("vf-calc-areasrc", "change", function () { self.data.calc.areaSrc = this.value; self.applyCalcAreaSrc(); window.__vueloSharedData = self.data; });
+    // Refresca el listado de capas al desplegar el select (por si se cargaron
+    // capas después). mousedown salta antes de abrir; focus cubre el teclado.
+    var capaSel = p.querySelector("#vf-calc-capa");
+    if (capaSel) {
+      var refrescarCapas = function () { self.fillCapaSelect(self.data.calc.capa || ""); };
+      capaSel.addEventListener("mousedown", refrescarCapas);
+      capaSel.addEventListener("focus", refrescarCapas);
+    }
+    // Al elegir capa: guarda, resetea el feature y puebla el selector de features.
+    bind("vf-calc-capa", "change", function () {
+      self.data.calc.capa = this.value;
+      self.data.calc.feature = "";
+      window.__vueloSharedData = self.data;
+      self.fillFeatureSelect("");
+    });
+    bind("vf-calc-feature", "change", function () { self.data.calc.feature = this.value; window.__vueloSharedData = self.data; });
+    bind("vf-calc-gsd", "change", function () { self.data.calc.gsd = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
+    bind("vf-calc-solapel", "change", function () { self.data.calc.solapeLong = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
+    bind("vf-calc-solapet", "change", function () { self.data.calc.solapeTrans = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
+    bind("vf-calc-rumbo", "change", function () { self.data.calc.rumbo = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
+    bind("vf-calc-run", "click", function () { self.calcularVuelo(); });
+    bind("vf-calc-clear", "click", function () { self.clearCalc(); });
 
     // La visibilidad de las capas la gestiona el plugin externo de gestión de
     // capas (layerswitcher); el plugin ya no expone checks de visibilidad.
@@ -676,11 +771,26 @@
     set("#vf-fp-focal", fp.focal_mm);
     set("#vf-fp-sw", fp.sensor_w_mm);
     set("#vf-fp-sh", fp.sensor_h_mm);
+    set("#vf-fp-pxw", fp.px_w);
+    set("#vf-fp-pxh", fp.px_h);
 
     // Puebla el desplegable de cámaras (presets + cámaras del usuario) y marca
     // el preset que coincida con los valores actuales (o "Personalizada").
     this.fillCameraSelect();
     this.selectMatchingPreset();
+
+    // Campos del modo CÁLCULO (persisten entre swaps).
+    if (d.calc) {
+      var c = d.calc;
+      set("#vf-calc-areasrc", c.areaSrc || "bbox");
+      set("#vf-calc-gsd", c.gsd);
+      set("#vf-calc-solapel", c.solapeLong);
+      set("#vf-calc-solapet", c.solapeTrans);
+      set("#vf-calc-rumbo", c.rumbo);
+      this.fillCapaSelect(c.capa || "");
+      this.applyCalcAreaSrc();
+      if (c.resultados) this.renderCalcResults(c.resultados);
+    }
 
     // Campos del modo OGC.
     if (d.ogc) {
@@ -725,7 +835,7 @@
   // (guardadas en localStorage). Las del usuario se marcan con user:true.
   getAllCameras() {
     var user = loadUserCameras().map(function (c) {
-      return { name: c.name, focal_mm: c.focal_mm, sensor_w_mm: c.sensor_w_mm, sensor_h_mm: c.sensor_h_mm, user: true };
+      return { name: c.name, focal_mm: c.focal_mm, sensor_w_mm: c.sensor_w_mm, sensor_h_mm: c.sensor_h_mm, px_w: c.px_w, px_h: c.px_h, user: true };
     });
     return CAMARA_PRESETS.concat(user);
   };
@@ -762,12 +872,16 @@
     fp.focal_mm = cam.focal_mm;
     fp.sensor_w_mm = cam.sensor_w_mm;
     fp.sensor_h_mm = cam.sensor_h_mm;
+    if (cam.px_w) fp.px_w = cam.px_w;
+    if (cam.px_h) fp.px_h = cam.px_h;
     window.__vueloSharedData = this.data;
     var p = this.panel;
     var set = function (id, v) { var el = p.querySelector(id); if (el) el.value = v; };
     set("#vf-fp-focal", fp.focal_mm);
     set("#vf-fp-sw", fp.sensor_w_mm);
     set("#vf-fp-sh", fp.sensor_h_mm);
+    set("#vf-fp-pxw", fp.px_w);
+    set("#vf-fp-pxh", fp.px_h);
   };
 
   // Marca en el desplegable el preset cuyos valores coinciden con los actuales
@@ -808,6 +922,8 @@
       set("#vf-cam-focal", fp.focal_mm || "");
       set("#vf-cam-sw", fp.sensor_w_mm || "");
       set("#vf-cam-sh", fp.sensor_h_mm || "");
+      set("#vf-cam-pxw", fp.px_w || "");
+      set("#vf-cam-pxh", fp.px_h || "");
       this.setCamMsg("");
     } else {
       form.setAttribute("hidden", "");
@@ -832,11 +948,15 @@
     var focal = parseFloat(val("#vf-cam-focal"));
     var sw = parseFloat(val("#vf-cam-sw"));
     var sh = parseFloat(val("#vf-cam-sh"));
+    var pxw = parseInt(val("#vf-cam-pxw"), 10);
+    var pxh = parseInt(val("#vf-cam-pxh"), 10);
 
     if (!name) { this.setCamMsg("Indica un nombre para la cámara.", "error"); return; }
     if (isNaN(focal) || focal <= 0) { this.setCamMsg("Focal inválida.", "error"); return; }
     if (isNaN(sw) || sw <= 0) { this.setCamMsg("Sensor ancho inválido.", "error"); return; }
     if (isNaN(sh) || sh <= 0) { this.setCamMsg("Sensor alto inválido.", "error"); return; }
+    if (isNaN(pxw) || pxw <= 0) { this.setCamMsg("Píxeles ancho inválidos.", "error"); return; }
+    if (isNaN(pxh) || pxh <= 0) { this.setCamMsg("Píxeles alto inválidos.", "error"); return; }
 
     // Evita colisión con un nombre de preset fijo.
     var esPreset = CAMARA_PRESETS.some(function (c) { return c.name === name; });
@@ -844,7 +964,7 @@
 
     var user = loadUserCameras();
     var idx = user.findIndex(function (c) { return c.name === name; });
-    var cam = { name: name, focal_mm: focal, sensor_w_mm: sw, sensor_h_mm: sh };
+    var cam = { name: name, focal_mm: focal, sensor_w_mm: sw, sensor_h_mm: sh, px_w: pxw, px_h: pxh };
     if (idx >= 0) user[idx] = cam; else user.push(cam);
     saveUserCameras(user);
 
@@ -900,14 +1020,19 @@
       btns[i].classList.toggle("active", btns[i].getAttribute("data-mode") === mode);
     }
 
-    // El modo 'calculo' no produce datos: oculta las secciones compartidas.
-    // En 'hecho' y 'demo' su visibilidad la decide showConfigSections según
-    // haya datos cargados/generados.
+    // Visibilidad de las secciones compartidas según el modo:
+    //  - 'calculo': la CÁMARA es necesaria (el GSD depende de ella), así que se
+    //    muestra; se ocultan acciones (usa su propio botón Calcular) y animación;
+    //    el estado se muestra. Si ya hay un plan renderizado, se ve la animación.
+    //  - 'hecho'/'demo': lo decide showConfigSections según haya datos.
     if (mode === "calculo") {
-      ["#vf-status", "#vf-section-fp", "#vf-section-actions", "#vf-section-anim"].forEach(function (id) {
-        var el = p.querySelector(id);
-        if (el) el.setAttribute("hidden", "");
-      });
+      var st0 = p.querySelector("#vf-status");
+      if (st0) st0.removeAttribute("hidden");
+      var fpc = p.querySelector("#vf-section-fp");
+      if (fpc) fpc.removeAttribute("hidden"); // cámara visible (GSD la necesita)
+      var acc = p.querySelector("#vf-section-actions");
+      if (acc) acc.setAttribute("hidden", "");
+      this.updateAnimUI(); // muestra animación solo si hay línea de vuelo (plan)
     } else {
       var st = p.querySelector("#vf-status");
       if (st) st.removeAttribute("hidden");
@@ -935,12 +1060,19 @@
         anchorDemo.parentNode.insertBefore(fpSec, anchorDemo.nextSibling);
       }
       fpSec.removeAttribute("hidden"); // en demo, la cámara siempre visible
+    } else if (mode === "calculo") {
+      // En cálculo la cámara se coloca ARRIBA del panel (el GSD la necesita).
+      var anchorCalc = p.querySelector("#vf-cam-anchor-calc");
+      if (anchorCalc && anchorCalc.nextSibling !== fpSec) {
+        anchorCalc.parentNode.insertBefore(fpSec, anchorCalc.nextSibling);
+      }
+      fpSec.removeAttribute("hidden");
     } else {
       var home = p.querySelector("#vf-cam-home");
       if (home && home.nextSibling !== fpSec) {
         home.parentNode.insertBefore(fpSec, home.nextSibling);
       }
-      // En 'hecho'/'calculo' la visibilidad ya la fijaron los bloques anteriores.
+      // En 'hecho' la visibilidad la fija showConfigSections.
     }
   };
 
@@ -1722,6 +1854,365 @@
     var np = Object.keys(pasadas).length;
     el.textContent = n + " fotograma" + (n === 1 ? "" : "s") + " en " +
       np + " pasada" + (np === 1 ? "" : "s") + " (pasada actual: " + dm.pasada + ").";
+  };
+
+  // ###################################################################
+  //  MODO CÁLCULO: planificación de vuelo (GSD + solapes + cámara -> malla)
+  //  --------------------------------------------------------------------
+  //  Fórmulas fotogramétricas (cámara matricial, vista nadiral):
+  //    pixel_pitch = sensor_mm / n_píxeles           (tamaño de píxel en el sensor)
+  //    H (altura de vuelo) = GSD * focal / pixel_pitch
+  //    huella en suelo:  Wx = GSD * px_w ;  Wy = GSD * px_h
+  //    avance entre fotogramas (base): B = Wy * (1 - solapeLong)
+  //    separación entre pasadas:       A = Wx * (1 - solapeTrans)
+  //  Con eso se teselan el área en una malla de pasadas (dirección = rumbo) y de
+  //  fotogramas por pasada, y se genera un vuelo serpenteante reutilizando el
+  //  pipeline de render (fotocentros + huellas + líneas + animación del avión).
+  // ###################################################################
+
+  // Muestra/oculta el selector de capa según el origen de área elegido.
+  applyCalcAreaSrc() {
+    var p = this.panel;
+    var row = p && p.querySelector("#vf-calc-capa-row");
+    var frow = p && p.querySelector("#vf-calc-feature-row");
+    if (!row) return;
+    if (this.data.calc.areaSrc === "feature") {
+      row.removeAttribute("hidden");
+      if (frow) frow.removeAttribute("hidden");
+      // Refresca la lista de capas al mostrarla y puebla los features de la capa
+      // seleccionada (puede haberse cargado la capa después de abrir el modo).
+      this.fillCapaSelect(this.data.calc.capa || "");
+      this.fillFeatureSelect(this.data.calc.feature || "");
+    } else {
+      row.setAttribute("hidden", "");
+      if (frow) frow.setAttribute("hidden", "");
+    }
+  };
+
+  // Enumera las capas VECTORIALES del mapa (vía API-IDEE, que expone el NOMBRE
+  // real de cada capa) que tienen features de polígono, para el selector de área
+  // por feature. Excluye las capas internas del propio plugin y la de dibujo.
+  // Devuelve [{name, olLayer}]. (El modo cálculo se usa en 2D.)
+  listVectorLayers() {
+    var out = [];
+    // Nombres de capas propias del plugin a excluir del selector.
+    var PROPIAS = { "Huellas de fotograma": 1, "Líneas de pasada": 1, "Centros de fotograma": 1, "Avión": 1, "__draw__": 1 };
+    try {
+      var capas = (this.map && typeof this.map.getLayers === "function") ? this.map.getLayers() : [];
+      for (var i = 0; i < capas.length; i++) {
+        var capa = capas[i];
+        try {
+          var nombre = capa && (capa.name || capa.legend);
+          if (!nombre || PROPIAS[nombre]) continue;
+          // Obtiene el ol.Layer subyacente para leer sus features.
+          var olLayer = capa.getImpl && capa.getImpl().getLayer && capa.getImpl().getLayer();
+          var src = olLayer && olLayer.getSource && olLayer.getSource();
+          if (!src || typeof src.getFeatures !== "function") continue; // no vectorial
+          var feats = src.getFeatures();
+          if (!feats || !feats.length) continue;
+          var hasPoly = feats.some(function (f) {
+            var g = f.getGeometry && f.getGeometry();
+            var t = g && g.getType && g.getType();
+            return t === "Polygon" || t === "MultiPolygon";
+          });
+          if (!hasPoly) continue;
+          // Nombre único (por si hubiera capas homónimas).
+          var base = String(nombre), uniq = base, k = 2;
+          while (out.some(function (o) { return o.name === uniq; })) { uniq = base + " (" + (k++) + ")"; }
+          out.push({ name: uniq, olLayer: olLayer });
+        } catch (e) { /* ignora esta capa */ }
+      }
+    } catch (e) { /* nada */ }
+    return out;
+  };
+
+  // Rellena el <select> de capas con las capas vectoriales de polígonos. Es
+  // IDEMPOTENTE: solo reconstruye el <select> si la lista de capas cambió respecto
+  // a las opciones actuales. Esto evita que el refresco al desplegar el select
+  // (mousedown/focus) reconstruya el DOM en pleno gesto y anule la selección.
+  fillCapaSelect(selName) {
+    var p = this.panel;
+    var sel = p && p.querySelector("#vf-calc-capa");
+    if (!sel) return;
+    var capas = this.listVectorLayers();
+    var nuevos = capas.map(function (c) { return c.name; });
+
+    // Opciones actuales (sin el placeholder) para comparar.
+    var actuales = [];
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value !== "") actuales.push(sel.options[i].value);
+    }
+    var iguales = actuales.length === nuevos.length &&
+      actuales.every(function (v, idx) { return v === nuevos[idx]; });
+    if (iguales) {
+      // Sin cambios: no tocar el DOM (preserva la selección/apertura del usuario).
+      if (selName !== undefined && selName !== null && selName !== "") sel.value = selName;
+      return;
+    }
+
+    var esc = function (s) { return String(s).replace(/"/g, "&quot;").replace(/</g, "&lt;"); };
+    var html = '<option value="">— Elige una capa —</option>';
+    capas.forEach(function (c) { html += '<option value="' + esc(c.name) + '">' + esc(c.name) + "</option>"; });
+    sel.innerHTML = html;
+    if (selName) sel.value = selName;
+  };
+
+  // Devuelve los features de POLÍGONO de la capa elegida (ol.Feature[]), en el
+  // orden de la fuente. Vacío si no hay capa seleccionada o no es válida.
+  getCapaFeatures() {
+    var d = this.data.calc;
+    if (!d.capa) return [];
+    var capa = this.listVectorLayers().filter(function (c) { return c.name === d.capa; })[0];
+    if (!capa) return [];
+    try {
+      var feats = capa.olLayer.getSource().getFeatures() || [];
+      return feats.filter(function (f) {
+        var g = f.getGeometry && f.getGeometry();
+        var t = g && g.getType && g.getType();
+        return t === "Polygon" || t === "MultiPolygon";
+      });
+    } catch (e) { return []; }
+  };
+
+  // Etiqueta legible de un feature: usa un atributo con nombre si lo tiene
+  // (name/nombre/NOMBRE/id...), o "Elemento N" como respaldo.
+  featureLabel(f, i) {
+    try {
+      var props = (f.getProperties && f.getProperties()) || {};
+      var keys = ["nombre", "name", "NOMBRE", "Nombre", "NAME", "id", "ID", "gid", "cod", "codigo"];
+      for (var k = 0; k < keys.length; k++) {
+        if (props[keys[k]] != null && props[keys[k]] !== "") return String(props[keys[k]]);
+      }
+    } catch (e) { /* nada */ }
+    return "Elemento " + (i + 1);
+  };
+
+  // Rellena el <select> de features (elementos) de la capa elegida. La opción
+  // vacía significa "toda la capa" (envolvente de todos los polígonos).
+  fillFeatureSelect(selIdx) {
+    var p = this.panel;
+    var sel = p && p.querySelector("#vf-calc-feature");
+    if (!sel) return;
+    var self = this;
+    var feats = this.getCapaFeatures();
+    var esc = function (s) { return String(s).replace(/"/g, "&quot;").replace(/</g, "&lt;"); };
+    var html = '<option value="">— Toda la capa —</option>';
+    feats.forEach(function (f, i) {
+      html += '<option value="' + i + '">' + esc(self.featureLabel(f, i)) + "</option>";
+    });
+    sel.innerHTML = html;
+    if (selIdx !== undefined && selIdx !== null && selIdx !== "") sel.value = String(selIdx);
+  };
+
+  // Devuelve el área de vuelo como un anillo de coords [lon,lat] (EPSG:4326):
+  //  - areaSrc "bbox": rectángulo del encuadre visible del mapa.
+  //  - areaSrc "feature": envolvente (bbox) del/los polígono(s) de la capa elegida.
+  // Se usa el bbox del feature (no el polígono exacto) para teselar la malla; el
+  // recorte fino al polígono queda como mejora futura. Devuelve null si no puede.
+  getAreaExtent4326() {
+    var d = this.data.calc;
+    if (d.areaSrc === "feature") {
+      var capas = this.listVectorLayers();
+      var capa = capas.filter(function (c) { return c.name === d.capa; })[0];
+      if (!capa) return null;
+      try {
+        var ext;
+        // Si hay un feature concreto elegido, se usa su envolvente; si no ("toda
+        // la capa"), la envolvente de toda la capa.
+        if (d.feature !== "" && d.feature !== null && d.feature !== undefined) {
+          var feats = this.getCapaFeatures();
+          var f = feats[parseInt(d.feature, 10)];
+          if (!f || !f.getGeometry) return null;
+          ext = f.getGeometry().getExtent();
+        } else {
+          ext = capa.olLayer.getSource().getExtent();
+        }
+        if (!ext || !isFinite(ext[0])) return null;
+        return this._extentToLonLat(ext);
+      } catch (e) { return null; }
+    }
+    // bbox del encuadre visible.
+    try {
+      var impl = this.map.getMapImpl();
+      if (impl && typeof impl.getView === "function" && window.ol) {
+        var view = impl.getView();
+        var size = impl.getSize();
+        if (size && size[0] && size[1]) {
+          var e = view.calculateExtent(size);
+          return this._extentToLonLat(e, view.getProjection().getCode());
+        }
+      }
+    } catch (e) { /* respaldo abajo */ }
+    return null;
+  };
+
+  // Convierte un extent [minx,miny,maxx,maxy] de la proyección del mapa a
+  // [minLon,minLat,maxLon,maxLat] en EPSG:4326.
+  _extentToLonLat(ext, code) {
+    var proj = code;
+    if (!proj) {
+      try { proj = this.map.getMapImpl().getView().getProjection().getCode(); }
+      catch (e) { proj = "EPSG:3857"; }
+    }
+    if (proj === "EPSG:4326") return [ext[0], ext[1], ext[2], ext[3]];
+    var mn = window.ol.proj.transform([ext[0], ext[1]], proj, "EPSG:4326");
+    var mx = window.ol.proj.transform([ext[2], ext[3]], proj, "EPSG:4326");
+    return [mn[0], mn[1], mx[0], mx[1]];
+  };
+
+  // Calcula el plan de vuelo a partir del GSD, solapes y cámara, teselando el
+  // área en una malla de pasadas (dirección = rumbo) y fotogramas. Genera los
+  // frames en el estado demo (reutiliza su pipeline de render y animación) y
+  // muestra los resultados numéricos.
+  calcularVuelo() {
+    var c = this.data.calc;
+    var fp = this.data.footprint;
+
+    // Validaciones de cámara (necesita píxeles para derivar el GSD->altura).
+    if (!fp.focal_mm || !fp.sensor_w_mm || !fp.sensor_h_mm) {
+      this.setStatus("Completa los parámetros de la cámara (focal y sensor).", "error"); return;
+    }
+    if (!fp.px_w || !fp.px_h) {
+      this.setStatus("La cámara necesita nº de píxeles (ancho y alto) para calcular el GSD.", "error"); return;
+    }
+    if (!c.gsd || c.gsd <= 0) { this.setStatus("Indica un GSD válido (cm/píxel).", "error"); return; }
+
+    var ext = this.getAreaExtent4326();
+    if (!ext) { this.setStatus("No se pudo obtener el área de vuelo.", "error"); return; }
+
+    // --- Fórmulas fotogramétricas ---
+    var gsd_m = c.gsd / 100;                       // GSD en metros/píxel
+    var pitch_w = fp.sensor_w_mm / fp.px_w;        // tamaño de píxel (mm) ancho
+    // Altura de vuelo: H = GSD * focal / pixel_pitch (todo coherente en mm).
+    var altura = gsd_m * fp.focal_mm / pitch_w;    // metros
+    var Wx = gsd_m * fp.px_w;                      // huella en suelo, ancho (m)
+    var Wy = gsd_m * fp.px_h;                      // huella en suelo, alto (m)
+    var sl = Math.min(Math.max(c.solapeLong, 0), 95) / 100;
+    var st = Math.min(Math.max(c.solapeTrans, 0), 95) / 100;
+    var B = Wy * (1 - sl);                         // avance entre fotogramas (m)
+    var A = Wx * (1 - st);                         // separación entre pasadas (m)
+    if (B <= 0 || A <= 0) { this.setStatus("Solapes demasiado altos: reduce los porcentajes.", "error"); return; }
+
+    // --- Dimensiones del área (m) y nº de pasadas/fotogramas ---
+    var cLat = (ext[1] + ext[3]) / 2;
+    var mPerDegLat = 111320.0;
+    var mPerDegLon = 111320.0 * Math.cos(cLat * Math.PI / 180);
+    var anchoAreaM = (ext[2] - ext[0]) * mPerDegLon; // O-E
+    var altoAreaM = (ext[3] - ext[1]) * mPerDegLat;  // S-N
+
+    // La dirección de las pasadas es el rumbo; para teselar proyectamos el área
+    // sobre los ejes "a lo largo" (rumbo) y "transversal" (rumbo+90). Como el área
+    // es un bbox, usamos su diagonal como cota para cubrirla con cualquier rumbo.
+    var diag = Math.sqrt(anchoAreaM * anchoAreaM + altoAreaM * altoAreaM);
+    var largoPasada = diag;                          // longitud de cada pasada (m)
+    var anchoTotal = diag;                           // ancho a cubrir con pasadas (m)
+
+    var nFotosPorPasada = Math.max(2, Math.ceil(largoPasada / B) + 1);
+    var nPasadas = Math.max(1, Math.ceil(anchoTotal / A) + 1);
+
+    // Punto de arranque: esquina del área desplazada media diagonal hacia el
+    // suroeste del centro, de modo que la malla (centrada) cubra todo el bbox.
+    var centro = [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
+    var rumbo = c.rumbo || 0;
+    // Vector "a lo largo" (rumbo) y "transversal" (rumbo+90), en metros.
+    var self = this;
+    var media = { along: (nFotosPorPasada - 1) * B / 2, across: (nPasadas - 1) * A / 2 };
+    // Esquina inicial = centro - media_along*dir - media_across*perp.
+    var startCorner = this._offsetMeters(centro, -media.along, rumbo);
+    startCorner = this._offsetMeters(startCorner, -media.across, rumbo + 90);
+
+    // --- Genera los frames serpenteantes en el estado demo ---
+    var frames = [];
+    var kappaBase = rumbo * Math.PI / 180;
+    for (var pi = 0; pi < nPasadas; pi++) {
+      // Origen de la pasada pi: desde startCorner, desplazado pi*A en transversal.
+      var passStart = this._offsetMeters(startCorner, pi * A, rumbo + 90);
+      // Sentido serpenteante: pasadas pares en rumbo, impares en rumbo+180.
+      var inverse = (pi % 2 !== 0);
+      var heading = inverse ? rumbo + 180 : rumbo;
+      var hkappa = heading * Math.PI / 180;
+      for (var fi = 0; fi < nFotosPorPasada; fi++) {
+        var idx = inverse ? (nFotosPorPasada - 1 - fi) : fi;
+        var pos = this._offsetMeters(passStart, idx * B, rumbo);
+        frames.push({
+          id: "P" + (pi + 1) + "-F" + (fi + 1),
+          pasada: "Pasada " + (pi + 1),
+          pasadaNum: pi + 1,
+          lon: pos[0], lat: pos[1], z: altura,
+          heading: heading,
+          omega: 0, phi: 0, kappa: hkappa
+        });
+      }
+    }
+
+    // Vuelca los frames al estado demo y reutiliza su render (fotocentros,
+    // huellas, líneas serpenteantes y animación del avión).
+    var dm = this.data.demo;
+    dm.frames = frames;
+    dm.pasada = nPasadas;
+    dm.nFrame = nFotosPorPasada;
+    dm.lastPassStart = null;
+    this.rebuildDemoRows();
+
+    // Resultados numéricos.
+    c.resultados = {
+      altura: altura, gsd: c.gsd, Wx: Wx, Wy: Wy, B: B, A: A,
+      nPasadas: nPasadas, nFotosPorPasada: nFotosPorPasada,
+      nFotos: frames.length, anchoAreaM: anchoAreaM, altoAreaM: altoAreaM
+    };
+    window.__vueloSharedData = this.data;
+
+    this.renderCalcResults(c.resultados);
+    this.updateAnimUI();
+    this.render();
+    this.setStatus("Plan calculado: " + frames.length + " fotogramas en " +
+      nPasadas + " pasadas.", "ok");
+  };
+
+  // Desplaza [lon,lat] `dist` metros con rumbo `bearingDeg` (0=N, 90=E). Igual
+  // que offsetLonLat (demo), replicado aquí para claridad del bloque de cálculo.
+  _offsetMeters(ll, dist, bearingDeg) {
+    return this.offsetLonLat(ll[0], ll[1], dist, bearingDeg);
+  };
+
+  // Muestra los resultados numéricos del cálculo en el panel.
+  renderCalcResults(r) {
+    var p = this.panel;
+    var el = p && p.querySelector("#vf-calc-results");
+    if (!el || !r) return;
+    var f1 = function (n) { return (Math.round(n * 10) / 10).toLocaleString("es-ES"); };
+    var f0 = function (n) { return Math.round(n).toLocaleString("es-ES"); };
+    el.innerHTML =
+      '<div class="vuelo-calc-row"><span>Altura de vuelo</span><strong>' + f0(r.altura) + ' m</strong></div>' +
+      '<div class="vuelo-calc-row"><span>Huella (ancho × alto)</span><strong>' + f0(r.Wx) + ' × ' + f0(r.Wy) + ' m</strong></div>' +
+      '<div class="vuelo-calc-row"><span>Sep. entre fotogramas</span><strong>' + f1(r.B) + ' m</strong></div>' +
+      '<div class="vuelo-calc-row"><span>Sep. entre pasadas</span><strong>' + f1(r.A) + ' m</strong></div>' +
+      '<div class="vuelo-calc-row"><span>Nº de pasadas</span><strong>' + f0(r.nPasadas) + '</strong></div>' +
+      '<div class="vuelo-calc-row"><span>Fotogramas/pasada</span><strong>' + f0(r.nFotosPorPasada) + '</strong></div>' +
+      '<div class="vuelo-calc-row"><span>Fotogramas totales</span><strong>' + f0(r.nFotos) + '</strong></div>';
+    el.removeAttribute("hidden");
+  };
+
+  // Limpia el plan calculado: quita capas, resetea frames y resultados, y deja
+  // el panel de cálculo listo para recalcular (mantiene los parámetros y la
+  // cámara visible, ya que seguimos en modo cálculo).
+  clearCalc() {
+    this.removeLayers();
+    this.data.rows = null;
+    this.data.headers = null;
+    this.data.mapping = {};
+    this._mdtCache = undefined;
+    this.data.zoomDone = false;
+    this._stopRAF();
+    this.data.anim = { playing: false, t: 0 };
+    this._flightLine = null;
+    this.data.demo.frames = [];
+    this.data.calc.resultados = null;
+    window.__vueloSharedData = this.data;
+    var el = this.panel && this.panel.querySelector("#vf-calc-results");
+    if (el) { el.innerHTML = ""; el.setAttribute("hidden", ""); }
+    this.updateAnimUI();
+    this.setStatus("Plan limpiado. Ajusta los parámetros y pulsa “Calcular vuelo”.");
   };
 
   // ###################################################################
