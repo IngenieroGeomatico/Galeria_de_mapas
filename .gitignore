@@ -399,3 +399,6 @@ FodyWeavers.xsd
 
 # OhMyOpenCode working directory
 .omo/
+
+# Playwright MCP working directory (capturas y snapshots temporales de QA)
+.playwright-mcp/
