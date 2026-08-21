@@ -47,6 +47,53 @@
     { code: "EPSG:3857", label: "Web Mercator", def: "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs" }
   ];
 
+  // ---------------------------------------------------------------------
+  //  CÁMARAS FOTOGRAMÉTRICAS predefinidas para el desplegable de preset.
+  //  --------------------------------------------------------------------
+  //  Los pliegos técnicos del PNOA (IGN/CNIG) NO imponen un modelo de cámara:
+  //  fijan el GSD del vuelo y requisitos de rendimiento, y cada empresa declara
+  //  marca/modelo con su certificado de calibración. Estos presets son las
+  //  cámaras matriciales de gran formato más habituales en campañas PNOA
+  //  (familias Vexcel UltraCam y Z/I·Leica DMC) más un par de equipos de formato
+  //  medio/UAV. Valores derivados de cameras.json del plugin QGIS flight_planner
+  //  de J. M. Garrido (JMG30), autor de las especificaciones técnicas del PNOA:
+  //    sensor_mm = nº_píxeles * tamaño_píxel(µm)/1000
+  //    ancho = across-track (perpendicular al vuelo); alto = along-track (vuelo).
+  //  focal_mm = distancia focal de la lente instalada. El usuario puede editar
+  //  cualquier valor tras elegir un preset, o añadir cámaras propias (que se
+  //  guardan en localStorage) desde el botón "Añadir cámara".
+  var CAMARA_PRESETS = [
+    { name: "Vexcel UltraCam-D",        focal_mm: 100, sensor_w_mm: 103.5, sensor_h_mm: 67.5 },
+    { name: "Vexcel UltraCam-X",        focal_mm: 100, sensor_w_mm: 103.9, sensor_h_mm: 67.8 },
+    { name: "Vexcel UltraCam-Xp",       focal_mm: 100, sensor_w_mm: 103.9, sensor_h_mm: 67.9 },
+    { name: "Vexcel UltraCam Eagle 80mm",  focal_mm: 80,  sensor_w_mm: 104.1, sensor_h_mm: 68.0 },
+    { name: "Vexcel UltraCam Eagle 210mm", focal_mm: 210, sensor_w_mm: 104.1, sensor_h_mm: 68.0 },
+    { name: "Z/I·Leica DMC II 140",     focal_mm: 92,  sensor_w_mm: 87.1,  sensor_h_mm: 80.6 },
+    { name: "Z/I·Leica DMC II 230",     focal_mm: 92,  sensor_w_mm: 87.1,  sensor_h_mm: 79.2 },
+    { name: "Z/I·Leica DMC II 250",     focal_mm: 92,  sensor_w_mm: 93.9,  sensor_h_mm: 78.5 },
+    { name: "Leica DMC III",            focal_mm: 92,  sensor_w_mm: 100.3, sensor_h_mm: 56.9 },
+    { name: "Phase One IXU 1000",       focal_mm: 55,  sensor_w_mm: 53.4,  sensor_h_mm: 40.1 },
+    { name: "DJI Zenmuse P1 (35mm)",    focal_mm: 35,  sensor_w_mm: 36.0,  sensor_h_mm: 24.0 }
+  ];
+
+  // Clave de localStorage donde se guardan las cámaras que añade el usuario.
+  var CAMARA_STORE_KEY = "vueloFotogrametrico:camarasUsuario";
+
+  // Lee del localStorage el array de cámaras añadidas por el usuario (o []).
+  function loadUserCameras() {
+    try {
+      var raw = window.localStorage.getItem(CAMARA_STORE_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+
+  // Persiste en localStorage el array de cámaras añadidas por el usuario.
+  function saveUserCameras(arr) {
+    try { window.localStorage.setItem(CAMARA_STORE_KEY, JSON.stringify(arr || [])); }
+    catch (e) { /* almacenamiento no disponible: se ignora */ }
+  }
+
   // Campos lógicos que el usuario mapea a columnas del fichero. required indica
   // los imprescindibles para poder pintar los puntos.
   var CAMPOS = [
@@ -166,7 +213,7 @@
     // El giro kappa se aplica siempre que el dato lo traiga (no es opcional).
     this.data = (window.__vueloSharedData) || {
       mode: "hecho",
-      source: "csv",
+      source: "ogc",
       rows: null,
       headers: null,
       mapping: {},
@@ -176,6 +223,35 @@
       // plugin externo de gestión de capas (layerswitcher).
       visible: { puntos: true, lineas: true, footprints: true },
       ogc: { fechaDesde: "", fechaHasta: "" },
+      // Fuente DEMO: generador de vuelo sintético fotograma a fotograma. El
+      // primer fotograma de cada pasada se coloca en el CENTRO de la pantalla en
+      // ese momento; los siguientes se van añadiendo según rumbo + separación.
+      //   params: parámetros de generación (rumbo, separaciones, giros...).
+      //   frames: array de {lon,lat,z,pasada,omega,phi,kappa,id} generados.
+      //   pasada: índice de pasada actual (empieza en 1); nFrame: contador de
+      //   fotogramas de la pasada actual (para el ID legible).
+      //   lastPassStart: [lon,lat] del primer fotograma de la pasada actual
+      //   (origen para desplazar lateralmente la siguiente "nueva pasada").
+      demo: {
+        params: {
+          rumbo: 0,          // dirección de avance de la pasada (grados, 0=N, 90=E)
+          sepFoto: 500,      // separación entre fotogramas consecutivos (m)
+          sepPasada: 800,    // separación lateral entre pasadas (m)
+          z: 1500,           // altura de vuelo (m) para dimensionar la huella
+          omega: 0,          // giro omega por fotograma (grados)
+          phi: 0,            // giro phi por fotograma (grados)
+          kappa: 0,          // giro kappa por fotograma (grados) -> rota la huella
+          // Lado hacia el que se van colocando las pasadas (respecto al rumbo
+          // BASE): "der" (rumbo+90) o "izq" (rumbo-90). Determinante para que las
+          // pasadas avancen SIEMPRE hacia el mismo lado (evita que la 3ª vuelva
+          // sobre la 1ª pese al serpenteo de sentido de vuelo).
+          lado: "der"
+        },
+        frames: [],
+        pasada: 1,
+        nFrame: 0,
+        lastPassStart: null
+      },
       // Modo OGC: lista de vuelos agrupados de la última búsqueda y clave del
       // vuelo seleccionado (persisten entre swaps OL<->Cesium).
       vuelos: null,
@@ -301,31 +377,24 @@
     return '' +
       '<div class="vuelo-body" id="vf-body">' +
 
-      // --- Selector de MODO: Vuelo ya hecho / Cálculo (planificación) ------
+      // --- Selector de MODO: Vuelo ya hecho / Demo / Cálculo --------------
       '  <div class="vuelo-modes" id="vf-modes">' +
       '    <button type="button" class="vuelo-mode" data-mode="hecho">Vuelo ya hecho</button>' +
+      '    <button type="button" class="vuelo-mode" data-mode="demo">Demo</button>' +
       '    <button type="button" class="vuelo-mode" data-mode="calculo">Cálculo</button>' +
       '  </div>' +
 
       // ==================== MODO: VUELO YA HECHO ==========================
       '  <div class="vuelo-mode-panel" id="vf-mode-hecho">' +
 
-      // --- Sub-pestañas de FUENTE: CSV / OGC API IGN --------------------
+      // --- Sub-pestañas de FUENTE: OGC API IGN / CSV -------------------
       '    <div class="vuelo-tabs" id="vf-tabs">' +
-      '      <button type="button" class="vuelo-tab" data-source="csv">CSV / Excel</button>' +
       '      <button type="button" class="vuelo-tab" data-source="ogc">OGC API IGN</button>' +
-      '    </div>' +
-
-      // ---- Fuente CSV / Excel -----------------------------------------
-      '    <div class="vuelo-tab-panel" id="vf-tab-csv">' +
-      '      <div class="vuelo-drop" id="vf-drop">' +
-      '        Arrastra aquí un <strong>CSV</strong> o <strong>Excel</strong><br>o haz clic para elegir archivo' +
-      '        <input type="file" id="vf-file" accept=".csv,.txt,.xlsx,.xls">' +
-      '      </div>' +
+      '      <button type="button" class="vuelo-tab" data-source="csv">CSV / Excel</button>' +
       '    </div>' +
 
       // ---- Fuente OGC API IGN (bsq-fotogramas) ------------------------
-      '    <div class="vuelo-tab-panel" id="vf-tab-ogc" hidden>' +
+      '    <div class="vuelo-tab-panel" id="vf-tab-ogc">' +
       '      <p class="vuelo-hint">Busca fotogramas PNOA del IGN en el área visible del mapa y un rango de fechas. Devuelve los parámetros de orientación externa (fotocentros y giros).</p>' +
       '      <div class="vuelo-row"><label for="vf-ogc-desde">Fecha desde</label><input type="date" id="vf-ogc-desde"></div>' +
       '      <div class="vuelo-row"><label for="vf-ogc-hasta">Fecha hasta</label><input type="date" id="vf-ogc-hasta"></div>' +
@@ -333,7 +402,13 @@
       '      <button type="button" id="vf-ogc-buscar" class="vuelo-btn primary">Buscar vuelos</button>' +
       '    </div>' +
 
-      '    <div class="vuelo-status" id="vf-status"></div>' +
+      // ---- Fuente CSV / Excel -----------------------------------------
+      '    <div class="vuelo-tab-panel" id="vf-tab-csv" hidden>' +
+      '      <div class="vuelo-drop" id="vf-drop">' +
+      '        Arrastra aquí un <strong>CSV</strong> o <strong>Excel</strong><br>o haz clic para elegir archivo' +
+      '        <input type="file" id="vf-file" accept=".csv,.txt,.xlsx,.xls">' +
+      '      </div>' +
+      '    </div>' +
 
       // ---- Selector de VUELOS (resultado de la búsqueda OGC) ----------
       '    <div class="vuelo-section" id="vf-section-vuelos" hidden>' +
@@ -350,37 +425,96 @@
       '      </div>' +
       mapRows +
       '    </div>' +
+      '  </div>' +
 
-      // ---- Huella / footprint (común a ambas fuentes) -----------------
-      // La altura de vuelo se toma SIEMPRE de la Z del dato; el giro kappa se
-      // aplica automáticamente si el dato lo trae. La visibilidad de las capas
-      // la gestiona el plugin externo de gestión de capas (layerswitcher).
-      '    <div class="vuelo-section" id="vf-section-fp" hidden>' +
-      '      <span class="vuelo-section-title">Cámara</span>' +
-      '      <div class="vuelo-row"><label for="vf-fp-focal">Focal (mm)</label><input type="number" id="vf-fp-focal" step="1" min="1"></div>' +
-      '      <div class="vuelo-row"><label for="vf-fp-sw">Sensor ancho (mm)</label><input type="number" id="vf-fp-sw" step="0.1" min="0.1"></div>' +
-      '      <div class="vuelo-row"><label for="vf-fp-sh">Sensor alto (mm)</label><input type="number" id="vf-fp-sh" step="0.1" min="0.1"></div>' +
+      // ==================== MODO: DEMO (generador sintético) =============
+      // El primer fotograma de cada pasada se sitúa en el CENTRO de la pantalla
+      // en ese instante; los siguientes se van añadiendo con "Añadir fotograma"
+      // según el rumbo y la separación. "Nueva pasada" desplaza lateralmente el
+      // origen y reinicia el conteo de la pasada.
+      '  <div class="vuelo-mode-panel" id="vf-mode-demo" hidden>' +
+      '    <p class="vuelo-hint">Genera un vuelo sintético <strong>fotograma a fotograma</strong>. El primer fotograma se coloca en el centro del mapa; cada nuevo fotograma se añade según el rumbo y la separación indicados.</p>' +
+      // Ancla donde se REUBICA la sección Cámara al entrar en modo Demo, de modo
+      // que la cámara se elija ANTES de generar (dimensiona la huella). Al salir
+      // del modo, la sección vuelve a su ancla compartida (vf-cam-home).
+      '    <div id="vf-cam-anchor-demo"></div>' +
+      '    <div class="vuelo-row"><label for="vf-demo-rumbo">Rumbo (°)</label><input type="number" id="vf-demo-rumbo" step="1" min="0" max="360"></div>' +
+      '    <div class="vuelo-row"><label for="vf-demo-sepfoto">Sep. fotogramas (m)</label><input type="number" id="vf-demo-sepfoto" step="10" min="1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-demo-seppasada">Sep. pasadas (m)</label><input type="number" id="vf-demo-seppasada" step="10" min="1"></div>' +
+      // Lado hacia el que se van colocando las pasadas sucesivas (respecto al
+      // rumbo base). Evita que las pasadas se solapen al alternar el sentido.
+      '    <div class="vuelo-row"><label for="vf-demo-lado">Lado pasadas</label>' +
+      '      <select id="vf-demo-lado"><option value="der">Derecha</option><option value="izq">Izquierda</option></select>' +
       '    </div>' +
-
-      // ---- Acciones ---------------------------------------------------
-      '    <div class="vuelo-section" id="vf-section-actions" hidden>' +
-      '      <button type="button" id="vf-render" class="vuelo-btn primary">Visualizar vuelo</button>' +
-      '      <button type="button" id="vf-clear" class="vuelo-btn">Limpiar</button>' +
+      '    <div class="vuelo-row"><label for="vf-demo-z">Altura Z (m)</label><input type="number" id="vf-demo-z" step="10" min="1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-demo-omega">Omega (°)</label><input type="number" id="vf-demo-omega" step="0.1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-demo-phi">Phi (°)</label><input type="number" id="vf-demo-phi" step="0.1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-demo-kappa">Kappa (°)</label><input type="number" id="vf-demo-kappa" step="0.1"></div>' +
+      '    <div class="vuelo-anim-controls">' +
+      '      <button type="button" id="vf-demo-add" class="vuelo-btn primary" title="Añadir un fotograma">＋ Añadir fotograma</button>' +
+      '      <button type="button" id="vf-demo-newpass" class="vuelo-btn" title="Empezar una nueva pasada">↵ Nueva pasada</button>' +
       '    </div>' +
-
-      // ---- Animación del avión sobre la línea de vuelo ----------------
-      '    <div class="vuelo-section" id="vf-section-anim" hidden>' +
-      '      <span class="vuelo-section-title">Animación del vuelo</span>' +
-      '      <div class="vuelo-anim-controls">' +
-      '        <button type="button" id="vf-anim-play" class="vuelo-btn primary" title="Reproducir / Pausar">▶ Reproducir</button>' +
-      '        <button type="button" id="vf-anim-restart" class="vuelo-btn" title="Reiniciar">⏮ Reiniciar</button>' +
-      '      </div>' +
-      '    </div>' +
+      '    <button type="button" id="vf-demo-clear" class="vuelo-btn">Limpiar demo</button>' +
+      '    <p class="vuelo-hint" id="vf-demo-info"></p>' +
       '  </div>' +
 
       // ==================== MODO: CÁLCULO (placeholder) ==================
       '  <div class="vuelo-mode-panel" id="vf-mode-calculo" hidden>' +
       '    <p class="vuelo-hint">Planificación de vuelos nuevos (GSD, solape, cámara, altura y dirección de pasadas). <strong>Próximamente.</strong></p>' +
+      '  </div>' +
+
+      // ==================== SECCIONES COMPARTIDAS (hecho + demo) =========
+      // Estado, Cámara, Acciones y Animación son comunes a los modos que
+      // producen datos (hecho y demo). applyMode() controla su visibilidad.
+      '  <div class="vuelo-status" id="vf-status"></div>' +
+
+      // Ancla ORIGINAL (home) de la sección Cámara. En modo 'hecho' la sección
+      // vive aquí; en modo 'demo' se mueve al ancla vf-cam-anchor-demo (arriba).
+      '  <div id="vf-cam-home"></div>' +
+
+      // ---- Huella / footprint (común a las fuentes de datos) ----------
+      // La altura de vuelo se toma SIEMPRE de la Z del dato; el giro kappa se
+      // aplica automáticamente si el dato lo trae. La visibilidad de las capas
+      // la gestiona el plugin externo de gestión de capas (layerswitcher).
+      '  <div class="vuelo-section" id="vf-section-fp" hidden>' +
+      '    <span class="vuelo-section-title">Cámara</span>' +
+      // Desplegable de preset: al elegir una cámara rellena focal + sensor.
+      // "custom" (Personalizada) deja los campos para edición manual.
+      '    <div class="vuelo-row">' +
+      '      <label for="vf-cam-preset">Modelo</label>' +
+      '      <select id="vf-cam-preset"></select>' +
+      '    </div>' +
+      '    <div class="vuelo-row"><label for="vf-fp-focal">Focal (mm)</label><input type="number" id="vf-fp-focal" step="1" min="1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-fp-sw">Sensor ancho (mm)</label><input type="number" id="vf-fp-sw" step="0.1" min="0.1"></div>' +
+      '    <div class="vuelo-row"><label for="vf-fp-sh">Sensor alto (mm)</label><input type="number" id="vf-fp-sh" step="0.1" min="0.1"></div>' +
+      '    <button type="button" id="vf-cam-add-toggle" class="vuelo-btn">＋ Añadir cámara</button>' +
+      // Mini-formulario para dar de alta una cámara nueva (se guarda en caché).
+      '    <div class="vuelo-cam-form" id="vf-cam-form" hidden>' +
+      '      <div class="vuelo-row"><label for="vf-cam-name">Nombre</label><input type="text" id="vf-cam-name" placeholder="Mi cámara"></div>' +
+      '      <div class="vuelo-row"><label for="vf-cam-focal">Focal (mm)</label><input type="number" id="vf-cam-focal" step="1" min="1"></div>' +
+      '      <div class="vuelo-row"><label for="vf-cam-sw">Sensor ancho (mm)</label><input type="number" id="vf-cam-sw" step="0.1" min="0.1"></div>' +
+      '      <div class="vuelo-row"><label for="vf-cam-sh">Sensor alto (mm)</label><input type="number" id="vf-cam-sh" step="0.1" min="0.1"></div>' +
+      '      <div class="vuelo-anim-controls">' +
+      '        <button type="button" id="vf-cam-save" class="vuelo-btn primary">Guardar cámara</button>' +
+      '        <button type="button" id="vf-cam-cancel" class="vuelo-btn">Cancelar</button>' +
+      '      </div>' +
+      '      <p class="vuelo-hint" id="vf-cam-msg"></p>' +
+      '    </div>' +
+      '  </div>' +
+
+      // ---- Acciones ---------------------------------------------------
+      '  <div class="vuelo-section" id="vf-section-actions" hidden>' +
+      '    <button type="button" id="vf-render" class="vuelo-btn primary">Visualizar vuelo</button>' +
+      '    <button type="button" id="vf-clear" class="vuelo-btn">Limpiar</button>' +
+      '  </div>' +
+
+      // ---- Animación del avión sobre la línea de vuelo ----------------
+      '  <div class="vuelo-section" id="vf-section-anim" hidden>' +
+      '    <span class="vuelo-section-title">Animación del vuelo</span>' +
+      '    <div class="vuelo-anim-controls">' +
+      '      <button type="button" id="vf-anim-play" class="vuelo-btn primary" title="Reproducir / Pausar">▶ Reproducir</button>' +
+      '      <button type="button" id="vf-anim-restart" class="vuelo-btn" title="Reiniciar">⏮ Reiniciar</button>' +
+      '    </div>' +
       '  </div>' +
 
       '</div>';
@@ -401,13 +535,26 @@
       return el;
     }
 
-    // Selector de modo (Vuelo hecho / Cálculo).
+    // Selector de modo (Vuelo ya hecho / Demo / Cálculo).
     var modeBtns = p.querySelectorAll(".vuelo-mode");
     for (var mi = 0; mi < modeBtns.length; mi++) {
       modeBtns[mi].addEventListener("click", function () {
-        self.data.mode = this.getAttribute("data-mode");
+        var mode = this.getAttribute("data-mode");
+        self.data.mode = mode;
+        // Sincroniza la fuente de datos con el modo elegido: en 'demo' la fuente
+        // es el generador sintético; en 'hecho' se restaura a una fuente válida
+        // del modo (ogc por defecto, o csv si ya se estaba usando).
+        if (mode === "demo") {
+          self.data.source = "demo";
+        } else if (mode === "hecho") {
+          if (self.data.source !== "csv") self.data.source = "ogc";
+        }
         window.__vueloSharedData = self.data;
         self.applyMode();
+        // applySource solo aplica a las sub-pestañas del modo 'hecho'. En 'demo'
+        // y 'calculo' no hay sub-pestañas y no debe re-mostrar las secciones de
+        // configuración (applyMode ya decide su visibilidad para esos modos).
+        if (mode === "hecho") self.applySource();
       });
     }
 
@@ -448,6 +595,30 @@
       if (this.files && this.files.length) self.handleFile(this.files[0]);
     });
 
+    // Campos y botones del modo DEMO (generador sintético).
+    var bindDemoParam = function (id, key, isInt) {
+      bind(id, "change", function () {
+        var v = isInt ? parseInt(this.value, 10) : parseFloat(this.value);
+        self.data.demo.params[key] = isNaN(v) ? 0 : v;
+        window.__vueloSharedData = self.data;
+      });
+    };
+    bindDemoParam("vf-demo-rumbo", "rumbo", false);
+    bindDemoParam("vf-demo-sepfoto", "sepFoto", false);
+    bindDemoParam("vf-demo-seppasada", "sepPasada", false);
+    bindDemoParam("vf-demo-z", "z", false);
+    bindDemoParam("vf-demo-omega", "omega", false);
+    bindDemoParam("vf-demo-phi", "phi", false);
+    bindDemoParam("vf-demo-kappa", "kappa", false);
+    // Lado de las pasadas (select der/izq).
+    bind("vf-demo-lado", "change", function () {
+      self.data.demo.params.lado = this.value;
+      window.__vueloSharedData = self.data;
+    });
+    bind("vf-demo-add", "click", function () { self.addDemoFotograma(); });
+    bind("vf-demo-newpass", "click", function () { self.nuevaPasadaDemo(); });
+    bind("vf-demo-clear", "click", function () { self.clearDemo(); });
+
     bind("vf-crs", "change", function () { self.data.crs = this.value; });
 
     // Selects de mapeo de columnas.
@@ -459,9 +630,18 @@
 
     // Parámetros de cámara (para dimensionar la huella). La altura de vuelo se
     // toma siempre de la Z del dato y el giro kappa se aplica si el dato lo trae.
-    bind("vf-fp-focal", "change", function () { self.data.footprint.focal_mm = parseFloat(this.value) || 0; });
-    bind("vf-fp-sw", "change", function () { self.data.footprint.sensor_w_mm = parseFloat(this.value) || 0; });
-    bind("vf-fp-sh", "change", function () { self.data.footprint.sensor_h_mm = parseFloat(this.value) || 0; });
+    // Al editar un campo manualmente, el preset pasa a "Personalizada".
+    bind("vf-fp-focal", "change", function () { self.data.footprint.focal_mm = parseFloat(this.value) || 0; self.markCustomPreset(); });
+    bind("vf-fp-sw", "change", function () { self.data.footprint.sensor_w_mm = parseFloat(this.value) || 0; self.markCustomPreset(); });
+    bind("vf-fp-sh", "change", function () { self.data.footprint.sensor_h_mm = parseFloat(this.value) || 0; self.markCustomPreset(); });
+
+    // Desplegable de preset de cámara: al elegir un modelo rellena focal + sensor.
+    bind("vf-cam-preset", "change", function () { self.applyCameraPreset(this.value); });
+
+    // Alta de cámara nueva (se guarda en localStorage).
+    bind("vf-cam-add-toggle", "click", function () { self.toggleCameraForm(); });
+    bind("vf-cam-save", "click", function () { self.saveNewCamera(); });
+    bind("vf-cam-cancel", "click", function () { self.toggleCameraForm(false); });
 
     // La visibilidad de las capas la gestiona el plugin externo de gestión de
     // capas (layerswitcher); el plugin ya no expone checks de visibilidad.
@@ -486,10 +666,28 @@
     set("#vf-fp-sw", fp.sensor_w_mm);
     set("#vf-fp-sh", fp.sensor_h_mm);
 
+    // Puebla el desplegable de cámaras (presets + cámaras del usuario) y marca
+    // el preset que coincida con los valores actuales (o "Personalizada").
+    this.fillCameraSelect();
+    this.selectMatchingPreset();
+
     // Campos del modo OGC.
     if (d.ogc) {
       set("#vf-ogc-desde", d.ogc.fechaDesde || "");
       set("#vf-ogc-hasta", d.ogc.fechaHasta || "");
+    }
+
+    // Campos del generador DEMO (persisten entre swaps OL<->Cesium).
+    if (d.demo && d.demo.params) {
+      var dp = d.demo.params;
+      set("#vf-demo-rumbo", dp.rumbo);
+      set("#vf-demo-sepfoto", dp.sepFoto);
+      set("#vf-demo-seppasada", dp.sepPasada);
+      set("#vf-demo-z", dp.z);
+      set("#vf-demo-omega", dp.omega);
+      set("#vf-demo-phi", dp.phi);
+      set("#vf-demo-kappa", dp.kappa);
+      set("#vf-demo-lado", dp.lado || "der");
     }
 
     // Restaura la lista de vuelos y la selección tras un swap OL<->Cesium.
@@ -506,6 +704,146 @@
       this.fillColumnSelects(d.headers, d.mapping);
       this.showConfigSections(true);
     }
+  };
+
+  // ###################################################################
+  //  CÁMARA: presets predefinidos + cámaras del usuario (localStorage)
+  // ###################################################################
+
+  // Todas las cámaras disponibles: presets fijos + las que el usuario ha añadido
+  // (guardadas en localStorage). Las del usuario se marcan con user:true.
+  getAllCameras() {
+    var user = loadUserCameras().map(function (c) {
+      return { name: c.name, focal_mm: c.focal_mm, sensor_w_mm: c.sensor_w_mm, sensor_h_mm: c.sensor_h_mm, user: true };
+    });
+    return CAMARA_PRESETS.concat(user);
+  };
+
+  // Rellena el <select> de cámara con "Personalizada" + presets + cámaras del
+  // usuario. Las del usuario van en un optgroup aparte para distinguirlas.
+  fillCameraSelect() {
+    var p = this.panel;
+    var sel = p && p.querySelector("#vf-cam-preset");
+    if (!sel) return;
+    var esc = function (s) { return String(s).replace(/"/g, "&quot;").replace(/</g, "&lt;"); };
+    var html = '<option value="custom">— Personalizada —</option>';
+    CAMARA_PRESETS.forEach(function (c) {
+      html += '<option value="' + esc(c.name) + '">' + esc(c.name) + "</option>";
+    });
+    var user = loadUserCameras();
+    if (user.length) {
+      html += '<optgroup label="Mis cámaras">';
+      user.forEach(function (c) {
+        html += '<option value="' + esc(c.name) + '">' + esc(c.name) + "</option>";
+      });
+      html += "</optgroup>";
+    }
+    sel.innerHTML = html;
+  };
+
+  // Aplica un preset de cámara por nombre: rellena focal + sensor en data y en
+  // los inputs. "custom" no cambia los valores (edición manual libre).
+  applyCameraPreset(name) {
+    if (!name || name === "custom") return;
+    var cam = this.getAllCameras().filter(function (c) { return c.name === name; })[0];
+    if (!cam) return;
+    var fp = this.data.footprint;
+    fp.focal_mm = cam.focal_mm;
+    fp.sensor_w_mm = cam.sensor_w_mm;
+    fp.sensor_h_mm = cam.sensor_h_mm;
+    window.__vueloSharedData = this.data;
+    var p = this.panel;
+    var set = function (id, v) { var el = p.querySelector(id); if (el) el.value = v; };
+    set("#vf-fp-focal", fp.focal_mm);
+    set("#vf-fp-sw", fp.sensor_w_mm);
+    set("#vf-fp-sh", fp.sensor_h_mm);
+  };
+
+  // Marca en el desplegable el preset cuyos valores coinciden con los actuales
+  // de la cámara; si ninguno coincide, selecciona "Personalizada".
+  selectMatchingPreset() {
+    var p = this.panel;
+    var sel = p && p.querySelector("#vf-cam-preset");
+    if (!sel) return;
+    var fp = this.data.footprint;
+    var eq = function (a, b) { return Math.abs((a || 0) - (b || 0)) < 1e-6; };
+    var match = this.getAllCameras().filter(function (c) {
+      return eq(c.focal_mm, fp.focal_mm) && eq(c.sensor_w_mm, fp.sensor_w_mm) && eq(c.sensor_h_mm, fp.sensor_h_mm);
+    })[0];
+    sel.value = match ? match.name : "custom";
+  };
+
+  // Fuerza el desplegable a "Personalizada" (tras editar un campo a mano).
+  markCustomPreset() {
+    var sel = this.panel && this.panel.querySelector("#vf-cam-preset");
+    if (sel) sel.value = "custom";
+  };
+
+  // Muestra/oculta el mini-formulario de alta de cámara. Si se pasa force
+  // (booleano) fuerza el estado; si no, alterna. Al abrir, precarga el formulario
+  // con los valores actuales de la cámara para facilitar variantes.
+  toggleCameraForm(force) {
+    var p = this.panel;
+    var form = p && p.querySelector("#vf-cam-form");
+    var toggle = p && p.querySelector("#vf-cam-add-toggle");
+    if (!form) return;
+    var show = (typeof force === "boolean") ? force : form.hasAttribute("hidden");
+    if (show) {
+      form.removeAttribute("hidden");
+      if (toggle) toggle.textContent = "✕ Cerrar";
+      var fp = this.data.footprint;
+      var set = function (id, v) { var el = p.querySelector(id); if (el) el.value = v; };
+      set("#vf-cam-name", "");
+      set("#vf-cam-focal", fp.focal_mm || "");
+      set("#vf-cam-sw", fp.sensor_w_mm || "");
+      set("#vf-cam-sh", fp.sensor_h_mm || "");
+      this.setCamMsg("");
+    } else {
+      form.setAttribute("hidden", "");
+      if (toggle) toggle.textContent = "＋ Añadir cámara";
+    }
+  };
+
+  // Mensaje del formulario de cámara (validación / confirmación).
+  setCamMsg(msg, cls) {
+    var el = this.panel && this.panel.querySelector("#vf-cam-msg");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = "vuelo-hint" + (cls ? " " + cls : "");
+  };
+
+  // Valida y guarda una cámara nueva en localStorage, la añade al desplegable,
+  // la selecciona y aplica sus parámetros. Nombres duplicados se sobrescriben.
+  saveNewCamera() {
+    var p = this.panel;
+    var val = function (id) { var el = p.querySelector(id); return el ? el.value : ""; };
+    var name = String(val("#vf-cam-name") || "").trim();
+    var focal = parseFloat(val("#vf-cam-focal"));
+    var sw = parseFloat(val("#vf-cam-sw"));
+    var sh = parseFloat(val("#vf-cam-sh"));
+
+    if (!name) { this.setCamMsg("Indica un nombre para la cámara.", "error"); return; }
+    if (isNaN(focal) || focal <= 0) { this.setCamMsg("Focal inválida.", "error"); return; }
+    if (isNaN(sw) || sw <= 0) { this.setCamMsg("Sensor ancho inválido.", "error"); return; }
+    if (isNaN(sh) || sh <= 0) { this.setCamMsg("Sensor alto inválido.", "error"); return; }
+
+    // Evita colisión con un nombre de preset fijo.
+    var esPreset = CAMARA_PRESETS.some(function (c) { return c.name === name; });
+    if (esPreset) { this.setCamMsg("Ese nombre ya existe como preset. Usa otro.", "error"); return; }
+
+    var user = loadUserCameras();
+    var idx = user.findIndex(function (c) { return c.name === name; });
+    var cam = { name: name, focal_mm: focal, sensor_w_mm: sw, sensor_h_mm: sh };
+    if (idx >= 0) user[idx] = cam; else user.push(cam);
+    saveUserCameras(user);
+
+    // Refresca el desplegable, selecciona la nueva cámara y aplica sus valores.
+    this.fillCameraSelect();
+    var sel = p.querySelector("#vf-cam-preset");
+    if (sel) sel.value = name;
+    this.applyCameraPreset(name);
+    this.toggleCameraForm(false);
+    this.setStatus("Cámara \u201c" + name + "\u201d guardada.", "ok");
   };
 
   // ---- Estado / mensajes -------------------------------------------------
@@ -528,34 +866,86 @@
     });
     var mapSec = p.querySelector("#vf-section-map");
     if (mapSec) {
-      var showMap = on && this.data.source === "csv";
+      // El mapeo de columnas solo aplica al modo 'hecho' con fuente CSV.
+      var showMap = on && this.data.mode === "hecho" && this.data.source === "csv";
       if (showMap) mapSec.removeAttribute("hidden"); else mapSec.setAttribute("hidden", "");
     }
   };
 
-  // Muestra el modo activo (hecho / calculo) y marca su botón. El modo
-  // 'calculo' es un placeholder para la fase de planificación.
+  // Muestra el modo activo (hecho / demo / calculo) y marca su botón. El modo
+  // 'calculo' es un placeholder para la fase de planificación. Las secciones
+  // compartidas (estado, cámara, acciones, animación) se muestran en los modos
+  // que producen datos (hecho y demo) y se ocultan en 'calculo'.
   applyMode() {
     var p = this.panel;
     var mode = this.data.mode || "hecho";
-    var hecho = p.querySelector("#vf-mode-hecho");
-    var calc = p.querySelector("#vf-mode-calculo");
-    if (hecho) { if (mode === "hecho") hecho.removeAttribute("hidden"); else hecho.setAttribute("hidden", ""); }
-    if (calc) { if (mode === "calculo") calc.removeAttribute("hidden"); else calc.setAttribute("hidden", ""); }
+    var panels = { hecho: "#vf-mode-hecho", demo: "#vf-mode-demo", calculo: "#vf-mode-calculo" };
+    Object.keys(panels).forEach(function (key) {
+      var el = p.querySelector(panels[key]);
+      if (el) { if (mode === key) el.removeAttribute("hidden"); else el.setAttribute("hidden", ""); }
+    });
     var btns = p.querySelectorAll(".vuelo-mode");
     for (var i = 0; i < btns.length; i++) {
       btns[i].classList.toggle("active", btns[i].getAttribute("data-mode") === mode);
     }
+
+    // El modo 'calculo' no produce datos: oculta las secciones compartidas.
+    // En 'hecho' y 'demo' su visibilidad la decide showConfigSections según
+    // haya datos cargados/generados.
+    if (mode === "calculo") {
+      ["#vf-status", "#vf-section-fp", "#vf-section-actions", "#vf-section-anim"].forEach(function (id) {
+        var el = p.querySelector(id);
+        if (el) el.setAttribute("hidden", "");
+      });
+    } else {
+      var st = p.querySelector("#vf-status");
+      if (st) st.removeAttribute("hidden");
+      this.showConfigSections(!!(this.data.rows && this.data.rows.length));
+      this.updateAnimUI();
+    }
+
+    // Reubica la sección Cámara según el modo: en 'demo' se coloca ARRIBA (para
+    // elegir la cámara antes de generar) y se muestra siempre; en el resto vuelve
+    // a su posición compartida y su visibilidad la decide showConfigSections.
+    this.positionCameraSection(mode);
   };
 
-  // Muestra la fuente activa dentro del modo 'hecho' (csv / ogc) y marca su tab.
+  // Mueve el nodo de la sección Cámara (#vf-section-fp) entre su ancla compartida
+  // (#vf-cam-home) y el ancla del panel Demo (#vf-cam-anchor-demo). Reutiliza el
+  // mismo nodo (conserva los listeners ya enlazados). En 'demo' además la muestra
+  // siempre, porque la cámara dimensiona la huella y debe elegirse antes.
+  positionCameraSection(mode) {
+    var p = this.panel;
+    var fpSec = p.querySelector("#vf-section-fp");
+    if (!fpSec) return;
+    if (mode === "demo") {
+      var anchorDemo = p.querySelector("#vf-cam-anchor-demo");
+      if (anchorDemo && anchorDemo.nextSibling !== fpSec) {
+        anchorDemo.parentNode.insertBefore(fpSec, anchorDemo.nextSibling);
+      }
+      fpSec.removeAttribute("hidden"); // en demo, la cámara siempre visible
+    } else {
+      var home = p.querySelector("#vf-cam-home");
+      if (home && home.nextSibling !== fpSec) {
+        home.parentNode.insertBefore(fpSec, home.nextSibling);
+      }
+      // En 'hecho'/'calculo' la visibilidad ya la fijaron los bloques anteriores.
+    }
+  };
+
+  // Muestra la fuente activa dentro del modo 'hecho' (ogc / csv) y marca su tab.
+  // La fuente 'demo' se maneja como MODO aparte (no como sub-pestaña), por lo que
+  // aquí solo se contemplan las fuentes del modo 'hecho'.
   applySource() {
     var p = this.panel;
-    var src = this.data.source || "csv";
-    var csv = p.querySelector("#vf-tab-csv");
-    var ogc = p.querySelector("#vf-tab-ogc");
-    if (csv) { if (src === "csv") csv.removeAttribute("hidden"); else csv.setAttribute("hidden", ""); }
-    if (ogc) { if (src === "ogc") ogc.removeAttribute("hidden"); else ogc.setAttribute("hidden", ""); }
+    // Si la fuente activa es 'demo' (modo Demo), no hay sub-pestaña que resaltar;
+    // usa 'ogc' como valor visual por defecto para el modo 'hecho'.
+    var src = (this.data.source === "csv") ? "csv" : "ogc";
+    var panels = { csv: "#vf-tab-csv", ogc: "#vf-tab-ogc" };
+    Object.keys(panels).forEach(function (key) {
+      var el = p.querySelector(panels[key]);
+      if (el) { if (src === key) el.removeAttribute("hidden"); else el.setAttribute("hidden", ""); }
+    });
     var tabs = p.querySelectorAll(".vuelo-tab");
     for (var i = 0; i < tabs.length; i++) {
       tabs[i].classList.toggle("active", tabs[i].getAttribute("data-source") === src);
@@ -563,6 +953,8 @@
     // Reevalúa qué secciones de configuración se muestran (map solo en CSV).
     var hayDatos = !!(this.data.rows && this.data.rows.length);
     this.showConfigSections(hayDatos);
+    // Refresca el texto informativo del generador demo (nº de fotogramas/pasada).
+    this.updateDemoInfo();
   };
 
   // ###################################################################
@@ -1022,7 +1414,8 @@
     var d = this.data;
     var COL = {
       id: "id", pasada: "pasada", x: "x", y: "y", z: "z",
-      fecha: "fecha", sensor: "sensor", nom_fichero: "nom_fichero", kappa: "kappa"
+      fecha: "fecha", sensor: "sensor", nom_fichero: "nom_fichero",
+      omega: "omega", phi: "phi", kappa: "kappa"
     };
 
     // Ordena por número de fotograma (asc) para trazar la línea del vuelo en el
@@ -1052,6 +1445,9 @@
         fecha: f.fecha_fotograma || null,
         sensor: null,
         nom_fichero: nom,
+        // Orientación externa del IGN en RADIANES (omega/phi/kappa).
+        omega: (typeof f.giro_o_at === "number") ? f.giro_o_at : null,
+        phi: (typeof f.giro_p_at === "number") ? f.giro_p_at : null,
         kappa: (typeof f.giro_k_at === "number") ? f.giro_k_at : null
       });
     }
@@ -1070,6 +1466,251 @@
     // Muestra las secciones de configuración (cámara, acciones). El mapeo de
     // columnas se mantiene oculto en OGC (columnas ya normalizadas).
     this.showConfigSections(true);
+  };
+
+  // ###################################################################
+  //  MODO DEMO: generador de vuelo sintético fotograma a fotograma
+  //  --------------------------------------------------------------------
+  //  El primer fotograma de cada pasada se sitúa en el CENTRO de la pantalla
+  //  en ese instante (lon/lat). Cada "Añadir fotograma" coloca el siguiente a
+  //  `sepFoto` metros en la dirección `rumbo`. "Nueva pasada" desplaza el origen
+  //  lateralmente (perpendicular al rumbo) `sepPasada` metros y reinicia la
+  //  pasada tomando de nuevo el centro actual del mapa como referencia. Los
+  //  datos se generan directamente en EPSG:4326 (sin proj4).
+  // ###################################################################
+
+  // Centro actual del mapa en [lon, lat] (EPSG:4326). Usa la vista de OpenLayers
+  // cuando está disponible (implementación activa) reproyectando desde la
+  // proyección del mapa; como respaldo usa map.getCenter() de API-IDEE.
+  getMapCenterLonLat() {
+    // 1) Vía OpenLayers directa: centro de la vista -> reproyectar a 4326.
+    try {
+      var impl = this.map.getMapImpl();
+      if (impl && typeof impl.getView === "function" && window.ol) {
+        var view = impl.getView();
+        var c = view.getCenter();
+        if (c) {
+          var code = view.getProjection().getCode();
+          if (code === "EPSG:4326") return [c[0], c[1]];
+          return window.ol.proj.transform([c[0], c[1]], code, "EPSG:4326");
+        }
+      }
+    } catch (e) { /* cae al respaldo */ }
+
+    // 2) Respaldo: centro de API-IDEE. getCenter() devuelve {x,y} en la
+    //    proyección del mapa; se reproyecta a 4326 si hace falta.
+    try {
+      var center = this.map.getCenter();
+      if (center) {
+        var proj = this.map.getProjection && this.map.getProjection();
+        var pcode = proj && proj.code ? proj.code : "EPSG:3857";
+        if (pcode === "EPSG:4326") return [center.x, center.y];
+        if (window.ol) return window.ol.proj.transform([center.x, center.y], pcode, "EPSG:4326");
+        return [center.x, center.y];
+      }
+    } catch (e) { /* nada */ }
+    return null;
+  };
+
+  // Desplaza [lon,lat] `dist` metros con rumbo `bearingDeg` (0=N, 90=E). Cálculo
+  // plano local (aprox. esférica), suficiente para las distancias de una demo.
+  offsetLonLat(lon, lat, dist, bearingDeg) {
+    var rad = bearingDeg * Math.PI / 180;
+    var dNorte = dist * Math.cos(rad); // componente norte (m)
+    var dEste = dist * Math.sin(rad);  // componente este (m)
+    var mPerDegLat = 111320.0;
+    var mPerDegLon = 111320.0 * Math.cos(lat * Math.PI / 180);
+    if (mPerDegLon < 1e-6) mPerDegLon = 1e-6;
+    return [lon + dEste / mPerDegLon, lat + dNorte / mPerDegLat];
+  };
+
+  // Reconstruye las filas internas (d.rows) a partir de los fotogramas demo y
+  // deja el modelo listo para render() (mapping 1:1, CRS 4326, fuente 'demo').
+  rebuildDemoRows() {
+    var d = this.data;
+    var COL = {
+      id: "id", pasada: "pasada", x: "x", y: "y", z: "z",
+      fecha: "fecha", sensor: "sensor", omega: "omega", phi: "phi", kappa: "kappa"
+    };
+    var rows = d.demo.frames.map(function (f) {
+      return {
+        id: f.id, pasada: f.pasada, x: f.lon, y: f.lat, z: f.z,
+        fecha: null, sensor: null,
+        // omega/phi/kappa en RADIANES (la orientación de la huella los espera así).
+        omega: f.omega, phi: f.phi, kappa: f.kappa
+      };
+    });
+    d.source = "demo";
+    d.crs = "EPSG:4326"; // ya en lon/lat: toLonLat los devuelve tal cual
+    d.headers = Object.keys(COL);
+    d.rows = rows;
+    d.mapping = COL;
+    // Cámara para dimensionar la huella (footprintPolygon usa d.footprint).
+    this._mdtCache = undefined; // nuevos datos: fuerza re-descarga del MDT
+    // En DEMO el usuario coloca los fotogramas desde el centro de SU vista actual,
+    // así que NO se re-encuadra: marcamos zoomDone=true para respetar la vista y
+    // que "Añadir fotograma" no provoque un salto de zoom.
+    d.zoomDone = true;
+    d.anim = { playing: false, t: 0 };
+    this._stopRAF();
+    window.__vueloSharedData = d;
+  };
+
+  // Rumbo efectivo (grados) de una pasada. Las pasadas alternan sentido para
+  // simular el serpenteo real del vuelo (boustrophedon): la pasada 1 vuela en el
+  // rumbo base; la 2, en rumbo+180; la 3, en rumbo base; etc. (según paridad).
+  demoHeadingForPass(pasadaNum) {
+    var base = this.data.demo.params.rumbo || 0;
+    return ((pasadaNum - 1) % 2 === 0) ? base : base + 180;
+  };
+
+  // Añade un fotograma a la pasada actual del generador demo. El primero de la
+  // pasada toma el centro de la pantalla; los siguientes se colocan a `sepFoto`
+  // metros en la dirección efectiva de la pasada (que alterna por serpenteo).
+  addDemoFotograma() {
+    var d = this.data, dm = d.demo, pr = dm.params;
+    var lon, lat;
+
+    // Último fotograma de la pasada actual (si lo hay) para encadenar.
+    var prev = null;
+    for (var i = dm.frames.length - 1; i >= 0; i--) {
+      if (dm.frames[i].pasadaNum === dm.pasada) { prev = dm.frames[i]; break; }
+    }
+
+    // Rumbo efectivo de esta pasada (alterna por serpenteo). El giro kappa de la
+    // huella se orienta también con este rumbo, de modo que la huella "mira" en la
+    // dirección de vuelo de la pasada (kappa del panel se suma como ajuste fino).
+    var heading = this.demoHeadingForPass(dm.pasada);
+    var kappaRad = (pr.kappa + heading) * Math.PI / 180;
+
+    if (!prev) {
+      // Primer fotograma de la pasada: centro actual del mapa.
+      var c = this.getMapCenterLonLat();
+      if (!c) { this.setStatus("No se pudo obtener el centro del mapa.", "error"); return; }
+      lon = c[0]; lat = c[1];
+      dm.lastPassStart = [lon, lat];
+    } else {
+      // Siguiente fotograma: desplaza desde el anterior según el rumbo efectivo.
+      var off = this.offsetLonLat(prev.lon, prev.lat, pr.sepFoto, heading);
+      lon = off[0]; lat = off[1];
+    }
+
+    dm.nFrame = (prev ? dm.nFrame : 0) + 1;
+    dm.frames.push({
+      id: "P" + dm.pasada + "-F" + dm.nFrame,
+      pasada: "Pasada " + dm.pasada,
+      pasadaNum: dm.pasada,
+      lon: lon, lat: lat, z: pr.z,
+      heading: heading, // rumbo efectivo de la pasada (grados)
+      // omega/phi/kappa se guardan en RADIANES (la orientación de la huella los
+      // espera así). Los inputs del panel están en grados.
+      omega: pr.omega * Math.PI / 180,
+      phi: pr.phi * Math.PI / 180,
+      kappa: kappaRad
+    });
+
+    this.rebuildDemoRows();
+    this.showConfigSections(true);
+    this.updateDemoInfo();
+    this.render();
+  };
+
+  // Inicia una nueva pasada en SENTIDO INVERSO (serpenteo). El primer fotograma
+  // de la nueva pasada se coloca AL LADO del ÚLTIMO fotograma de la pasada
+  // anterior (desplazamiento perpendicular = sep. pasadas), de modo que el vuelo
+  // "gira en U" y la línea continua se une por ese lado. Si no había pasada
+  // previa, arranca desde el centro del mapa.
+  nuevaPasadaDemo() {
+    var d = this.data, dm = d.demo, pr = dm.params;
+
+    // Último fotograma de la pasada actual (extremo por el que se hace el giro).
+    var last = null;
+    for (var i = dm.frames.length - 1; i >= 0; i--) {
+      if (dm.frames[i].pasadaNum === dm.pasada) { last = dm.frames[i]; break; }
+    }
+
+    // Dirección de desplazamiento entre pasadas: SIEMPRE respecto al rumbo BASE
+    // (no al heading alterno de cada pasada), para que todas las pasadas avancen
+    // hacia el MISMO lado. "der" = rumbo+90; "izq" = rumbo-90. Si se usara el
+    // heading efectivo (que alterna 0/180), la 3ª pasada volvería sobre la 1ª.
+    var lado = (pr.lado === "izq") ? -90 : 90;
+    var dirPasada = (pr.rumbo || 0) + lado;
+
+    var start;
+    if (!last) {
+      // Pasada actual vacía: arranca la nueva desde el centro del mapa.
+      var c = this.getMapCenterLonLat();
+      if (!c) { this.setStatus("No se pudo obtener el centro del mapa.", "error"); return; }
+      start = c;
+    } else {
+      // Desplaza la separación entre pasadas hacia el lado elegido, partiendo del
+      // ÚLTIMO fotograma de la pasada actual (giro en U con unión por ese lado).
+      start = this.offsetLonLat(last.lon, last.lat, pr.sepPasada, dirPasada);
+    }
+
+    dm.pasada += 1;
+    dm.nFrame = 1;
+    dm.lastPassStart = start;
+
+    // La nueva pasada vuela en sentido inverso: su kappa se orienta con el nuevo
+    // rumbo efectivo (rumbo base + 180 por paridad).
+    var heading = this.demoHeadingForPass(dm.pasada);
+    dm.frames.push({
+      id: "P" + dm.pasada + "-F1",
+      pasada: "Pasada " + dm.pasada,
+      pasadaNum: dm.pasada,
+      lon: start[0], lat: start[1], z: pr.z,
+      heading: heading,
+      // omega/phi/kappa en RADIANES (los inputs del panel están en grados).
+      omega: pr.omega * Math.PI / 180,
+      phi: pr.phi * Math.PI / 180,
+      kappa: (pr.kappa + heading) * Math.PI / 180
+    });
+
+    this.rebuildDemoRows();
+    this.showConfigSections(true);
+    this.updateDemoInfo();
+    this.render();
+  };
+
+  // Limpia todos los fotogramas generados en el modo demo (reinicia el estado
+  // del generador) y quita las capas pintadas.
+  clearDemo() {
+    var d = this.data;
+    d.demo.frames = [];
+    d.demo.pasada = 1;
+    d.demo.nFrame = 0;
+    d.demo.lastPassStart = null;
+    this.removeLayers();
+    d.rows = null;
+    d.headers = null;
+    d.mapping = {};
+    this._mdtCache = undefined;
+    d.zoomDone = false;
+    this._stopRAF();
+    d.anim = { playing: false, t: 0 };
+    this._flightLine = null;
+    this.updateAnimUI();
+    window.__vueloSharedData = d;
+    this.showConfigSections(false);
+    this.updateDemoInfo();
+    this.setStatus("Demo limpiada. Añade fotogramas para generar un vuelo.");
+  };
+
+  // Actualiza el texto informativo del generador demo (nº de fotogramas y de
+  // pasadas actuales). Solo visible en la pestaña demo.
+  updateDemoInfo() {
+    var p = this.panel;
+    var el = p && p.querySelector("#vf-demo-info");
+    if (!el) return;
+    var dm = this.data.demo;
+    var n = dm.frames.length;
+    if (!n) { el.textContent = "Sin fotogramas. Pulsa “Añadir fotograma”."; return; }
+    var pasadas = {};
+    dm.frames.forEach(function (f) { pasadas[f.pasadaNum] = true; });
+    var np = Object.keys(pasadas).length;
+    el.textContent = n + " fotograma" + (n === 1 ? "" : "s") + " en " +
+      np + " pasada" + (np === 1 ? "" : "s") + " (pasada actual: " + dm.pasada + ").";
   };
 
   // ###################################################################
@@ -1254,13 +1895,19 @@
       if (!pasadas[pasadaVal]) pasadas[pasadaVal] = [];
       pasadas[pasadaVal].push(coord);
 
-      // Footprint (rectángulo aproximado alrededor del centro). Si la fuente es
-      // OGC y el usuario lo pide, se rota con el giro kappa del fotograma. La
-      // huella se sitúa sobre el TERRENO usando la cota del MDT en cada esquina.
-      var kappa = (m.kappa && row[m.kappa] != null && row[m.kappa] !== "")
-        ? parseFloat(String(row[m.kappa]).replace(",", "."))
-        : null;
-      var fp = self.footprintPolygon(lon, lat, z, i, kappa, mdtData);
+      // Footprint: proyección del fotograma en el suelo. Si el dato trae los
+      // giros de orientación externa (omega/phi/kappa, en radianes), la huella se
+      // inclina/rota en consecuencia (kappa gira; omega y phi la deforman en
+      // trapecio). La huella se sitúa sobre el TERRENO usando la cota del MDT.
+      var readAng = function (key) {
+        return (m[key] && row[m[key]] != null && row[m[key]] !== "")
+          ? parseFloat(String(row[m[key]]).replace(",", "."))
+          : null;
+      };
+      var omega = readAng("omega");
+      var phi = readAng("phi");
+      var kappa = readAng("kappa");
+      var fp = self.footprintPolygon(lon, lat, z, i, omega, phi, kappa, mdtData);
       if (fp) {
         if (fp.hasZ) fpAnyZ = true;
         // Propiedades de la huella: las del punto + la cota del terreno bajo el
@@ -1270,21 +1917,40 @@
       }
     }
 
-    // Líneas de pasada. Guarda la línea MÁS LARGA como "línea de vuelo" para la
-    // animación del avión (con una sola pasada por vuelo, es esa línea).
+    // Líneas de pasada. Dos comportamientos:
+    //  - DEMO: UNA sola polilínea CONTINUA que serpentea por todas las pasadas en
+    //    el orden en que se generaron los fotogramas (boustrophedon): sube por la
+    //    pasada 1, cruza al inicio de la pasada 2, baja por la 2, etc. Esa misma
+    //    línea es la "línea de vuelo" que recorre el avión.
+    //  - OGC/CSV: una línea POR pasada (agrupada), como hasta ahora; la línea de
+    //    vuelo para el avión es la más larga.
     var lineas = [];
     var flightCoords = null;
-    Object.keys(pasadas).forEach(function (pid) {
-      var coords = pasadas[pid];
-      if (coords.length >= 2) {
+    if (d.source === "demo") {
+      // Los puntos ya están en orden de generación (fila i = fotograma i). La
+      // línea continua une TODOS los centros en ese orden.
+      var serpiente = puntos.map(function (ft) { return ft.geometry.coordinates; });
+      if (serpiente.length >= 2) {
         lineas.push({
           type: "Feature",
-          geometry: { type: "LineString", coordinates: coords },
-          properties: { pasada: pid }
+          geometry: { type: "LineString", coordinates: serpiente },
+          properties: { pasada: "vuelo" }
         });
-        if (!flightCoords || coords.length > flightCoords.length) flightCoords = coords;
+        flightCoords = serpiente;
       }
-    });
+    } else {
+      Object.keys(pasadas).forEach(function (pid) {
+        var coords = pasadas[pid];
+        if (coords.length >= 2) {
+          lineas.push({
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: coords },
+            properties: { pasada: pid }
+          });
+          if (!flightCoords || coords.length > flightCoords.length) flightCoords = coords;
+        }
+      });
+    }
 
     return {
       puntos: { type: "FeatureCollection", features: puntos },
@@ -1300,16 +1966,21 @@
     };
   };
 
-  // Calcula el rectángulo de huella (proyección del fotograma en el SUELO).
-  // Tamaño en el suelo:
+  // Calcula la huella (proyección del fotograma en el SUELO) según la geometría
+  // de una cámara fotogramétrica. Cada esquina del sensor define un rayo desde el
+  // centro de proyección; el rayo se orienta con la matriz de rotación de la
+  // orientación externa R(omega, phi, kappa) y se interseca con el plano del
+  // suelo (a la altura de vuelo). Con la cámara nadiral (0,0,0) la huella es un
+  // rectángulo centrado de tamaño:
   //   S_x = altura * sensor_w / focal ;  S_y = altura * sensor_h / focal
+  // Con omega (balanceo) / phi (cabeceo) la huella se inclina y deforma en
+  // trapecio (efecto "keystone") y se desplaza; kappa la rota en el plano.
   // La huella se dibuja SOBRE EL TERRENO: cada esquina toma su cota del MDT
   // (mdtData) como Z absoluta. Criterio all-or-nothing: si alguna esquina no
   // tiene cota del MDT, el anillo se devuelve 2D (el llamador lo pega al terreno
-  // con CLAMP en Cesium). NUNCA se usa la Z de vuelo para el anillo (produciría
-  // un polígono deforme de miles de metros). Devuelve { ring, hasZ, cotaTerreno }
-  // (ring = anillo cerrado de 5 vértices) o null si no puede calcularse.
-  footprintPolygon(lon, lat, z, index, kappa, mdtData) {
+  // con CLAMP en Cesium). Devuelve { ring, hasZ, cotaTerreno } (ring = anillo
+  // cerrado de 5 vértices) o null si no puede calcularse.
+  footprintPolygon(lon, lat, z, index, omega, phi, kappa, mdtData) {
     var fp = this.data.footprint;
     if (!fp || !fp.focal_mm) return null;
     // La ALTURA para dimensionar la huella se toma SIEMPRE de la Z del dato
@@ -1317,31 +1988,56 @@
     var altura = (z !== null && z !== undefined && !isNaN(z) && z > 0) ? z : 0;
     if (!altura || altura <= 0) return null;
 
-    var Sx = altura * (fp.sensor_w_mm / fp.focal_mm); // metros ancho total
-    var Sy = altura * (fp.sensor_h_mm / fp.focal_mm); // metros alto total
-    var halfX = Sx / 2, halfY = Sy / 2;
+    // Semiejes del sensor en unidades de la focal (mm). Un rayo a la esquina del
+    // sensor, en el marco de la cámara, es (±sw/2, ±sh/2, -focal): eje Z hacia el
+    // objeto (abajo). Trabajamos con la focal como unidad para proyectar al suelo.
+    var f = fp.focal_mm;
+    var hx = (fp.sensor_w_mm / 2), hy = (fp.sensor_h_mm / 2);
 
-    // Esquinas del rectángulo en metros respecto al centro (antes de rotar).
-    var corners = [
-      [-halfX, -halfY],
-      [halfX, -halfY],
-      [halfX, halfY],
-      [-halfX, halfY]
+    // Ángulos de orientación externa (radianes); ausentes => 0 (nadiral).
+    var o = (omega !== null && omega !== undefined && !isNaN(omega)) ? omega : 0;
+    var ph = (phi !== null && phi !== undefined && !isNaN(phi)) ? phi : 0;
+    var k = (kappa !== null && kappa !== undefined && !isNaN(kappa)) ? kappa : 0;
+
+    // Matriz de rotación fotogramétrica R = Rz(kappa)·Ry(phi)·Rx(omega) que lleva
+    // vectores del marco de la cámara al marco del terreno (X=Este, Y=Norte,
+    // Z=arriba). Convención estándar (Kraus / manual del IGN de orientación
+    // externa). Precalculamos senos/cosenos.
+    var co = Math.cos(o), so = Math.sin(o);
+    var cp = Math.cos(ph), sp = Math.sin(ph);
+    var ck = Math.cos(k), sk = Math.sin(k);
+    var R = [
+      [cp * ck, -cp * sk, sp],
+      [co * sk + so * sp * ck, co * ck - so * sp * sk, -so * cp],
+      [so * sk - co * sp * ck, so * ck + co * sp * sk, co * cp]
     ];
 
-    // Rotación en plano por el giro kappa (radianes). Se aplica SIEMPRE que el
-    // dato traiga kappa (fuente OGC, o CSV con columna kappa). Convención
-    // fotogramétrica: kappa es el giro alrededor del eje vertical; para orientar
-    // la huella en el suelo aplicamos la rotación 2D inversa (-kappa) de modo
-    // que un kappa positivo gire la huella en sentido horario sobre el mapa.
-    var useKappa = (kappa !== null && kappa !== undefined && !isNaN(kappa));
-    if (useKappa) {
-      var ang = -kappa;
-      var cs = Math.cos(ang), sn = Math.sin(ang);
-      for (var c = 0; c < corners.length; c++) {
-        var mx = corners[c][0], my = corners[c][1];
-        corners[c] = [mx * cs - my * sn, mx * sn + my * cs];
-      }
+    // Esquinas del sensor en el marco de la cámara: (x, y, -f). El eje Z del
+    // marco cámara apunta al objeto; al rotar con R (marco terreno) el rayo tendrá
+    // componente Z<0 (hacia abajo) para la cámara mirando al suelo.
+    var sensorCorners = [
+      [-hx, -hy, -f],
+      [hx, -hy, -f],
+      [hx, hy, -f],
+      [-hx, hy, -f]
+    ];
+
+    // Proyecta cada rayo al suelo: la esquina en el suelo respecto al centro
+    // (en metros) es altura * (Rr_x / -Rr_z, Rr_y / -Rr_z), con Rr = R·rayo.
+    // -Rr_z>0 porque el rayo apunta hacia abajo. Si algún rayo no apunta hacia
+    // abajo (inclinación extrema), se descarta la huella (cae al horizonte).
+    var corners = [];
+    for (var s = 0; s < sensorCorners.length; s++) {
+      var v = sensorCorners[s];
+      var rx = R[0][0] * v[0] + R[0][1] * v[1] + R[0][2] * v[2];
+      var ry = R[1][0] * v[0] + R[1][1] * v[1] + R[1][2] * v[2];
+      var rz = R[2][0] * v[0] + R[2][1] * v[1] + R[2][2] * v[2];
+      if (rz >= -1e-6) return null; // rayo no mira al suelo: huella inválida
+      var scale = altura / (-rz);
+      // Nota: X=Este, Y=Norte. Aplicamos la convención de que un kappa positivo
+      // gira la huella en horario sobre el mapa (coherente con el comportamiento
+      // previo); la matriz R ya orienta X/Y en el marco terreno.
+      corners.push([rx * scale, ry * scale]);
     }
 
     // Conversión metros -> grados en el punto (aprox. esférica).
@@ -1358,9 +2054,9 @@
     // Primero calculamos las posiciones planas y la cota de cada esquina.
     var planas = [];      // [ [pLon, pLat, cotaOrNull], ... ]
     var todasConCota = true;
-    for (var k = 0; k < corners.length; k++) {
-      var pLon = lon + corners[k][0] / mPerDegLon;
-      var pLat = lat + corners[k][1] / mPerDegLat;
+    for (var ci = 0; ci < corners.length; ci++) {
+      var pLon = lon + corners[ci][0] / mPerDegLon;
+      var pLat = lat + corners[ci][1] / mPerDegLat;
       var cota = this.sampleCota(mdtData, pLon, pLat);
       if (cota === null) cota = cotaCentro; // respaldo: cota del centro (MDT)
       if (cota === null || isNaN(cota)) todasConCota = false;
