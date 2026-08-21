@@ -321,6 +321,47 @@
     min-height: 16px;
 }
 
+/* Cálculo: selector de capa y botones a ancho completo. */
+.g-herramienta_vuelo #vf-calc-run,
+.g-herramienta_vuelo #vf-calc-clear {
+    width: 100%;
+}
+
+/* Cálculo: los selectores de capa y elemento ocupan el ancho de su fila. */
+.g-herramienta_vuelo #vf-calc-capa,
+.g-herramienta_vuelo #vf-calc-feature {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Cálculo: bloque de resultados numéricos. */
+.g-herramienta_vuelo .vuelo-calc-results {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #f7f9fc;
+    font-size: 12px;
+}
+
+.g-herramienta_vuelo .vuelo-calc-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.g-herramienta_vuelo .vuelo-calc-row span {
+    color: #4a5568;
+}
+
+.g-herramienta_vuelo .vuelo-calc-row strong {
+    color: #1a1a1a;
+    font-variant-numeric: tabular-nums;
+}
+
 /* Texto de ayuda dentro de los paneles */
 .g-herramienta_vuelo .vuelo-hint {
     font-size: 12px;
