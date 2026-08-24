@@ -374,6 +374,72 @@
     color: #c53030;
 }
 
+
+/* --- Estilos del Acordeón --- */
+.g-herramienta_vuelo .vuelo-accordion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.g-herramienta_vuelo .vuelo-accordion-header .vuelo-section-title {
+    /* El título ya tiene estilos, no necesita más */
+}
+
+.g-herramienta_vuelo .vuelo-chevron {
+    font-size: 14px;
+    transition: transform 0.2s ease;
+    color: #4a5568;
+}
+
+/* IMPORTANTE: se usa el combinador de HIJO DIRECTO (>) en todas las reglas de
+   estado del acordeón. La sección "Cámara" (#vf-section-fp) se MUEVE dentro del
+   cuerpo de los acordeones "demo"/"calculo" (positionCameraSection), generando
+   acordeones ANIDADOS. Con el combinador descendiente, el estado del acordeón
+   externo (p.ej. calculo expandido) afectaba al chevron/cuerpo del acordeón
+   interno (Cámara), desincronizando el icono. Con ">", cada acordeón solo
+   estiliza SU header y SU cuerpo directos, inmune al anidamiento. */
+.g-herramienta_vuelo .vf-accordion > .vuelo-accordion-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 6px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding-top 0.3s ease-out, margin 0.3s ease-out;
+    /* max-height grande para acomodar contenido anidado (p.ej. Cámara dentro de
+       Cálculo) sin recortar al expandir. */
+    max-height: 2000px;
+    opacity: 1;
+}
+
+.g-herramienta_vuelo .vf-accordion.collapsed > .vuelo-accordion-body {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    /* Importante para que no ocupe espacio al estar colapsado */
+    margin: 0;
+}
+
+.g-herramienta_vuelo .vf-accordion > .vuelo-accordion-header .vuelo-chevron {
+    transition: transform 0.3s ease-out;
+}
+
+.g-herramienta_vuelo .vf-accordion.collapsed > .vuelo-accordion-header .vuelo-chevron {
+    transform: rotate(0deg);
+}
+
+.g-herramienta_vuelo .vf-accordion:not(.collapsed) > .vuelo-accordion-header .vuelo-chevron {
+    transform: rotate(90deg);
+}
+
+/* Ajuste para que el cuerpo del acordeón no tenga su propio gap si el contenido ya lo tiene */
+.g-herramienta_vuelo .vuelo-accordion-body > .vuelo-tab-panel,
+.g-herramienta_vuelo .vuelo-accordion-body > .vuelo-mode-panel {
+    gap: 10px;
+}
+
 /* Mensaje de estado */
 .g-herramienta_vuelo .vuelo-status {
     font-size: 12px;

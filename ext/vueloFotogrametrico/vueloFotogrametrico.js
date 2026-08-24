@@ -216,7 +216,12 @@
         // entre swaps OL<->Cesium (vive en window.__vueloSharedData) para que al
         // cambiar de implementación se respete la vista (shareView) en vez de
         // re-encuadrar. Se resetea al cargar/limpiar datos.
-        zoomDone: false
+        zoomDone: false,
+        // Estado de la UI que persiste entre swaps (p.ej. secciones del panel
+        // abiertas/cerradas).
+        ui: {
+          accordion: {}
+        }
       };
     }
   };
@@ -985,7 +990,7 @@
           '</div>';
       }).join("");
 
-      return '' +
+        return '' +
         '<div class="vuelo-body" id="vf-body">' +
 
         // --- Selector de MODO: Vuelo ya hecho / Demo / Cálculo --------------
@@ -997,174 +1002,186 @@
 
         // ==================== MODO: VUELO YA HECHO ==========================
         '  <div class="vuelo-mode-panel" id="vf-mode-hecho">' +
-
-        // --- Sub-pestañas de FUENTE: OGC API IGN / CSV -------------------
-        '    <div class="vuelo-tabs" id="vf-tabs">' +
-        '      <button type="button" class="vuelo-tab" data-source="ogc">OGC API IGN</button>' +
-        '      <button type="button" class="vuelo-tab" data-source="csv">CSV / Excel</button>' +
-        '    </div>' +
-
-        // ---- Fuente OGC API IGN (bsq-fotogramas) ------------------------
-        '    <div class="vuelo-tab-panel" id="vf-tab-ogc">' +
-        '      <p class="vuelo-hint">Busca fotogramas PNOA del IGN en el área visible del mapa y un rango de fechas. Devuelve los parámetros de orientación externa (fotocentros y giros).</p>' +
-        '      <div class="vuelo-row"><label for="vf-ogc-desde">Fecha desde</label><input type="date" id="vf-ogc-desde"></div>' +
-        '      <div class="vuelo-row"><label for="vf-ogc-hasta">Fecha hasta</label><input type="date" id="vf-ogc-hasta"></div>' +
-        '      <label class="vuelo-check"><input type="checkbox" id="vf-ogc-usarvista" checked> Usar el área visible del mapa</label>' +
-        '      <button type="button" id="vf-ogc-buscar" class="vuelo-btn primary">Buscar vuelos</button>' +
-        '    </div>' +
-
-        // ---- Fuente CSV / Excel -----------------------------------------
-        '    <div class="vuelo-tab-panel" id="vf-tab-csv" hidden>' +
-        '      <div class="vuelo-drop" id="vf-drop">' +
-        '        Arrastra aquí un <strong>CSV</strong> o <strong>Excel</strong><br>o haz clic para elegir archivo' +
-        '        <input type="file" id="vf-file" accept=".csv,.txt,.xlsx,.xls">' +
+        // --- Contenedor de Origen de datos (acordeón) ---
+        '    <div class="vuelo-section vf-accordion" data-acc="source">' +
+        '      <div class="vuelo-accordion-header" role="button" tabindex="0">' +
+        '        <span class="vuelo-section-title">Origen de datos</span>' +
+        '        <span class="vuelo-chevron">▸</span>' +
+        '      </div>' +
+        '      <div class="vuelo-accordion-body">' +
+        '        <div class="vuelo-tabs" id="vf-tabs">' +
+        '          <button type="button" class="vuelo-tab" data-source="ogc">OGC API IGN</button>' +
+        '          <button type="button" class="vuelo-tab" data-source="csv">CSV / Excel</button>' +
+        '        </div>' +
+        '        <div class="vuelo-tab-panel" id="vf-tab-ogc">' +
+        '          <p class="vuelo-hint">Busca fotogramas PNOA del IGN en el área visible del mapa y un rango de fechas. Devuelve los parámetros de orientación externa (fotocentros y giros).</p>' +
+        '          <div class="vuelo-row"><label for="vf-ogc-desde">Fecha desde</label><input type="date" id="vf-ogc-desde"></div>' +
+        '          <div class="vuelo-row"><label for="vf-ogc-hasta">Fecha hasta</label><input type="date" id="vf-ogc-hasta"></div>' +
+        '          <label class="vuelo-check"><input type="checkbox" id="vf-ogc-usarvista" checked> Usar el área visible del mapa</label>' +
+        '          <button type="button" id="vf-ogc-buscar" class="vuelo-btn primary">Buscar vuelos</button>' +
+        '        </div>' +
+        '        <div class="vuelo-tab-panel" id="vf-tab-csv" hidden>' +
+        '          <div class="vuelo-drop" id="vf-drop">' +
+        '            Arrastra aquí un <strong>CSV</strong> o <strong>Excel</strong><br>o haz clic para elegir archivo' +
+        '            <input type="file" id="vf-file" accept=".csv,.txt,.xlsx,.xls">' +
+        '          </div>' +
+        '        </div>' +
         '      </div>' +
         '    </div>' +
 
-        // ---- Selector de VUELOS (resultado de la búsqueda OGC) ----------
-        '    <div class="vuelo-section" id="vf-section-vuelos" hidden>' +
-        '      <span class="vuelo-section-title">Vuelo</span>' +
-        '      <select id="vf-ogc-vuelos" class="vuelo-select-vuelo"><option value="">— Elige un vuelo —</option></select>' +
+        // ---- Selector de VUELOS (acordeón) ----------
+        '    <div class="vuelo-section vf-accordion" id="vf-section-vuelos" data-acc="vuelos" hidden>' +
+        '      <div class="vuelo-accordion-header" role="button" tabindex="0">' +
+        '        <span class="vuelo-section-title">Vuelo</span>' +
+        '        <span class="vuelo-chevron">▸</span>' +
+        '      </div>' +
+        '      <div class="vuelo-accordion-body">' +
+        '        <select id="vf-ogc-vuelos" class="vuelo-select-vuelo"><option value="">— Elige un vuelo —</option></select>' +
+        '      </div>' +
         '    </div>' +
 
-        // ---- Mapeo de columnas (solo relevante para CSV; oculto en OGC) --
-        '    <div class="vuelo-section" id="vf-section-map" hidden>' +
-        '      <span class="vuelo-section-title">Mapeo de columnas</span>' +
-        '      <div class="vuelo-row">' +
-        '        <label for="vf-crs">CRS origen</label>' +
-        '        <select id="vf-crs">' + crsOptions + '</select>' +
+        // ---- Mapeo de columnas (acordeón) --
+        '    <div class="vuelo-section vf-accordion" id="vf-section-map" data-acc="map" hidden>' +
+        '      <div class="vuelo-accordion-header" role="button" tabindex="0">' +
+        '        <span class="vuelo-section-title">Mapeo de columnas</span>' +
+        '        <span class="vuelo-chevron">▸</span>' +
         '      </div>' +
+        '      <div class="vuelo-accordion-body">' +
+        '        <div class="vuelo-row">' +
+        '          <label for="vf-crs">CRS origen</label>' +
+        '          <select id="vf-crs">' + crsOptions + '</select>' +
+        '        </div>' +
         mapRows +
+        '      </div>' +
         '    </div>' +
         '  </div>' +
 
         // ==================== MODO: DEMO (generador sintético) =============
-        // El primer fotograma de cada pasada se sitúa en el CENTRO de la pantalla
-        // en ese instante; los siguientes se van añadiendo con "Añadir fotograma"
-        // según el rumbo y la separación. "Nueva pasada" desplaza lateralmente el
-        // origen y reinicia el conteo de la pasada.
         '  <div class="vuelo-mode-panel" id="vf-mode-demo" hidden>' +
-        '    <p class="vuelo-hint">Genera un vuelo sintético <strong>fotograma a fotograma</strong>. El primer fotograma se coloca en el centro del mapa; cada nuevo fotograma se añade según el rumbo y la separación indicados.</p>' +
-        // Ancla donde se REUBICA la sección Cámara al entrar en modo Demo, de modo
-        // que la cámara se elija ANTES de generar (dimensiona la huella). Al salir
-        // del modo, la sección vuelve a su ancla compartida (vf-cam-home).
-        '    <div id="vf-cam-anchor-demo"></div>' +
-        '    <div class="vuelo-row"><label for="vf-demo-rumbo">Rumbo (°)</label><input type="number" id="vf-demo-rumbo" step="1" min="0" max="360"></div>' +
-        '    <div class="vuelo-row"><label for="vf-demo-sepfoto">Sep. fotogramas (m)</label><input type="number" id="vf-demo-sepfoto" step="10" min="1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-demo-seppasada">Sep. pasadas (m)</label><input type="number" id="vf-demo-seppasada" step="10" min="1"></div>' +
-        // Lado hacia el que se van colocando las pasadas sucesivas (respecto al
-        // rumbo base). Evita que las pasadas se solapen al alternar el sentido.
-        '    <div class="vuelo-row"><label for="vf-demo-lado">Lado pasadas</label>' +
-        '      <select id="vf-demo-lado"><option value="der">Derecha</option><option value="izq">Izquierda</option></select>' +
+        '    <div class="vuelo-section vf-accordion" data-acc="demo">' +
+        '      <div class="vuelo-accordion-header" role="button" tabindex="0">' +
+        '        <span class="vuelo-section-title">Parámetros de la demo</span>' +
+        '        <span class="vuelo-chevron">▸</span>' +
+        '      </div>' +
+        '      <div class="vuelo-accordion-body">' +
+        '        <p class="vuelo-hint">Genera un vuelo sintético <strong>fotograma a fotograma</strong>. El primer fotograma se coloca en el centro del mapa; cada nuevo fotograma se añade según el rumbo y la separación indicados.</p>' +
+        '        <div id="vf-cam-anchor-demo"></div>' +
+        '        <div class="vuelo-row"><label for="vf-demo-rumbo">Rumbo (°)</label><input type="number" id="vf-demo-rumbo" step="1" min="0" max="360"></div>' +
+        '        <div class="vuelo-row"><label for="vf-demo-sepfoto">Sep. fotogramas (m)</label><input type="number" id="vf-demo-sepfoto" step="10" min="1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-demo-seppasada">Sep. pasadas (m)</label><input type="number" id="vf-demo-seppasada" step="10" min="1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-demo-lado">Lado pasadas</label>' +
+        '          <select id="vf-demo-lado"><option value="der">Derecha</option><option value="izq">Izquierda</option></select>' +
+        '        </div>' +
+        '        <div class="vuelo-row"><label for="vf-demo-z">Altura Z (m)</label><input type="number" id="vf-demo-z" step="10" min="1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-demo-omega">Omega (°)</label><input type="number" id="vf-demo-omega" step="0.1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-demo-phi">Phi (°)</label><input type="number" id="vf-demo-phi" step="0.1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-demo-kappa">Kappa (°)</label><input type="number" id="vf-demo-kappa" step="0.1"></div>' +
+        '        <div class="vuelo-anim-controls">' +
+        '          <button type="button" id="vf-demo-add" class="vuelo-btn primary" title="Añadir un fotograma">＋ Añadir fotograma</button>' +
+        '          <button type="button" id="vf-demo-newpass" class="vuelo-btn" title="Empezar una nueva pasada">↵ Nueva pasada</button>' +
+        '        </div>' +
+        '        <button type="button" id="vf-demo-clear" class="vuelo-btn">Limpiar demo</button>' +
+        '        <p class="vuelo-hint" id="vf-demo-info"></p>' +
+        '      </div>' +
         '    </div>' +
-        '    <div class="vuelo-row"><label for="vf-demo-z">Altura Z (m)</label><input type="number" id="vf-demo-z" step="10" min="1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-demo-omega">Omega (°)</label><input type="number" id="vf-demo-omega" step="0.1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-demo-phi">Phi (°)</label><input type="number" id="vf-demo-phi" step="0.1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-demo-kappa">Kappa (°)</label><input type="number" id="vf-demo-kappa" step="0.1"></div>' +
-        '    <div class="vuelo-anim-controls">' +
-        '      <button type="button" id="vf-demo-add" class="vuelo-btn primary" title="Añadir un fotograma">＋ Añadir fotograma</button>' +
-        '      <button type="button" id="vf-demo-newpass" class="vuelo-btn" title="Empezar una nueva pasada">↵ Nueva pasada</button>' +
-        '    </div>' +
-        '    <button type="button" id="vf-demo-clear" class="vuelo-btn">Limpiar demo</button>' +
-        '    <p class="vuelo-hint" id="vf-demo-info"></p>' +
         '  </div>' +
 
         // ==================== MODO: CÁLCULO (planificación) ================
-        // A partir del área (BBOX visible o polígono de un feature de capa), el GSD
-        // deseado, los solapes y la cámara, calcula la altura de vuelo y la malla de
-        // pasadas/fotogramas que cubren el área, y la dibuja. La cámara se elige en
-        // la sección Cámara (compartida). Los píxeles del sensor dan el pixel pitch.
         '  <div class="vuelo-mode-panel" id="vf-mode-calculo" hidden>' +
-        '    <p class="vuelo-hint">Planifica un vuelo nuevo a partir del <strong>GSD</strong> deseado, los solapes y la cámara. Define el área con el encuadre del mapa o un polígono de una capa.</p>' +
-        // Ancla donde se REUBICA la sección Cámara al entrar en modo Cálculo (el GSD
-        // depende de la cámara: focal + tamaño y nº de píxeles del sensor).
-        '    <div id="vf-cam-anchor-calc"></div>' +
-        // Origen del área de vuelo.
-        '    <div class="vuelo-row">' +
-        '      <label for="vf-calc-areasrc">Área</label>' +
-        '      <select id="vf-calc-areasrc">' +
-        '        <option value="bbox">Encuadre del mapa</option>' +
-        '        <option value="feature">Polígono de capa</option>' +
-        '      </select>' +
+        '    <div class="vuelo-section vf-accordion" data-acc="calculo">' +
+        '      <div class="vuelo-accordion-header" role="button" tabindex="0">' +
+        '        <span class="vuelo-section-title">Parámetros de cálculo</span>' +
+        '        <span class="vuelo-chevron">▸</span>' +
+        '      </div>' +
+        '      <div class="vuelo-accordion-body">' +
+        '        <p class="vuelo-hint">Planifica un vuelo nuevo a partir del <strong>GSD</strong> deseado, los solapes y la cámara. Define el área con el encuadre del mapa o un polígono de una capa.</p>' +
+        '        <div id="vf-cam-anchor-calc"></div>' +
+        '        <div class="vuelo-row">' +
+        '          <label for="vf-calc-areasrc">Área</label>' +
+        '          <select id="vf-calc-areasrc">' +
+        '            <option value="bbox">Encuadre del mapa</option>' +
+        '            <option value="feature">Polígono de capa</option>' +
+        '          </select>' +
+        '        </div>' +
+        '        <div class="vuelo-row" id="vf-calc-capa-row" hidden>' +
+        '          <label for="vf-calc-capa">Capa</label>' +
+        '          <select id="vf-calc-capa" class="vuelo-select-vuelo"><option value="">— Elige una capa —</option></select>' +
+        '        </div>' +
+        '        <div class="vuelo-row" id="vf-calc-feature-row" hidden>' +
+        '          <label for="vf-calc-feature">Elemento</label>' +
+        '          <select id="vf-calc-feature" class="vuelo-select-vuelo"><option value="">— Toda la capa —</option></select>' +
+        '        </div>' +
+        '        <div class="vuelo-row"><label for="vf-calc-gsd">GSD (cm/píxel)</label><input type="number" id="vf-calc-gsd" step="1" min="1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-calc-solapel">Solape long. (%)</label><input type="number" id="vf-calc-solapel" step="5" min="0" max="95"></div>' +
+        '        <div class="vuelo-row"><label for="vf-calc-solapet">Solape trans. (%)</label><input type="number" id="vf-calc-solapet" step="5" min="0" max="95"></div>' +
+        '        <div class="vuelo-row"><label for="vf-calc-rumbo">Rumbo pasadas (°)</label><input type="number" id="vf-calc-rumbo" step="1" min="0" max="360"></div>' +
+        '        <button type="button" id="vf-calc-run" class="vuelo-btn primary">Calcular vuelo</button>' +
+        '        <button type="button" id="vf-calc-clear" class="vuelo-btn">Limpiar</button>' +
+        '        <div class="vuelo-calc-results" id="vf-calc-results" hidden></div>' +
+        '      </div>' +
         '    </div>' +
-        // Selector de capa (solo visible cuando areaSrc = feature). El listado se
-        // refresca al desplegar el select (mousedown/focus), sin botón aparte.
-        '    <div class="vuelo-row" id="vf-calc-capa-row" hidden>' +
-        '      <label for="vf-calc-capa">Capa</label>' +
-        '      <select id="vf-calc-capa" class="vuelo-select-vuelo"><option value="">— Elige una capa —</option></select>' +
-        '    </div>' +
-        // Selector de feature dentro de la capa elegida (polígonos). Permite calcular
-        // sobre un feature concreto; "todos" usa la envolvente de la capa entera.
-        '    <div class="vuelo-row" id="vf-calc-feature-row" hidden>' +
-        '      <label for="vf-calc-feature">Elemento</label>' +
-        '      <select id="vf-calc-feature" class="vuelo-select-vuelo"><option value="">— Toda la capa —</option></select>' +
-        '    </div>' +
-        // Parámetros de planificación.
-        '    <div class="vuelo-row"><label for="vf-calc-gsd">GSD (cm/píxel)</label><input type="number" id="vf-calc-gsd" step="1" min="1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-calc-solapel">Solape long. (%)</label><input type="number" id="vf-calc-solapel" step="5" min="0" max="95"></div>' +
-        '    <div class="vuelo-row"><label for="vf-calc-solapet">Solape trans. (%)</label><input type="number" id="vf-calc-solapet" step="5" min="0" max="95"></div>' +
-        '    <div class="vuelo-row"><label for="vf-calc-rumbo">Rumbo pasadas (°)</label><input type="number" id="vf-calc-rumbo" step="1" min="0" max="360"></div>' +
-        '    <button type="button" id="vf-calc-run" class="vuelo-btn primary">Calcular vuelo</button>' +
-        '    <button type="button" id="vf-calc-clear" class="vuelo-btn">Limpiar</button>' +
-        // Resultados numéricos del cálculo.
-        '    <div class="vuelo-calc-results" id="vf-calc-results" hidden></div>' +
         '  </div>' +
 
         // ==================== SECCIONES COMPARTIDAS (hecho + demo) =========
-        // Estado, Cámara, Acciones y Animación son comunes a los modos que
-        // producen datos (hecho y demo). applyMode() controla su visibilidad.
         '  <div class="vuelo-status" id="vf-status"></div>' +
-
-        // Ancla ORIGINAL (home) de la sección Cámara. En modo 'hecho' la sección
-        // vive aquí; en modo 'demo' se mueve al ancla vf-cam-anchor-demo (arriba).
         '  <div id="vf-cam-home"></div>' +
 
-        // ---- Huella / footprint (común a las fuentes de datos) ----------
-        // La altura de vuelo se toma SIEMPRE de la Z del dato; el giro kappa se
-        // aplica automáticamente si el dato lo trae. La visibilidad de las capas
-        // la gestiona el plugin externo de gestión de capas (layerswitcher).
-        '  <div class="vuelo-section" id="vf-section-fp" hidden>' +
-        '    <span class="vuelo-section-title">Cámara</span>' +
-        // Desplegable de preset: al elegir una cámara rellena focal + sensor.
-        // "custom" (Personalizada) deja los campos para edición manual.
-        '    <div class="vuelo-row">' +
-        '      <label for="vf-cam-preset">Modelo</label>' +
-        '      <select id="vf-cam-preset"></select>' +
+        // ---- Cámara / Footprint (acordeón) ----------
+        '  <div class="vuelo-section vf-accordion" id="vf-section-fp" data-acc="camara" hidden>' +
+        '    <div class="vuelo-accordion-header" role="button" tabindex="0">' +
+        '      <span class="vuelo-section-title">Cámara</span>' +
+        '      <span class="vuelo-chevron">▸</span>' +
         '    </div>' +
-        '    <div class="vuelo-row"><label for="vf-fp-focal">Focal (mm)</label><input type="number" id="vf-fp-focal" step="1" min="1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-fp-sw">Sensor ancho (mm)</label><input type="number" id="vf-fp-sw" step="0.1" min="0.1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-fp-sh">Sensor alto (mm)</label><input type="number" id="vf-fp-sh" step="0.1" min="0.1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-fp-pxw">Píxeles ancho</label><input type="number" id="vf-fp-pxw" step="1" min="1"></div>' +
-        '    <div class="vuelo-row"><label for="vf-fp-pxh">Píxeles alto</label><input type="number" id="vf-fp-pxh" step="1" min="1"></div>' +
-        '    <button type="button" id="vf-cam-add-toggle" class="vuelo-btn">＋ Añadir cámara</button>' +
-        // Mini-formulario para dar de alta una cámara nueva (se guarda en caché).
-        '    <div class="vuelo-cam-form" id="vf-cam-form" hidden>' +
-        '      <div class="vuelo-row"><label for="vf-cam-name">Nombre</label><input type="text" id="vf-cam-name" placeholder="Mi cámara"></div>' +
-        '      <div class="vuelo-row"><label for="vf-cam-focal">Focal (mm)</label><input type="number" id="vf-cam-focal" step="1" min="1"></div>' +
-        '      <div class="vuelo-row"><label for="vf-cam-sw">Sensor ancho (mm)</label><input type="number" id="vf-cam-sw" step="0.1" min="0.1"></div>' +
-        '      <div class="vuelo-row"><label for="vf-cam-sh">Sensor alto (mm)</label><input type="number" id="vf-cam-sh" step="0.1" min="0.1"></div>' +
-        '      <div class="vuelo-row"><label for="vf-cam-pxw">Píxeles ancho</label><input type="number" id="vf-cam-pxw" step="1" min="1"></div>' +
-        '      <div class="vuelo-row"><label for="vf-cam-pxh">Píxeles alto</label><input type="number" id="vf-cam-pxh" step="1" min="1"></div>' +
-        '      <div class="vuelo-anim-controls">' +
-        '        <button type="button" id="vf-cam-save" class="vuelo-btn primary">Guardar cámara</button>' +
-        '        <button type="button" id="vf-cam-cancel" class="vuelo-btn">Cancelar</button>' +
+        '    <div class="vuelo-accordion-body">' +
+        '      <div class="vuelo-row">' +
+        '        <label for="vf-cam-preset">Modelo</label>' +
+        '        <select id="vf-cam-preset"></select>' +
         '      </div>' +
-        '      <p class="vuelo-hint" id="vf-cam-msg"></p>' +
+        '      <div class="vuelo-row"><label for="vf-fp-focal">Focal (mm)</label><input type="number" id="vf-fp-focal" step="1" min="1"></div>' +
+        '      <div class="vuelo-row"><label for="vf-fp-sw">Sensor ancho (mm)</label><input type="number" id="vf-fp-sw" step="0.1" min="0.1"></div>' +
+        '      <div class="vuelo-row"><label for="vf-fp-sh">Sensor alto (mm)</label><input type="number" id="vf-fp-sh" step="0.1" min="0.1"></div>' +
+        '      <div class="vuelo-row"><label for="vf-fp-pxw">Píxeles ancho</label><input type="number" id="vf-fp-pxw" step="1" min="1"></div>' +
+        '      <div class="vuelo-row"><label for="vf-fp-pxh">Píxeles alto</label><input type="number" id="vf-fp-pxh" step="1" min="1"></div>' +
+        '      <button type="button" id="vf-cam-add-toggle" class="vuelo-btn">＋ Añadir cámara</button>' +
+        '      <div class="vuelo-cam-form" id="vf-cam-form" hidden>' +
+        '        <div class="vuelo-row"><label for="vf-cam-name">Nombre</label><input type="text" id="vf-cam-name" placeholder="Mi cámara"></div>' +
+        '        <div class="vuelo-row"><label for="vf-cam-focal">Focal (mm)</label><input type="number" id="vf-cam-focal" step="1" min="1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-cam-sw">Sensor ancho (mm)</label><input type="number" id="vf-cam-sw" step="0.1" min="0.1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-cam-sh">Sensor alto (mm)</label><input type="number" id="vf-cam-sh" step="0.1" min="0.1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-cam-pxw">Píxeles ancho</label><input type="number" id="vf-cam-pxw" step="1" min="1"></div>' +
+        '        <div class="vuelo-row"><label for="vf-cam-pxh">Píxeles alto</label><input type="number" id="vf-cam-pxh" step="1" min="1"></div>' +
+        '        <div class="vuelo-anim-controls">' +
+        '          <button type="button" id="vf-cam-save" class="vuelo-btn primary">Guardar cámara</button>' +
+        '          <button type="button" id="vf-cam-cancel" class="vuelo-btn">Cancelar</button>' +
+        '        </div>' +
+        '        <p class="vuelo-hint" id="vf-cam-msg"></p>' +
+        '      </div>' +
         '    </div>' +
         '  </div>' +
 
-        // ---- Acciones ---------------------------------------------------
-        '  <div class="vuelo-section" id="vf-section-actions" hidden>' +
-        '    <button type="button" id="vf-render" class="vuelo-btn primary">Visualizar vuelo</button>' +
-        '    <button type="button" id="vf-clear" class="vuelo-btn">Limpiar</button>' +
+        // ---- Acciones (acordeón) -------------------------------------------
+        '  <div class="vuelo-section vf-accordion" id="vf-section-actions" data-acc="acciones" hidden>' +
+        '    <div class="vuelo-accordion-header" role="button" tabindex="0">' +
+        '      <span class="vuelo-section-title">Acciones</span>' +
+        '      <span class="vuelo-chevron">▸</span>' +
+        '    </div>' +
+        '    <div class="vuelo-accordion-body">' +
+        '      <button type="button" id="vf-render" class="vuelo-btn primary">Visualizar vuelo</button>' +
+        '      <button type="button" id="vf-clear" class="vuelo-btn">Limpiar</button>' +
+        '    </div>' +
         '  </div>' +
 
-        // ---- Animación del avión sobre la línea de vuelo ----------------
-        '  <div class="vuelo-section" id="vf-section-anim" hidden>' +
-        '    <span class="vuelo-section-title">Animación del vuelo</span>' +
-        '    <div class="vuelo-anim-controls">' +
-        '      <button type="button" id="vf-anim-play" class="vuelo-btn primary" title="Reproducir / Pausar">▶ Reproducir</button>' +
-        '      <button type="button" id="vf-anim-restart" class="vuelo-btn" title="Reiniciar">⏮ Reiniciar</button>' +
+        // ---- Animación del avión (acordeón) ----------------
+        '  <div class="vuelo-section vf-accordion" id="vf-section-anim" data-acc="anim" hidden>' +
+        '    <div class="vuelo-accordion-header" role="button" tabindex="0">' +
+        '      <span class="vuelo-section-title">Animación del vuelo</span>' +
+        '      <span class="vuelo-chevron">▸</span>' +
+        '    </div>' +
+        '    <div class="vuelo-accordion-body">' +
+        '      <div class="vuelo-anim-controls">' +
+        '        <button type="button" id="vf-anim-play" class="vuelo-btn primary" title="Reproducir / Pausar">▶ Reproducir</button>' +
+        '        <button type="button" id="vf-anim-restart" class="vuelo-btn" title="Reiniciar">⏮ Reiniciar</button>' +
+        '      </div>' +
         '    </div>' +
         '  </div>' +
 
@@ -1456,6 +1473,30 @@
     // Controles de animación del avión.
     bind("vf-anim-play", "click", function () { self.togglePlay(); });
     bind("vf-anim-restart", "click", function () { self.restartAnimation(); });
+
+    // --- Acordeones ---
+    var headers = p.querySelectorAll(".vuelo-accordion-header");
+    var toggleAccordion = function(header) {
+        var section = header.closest('.vf-accordion');
+        if (!section) return;
+        var key = section.getAttribute("data-acc");
+        var isCollapsed = section.classList.toggle("collapsed");
+        if (!self.data.ui) self.data.ui = { accordion: {} };
+        self.data.ui.accordion[key] = isCollapsed;
+        window.__vueloSharedData = self.data;
+    };
+
+    for (var hi = 0; hi < headers.length; hi++) {
+      headers[hi].addEventListener("click", function () {
+        toggleAccordion(this);
+      });
+      headers[hi].addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggleAccordion(this);
+        }
+      });
+    }
   }
 
   // Refleja el estado de datos en la UI (tras un swap, o al reabrir).
@@ -1521,6 +1562,17 @@
     if (d.headers && d.headers.length) {
       this.fillColumnSelects(d.headers, d.mapping);
       this.showConfigSections(true);
+    }
+
+    // Restaura el estado de los acordeones.
+    var accState = (d.ui && d.ui.accordion) ? d.ui.accordion : {};
+    var sections = p.querySelectorAll(".vf-accordion");
+    for (var i = 0; i < sections.length; i++) {
+      var section = sections[i];
+      var key = section.getAttribute("data-acc");
+      // Por defecto, todas las secciones colapsadas, a menos que el estado diga lo contrario.
+      var isCollapsed = accState[key] !== false;
+      section.classList.toggle("collapsed", isCollapsed);
     }
   };
 
