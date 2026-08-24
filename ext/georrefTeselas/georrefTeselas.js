@@ -17,6 +17,39 @@ function api_georrefTeselas() {
 
 const valueOri_georrefTeselas = "-- Seleccione un tipo de malla --";
 
+// ===================================================================
+//  Carga bajo demanda de h3-js (solo para el modo H3)
+//  --------------------------------------------------------------------
+//  El georreferenciador de teselas solo necesita h3-js cuando se georreferencia
+//  una tesela H3 (h3ToGeoJSON usa la global `h3`). En vez de cargar h3 por
+//  <script> en el index.html, se inyecta bajo demanda desde aquí la primera vez
+//  que se usa el modo H3. La carga se cachea en window.__georrefH3Promise para no
+//  reinyectar. Se usa la build UMD (expone window.h3). TMS/XYZ no cargan nada.
+// ===================================================================
+const H3_CDN_URL_GT = "https://cdn.jsdelivr.net/npm/h3-js@4/dist/h3-js.umd.js";
+function ensureH3_georrefTeselas() {
+  if (typeof window.h3 !== "undefined") return Promise.resolve(window.h3);
+  if (window.__georrefH3Promise) return window.__georrefH3Promise;
+  window.__georrefH3Promise = new Promise(function (resolve, reject) {
+    var existing = document.querySelector('script[data-lib="gt-h3"]');
+    var script = existing || document.createElement("script");
+    var onOk = function () {
+      if (typeof window.h3 !== "undefined") resolve(window.h3);
+      else reject(new Error("h3-js cargó pero no expuso window.h3"));
+    };
+    var onErr = function () { window.__georrefH3Promise = null; reject(new Error("No se pudo cargar h3-js")); };
+    script.addEventListener("load", onOk);
+    script.addEventListener("error", onErr);
+    if (!existing) {
+      script.src = H3_CDN_URL_GT;
+      script.async = true;
+      script.setAttribute("data-lib", "gt-h3");
+      document.head.appendChild(script);
+    }
+  });
+  return window.__georrefH3Promise;
+}
+
 class miPlugin_georrefTeselas {
   constructor(options = {}) {
     this.name = 'miPlugin_georrefTeselas';
@@ -139,7 +172,7 @@ class miPlugin_georrefTeselas {
     });
   }
 
-  myFunctionGetGrid() {
+  async myFunctionGetGrid() {
     const map = this.map;
     const IDEE = api_georrefTeselas();
     let gjson;
@@ -160,6 +193,14 @@ class miPlugin_georrefTeselas {
         break;
       }
       case 'H3': {
+        // h3-js se carga bajo demanda solo para el modo H3 (h3ToGeoJSON usa la
+        // global `h3`). Si falla la red, avisa y aborta.
+        try {
+          await ensureH3_georrefTeselas();
+        } catch (e) {
+          IDEE.toast.error('No se pudo cargar la librería h3-js.', null, 3000);
+          return;
+        }
         const h3Index = document.getElementById("H3_id").value;
         gjson = h3ToGeoJSON(h3Index);
         break;

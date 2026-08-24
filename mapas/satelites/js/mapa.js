@@ -5,6 +5,38 @@ const SVGCarga = document.getElementById("cargaSVG")
 //   SVGCarga.hidden = true
 // };
 
+// ===================================================================
+//  Carga bajo demanda de satellite.js (propagación orbital SGP4)
+//  ------------------------------------------------------------------
+//  Este visualizador usa satellite.js para propagar las órbitas de la ISS y los
+//  satélites Galileo. En vez de cargarlo por <script> en el index.html, se
+//  inyecta bajo demanda desde aquí antes de calcular la primera órbita. La carga
+//  se cachea en window.__satellitePromise para no reinyectar.
+// ===================================================================
+const SATELLITE_CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/satellite.js/1.3.0/satellite.min.js";
+function ensureSatellite() {
+  if (typeof window.satellite !== "undefined") return Promise.resolve(window.satellite);
+  if (window.__satellitePromise) return window.__satellitePromise;
+  window.__satellitePromise = new Promise(function (resolve, reject) {
+    var existing = document.querySelector('script[data-lib="satellite-js"]');
+    var script = existing || document.createElement("script");
+    var onOk = function () {
+      if (typeof window.satellite !== "undefined") resolve(window.satellite);
+      else reject(new Error("satellite.js cargó pero no expuso window.satellite"));
+    };
+    var onErr = function () { window.__satellitePromise = null; reject(new Error("No se pudo cargar satellite.js")); };
+    script.addEventListener("load", onOk);
+    script.addEventListener("error", onErr);
+    if (!existing) {
+      script.src = SATELLITE_CDN_URL;
+      script.async = true;
+      script.setAttribute("data-lib", "satellite-js");
+      document.head.appendChild(script);
+    }
+  });
+  return window.__satellitePromise;
+}
+
 
 Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
   url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
@@ -470,9 +502,6 @@ mapajs.addLayers(layerISS);
 mapajs.addLayers(layerOrbit);
 mapajs.addLayers(layerGalileo);
 mapajs.addLayers(layerGalileoOrbit);
-OrbitISS()
-ISSPosition(centerMap = true)
-GalileoPosition(Orbit = true)
 
 pluglinCambioCapaBase = new miPlugin_baseLayer()
 mapajs.addPlugin(pluglinCambioCapaBase)
@@ -482,21 +511,30 @@ mapajs.addPlugin(pluginCapasSuperpuestas)
 
 mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
 
+// Carga satellite.js bajo demanda y arranca los cálculos orbitales cuando esté
+// disponible (propagación de la ISS y Galileo).
+ensureSatellite().then(function () {
+  OrbitISS()
+  ISSPosition(centerMap = true)
+  GalileoPosition(Orbit = true)
 
-let iter = 0;
-setInterval(() => {
+  let iter = 0;
+  setInterval(() => {
 
-  if (iter >= 60) { // cada 120 s recalculamos órbita (1 hora antes / 1 hora después)
-    iter = 0;
-    OrbitISS()
-    GalileoPositionByTime(Orbit = true)
-  }
-  iter += 1
-  ISSPosition(centerMap = false, onlyPosition = true)
-  GalileoPositionByTime(Orbit = false)
-
-
-}, 5 * 1000);
+    if (iter >= 60) { // cada 120 s recalculamos órbita (1 hora antes / 1 hora después)
+      iter = 0;
+      OrbitISS()
+      GalileoPositionByTime(Orbit = true)
+    }
+    iter += 1
+    ISSPosition(centerMap = false, onlyPosition = true)
+    GalileoPositionByTime(Orbit = false)
 
 
-SVGCarga.hidden = true
+  }, 5 * 1000);
+
+  SVGCarga.hidden = true
+}).catch(function (err) {
+  console.error("[satelites] No se pudo cargar satellite.js:", err && err.message);
+  SVGCarga.hidden = true
+});

@@ -37,9 +37,8 @@
   <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.ol.min.js"></script>
   <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>
 
-  <!-- geotiff.js: decodificación del MDT (GeoTIFF) del WCS del IGN para la
-       estereoscopía sintética de la implementación OpenLayers. -->
-  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js"></script>
+  <!-- geotiff.js (decodificación del MDT del WCS del IGN) lo carga el propio
+       plugin de estereoscopía bajo demanda (ensureGeoTIFF). -->
 
   <!-- estilo propio del visualizador -->
   <link href="./css/mapa.css" rel="stylesheet" />
