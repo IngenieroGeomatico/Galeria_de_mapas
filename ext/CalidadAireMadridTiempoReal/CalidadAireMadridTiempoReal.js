@@ -17,6 +17,55 @@ function api_calidadAire() {
 const valueOri_calidadAire = "-- Seleccione un gas --";
 
 // ===================================================================
+//  Carga bajo demanda de las librerías externas (turf + kriging)
+//  --------------------------------------------------------------------
+//  El plugin de interpolación necesita turf.js (geometría) y kriging.js
+//  (interpolación). En vez de cargarlas por <script> en el index.html, se
+//  inyectan bajo demanda desde aquí la primera vez que se usan (al pulsar
+//  "Calcular"). Cada carga se cachea con una promesa a nivel de window para no
+//  reinyectar. Así el plugin es autosuficiente: basta con incluir su .js.
+// ===================================================================
+const TURF_CDN_URL_CA = "https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js";
+// kriging: NO existe un CDN UMD fiable (el de oeo4b es CommonJS y falla en
+// navegador con "module is not defined"). El repo incluye una copia adaptada
+// (module.exports comentado) que expone la global `kriging`. Se carga por ruta
+// relativa desde este plugin: ext/CalidadAireMadridTiempoReal -> ../../js/kriging.
+const KRIGING_URL_CA = "../../js/kriging/kriging.js";
+
+// Inyecta un <script src=url> una sola vez; resuelve cuando globalName existe en
+// window. Cachea la promesa en window[cacheKey]. Rechaza en error de red.
+function loadScriptOnce_calidadAire(url, globalName, cacheKey, marker) {
+  if (typeof window[globalName] !== "undefined") return Promise.resolve(window[globalName]);
+  if (window[cacheKey]) return window[cacheKey];
+  window[cacheKey] = new Promise(function (resolve, reject) {
+    var existing = document.querySelector('script[data-lib="' + marker + '"]');
+    var script = existing || document.createElement("script");
+    var onOk = function () {
+      if (typeof window[globalName] !== "undefined") resolve(window[globalName]);
+      else reject(new Error(globalName + " cargó pero no expuso window." + globalName));
+    };
+    var onErr = function () { window[cacheKey] = null; reject(new Error("No se pudo cargar " + url)); };
+    script.addEventListener("load", onOk);
+    script.addEventListener("error", onErr);
+    if (!existing) {
+      script.src = url;
+      script.async = true;
+      script.setAttribute("data-lib", marker);
+      document.head.appendChild(script);
+    }
+  });
+  return window[cacheKey];
+}
+
+// Garantiza turf y kriging disponibles (en paralelo). Devuelve una Promise.
+function ensureLibs_calidadAire() {
+  return Promise.all([
+    loadScriptOnce_calidadAire(TURF_CDN_URL_CA, "turf", "__caTurfPromise", "ca-turf"),
+    loadScriptOnce_calidadAire(KRIGING_URL_CA, "kriging", "__caKrigingPromise", "ca-kriging")
+  ]);
+}
+
+// ===================================================================
 //  Plugin: Interpolar / extrapolar datos de calidad del aire
 //  options: { BBox_Gjson, gridValue, alpha, sigma2 }
 // ===================================================================
@@ -146,6 +195,16 @@ class miPlugin_calidadAire {
     const IDEE = api_calidadAire();
     const map = this.map;
     if (typeof SVGCarga !== 'undefined' && SVGCarga) SVGCarga.hidden = false;
+
+    // Carga bajo demanda de turf + kriging (autosuficiencia del plugin). Si falla
+    // la red, avisa y aborta la operación.
+    try {
+      await ensureLibs_calidadAire();
+    } catch (e) {
+      IDEE.toast.error('No se pudieron cargar las librerías de cálculo (turf/kriging).', null, 3000);
+      if (typeof SVGCarga !== 'undefined' && SVGCarga) SVGCarga.hidden = true;
+      return;
+    }
 
     // Espera un ciclo de evento para que el navegador actualice el DOM
     await new Promise(resolve => setTimeout(resolve, 100));

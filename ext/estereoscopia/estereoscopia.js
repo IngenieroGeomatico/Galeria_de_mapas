@@ -483,6 +483,38 @@
   var internals = window.__estereoInternals;
   if (!internals) return;
 
+  // ===================================================================
+  //  Carga bajo demanda de geotiff.js (decodificación del MDT del IGN)
+  //  ------------------------------------------------------------------
+  //  El submódulo Elevation decodifica el MDT (WCS GeoTIFF) con GeoTIFF. En vez
+  //  de cargar geotiff por <script> en el index.html, se inyecta bajo demanda la
+  //  primera vez que se pide el MDT. La carga se cachea en window.__estereoGeoTIFFPromise
+  //  para no reinyectar. Misma versión/CDN que usaba el index.html.
+  // ===================================================================
+  var GEOTIFF_CDN_URL = "https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.min.js";
+  function ensureGeoTIFF() {
+    if (typeof window.GeoTIFF !== "undefined") return Promise.resolve(window.GeoTIFF);
+    if (window.__estereoGeoTIFFPromise) return window.__estereoGeoTIFFPromise;
+    window.__estereoGeoTIFFPromise = new Promise(function (resolve, reject) {
+      var existing = document.querySelector('script[data-lib="estereo-geotiff"]');
+      var script = existing || document.createElement("script");
+      var onOk = function () {
+        if (typeof window.GeoTIFF !== "undefined") resolve(window.GeoTIFF);
+        else reject(new Error("geotiff cargó pero no expuso window.GeoTIFF"));
+      };
+      var onErr = function () { window.__estereoGeoTIFFPromise = null; reject(new Error("No se pudo cargar geotiff.js")); };
+      script.addEventListener("load", onOk);
+      script.addEventListener("error", onErr);
+      if (!existing) {
+        script.src = GEOTIFF_CDN_URL;
+        script.async = true;
+        script.setAttribute("data-lib", "estereo-geotiff");
+        document.head.appendChild(script);
+      }
+    });
+    return window.__estereoGeoTIFFPromise;
+  }
+
   function OlStereoEngine(plugin, AppConfig) {
     this.plugin = plugin;
     this.AppConfig = AppConfig;
@@ -1150,7 +1182,9 @@
       }
       var req = buildUrl(ensureMinExtent(ext4326));
       pending = true;
-      fetch(req.url)
+      // Carga geotiff.js bajo demanda antes de pedir/decodificar el MDT.
+      ensureGeoTIFF()
+        .then(function () { return fetch(req.url); })
         .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.arrayBuffer(); })
         .then(function (buf) { return GeoTIFF.fromArrayBuffer(buf); })
         .then(function (tiff) { return tiff.getImage(); })
