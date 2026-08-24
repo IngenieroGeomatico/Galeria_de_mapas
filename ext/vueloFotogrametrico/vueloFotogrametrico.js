@@ -34,6 +34,51 @@
   }
 
   // ###################################################################
+  //  ensureTurf() — carga bajo demanda de turf.js (geometría de polígonos)
+  //  --------------------------------------------------------------------
+  //  El modo Cálculo con recorte a una feature necesita operaciones de geometría
+  //  de polígonos (buffer, intersección huella∩área, envolvente). En vez de
+  //  añadir turf al index.html, el plugin lo inyecta bajo demanda: la primera vez
+  //  que se necesita, añade el <script> de turf al <head> y cachea la promesa en
+  //  window.__vueloTurfPromise, de modo que NO se reinyecta en cada swap
+  //  OL<->Cesium (el global window.turf sobrevive al swap; la promesa también, al
+  //  vivir en window). Resuelve con el objeto turf; rechaza si falla la red (el
+  //  llamador degrada a recorte por bbox y avisa por el estado del panel).
+  // ###################################################################
+  var TURF_CDN_URL = "https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js";
+  function ensureTurf() {
+    // Ya disponible (cargado antes, o entre swaps): resuelve inmediato.
+    if (typeof window.turf !== "undefined") return Promise.resolve(window.turf);
+    // Carga en curso o completada previamente: reutiliza la misma promesa.
+    if (window.__vueloTurfPromise) return window.__vueloTurfPromise;
+
+    window.__vueloTurfPromise = new Promise(function (resolve, reject) {
+      // Si ya hay un <script> de turf en el DOM (p.ej. inyectado por otra
+      // instancia antes de resolver), engánchate a sus eventos en vez de duplicar.
+      var existing = document.querySelector('script[data-vuelo-turf="1"]');
+      var script = existing || document.createElement("script");
+      var onOk = function () {
+        if (typeof window.turf !== "undefined") resolve(window.turf);
+        else reject(new Error("turf cargó pero no expuso window.turf"));
+      };
+      var onErr = function () {
+        // Permite reintentar en una llamada futura (no deja la promesa envenenada).
+        window.__vueloTurfPromise = null;
+        reject(new Error("No se pudo cargar turf.js desde el CDN"));
+      };
+      script.addEventListener("load", onOk);
+      script.addEventListener("error", onErr);
+      if (!existing) {
+        script.src = TURF_CDN_URL;
+        script.async = true;
+        script.setAttribute("data-vuelo-turf", "1");
+        document.head.appendChild(script);
+      }
+    });
+    return window.__vueloTurfPromise;
+  }
+
+  // ###################################################################
   //  VueloGeo — utilidades geométricas PURAS (sin estado, sin mapa, sin DOM)
   //  --------------------------------------------------------------------
   //  Funciones de geodesia/álgebra reutilizadas por el generador demo, el
@@ -202,7 +247,10 @@
           gsd: 25,          // cm/píxel deseado en el terreno
           solapeLong: 60,   // % solape longitudinal (entre fotogramas de una pasada)
           solapeTrans: 30,  // % solape transversal (entre pasadas)
-          rumbo: 0,         // dirección de las pasadas (grados, 0 = Norte)
+          rumbo: 0,         // dirección de las pasadas (grados, 0 = Norte) - override manual
+          rumboAuto: true,  // true: rumbo óptimo automático; false: usa 'rumbo' manual
+          tolGsd: 10,       // tolerancia de GSD (%) para dividir pasadas a distinta altura
+          bufferPct: 10,    // buffer del área (%) al recortar el vuelo a una feature
           resultados: null  // {altura, sepFoto, sepPasada, nPasadas, nFotos, ...}
         },
         // Modo OGC: lista de vuelos agrupados de la última búsqueda y clave del
@@ -969,6 +1017,268 @@
   };
 
   // ###################################################################
+  //  FlightPlanner — planificación PURA de vuelo fotogramétrico
+  //  --------------------------------------------------------------------
+  //  Servicio sin estado, sin mapa ni DOM. Calcula la geometría de un plan de
+  //  vuelo (rumbo óptimo, malla de pasadas/fotogramas) a partir del área de vuelo
+  //  (anillo lon/lat), la cámara y los parámetros de cálculo. Trabaja en un plano
+  //  local métrico (equirectangular) centrado en el área, suficiente para las
+  //  extensiones de un vuelo. El Shell (calcularVuelo) le pasa los datos y vuelca
+  //  los frames resultantes al pipeline de render.
+  //
+  //  Convención de ejes: se proyecta cada punto sobre el eje "along" (dirección
+  //  del rumbo) y el eje "across" (rumbo+90). El nº de pasadas depende de la
+  //  extensión "across" del área; el nº de fotogramas por pasada, de la "along".
+  // ###################################################################
+  var FlightPlanner = {
+    // Convierte un anillo [[lon,lat],...] a puntos métricos locales {x:este,
+    // y:norte} relativos al centro del área (aprox. equirectangular). Devuelve
+    // { pts, center:[lon,lat], mLon, mLat } para poder revertir a lon/lat luego.
+    ringToLocalMeters: function (ring) {
+      var minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+      for (var i = 0; i < ring.length; i++) {
+        var p = ring[i];
+        if (p[0] < minLon) minLon = p[0];
+        if (p[1] < minLat) minLat = p[1];
+        if (p[0] > maxLon) maxLon = p[0];
+        if (p[1] > maxLat) maxLat = p[1];
+      }
+      var cLon = (minLon + maxLon) / 2, cLat = (minLat + maxLat) / 2;
+      var mLat = VueloGeo.M_PER_DEG_LAT;
+      var mLon = VueloGeo.mPerDegLon(cLat);
+      var pts = ring.map(function (p) {
+        return { x: (p[0] - cLon) * mLon, y: (p[1] - cLat) * mLat };
+      });
+      return { pts: pts, center: [cLon, cLat], mLon: mLon, mLat: mLat };
+    },
+
+    // Proyecta un conjunto de puntos locales sobre los ejes along/across de un
+    // rumbo dado (grados, 0=N, 90=E) y devuelve las extensiones (m) en cada eje.
+    //   along  = dirección del vuelo (unitario: [sin r, cos r])
+    //   across = perpendicular (rumbo+90):        [cos r, -sin r]
+    // Devuelve { alongMin, alongMax, acrossMin, acrossMax, alongExt, acrossExt }.
+    projectExtents: function (pts, rumboDeg) {
+      var r = rumboDeg * Math.PI / 180;
+      var ax = Math.sin(r), ay = Math.cos(r);   // eje along (dir. de vuelo)
+      var cx = Math.cos(r), cy = -Math.sin(r);  // eje across (rumbo+90)
+      var alMin = Infinity, alMax = -Infinity, acMin = Infinity, acMax = -Infinity;
+      for (var i = 0; i < pts.length; i++) {
+        var al = pts[i].x * ax + pts[i].y * ay;
+        var ac = pts[i].x * cx + pts[i].y * cy;
+        if (al < alMin) alMin = al;
+        if (al > alMax) alMax = al;
+        if (ac < acMin) acMin = ac;
+        if (ac > acMax) acMax = ac;
+      }
+      return {
+        alongMin: alMin, alongMax: alMax, acrossMin: acMin, acrossMax: acMax,
+        alongExt: alMax - alMin, acrossExt: acMax - acMin
+      };
+    },
+
+    // Rumbo óptimo (grados 0..179) que MINIMIZA el nº de pasadas para cubrir el
+    // área. El nº de pasadas es proporcional a la extensión "across"; por eso el
+    // óptimo suele alinear el vuelo con el eje LARGO del área (minimiza el ancho a
+    // barrer). A: separación entre pasadas (m). stepDeg: paso del barrido.
+    // Desempata por menor extensión "across" (área a cubrir más estrecha).
+    // Devuelve { rumbo, nPasadas, acrossExt }.
+    optimalHeading: function (ring, A, stepDeg) {
+      var lm = FlightPlanner.ringToLocalMeters(ring);
+      var step = stepDeg || 2;
+      var best = null;
+      for (var deg = 0; deg < 180; deg += step) {
+        var ext = FlightPlanner.projectExtents(lm.pts, deg);
+        var nPas = Math.max(1, Math.ceil(ext.acrossExt / A) + 1);
+        if (!best || nPas < best.nPasadas ||
+            (nPas === best.nPasadas && ext.acrossExt < best.acrossExt)) {
+          best = { rumbo: deg, nPasadas: nPas, acrossExt: ext.acrossExt };
+        }
+      }
+      return best;
+    },
+
+    // Ajusta la ALTURA de cada pasada al terreno para mantener el GSD objetivo.
+    // El GSD depende de la altura SOBRE EL TERRENO: GSD = (H - Zterreno)·pitch/focal.
+    // Una pasada vuela a altura absoluta CONSTANTE; para que su GSD medio sea el
+    // objetivo, su altura = cota_media_de_la_franja + alturaSobreTerreno, donde
+    //   alturaSobreTerreno = GSD_obj · focal / pitch  (metros).
+    // Para cada pasada se muestrea el MDT en sus fotocentros (cota media) y se fija
+    // la Z absoluta de todos sus frames a esa altura. Se calcula además el GSD real
+    // por fotograma (con su cota local) y se marca la pasada como "fuera de
+    // tolerancia" si algún fotograma se desvía > tolPct del GSD objetivo.
+    //
+    //   frames: array de {lon,lat,z,pasadaNum,...} (modifica z in situ).
+    //   opts.sampleCota(lon,lat) -> cota terreno (m) o null.
+    //   opts.gsdObjM: GSD objetivo (m/píxel). opts.focal_mm, opts.pitch_mm.
+    //   opts.tolPct: tolerancia (0..1) sobre el GSD objetivo.
+    // Devuelve { pasadas: [{pasadaNum, cotaMedia, altura, gsdMin, gsdMax, fueraTol}],
+    //   nAlturas, algunaFueraTol, sinCotaCount }.
+    applyPerPassHeights: function (frames, opts) {
+      var alturaSobreTerreno = opts.gsdObjM * opts.focal_mm / opts.pitch_mm; // m
+      // Agrupa índices de frame por pasada.
+      var byPass = {};
+      for (var i = 0; i < frames.length; i++) {
+        var pn = frames[i].pasadaNum;
+        if (!byPass[pn]) byPass[pn] = [];
+        byPass[pn].push(i);
+      }
+      // 1ª fase: cota media (y cotas locales) por pasada, sin fijar aún la altura.
+      var sinCotaCount = 0;
+      var passInfo = {}; // pasadaNum -> { idxs, cotaMedia, cotas }
+      var cotaGlobalMin = Infinity, cotaGlobalMax = -Infinity;
+      Object.keys(byPass).forEach(function (pnKey) {
+        var idxs = byPass[pnKey];
+        var suma = 0, n = 0, cotas = [];
+        for (var j = 0; j < idxs.length; j++) {
+          var fr = frames[idxs[j]];
+          var cota = opts.sampleCota(fr.lon, fr.lat);
+          if (cota === null || isNaN(cota)) { sinCotaCount++; cotas.push(null); continue; }
+          suma += cota; n++; cotas.push(cota);
+        }
+        var cotaMedia = n > 0 ? suma / n : 0;
+        if (cotaMedia < cotaGlobalMin) cotaGlobalMin = cotaMedia;
+        if (cotaMedia > cotaGlobalMax) cotaGlobalMax = cotaMedia;
+        passInfo[pnKey] = { idxs: idxs, cotaMedia: cotaMedia, cotas: cotas };
+      });
+
+      // UNIFICACIÓN: si TODAS las pasadas pueden volar a UNA altura común sin que
+      // ninguna se salga de la tolerancia de GSD, se usa una sola altura (evita
+      // fragmentar el vuelo en terreno casi plano). La altura común se calcula
+      // sobre la cota media global; el desnivel tolerable (m) que mantiene el GSD
+      // dentro de tol es: dH_max = alturaSobreTerreno · tolPct.
+      var dHtol = alturaSobreTerreno * opts.tolPct;
+      var rangoCotas = (cotaGlobalMax - cotaGlobalMin);
+      var alturaUnica = isFinite(rangoCotas) && rangoCotas <= dHtol;
+      var cotaComun = (isFinite(cotaGlobalMin) && isFinite(cotaGlobalMax))
+        ? (cotaGlobalMin + cotaGlobalMax) / 2 : 0;
+
+      // 2ª fase: fija la altura de cada pasada (común o propia) y evalúa tolerancia.
+      var pasadas = [];
+      var algunaFueraTol = false;
+      Object.keys(passInfo).forEach(function (pnKey) {
+        var info = passInfo[pnKey];
+        var altura = alturaUnica
+          ? (cotaComun + alturaSobreTerreno)
+          : (info.cotaMedia + alturaSobreTerreno);
+        var gsdMin = Infinity, gsdMax = -Infinity, fueraTol = false;
+        for (var k = 0; k < info.idxs.length; k++) {
+          var f2 = frames[info.idxs[k]];
+          f2.z = altura;
+          var cotaLocal = (info.cotas[k] !== null && !isNaN(info.cotas[k])) ? info.cotas[k] : info.cotaMedia;
+          var hSobre = altura - cotaLocal;
+          var gsdReal = hSobre * opts.pitch_mm / opts.focal_mm;
+          if (gsdReal < gsdMin) gsdMin = gsdReal;
+          if (gsdReal > gsdMax) gsdMax = gsdReal;
+          if (Math.abs(gsdReal - opts.gsdObjM) / opts.gsdObjM > opts.tolPct) fueraTol = true;
+        }
+        if (fueraTol) algunaFueraTol = true;
+        pasadas.push({
+          pasadaNum: parseInt(pnKey, 10),
+          cotaMedia: info.cotaMedia, altura: altura,
+          gsdMin: gsdMin, gsdMax: gsdMax, fueraTol: fueraTol
+        });
+      });
+      // nAlturas: nº de alturas distintas (redondeadas a 1 m) usadas.
+      var alturasSet = {};
+      pasadas.forEach(function (p) { alturasSet[Math.round(p.altura)] = true; });
+      return {
+        pasadas: pasadas,
+        nAlturas: Object.keys(alturasSet).length,
+        algunaFueraTol: algunaFueraTol,
+        sinCotaCount: sinCotaCount
+      };
+    },
+
+    // ---- Recorte a la feature (requiere turf) --------------------------------
+
+    // Bufferea un anillo [[lon,lat],...] un porcentaje de su "dimensión
+    // característica" (sqrt del área en m²). Devuelve un turf Polygon/MultiPolygon
+    // (Feature) o null si turf no puede. pct en % (p.ej. 10 = 10%).
+    bufferArea: function (turf, ring, pct) {
+      try {
+        var closed = ring.slice();
+        // turf exige anillo cerrado (primer punto == último).
+        var a = closed[0], b = closed[closed.length - 1];
+        if (a[0] !== b[0] || a[1] !== b[1]) closed.push([a[0], a[1]]);
+        var poly = turf.polygon([closed]);
+        if (!pct || pct <= 0) return poly;
+        var areaM2 = turf.area(poly);                 // m²
+        var dimChar = Math.sqrt(Math.max(areaM2, 1)); // m (lado equivalente)
+        var distKm = (dimChar * (pct / 100)) / 1000;  // turf.buffer usa km por defecto
+        var buffered = turf.buffer(poly, distKm, { units: "kilometers" });
+        return buffered || poly;
+      } catch (e) { return null; }
+    },
+
+    // Construye un turf Polygon con la huella de un fotograma a partir de su anillo
+    // [[lon,lat(,z)],...] (el que produce FootprintBuilder.build). Ignora la Z.
+    footprintPoly: function (turf, ring) {
+      try {
+        var coords = ring.map(function (p) { return [p[0], p[1]]; });
+        var a = coords[0], b = coords[coords.length - 1];
+        if (a[0] !== b[0] || a[1] !== b[1]) coords.push([a[0], a[1]]);
+        return turf.polygon([coords]);
+      } catch (e) { return null; }
+    },
+
+    // Recorta la lista de frames al área (turf polygon ya bufferado): conserva solo
+    // los fotogramas cuya HUELLA intersecta el área. Para cada frame se calcula su
+    // huella con buildFootprint(frame) -> anillo lon/lat. Devuelve
+    //   { kept, removed, coverageOk, minCoverage }
+    // donde coverageOk indica si todo el área queda cubierta por >=2 huellas
+    // (verificado por muestreo de puntos internos del área).
+    clipToFeature: function (turf, frames, areaPoly, buildFootprint) {
+      var kept = [];
+      var footPolys = [];
+      for (var i = 0; i < frames.length; i++) {
+        var ring = buildFootprint(frames[i]);
+        if (!ring) continue;
+        var fpPoly = FlightPlanner.footprintPoly(turf, ring);
+        if (!fpPoly) continue;
+        var hits = false;
+        try { hits = turf.booleanIntersects(fpPoly, areaPoly); } catch (e) { hits = true; }
+        if (hits) { kept.push(frames[i]); footPolys.push(fpPoly); }
+      }
+      // Verifica doble cobertura muestreando puntos dentro del área (rejilla sobre
+      // su bbox, filtrando los que caen dentro del área). Para cada punto cuenta
+      // cuántas huellas conservadas lo contienen; coverageOk si todos tienen >=2.
+      var cov = FlightPlanner._checkDoubleCoverage(turf, areaPoly, footPolys);
+      return { kept: kept, removed: frames.length - kept.length,
+        coverageOk: cov.ok, minCoverage: cov.min, nSampled: cov.n };
+    },
+
+    // Comprueba que todo el área tenga >=2 huellas: muestrea una rejilla de puntos
+    // dentro del área y cuenta huellas que contienen cada punto. Devuelve
+    //   { ok, min, n } (min = cobertura mínima encontrada; n = puntos muestreados).
+    _checkDoubleCoverage: function (turf, areaPoly, footPolys) {
+      try {
+        var bbox = turf.bbox(areaPoly); // [minLon,minLat,maxLon,maxLat]
+        var N = 12; // rejilla NxN
+        var dx = (bbox[2] - bbox[0]) / (N + 1);
+        var dy = (bbox[3] - bbox[1]) / (N + 1);
+        var min = Infinity, n = 0;
+        for (var ix = 1; ix <= N; ix++) {
+          for (var iy = 1; iy <= N; iy++) {
+            var lon = bbox[0] + dx * ix;
+            var lat = bbox[1] + dy * iy;
+            var pt = turf.point([lon, lat]);
+            if (!turf.booleanPointInPolygon(pt, areaPoly)) continue;
+            n++;
+            var cnt = 0;
+            for (var k = 0; k < footPolys.length; k++) {
+              if (turf.booleanPointInPolygon(pt, footPolys[k])) cnt++;
+              if (cnt >= 2) break;
+            }
+            if (cnt < min) min = cnt;
+          }
+        }
+        if (n === 0) return { ok: true, min: 0, n: 0 };
+        return { ok: min >= 2, min: (min === Infinity ? 0 : min), n: n };
+      } catch (e) { return { ok: true, min: 0, n: 0 }; }
+    }
+  };
+
+  // ###################################################################
   //  PanelTemplate — plantilla HTML PURA del panel de importación
   //  --------------------------------------------------------------------
   //  Construye el string HTML del panel (modos hecho/demo/cálculo, sub-pestañas de
@@ -1114,7 +1424,16 @@
         '        <div class="vuelo-row"><label for="vf-calc-gsd">GSD (cm/píxel)</label><input type="number" id="vf-calc-gsd" step="1" min="1"></div>' +
         '        <div class="vuelo-row"><label for="vf-calc-solapel">Solape long. (%)</label><input type="number" id="vf-calc-solapel" step="5" min="0" max="95"></div>' +
         '        <div class="vuelo-row"><label for="vf-calc-solapet">Solape trans. (%)</label><input type="number" id="vf-calc-solapet" step="5" min="0" max="95"></div>' +
-        '        <div class="vuelo-row"><label for="vf-calc-rumbo">Rumbo pasadas (°)</label><input type="number" id="vf-calc-rumbo" step="1" min="0" max="360"></div>' +
+        // Tolerancia de GSD (%): si el relieve hace variar el GSD más que esto, se
+        // vuela por pasadas a distinta altura (según la cota media de cada franja).
+        '        <div class="vuelo-row"><label for="vf-calc-tolgsd">Tolerancia GSD (%)</label><input type="number" id="vf-calc-tolgsd" step="1" min="1" max="100"></div>' +
+        // Rumbo: automático (minimiza pasadas) o manual. El input se habilita solo
+        // cuando se desmarca "automático".
+        '        <label class="vuelo-check"><input type="checkbox" id="vf-calc-rumboauto" checked> Rumbo automático (óptimo)</label>' +
+        '        <div class="vuelo-row"><label for="vf-calc-rumbo">Rumbo pasadas (°)</label><input type="number" id="vf-calc-rumbo" step="1" min="0" max="360" disabled></div>' +
+        // Buffer del área (%): solo relevante al recortar a una feature. Su fila se
+        // muestra/oculta según el origen del área (applyCalcAreaSrc).
+        '        <div class="vuelo-row" id="vf-calc-buffer-row" hidden><label for="vf-calc-buffer">Buffer área (%)</label><input type="number" id="vf-calc-buffer" step="5" min="0" max="100"></div>' +
         '        <button type="button" id="vf-calc-run" class="vuelo-btn primary">Calcular vuelo</button>' +
         '        <button type="button" id="vf-calc-clear" class="vuelo-btn">Limpiar</button>' +
         '        <div class="vuelo-calc-results" id="vf-calc-results" hidden></div>' +
@@ -1459,7 +1778,16 @@
     bind("vf-calc-gsd", "change", function () { self.data.calc.gsd = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
     bind("vf-calc-solapel", "change", function () { self.data.calc.solapeLong = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
     bind("vf-calc-solapet", "change", function () { self.data.calc.solapeTrans = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
+    bind("vf-calc-tolgsd", "change", function () { self.data.calc.tolGsd = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
+    // Rumbo automático (checkbox): al marcar, deshabilita el input de rumbo manual.
+    bind("vf-calc-rumboauto", "change", function () {
+      self.data.calc.rumboAuto = !!this.checked;
+      var rin = self.panel.querySelector("#vf-calc-rumbo");
+      if (rin) rin.disabled = self.data.calc.rumboAuto;
+      window.__vueloSharedData = self.data;
+    });
     bind("vf-calc-rumbo", "change", function () { self.data.calc.rumbo = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
+    bind("vf-calc-buffer", "change", function () { self.data.calc.bufferPct = parseFloat(this.value) || 0; window.__vueloSharedData = self.data; });
     bind("vf-calc-run", "click", function () { self.calcularVuelo(); });
     bind("vf-calc-clear", "click", function () { self.clearCalc(); });
 
@@ -1524,7 +1852,15 @@
       set("#vf-calc-gsd", c.gsd);
       set("#vf-calc-solapel", c.solapeLong);
       set("#vf-calc-solapet", c.solapeTrans);
+      set("#vf-calc-tolgsd", c.tolGsd != null ? c.tolGsd : 10);
       set("#vf-calc-rumbo", c.rumbo);
+      set("#vf-calc-buffer", c.bufferPct != null ? c.bufferPct : 10);
+      // Estado del checkbox de rumbo automático + habilitado del input manual.
+      var rumboAuto = (c.rumboAuto !== false);
+      var chkAuto = p.querySelector("#vf-calc-rumboauto");
+      if (chkAuto) chkAuto.checked = rumboAuto;
+      var rin = p.querySelector("#vf-calc-rumbo");
+      if (rin) rin.disabled = rumboAuto;
       this.fillCapaSelect(c.capa || "");
       this.applyCalcAreaSrc();
       if (c.resultados) this.renderCalcResults(c.resultados);
@@ -2536,10 +2872,13 @@
     var p = this.panel;
     var row = p && p.querySelector("#vf-calc-capa-row");
     var frow = p && p.querySelector("#vf-calc-feature-row");
+    // La fila del buffer solo es relevante al recortar a una feature.
+    var brow = p && p.querySelector("#vf-calc-buffer-row");
     if (!row) return;
     if (this.data.calc.areaSrc === "feature") {
       row.removeAttribute("hidden");
       if (frow) frow.removeAttribute("hidden");
+      if (brow) brow.removeAttribute("hidden");
       // Refresca la lista de capas al mostrarla y puebla los features de la capa
       // seleccionada (puede haberse cargado la capa después de abrir el modo).
       this.fillCapaSelect(this.data.calc.capa || "");
@@ -2547,6 +2886,7 @@
     } else {
       row.setAttribute("hidden", "");
       if (frow) frow.setAttribute("hidden", "");
+      if (brow) brow.setAttribute("hidden", "");
     }
   };
 
@@ -2707,6 +3047,66 @@
     return null;
   };
 
+  // Devuelve el ANILLO del área de vuelo como coords [[lon,lat],...] en EPSG:4326.
+  //  - areaSrc "feature": el anillo exterior del/los polígono(s). Si se elige un
+  //    feature concreto, su anillo exterior; si "toda la capa", se concatenan los
+  //    vértices de todos los polígonos (envolvente aproximada por sus vértices).
+  //  - areaSrc "bbox": las 4 esquinas del encuadre visible.
+  // Se usa para calcular el rumbo óptimo (proyección sobre ejes) y, en fases
+  // posteriores, el recorte real. Devuelve null si no puede.
+  getAreaRing4326() {
+    var d = this.data.calc;
+    var self = this;
+    // Extrae los anillos exteriores (coords en la proyección del mapa) de una
+    // geometría OL (Polygon o MultiPolygon) y los reproyecta a lon/lat.
+    var geomToRings = function (geom) {
+      var rings = [];
+      try {
+        var t = geom.getType && geom.getType();
+        if (t === "Polygon") {
+          rings.push(geom.getCoordinates()[0]);
+        } else if (t === "MultiPolygon") {
+          geom.getCoordinates().forEach(function (poly) { rings.push(poly[0]); });
+        }
+      } catch (e) { /* nada */ }
+      return rings;
+    };
+    if (d.areaSrc === "feature") {
+      try {
+        var proj = this.map.getMapImpl().getView().getProjection().getCode();
+        var rings = [];
+        if (d.feature !== "" && d.feature !== null && d.feature !== undefined) {
+          var feats = this.getCapaFeatures();
+          var f = feats[parseInt(d.feature, 10)];
+          if (!f || !f.getGeometry) return null;
+          rings = geomToRings(f.getGeometry());
+        } else {
+          var all = this.getCapaFeatures();
+          all.forEach(function (ft) {
+            if (ft.getGeometry) rings = rings.concat(geomToRings(ft.getGeometry()));
+          });
+        }
+        if (!rings.length) return null;
+        // Concatena los vértices de todos los anillos, reproyectados a lon/lat.
+        var out = [];
+        rings.forEach(function (ring) {
+          ring.forEach(function (xy) {
+            if (proj === "EPSG:4326") out.push([xy[0], xy[1]]);
+            else out.push(window.ol.proj.transform([xy[0], xy[1]], proj, "EPSG:4326"));
+          });
+        });
+        return out.length ? out : null;
+      } catch (e) { return null; }
+    }
+    // bbox del encuadre visible -> 4 esquinas.
+    var ext = this.getAreaExtent4326();
+    if (!ext) return null;
+    return [
+      [ext[0], ext[1]], [ext[2], ext[1]],
+      [ext[2], ext[3]], [ext[0], ext[3]], [ext[0], ext[1]]
+    ];
+  };
+
   // Convierte un extent [minx,miny,maxx,maxy] de la proyección del mapa a
   // [minLon,minLat,maxLon,maxLat] en EPSG:4326.
   _extentToLonLat(ext, code) {
@@ -2754,33 +3154,48 @@
     var A = Wx * (1 - st);                         // separación entre pasadas (m)
     if (B <= 0 || A <= 0) { this.setStatus("Solapes demasiado altos: reduce los porcentajes.", "error"); return; }
 
-    // --- Dimensiones del área (m) y nº de pasadas/fotogramas ---
-    var cLat = (ext[1] + ext[3]) / 2;
-    var mPerDegLat = VueloGeo.M_PER_DEG_LAT;
-    var mPerDegLon = VueloGeo.mPerDegLon(cLat);
-    var anchoAreaM = (ext[2] - ext[0]) * mPerDegLon; // O-E
-    var altoAreaM = (ext[3] - ext[1]) * mPerDegLat;  // S-N
+    // --- Orientación del vuelo (rumbo) ---
+    // Anillo real del área (polígono de la feature o esquinas del bbox). Se usa
+    // para elegir el rumbo óptimo y para teselar según las extensiones REALES
+    // proyectadas (no la diagonal del bbox, que sobreestima el nº de fotogramas).
+    var ring = this.getAreaRing4326();
+    if (!ring || ring.length < 3) {
+      // Respaldo: 4 esquinas del bbox si no hay anillo.
+      ring = [[ext[0], ext[1]], [ext[2], ext[1]], [ext[2], ext[3]], [ext[0], ext[3]]];
+    }
 
-    // La dirección de las pasadas es el rumbo; para teselar proyectamos el área
-    // sobre los ejes "a lo largo" (rumbo) y "transversal" (rumbo+90). Como el área
-    // es un bbox, usamos su diagonal como cota para cubrirla con cualquier rumbo.
-    var diag = Math.sqrt(anchoAreaM * anchoAreaM + altoAreaM * altoAreaM);
-    var largoPasada = diag;                          // longitud de cada pasada (m)
-    var anchoTotal = diag;                           // ancho a cubrir con pasadas (m)
+    // Rumbo: automático (minimiza nº de pasadas) u override manual del panel.
+    var rumbo;
+    var rumboOptimo = null;
+    if (c.rumboAuto === false) {
+      rumbo = c.rumbo || 0;
+    } else {
+      var opt = FlightPlanner.optimalHeading(ring, A, 2);
+      rumbo = opt ? opt.rumbo : (c.rumbo || 0);
+      rumboOptimo = rumbo;
+    }
+
+    // --- Extensiones reales del área proyectadas sobre los ejes del rumbo ---
+    var lm = FlightPlanner.ringToLocalMeters(ring);
+    var extP = FlightPlanner.projectExtents(lm.pts, rumbo);
+    var largoPasada = extP.alongExt;                 // longitud de cada pasada (m)
+    var anchoTotal = extP.acrossExt;                 // ancho a cubrir con pasadas (m)
 
     var nFotosPorPasada = Math.max(2, Math.ceil(largoPasada / B) + 1);
     var nPasadas = Math.max(1, Math.ceil(anchoTotal / A) + 1);
 
-    // Punto de arranque: esquina del área desplazada media diagonal hacia el
-    // suroeste del centro, de modo que la malla (centrada) cubra todo el bbox.
-    var centro = [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
-    var rumbo = c.rumbo || 0;
-    // Vector "a lo largo" (rumbo) y "transversal" (rumbo+90), en metros.
-    var self = this;
+    // Punto de arranque: centro del área desplazado media malla en along/across,
+    // de modo que la malla (centrada) cubra toda la extensión proyectada.
+    var centro = lm.center;
     var media = { along: (nFotosPorPasada - 1) * B / 2, across: (nPasadas - 1) * A / 2 };
     // Esquina inicial = centro - media_along*dir - media_across*perp.
     var startCorner = this._offsetMeters(centro, -media.along, rumbo);
     startCorner = this._offsetMeters(startCorner, -media.across, rumbo + 90);
+
+    // Métricas del bbox (para el bloque de resultados / compatibilidad).
+    var cLat = (ext[1] + ext[3]) / 2;
+    var anchoAreaM = (ext[2] - ext[0]) * VueloGeo.mPerDegLon(cLat);
+    var altoAreaM = (ext[3] - ext[1]) * VueloGeo.M_PER_DEG_LAT;
 
     // --- Genera los frames serpenteantes en el estado demo ---
     var frames = [];
@@ -2806,8 +3221,98 @@
       }
     }
 
-    // Vuelca los frames al estado demo y reutiliza su render (fotocentros,
-    // huellas, líneas serpenteantes y animación del avión).
+    // Metadatos comunes del plan (para los resultados numéricos).
+    var meta = {
+      altura: altura, gsd: c.gsd, Wx: Wx, Wy: Wy, B: B, A: A,
+      nPasadas: nPasadas, nFotosPorPasada: nFotosPorPasada,
+      nFotos: frames.length, anchoAreaM: anchoAreaM, altoAreaM: altoAreaM,
+      rumbo: rumbo, rumboOptimo: rumboOptimo
+    };
+
+    // --- GSD variable con el terreno (altura por pasada según cota media) ---
+    // El GSD real depende de la altura sobre el terreno. Para respetar el GSD
+    // objetivo, cada pasada vuela a una altura absoluta = cota_media_franja +
+    // GSD·focal/pitch. Se descarga el MDT del área y se ajustan las alturas por
+    // pasada. Si el MDT no está disponible / fuera de cobertura, se mantiene la
+    // altura fija (respaldo) y se avisa.
+    var self = this;
+    var gsdObjM = gsd_m;
+    var pitch_mm = pitch_w;
+    var tolPct = (typeof c.tolGsd === "number" && c.tolGsd > 0) ? (c.tolGsd / 100) : 0.10;
+
+    // ¿Recorte a feature? Solo si el área es un polígono de capa.
+    var recortar = (c.areaSrc === "feature");
+    var bufferPct = (typeof c.bufferPct === "number" && c.bufferPct >= 0) ? c.bufferPct : 10;
+
+    var bbox = this.dataBBox4326FromRing(ring);
+    this.setStatus("Descargando el modelo digital del terreno (MDT) para ajustar alturas…");
+    MdtService.fetch(bbox).then(function (mdt) {
+      // Guarda el MDT para reutilizarlo en el recorte (huellas sobre el terreno).
+      self._calcMDT = mdt || null;
+      if (mdt) {
+        var res = FlightPlanner.applyPerPassHeights(frames, {
+          sampleCota: function (lon, lat) { return FootprintBuilder.sampleCota(mdt, lon, lat); },
+          gsdObjM: gsdObjM, focal_mm: fp.focal_mm, pitch_mm: pitch_mm, tolPct: tolPct
+        });
+        meta.nAlturas = res.nAlturas;
+        meta.algunaFueraTol = res.algunaFueraTol;
+        meta.tolPct = tolPct;
+        meta.alturaVariable = res.nAlturas > 1;
+      } else {
+        meta.nAlturas = 1;
+        meta.algunaFueraTol = false;
+        meta.alturaVariable = false;
+        meta.sinMDT = true;
+      }
+      if (!recortar) {
+        self._finalizarCalculo(frames, meta, nPasadas, nFotosPorPasada);
+        return;
+      }
+      // Recorte a la feature (requiere turf, carga bajo demanda).
+      self.setStatus("Recortando el vuelo al área (cargando turf.js)…");
+      ensureTurf().then(function (turf) {
+        var areaPoly = FlightPlanner.bufferArea(turf, ring, bufferPct);
+        if (!areaPoly) { // sin geometría válida: no recorta
+          meta.recorteAplicado = false;
+          self._finalizarCalculo(frames, meta, nPasadas, nFotosPorPasada);
+          return;
+        }
+        var mdtRef = self._calcMDT;
+        var buildFootprint = function (frame) {
+          var r = FootprintBuilder.build(fp, frame.lon, frame.lat, frame.z,
+            frame.omega, frame.phi, frame.kappa, mdtRef);
+          return r ? r.ring : null;
+        };
+        var clip = FlightPlanner.clipToFeature(turf, frames, areaPoly, buildFootprint);
+        meta.recorteAplicado = true;
+        meta.bufferPct = bufferPct;
+        meta.nFotosRecortados = clip.removed;
+        meta.coberturaOk = clip.coverageOk;
+        meta.coberturaMin = clip.minCoverage;
+        meta.nFotos = clip.kept.length;
+        // Recalcula pasadas presentes tras el recorte (algunas pueden quedar vacías).
+        var passSet = {};
+        clip.kept.forEach(function (f) { passSet[f.pasadaNum] = true; });
+        var nPasFinal = Object.keys(passSet).length;
+        self._finalizarCalculo(clip.kept, meta, nPasFinal, nFotosPorPasada);
+      }).catch(function () {
+        // turf no disponible: degrada sin recorte, avisando.
+        meta.recorteAplicado = false;
+        meta.turfError = true;
+        self._finalizarCalculo(frames, meta, nPasadas, nFotosPorPasada);
+      });
+    }).catch(function () {
+      // Error de red del MDT: respaldo a altura fija, sin recorte.
+      meta.nAlturas = 1; meta.alturaVariable = false; meta.sinMDT = true;
+      self._finalizarCalculo(frames, meta, nPasadas, nFotosPorPasada);
+    });
+  };
+
+  // Finaliza el cálculo: vuelca los frames al estado demo, guarda resultados y
+  // re-renderiza. Separado de calcularVuelo para poder invocarse tras la descarga
+  // asíncrona del MDT (ajuste de alturas por pasada).
+  _finalizarCalculo(frames, meta, nPasadas, nFotosPorPasada) {
+    var c = this.data.calc;
     var dm = this.data.demo;
     dm.frames = frames;
     dm.pasada = nPasadas;
@@ -2815,19 +3320,41 @@
     dm.lastPassStart = null;
     this.rebuildDemoRows();
 
-    // Resultados numéricos.
-    c.resultados = {
-      altura: altura, gsd: c.gsd, Wx: Wx, Wy: Wy, B: B, A: A,
-      nPasadas: nPasadas, nFotosPorPasada: nFotosPorPasada,
-      nFotos: frames.length, anchoAreaM: anchoAreaM, altoAreaM: altoAreaM
-    };
+    c.resultados = meta;
     window.__vueloSharedData = this.data;
 
-    this.renderCalcResults(c.resultados);
+    this.renderCalcResults(meta);
     this.updateAnimUI();
     this.render();
+
+    var extraAlt = meta.alturaVariable
+      ? (" · " + meta.nAlturas + " alturas por relieve")
+      : (meta.sinMDT ? " · altura fija (sin MDT)" : " · altura uniforme");
+    var extraRec = meta.recorteAplicado
+      ? (" · recortado al área (buffer " + meta.bufferPct + "%, " + meta.nFotosRecortados + " descartados)")
+      : (meta.turfError ? " · sin recorte (turf no disponible)" : "");
+    var avisoTol = meta.algunaFueraTol
+      ? " Aviso: alguna pasada supera la tolerancia de GSD por relieve interno." : "";
+    var avisoCob = (meta.recorteAplicado && meta.coberturaOk === false)
+      ? " Aviso: hay zonas del área con menos de 2 huellas (sube el solape o el buffer)." : "";
     this.setStatus("Plan calculado: " + frames.length + " fotogramas en " +
-      nPasadas + " pasadas.", "ok");
+      nPasadas + " pasadas" + extraAlt + extraRec + "." + avisoTol + avisoCob,
+      (avisoTol || avisoCob) ? "" : "ok");
+  };
+
+  // bbox [minLon,minLat,maxLon,maxLat] (EPSG:4326) de un anillo [[lon,lat],...],
+  // con el margen del MDT para cubrir las esquinas de las huellas.
+  dataBBox4326FromRing(ring) {
+    var minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+    for (var i = 0; i < ring.length; i++) {
+      var p = ring[i];
+      if (p[0] < minLon) minLon = p[0];
+      if (p[1] < minLat) minLat = p[1];
+      if (p[0] > maxLon) maxLon = p[0];
+      if (p[1] > maxLat) maxLat = p[1];
+    }
+    return [minLon - MDT_MARGIN_DEG, minLat - MDT_MARGIN_DEG,
+            maxLon + MDT_MARGIN_DEG, maxLat + MDT_MARGIN_DEG];
   };
 
   // Desplaza [lon,lat] `dist` metros con rumbo `bearingDeg` (0=N, 90=E). Igual
@@ -2843,14 +3370,35 @@
     if (!el || !r) return;
     var f1 = function (n) { return (Math.round(n * 10) / 10).toLocaleString("es-ES"); };
     var f0 = function (n) { return Math.round(n).toLocaleString("es-ES"); };
+    // Etiqueta de rumbo: indica si es óptimo (auto) o manual.
+    var rumboTxt = (r.rumbo != null) ? f0(r.rumbo) + "°" : "—";
+    if (r.rumboOptimo != null) rumboTxt += " (óptimo)";
+    // Etiqueta de altura: fija o variable por relieve.
+    var alturaTxt;
+    if (r.alturaVariable) {
+      alturaTxt = f0(r.altura) + " m (var.: " + r.nAlturas + " alturas)";
+    } else {
+      alturaTxt = f0(r.altura) + " m" + (r.sinMDT ? " (sin MDT)" : "");
+    }
+    // Fila de cobertura (solo con recorte a feature).
+    var coberturaRow = "";
+    if (r.recorteAplicado) {
+      var cobTxt = (r.coberturaOk ? "≥2 huellas ✓" : "< 2 en zonas ✗") +
+        (r.coberturaMin != null ? " (mín. " + f0(r.coberturaMin) + ")" : "");
+      coberturaRow =
+        '<div class="vuelo-calc-row"><span>Recorte al área</span><strong>buffer ' + f0(r.bufferPct) + '%</strong></div>' +
+        '<div class="vuelo-calc-row"><span>Cobertura</span><strong>' + cobTxt + '</strong></div>';
+    }
     el.innerHTML =
-      '<div class="vuelo-calc-row"><span>Altura de vuelo</span><strong>' + f0(r.altura) + ' m</strong></div>' +
+      '<div class="vuelo-calc-row"><span>Rumbo del vuelo</span><strong>' + rumboTxt + '</strong></div>' +
+      '<div class="vuelo-calc-row"><span>Altura de vuelo</span><strong>' + alturaTxt + '</strong></div>' +
       '<div class="vuelo-calc-row"><span>Huella (ancho × alto)</span><strong>' + f0(r.Wx) + ' × ' + f0(r.Wy) + ' m</strong></div>' +
       '<div class="vuelo-calc-row"><span>Sep. entre fotogramas</span><strong>' + f1(r.B) + ' m</strong></div>' +
       '<div class="vuelo-calc-row"><span>Sep. entre pasadas</span><strong>' + f1(r.A) + ' m</strong></div>' +
       '<div class="vuelo-calc-row"><span>Nº de pasadas</span><strong>' + f0(r.nPasadas) + '</strong></div>' +
       '<div class="vuelo-calc-row"><span>Fotogramas/pasada</span><strong>' + f0(r.nFotosPorPasada) + '</strong></div>' +
-      '<div class="vuelo-calc-row"><span>Fotogramas totales</span><strong>' + f0(r.nFotos) + '</strong></div>';
+      '<div class="vuelo-calc-row"><span>Fotogramas totales</span><strong>' + f0(r.nFotos) + '</strong></div>' +
+      coberturaRow;
     el.removeAttribute("hidden");
   };
 
