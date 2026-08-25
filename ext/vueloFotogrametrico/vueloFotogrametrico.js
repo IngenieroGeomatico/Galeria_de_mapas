@@ -259,7 +259,12 @@
         vueloSel: null,
         // Animación del avión sobre la línea de vuelo. Persiste entre swaps:
         //   playing: reproduciendo; t: progreso 0..1 a lo largo de la línea.
-        anim: { playing: false, t: 0 },
+        //   reveal: si true, las geometrías (puntos, huellas y traza de línea) se
+        //     dibujan PROGRESIVAMENTE conforme el avión avanza. El botón "Mostrar
+        //     todo" lo pone a false (revela el vuelo completo y detiene el avión).
+        //   speedKmh: velocidad del avión (km/h); fija la duración según la longitud
+        //     real del vuelo (duración = distancia / velocidad).
+        anim: { playing: false, t: 0, reveal: true, speedKmh: AVION_SPEED_KMH_DEFAULT },
         // zoomDone: ya se ha encuadrado la vista a los datos una vez. Persiste
         // entre swaps OL<->Cesium (vive en window.__vueloSharedData) para que al
         // cambiar de implementación se respete la vista (shareView) en vez de
@@ -566,9 +571,21 @@
   // de los ejemplos de Cesium. Su morro apunta a +X (Este) en el marco local, por
   // lo que al orientar por rumbo se aplica un desfase de -90° (ver AVION_GLB_HEADING_OFFSET).
   var AVION_GLB = "https://cdn.jsdelivr.net/gh/CesiumGS/cesium@main/Apps/SampleData/models/CesiumAir/Cesium_Air.glb"; // modelo 3D
-  // Duración fija (ms) para recorrer la línea completa, independiente de su
-  // longitud (UX predecible: el vuelo se ve entero en ~este tiempo).
-  var AVION_DURACION_MS = 20000;
+  // Velocidad del avión en la animación, en km/h. La duración de la reproducción
+  // se calcula a partir de la LONGITUD REAL de la línea de vuelo y esta velocidad
+  // (duración = distancia / velocidad), de modo que la velocidad espacial percibida
+  // es constante e independiente del número de fotogramas.
+  // El rango es amplio a propósito: la velocidad REAL de un avión de fotogrametría
+  // (~250-300 km/h) hace que vuelos largos tarden muchos minutos en reproducirse y
+  // que vuelos demo pequeños se vean lentos. Permitir velocidades muy superiores a
+  // la real deja "acelerar" la reproducción manteniendo la unidad intuitiva (km/h):
+  // p.ej. un demo de 6 km a 5000 km/h dura ~4 s; un vuelo real de 200 km, ~2,4 min.
+  var AVION_SPEED_KMH_DEFAULT = 500;
+  var AVION_SPEED_KMH_MIN = 10;
+  var AVION_SPEED_KMH_MAX = 5000;
+  // Duración mínima (ms) de la reproducción, como salvaguarda para líneas muy cortas
+  // (evita que la animación termine en 1-2 frames o se divida por ~0).
+  var AVION_DURACION_MIN_MS = 1500;
   var AVION_SVG_SCALE = 0.5;      // escala del icono 2D
   var AVION_GLB_SCALE = 1.0;      // escala del modelo 3D
   var AVION_GLB_MINPX = 64;       // tamaño mínimo en píxeles del modelo 3D
@@ -578,6 +595,10 @@
   // Id fijo del Cesium.Entity del avión (gestionado directamente en el viewer,
   // no por la capa GeoJSON). Permite recuperarlo/eliminarlo de forma fiable.
   var AVION_ENTITY_ID = "vueloFotogrametrico-avion-3d";
+  // Id fijo del Cesium.Entity de la TRAZA de la línea de vuelo (polyline que crece
+  // bajo el avión). Se gestiona con una CallbackProperty en el viewer (no como capa
+  // GeoJSON, que en Cesium es asíncrona y no permite crecer suave cada frame).
+  var TRAZA_ENTITY_ID = "vueloFotogrametrico-traza-3d";
 
   // ###################################################################
   //  FlightPath — interpolación PURA de la trayectoria del avión
@@ -915,12 +936,18 @@
         var coord = hasZ ? [lon, lat, z] : [lon, lat];
         if (hasZ) anyZ = true;
 
+        // _ord: índice de orden global del fotograma dentro de la secuencia de
+        // captura (= posición en la "serpiente" de la línea de vuelo). Se usa para
+        // la revelación progresiva (revelar features con _ord <= índice alcanzado),
+        // de forma robusta aunque falten huellas (footprint[i] puede no existir).
+        var ord = puntos.length;
         var props = {
           id: idVal,
           pasada: pasadaVal,
           z: isNaN(z) ? null : z,
           fecha: m.fecha ? row[m.fecha] : null,
-          sensor: m.sensor ? row[m.sensor] : null
+          sensor: m.sensor ? row[m.sensor] : null,
+          _ord: ord
         };
 
         // Datos específicos de la fuente OGC (fotogramas del IGN): nombre del
@@ -975,19 +1002,26 @@
       //    vuelo para el avión es la más larga.
       var lineas = [];
       var flightCoords = null;
+      // Línea de vuelo (flightCoords): SIEMPRE la "serpiente" global que une TODOS
+      // los centros de fotograma en orden de captura (fila i = fotograma i). Así el
+      // avión recorre todos los puntos y existe un mapeo 1:1 entre el progreso de la
+      // animación (t) y el índice de fotograma, necesario para la revelación
+      // progresiva de geometrías (punto[i]/footprint[i] <-> vértice i de la línea).
+      var serpiente = puntos.map(function (ft) { return ft.geometry.coordinates; });
+      if (serpiente.length >= 2) flightCoords = serpiente;
+
       if (d.source === "demo") {
-        // Los puntos ya están en orden de generación (fila i = fotograma i). La
-        // línea continua une TODOS los centros en ese orden.
-        var serpiente = puntos.map(function (ft) { return ft.geometry.coordinates; });
+        // DEMO: una sola polilínea continua = la propia serpiente global.
         if (serpiente.length >= 2) {
           lineas.push({
             type: "Feature",
             geometry: { type: "LineString", coordinates: serpiente },
             properties: { pasada: "vuelo" }
           });
-          flightCoords = serpiente;
         }
       } else {
+        // OGC/CSV: una línea POR pasada (agrupada) para el render, como hasta ahora.
+        // La línea de vuelo del avión es la serpiente global calculada arriba.
         Object.keys(pasadas).forEach(function (pid) {
           var coords = pasadas[pid];
           if (coords.length >= 2) {
@@ -996,7 +1030,6 @@
               geometry: { type: "LineString", coordinates: coords },
               properties: { pasada: pid }
             });
-            if (!flightCoords || coords.length > flightCoords.length) flightCoords = coords;
           }
         });
       }
@@ -1499,7 +1532,16 @@
         '    <div class="vuelo-accordion-body">' +
         '      <div class="vuelo-anim-controls">' +
         '        <button type="button" id="vf-anim-play" class="vuelo-btn primary" title="Reproducir / Pausar">▶ Reproducir</button>' +
-        '        <button type="button" id="vf-anim-restart" class="vuelo-btn" title="Reiniciar">⏮ Reiniciar</button>' +
+        '        <button type="button" id="vf-anim-restart" class="vuelo-btn" title="Reiniciar y volver a reproducir">⏮ Reiniciar</button>' +
+        '        <button type="button" id="vf-anim-showall" class="vuelo-btn" title="Mostrar todas las geometrías y detener el vuelo">⧉ Mostrar todo</button>' +
+        '      </div>' +
+        '      <div class="vuelo-anim-speed">' +
+        '        <label for="vf-anim-speed">Velocidad del avión' +
+        '          <span id="vf-anim-speed-val" class="vuelo-anim-speed-val">500 km/h</span>' +
+        '        </label>' +
+        '        <input type="range" id="vf-anim-speed" min="10" max="5000" step="10" value="500" ' +
+        '          title="Velocidad del avión (km/h). Fija la duración según la longitud real del vuelo. Puedes superar la velocidad real para acelerar la reproducción.">' +
+        '        <div class="vuelo-anim-speed-hint" id="vf-anim-speed-hint"></div>' +
         '      </div>' +
         '    </div>' +
         '  </div>' +
@@ -1801,6 +1843,10 @@
     // Controles de animación del avión.
     bind("vf-anim-play", "click", function () { self.togglePlay(); });
     bind("vf-anim-restart", "click", function () { self.restartAnimation(); });
+    bind("vf-anim-showall", "click", function () { self.showAllGeometries(); });
+    // Slider de velocidad (km/h): actualiza en vivo mientras se arrastra ("input")
+    // y persiste el valor. La duración de la reproducción se recalcula cada frame.
+    bind("vf-anim-speed", "input", function () { self.setSpeedKmh(this.value); });
 
     // --- Acordeones ---
     var headers = p.querySelectorAll(".vuelo-accordion-header");
@@ -2287,7 +2333,7 @@
     this.data.rows = rows;
     this._mdtCache = undefined; // nuevos datos: fuerza re-descarga del MDT
     this.data.zoomDone = false; // nuevos datos: re-encuadra a la nueva extensión
-    this.data.anim = { playing: false, t: 0 }; // nuevos datos: reinicia animación
+    this.data.anim = { playing: false, t: 0, reveal: true, speedKmh: (this.data.anim && this.data.anim.speedKmh) || AVION_SPEED_KMH_DEFAULT }; // nuevos datos: reinicia animación
     this._stopRAF();
     window.__vueloSharedData = this.data;
 
@@ -2604,7 +2650,7 @@
     d.mapping = COL;
     this._mdtCache = undefined; // nuevo vuelo: fuerza re-descarga del MDT
     d.zoomDone = false;         // nuevo vuelo: re-encuadra a su extensión
-    d.anim = { playing: false, t: 0 }; // nuevo vuelo: reinicia la animación
+    d.anim = { playing: false, t: 0, reveal: true, speedKmh: (d.anim && d.anim.speedKmh) || AVION_SPEED_KMH_DEFAULT }; // nuevo vuelo: reinicia la animación
     this._stopRAF();
     window.__vueloSharedData = d;
 
@@ -2691,7 +2737,7 @@
     // así que NO se re-encuadra: marcamos zoomDone=true para respetar la vista y
     // que "Añadir fotograma" no provoque un salto de zoom.
     d.zoomDone = true;
-    d.anim = { playing: false, t: 0 };
+    d.anim = { playing: false, t: 0, reveal: true, speedKmh: (d.anim && d.anim.speedKmh) || AVION_SPEED_KMH_DEFAULT };
     this._stopRAF();
     window.__vueloSharedData = d;
   };
@@ -2828,7 +2874,7 @@
     this._mdtCache = undefined;
     d.zoomDone = false;
     this._stopRAF();
-    d.anim = { playing: false, t: 0 };
+    d.anim = { playing: false, t: 0, reveal: true, speedKmh: (d.anim && d.anim.speedKmh) || AVION_SPEED_KMH_DEFAULT };
     this._flightLine = null;
     this.updateAnimUI();
     window.__vueloSharedData = d;
@@ -3413,7 +3459,7 @@
     this._mdtCache = undefined;
     this.data.zoomDone = false;
     this._stopRAF();
-    this.data.anim = { playing: false, t: 0 };
+    this.data.anim = { playing: false, t: 0, reveal: true, speedKmh: (this.data.anim && this.data.anim.speedKmh) || AVION_SPEED_KMH_DEFAULT };
     this._flightLine = null;
     this.data.demo.frames = [];
     this.data.calc.resultados = null;
@@ -3592,6 +3638,10 @@
     }
 
     // --- Capa de líneas de pasada ---
+    // Guarda el GeoJSON original de las líneas de pasada para poder restaurarlo
+    // tras el modo "traza" de la revelación progresiva (showAllGeometries).
+    this._lineasSource = gj.lineas;
+    this._lineTraceMode = false;
     if (gj.lineas.features.length) {
       var capaLin = new IDEE.layer.GeoJSON({
         name: "Líneas de pasada",
@@ -3635,8 +3685,18 @@
     this._flightLine = (gj.flightCoords && gj.flightCoords.length >= 2)
       ? gj.flightCoords.slice() : null;
     this._precomputeFlightLine(); // longitudes acumuladas para interpolar
+    this._revealIndex = -1;       // fuerza reaplicar la revelación tras re-render
     this.crearCapaAvion();        // capa GeoJSON del avión (punto móvil)
     this.updateAnimUI();          // habilita/inhabilita controles según haya línea
+
+    // Re-aplica el estado de revelación progresiva tras crear las capas (carga
+    // inicial y swaps OL<->Cesium): si reveal está activo, deja visibles solo las
+    // geometrías hasta el progreso actual (data.anim.t) y la traza de línea hasta
+    // ese punto. Si reveal está desactivado ("Mostrar todo"), no toca nada y las
+    // capas quedan completas como se acaban de crear.
+    if (this._flightLine && this._revealActive()) {
+      this.applyProgressiveReveal(this.data.anim ? this.data.anim.t : 0, true);
+    }
 
     // Si veníamos reproduciendo (p.ej. tras un swap OL<->Cesium), reanuda.
     if (this._flightLine && this.data.anim && this.data.anim.playing) {
@@ -3907,12 +3967,414 @@
     this._avionEntityReady = false;
   };
 
+  // ###################################################################
+  //  REVELACIÓN PROGRESIVA DE GEOMETRÍAS DURANTE LA REPRODUCCIÓN
+  //  --------------------------------------------------------------------
+  //  Cuando data.anim.reveal es true, las geometrías (centros de fotograma,
+  //  huellas y la traza de la línea de vuelo) NO se muestran todas a la vez:
+  //  aparecen progresivamente conforme el avión avanza por la línea de vuelo.
+  //  El mapeo es 1:1 porque this._flightLine es la "serpiente" global (todos
+  //  los centros en orden), así que el vértice k alcanzado por el progreso t
+  //  corresponde al fotograma k => se revelan las features 0..k.
+  //
+  //  - Puntos/huellas: se ocultan/muestran por feature (en OL con estilo vacío;
+  //    en Cesium con entity.show, de forma defensiva). NO se toca la visibilidad
+  //    de CAPA (layerswitcher): si el usuario oculta una capa, sigue oculta.
+  //  - Línea de vuelo: se dibuja una "traza" que crece = serpiente[0..k] + el
+  //    punto interpolado del avión. En OL se actualiza la geometría en vivo; en
+  //    Cesium se reconstruye por cambios de índice (aceptable).
+  //  El botón "Mostrar todo" (showAllGeometries) desactiva el modo y revela todo.
+  // ###################################################################
+
+  // Devuelve el índice del último vértice (fotograma) que el avión YA HA ALCANZADO
+  // para el progreso t (0..1), usando las longitudes acumuladas precalculadas.
+  // IMPORTANTE: mientras el avión viaja por el segmento [i-1, i] (aún no ha llegado
+  // a i), se devuelve i-1, NO i. Así una geometría solo se revela cuando el avión
+  // llega realmente a su fotograma (no antes). En t=0 => 0; en t=1 => último índice.
+  _indexFromProgress(t) {
+    var line = this._flightLine, cum = this._flightCum, total = this._flightTotal;
+    if (!line || line.length < 2 || !cum || total <= 0) return 0;
+    t = Math.max(0, Math.min(1, t));
+    var target = t * total;
+    // Último vértice cuya distancia acumulada ya ha sido superada por el avión.
+    var idx = 0;
+    while (idx + 1 < cum.length && cum[idx + 1] <= target) idx++;
+    if (idx >= line.length) idx = line.length - 1;
+    return idx;
+  };
+
+  // ¿Está activo el modo de revelación progresiva? (defensivo ante estado viejo).
+  _revealActive() {
+    return !!(this.data && this.data.anim && this.data.anim.reveal);
+  };
+
+  // Devuelve el array de ol.Feature de una capa API-IDEE (o [] si no accesible).
+  _olFeatures(layer) {
+    try {
+      var olLayer = layer && layer.getImpl && layer.getImpl().getLayer();
+      var src = olLayer && olLayer.getSource && olLayer.getSource();
+      var feats = src && src.getFeatures && src.getFeatures();
+      return feats || [];
+    } catch (e) { return []; }
+  };
+
+  // Devuelve el array de Cesium entities de una capa GeoJSON de la API-IDEE (o []).
+  // En la implementación Cesium de API-IDEE, el impl de la capa expone el DataSource
+  // (Cesium.GeoJsonDataSource) a través de getLayer() (equivale a impl.cesiumLayer),
+  // y sus entities están en dataSource.entities.values. Se prueban varios caminos
+  // por robustez ante versiones del wrapper.
+  _cesiumEntities(layer) {
+    try {
+      var impl = layer && layer.getImpl && layer.getImpl();
+      if (!impl) return [];
+      var ds = null;
+      if (impl.getLayer) { try { ds = impl.getLayer(); } catch (e) {} }
+      if (!ds && impl.cesiumLayer) ds = impl.cesiumLayer;
+      if (!ds && impl.getDataSource) { try { ds = impl.getDataSource(); } catch (e) {} }
+      if (!ds && impl.dataSource) ds = impl.dataSource;
+      var ents = ds && ds.entities && ds.entities.values;
+      return ents || [];
+    } catch (e) { return []; }
+  };
+
+  // Muestra u oculta una feature OL concreta sin tocar la visibilidad de la CAPA.
+  // show=true devuelve el control del estilo a la capa (estilo GeoJSON de API-IDEE);
+  // show=false le pone un estilo vacío => no se dibuja aunque la capa esté visible.
+  _setOlFeatureRevealed(f, show) {
+    if (!f) return;
+    try {
+      f.setStyle(show ? null : new window.ol.style.Style({}));
+    } catch (e) { /* la capa puede no estar lista todavía */ }
+  };
+
+  // Lee el índice de orden global (_ord) de una feature OL o entity Cesium. Si no
+  // existe (features sin _ord), devuelve el índice de posición como respaldo.
+  _featOrd(feat, posFallback) {
+    try {
+      // OpenLayers: ol.Feature con get().
+      if (feat && typeof feat.get === "function") {
+        var v = feat.get("_ord");
+        if (v != null) return v;
+      }
+      // Cesium: entity.properties es un PropertyBag; _ord es una Property con
+      // getValue(). También se admite el valor plano por si acaso.
+      if (feat && feat.properties) {
+        var prop = feat.properties._ord;
+        if (prop != null) {
+          var cv = (typeof prop.getValue === "function") ? prop.getValue() : prop;
+          if (cv != null) return cv;
+        }
+      }
+    } catch (e) {}
+    return posFallback;
+  };
+
+  // Aplica el estado de revelación a puntos y huellas para el índice global k
+  // alcanzado por el avión: features con _ord <= k visibles, el resto ocultas.
+  // Se revela por _ord (no por posición de array) para que huellas y puntos queden
+  // alineados aunque falte alguna huella. Recorre todas las features en cada cambio
+  // de índice (el coste es lineal y solo se dispara cuando k cambia).
+  _revealUpTo(k, force) {
+    var self = this;
+    [this._layers.puntos, this._layers.footprints].forEach(function (layer) {
+      if (!layer) return;
+      if (!self._isCesium()) {
+        var feats = self._olFeatures(layer);
+        for (var i = 0; i < feats.length; i++) {
+          self._setOlFeatureRevealed(feats[i], self._featOrd(feats[i], i) <= k);
+        }
+      } else {
+        var ents = self._cesiumEntities(layer);
+        for (var j = 0; j < ents.length; j++) {
+          try { ents[j].show = (self._featOrd(ents[j], j) <= k); } catch (e) {}
+        }
+      }
+    });
+    this._revealIndex = k;
+  };
+
+  // Reconstruye la geometría de la TRAZA de la línea de vuelo hasta el índice k,
+  // añadiendo el punto interpolado del avión (posEnd = [lon,lat(,z)]) para que la
+  // línea crezca de forma continua bajo el avión. Sustituye TEMPORALMENTE el
+  // contenido de la capa de líneas por una sola feature LineString (la traza).
+  _updateTraceLine(k, posEnd) {
+    var layer = this._layers.lineas;
+    if (!layer || !this._flightLine) return;
+    // Coordenadas de la traza: serpiente[0..k] + punto interpolado del avión.
+    var coords = this._flightLine.slice(0, Math.max(2, k + 1));
+    if (posEnd) {
+      var last = coords.length ? coords[coords.length - 1] : null;
+      // Evita duplicar el vértice si el avión está justo sobre él.
+      if (!last || last[0] !== posEnd[0] || last[1] !== posEnd[1]) coords = coords.concat([posEnd]);
+    }
+    if (coords.length < 2) coords = this._flightLine.slice(0, 2);
+
+    if (!this._isCesium()) {
+      // OL: sustituye el contenido del source de la capa de líneas por UNA sola
+      // feature LineString (la traza) y actualiza su geometría en vivo. Trabajar
+      // sobre el source existente (sin recrear la capa) preserva el z-order y evita
+      // parpadeos. El estilo lo sigue poniendo la capa (IDEE.style.Generic line).
+      try {
+        var olLayer = layer.getImpl().getLayer();
+        var src = olLayer.getSource();
+        var proj = this.map.getProjection ? this.map.getProjection().code : "EPSG:3857";
+        var mapped = coords.map(function (c) {
+          return window.ol.proj.transform([c[0], c[1]], "EPSG:4326", proj);
+        });
+        var feats = src.getFeatures();
+        var traza = null;
+        for (var i = 0; i < feats.length; i++) {
+          if (feats[i].get && feats[i].get("traza")) { traza = feats[i]; break; }
+        }
+        if (traza && traza.getGeometry && traza.getGeometry().getType() === "LineString") {
+          traza.getGeometry().setCoordinates(mapped);
+          traza.changed && traza.changed();
+        } else {
+          // Primera vez: quita las líneas de pasada y añade la feature de traza.
+          src.clear();
+          var nueva = new window.ol.Feature({
+            geometry: new window.ol.geom.LineString(mapped)
+          });
+          nueva.set("traza", true);
+          src.addFeature(nueva);
+        }
+        this._lineTraceMode = true;
+        return;
+      } catch (e) { /* si falla el acceso OL, cae al rebuild por capa */ }
+    }
+    // Cesium: la traza es una polyline Entity propia del viewer con CallbackProperty.
+    this._updateTraceCesium(coords);
+  };
+
+  // Traza de la línea de vuelo en Cesium: una polyline Entity gestionada por el
+  // viewer (no una capa GeoJSON, que es asíncrona y no permite crecer suave por
+  // frame). Sus posiciones las provee una CallbackProperty que lee this._trazaCoords,
+  // así basta con actualizar ese array cada frame (sin recrear entities). Se oculta
+  // la capa de líneas de pasada mientras dura la traza (se restaura al mostrar todo).
+  _updateTraceCesium(coords) {
+    try {
+      if (typeof Cesium === "undefined") return;
+      var viewer = this.map.getMapImpl();
+      if (!viewer || !viewer.entities) return;
+
+      // Guarda las coords actuales de la traza (en grados) para la CallbackProperty.
+      this._trazaCoords = coords;
+
+      // Oculta las líneas de pasada originales mientras se muestra la traza.
+      if (!this._lineTraceMode) {
+        this._setLineasPasadaVisible(false);
+        this._lineTraceMode = true;
+      }
+
+      var ent = this._trazaEntity;
+      if (!ent) {
+        ent = viewer.entities.getById(TRAZA_ENTITY_ID);
+        if (!ent) {
+          var self = this;
+          ent = viewer.entities.add({
+            id: TRAZA_ENTITY_ID,
+            polyline: {
+              // CallbackProperty (no constante): Cesium la reevalúa cada frame, de
+              // modo que la traza crece al actualizar this._trazaCoords.
+              positions: new Cesium.CallbackProperty(function () {
+                var cs = self._trazaCoords || [];
+                if (cs.length < 2) return [];
+                var flat = [];
+                for (var i = 0; i < cs.length; i++) {
+                  flat.push(cs[i][0], cs[i][1], (cs[i][2] || 0));
+                }
+                return Cesium.Cartesian3.fromDegreesArrayHeights(flat);
+              }, false),
+              width: 3,
+              material: Cesium.Color.fromCssColorString("#e6194b")
+            }
+          });
+        }
+        this._trazaEntity = ent;
+      }
+      ent.show = !!this.data.visible.lineas;
+    } catch (e) { /* el viewer puede no estar listo */ }
+  };
+
+  // Muestra u oculta las líneas de pasada ORIGINALES (la capa GeoJSON) sin destruir
+  // la capa, para poder alternar entre "traza creciente" y "líneas completas".
+  // En OL usa setVisible de la capa; en Cesium togglea show de sus entities.
+  _setLineasPasadaVisible(show) {
+    var layer = this._layers.lineas;
+    if (!layer) return;
+    try {
+      if (this._isCesium()) {
+        var ents = this._cesiumEntities(layer);
+        for (var i = 0; i < ents.length; i++) { try { ents[i].show = !!show; } catch (e) {} }
+      } else {
+        // En OL la traza vive en el propio source, así que no se usa esta vía.
+        layer.setVisible(!!show);
+      }
+    } catch (e) {}
+  };
+
+  // Elimina la traza Cesium (polyline entity) del viewer y restaura la visibilidad
+  // de las líneas de pasada. Se usa al mostrar todo, al terminar y al limpiar.
+  _removeTrazaCesium() {
+    try {
+      if (typeof Cesium === "undefined") return;
+      var viewer = this.map && this.map.getMapImpl();
+      if (viewer && viewer.entities && viewer.entities.getById) {
+        var prev = viewer.entities.getById(TRAZA_ENTITY_ID);
+        if (prev) viewer.entities.remove(prev);
+      }
+    } catch (e) {}
+    this._trazaEntity = null;
+    this._trazaCoords = null;
+  };
+
+  // Punto de entrada de la revelación: dado el progreso t, revela puntos/huellas
+  // hasta el índice alcanzado y hace crecer la traza de la línea. force reaplica
+  // todo (tras render/swap). Si reveal no está activo, no hace nada.
+  applyProgressiveReveal(t, force) {
+    if (!this._revealActive()) return;
+    if (!this._flightLine || this._flightLine.length < 2) return;
+    var k = this._indexFromProgress(t);
+    this._revealUpTo(k, force);
+    var st = this.getInterpolatedState(t);
+    var posEnd = st ? [st.lon, st.lat, (st.z || 0)] : null;
+    this._updateTraceLine(k, posEnd);
+  };
+
+  // Desactiva la revelación progresiva: muestra TODAS las geometrías (estado
+  // clásico) y DETIENE la animación del avión. Restaura las líneas de pasada
+  // originales (deshace el modo traza). El avión permanece donde estaba (t).
+  showAllGeometries() {
+    this.data.anim.reveal = false;
+    window.__vueloSharedData = this.data;
+    this.stopAnimation();
+    // Muestra todas las features de puntos y huellas (revela con k = infinito).
+    var self = this;
+    [this._layers.puntos, this._layers.footprints].forEach(function (layer) {
+      if (!layer) return;
+      if (!self._isCesium()) {
+        self._olFeatures(layer).forEach(function (f) { self._setOlFeatureRevealed(f, true); });
+      } else {
+        self._cesiumEntities(layer).forEach(function (e) { try { e.show = true; } catch (err) {} });
+      }
+    });
+    this._revealIndex = -1;
+    // Restaura las líneas de pasada originales si estábamos en modo traza.
+    if (this._lineTraceMode) {
+      this._lineTraceMode = false;
+      this._restoreLineasOriginales();
+    }
+    this.updateAnimUI();
+  };
+
+  // Deshace el modo "traza" y restaura las líneas de pasada completas.
+  //  - Cesium: elimina la polyline entity de la traza y vuelve a mostrar las
+  //    entities de la capa de líneas de pasada (que solo estaban ocultas).
+  //  - OL: repuebla el source de la capa existente con las features originales
+  //    (preserva z-order); si falla, recrea la capa desde el GeoJSON guardado.
+  _restoreLineasOriginales() {
+    var IDEE = api();
+    if (!this.map) return;
+
+    if (this._isCesium()) {
+      this._removeTrazaCesium();
+      this._setLineasPasadaVisible(true);
+      return;
+    }
+
+    if (!IDEE || !this._lineasSource) return;
+    var visible = !!this.data.visible.lineas;
+
+    // OL: repuebla el source de la capa existente con las features originales.
+    if (this._layers.lineas) {
+      try {
+        var olLayer = this._layers.lineas.getImpl().getLayer();
+        var src = olLayer.getSource();
+        var proj = this.map.getProjection ? this.map.getProjection().code : "EPSG:3857";
+        src.clear();
+        (this._lineasSource.features || []).forEach(function (ft) {
+          if (!ft.geometry || ft.geometry.type !== "LineString") return;
+          var mapped = ft.geometry.coordinates.map(function (c) {
+            return window.ol.proj.transform([c[0], c[1]], "EPSG:4326", proj);
+          });
+          var f = new window.ol.Feature({ geometry: new window.ol.geom.LineString(mapped) });
+          if (ft.properties) f.setProperties(ft.properties);
+          f.setStyle(null); // usa el estilo de la capa
+          src.addFeature(f);
+        });
+        return;
+      } catch (e) { /* si falla, recrea la capa por completo */ }
+    }
+
+    try { if (this._layers.lineas) this.map.removeLayers(this._layers.lineas); } catch (e) {}
+    var hr = (IDEE.style && IDEE.style.heightReference) ? IDEE.style.heightReference : {};
+    var heightRefAbs = (hr.NONE !== undefined) ? hr.NONE : "NONE";
+    var capa = new IDEE.layer.GeoJSON({
+      name: "Líneas de pasada",
+      source: this._lineasSource,
+      legend: "Líneas de pasada",
+      extract: true
+    }, { visibility: visible });
+    capa.setStyle(new IDEE.style.Generic({
+      line: {
+        stroke: { color: "#e6194b", width: 2, opacity: 0.9 },
+        heightReference: heightRefAbs,
+        clampToGround: false
+      }
+    }));
+    this.map.addLayers(capa);
+    this._layers.lineas = capa;
+  };
+
+  // Velocidad actual del avión (km/h), saneada al rango permitido.
+  _speedKmh() {
+    var v = this.data && this.data.anim ? this.data.anim.speedKmh : AVION_SPEED_KMH_DEFAULT;
+    v = parseFloat(v);
+    if (!isFinite(v) || v <= 0) v = AVION_SPEED_KMH_DEFAULT;
+    return Math.max(AVION_SPEED_KMH_MIN, Math.min(AVION_SPEED_KMH_MAX, v));
+  };
+
+  // Duración (ms) de recorrer la línea de vuelo completa a la velocidad actual:
+  // duración = distancia_real(m) / velocidad(m/s). Así la velocidad ESPACIAL es
+  // constante e independiente del número de fotogramas. Se aplica una duración
+  // mínima para líneas muy cortas (evita división por ~0 y finales instantáneos).
+  _animDurationMs() {
+    var total = this._flightTotal || 0;            // metros
+    var ms = (total / (this._speedKmh() / 3.6)) * 1000;
+    if (!isFinite(ms) || ms < AVION_DURACION_MIN_MS) ms = AVION_DURACION_MIN_MS;
+    return ms;
+  };
+
+  // Cambia la velocidad del avión (km/h) en vivo. No reinicia el progreso: la nueva
+  // velocidad se aplica en el siguiente frame (o al reproducir). Actualiza la UI.
+  setSpeedKmh(kmh) {
+    var v = parseFloat(kmh);
+    if (!isFinite(v) || v <= 0) return;
+    v = Math.max(AVION_SPEED_KMH_MIN, Math.min(AVION_SPEED_KMH_MAX, v));
+    if (!this.data.anim) this.data.anim = { playing: false, t: 0, reveal: true, speedKmh: v };
+    else this.data.anim.speedKmh = v;
+    window.__vueloSharedData = this.data;
+    this.updateAnimUI();
+  };
+
   // Arranca la animación (rAF). Si resume=true, continúa desde data.anim.t.
   startAnimation(resume) {
     if (!this._flightLine || this._flightLine.length < 2) return;
     var d = this.data;
-    if (!d.anim) d.anim = { playing: false, t: 0 };
+    if (!d.anim) d.anim = { playing: false, t: 0, reveal: true, speedKmh: AVION_SPEED_KMH_DEFAULT };
     if (!resume && d.anim.t >= 1) d.anim.t = 0; // reinicia si estaba al final
+    // Arranque desde el principio (Reproducir con t=0 o Reiniciar): reactiva la
+    // revelación progresiva y oculta todas las geometrías para dibujarlas conforme
+    // avance el avión. (Si el usuario había pulsado "Mostrar todo", esto vuelve a
+    // activar el dibujo progresivo al reproducir de nuevo.)
+    if (!resume && d.anim.t === 0) {
+      d.anim.reveal = true;
+      this._revealIndex = -1;
+      this.applyProgressiveReveal(0, true /* force: oculta todo salvo el 1er punto */);
+    } else if (this._revealActive()) {
+      // Reanudar (p.ej. tras pausa o swap): reaplica el estado revelado hasta t.
+      this.applyProgressiveReveal(d.anim.t, true);
+    }
     d.anim.playing = true;
     window.__vueloSharedData = d;
     this.updateAnimUI();
@@ -3924,15 +4386,26 @@
       if (!self.data.anim || !self.data.anim.playing) return;
       var dt = now - (self._animLast || now);
       self._animLast = now;
-      self.data.anim.t += dt / AVION_DURACION_MS;
+      // La duración se recalcula cada frame a partir de la velocidad actual, de modo
+      // que cambiar el slider de velocidad afecta a la reproducción en vivo.
+      self.data.anim.t += dt / self._animDurationMs();
       if (self.data.anim.t >= 1) {
         self.data.anim.t = 1;
         self.updateAvionAt(1);
+        // Al terminar, revela el vuelo COMPLETO: todas las features visibles y las
+        // líneas de pasada originales restauradas (deshace el modo traza). El modo
+        // reveal permanece activo, de modo que "Reiniciar" vuelve a ocultar y
+        // dibujar progresivamente.
+        if (self._revealActive()) {
+          self._revealUpTo(self._flightLine ? self._flightLine.length - 1 : 0, true);
+          if (self._lineTraceMode) { self._lineTraceMode = false; self._restoreLineasOriginales(); }
+        }
         self.stopAnimation();       // se detiene al final; Reiniciar vuelve a t=0
         return;
       }
       window.__vueloSharedData = self.data;
       self.updateAvionAt(self.data.anim.t);
+      if (self._revealActive()) self.applyProgressiveReveal(self.data.anim.t, false);
       self._animRAF = requestAnimationFrame(step);
     };
     this._animRAF = requestAnimationFrame(step);
@@ -3960,9 +4433,14 @@
   };
 
   // Alterna reproducir/pausar según el estado actual.
+  //  - Reproduciendo -> pausa.
+  //  - Pausado con revelación progresiva activa -> reanuda desde el progreso actual.
+  //  - Pausado tras "Mostrar todo" (reveal desactivado) -> vuelve a reproducir desde
+  //    el principio con dibujo progresivo (reinicia y reactiva la revelación).
   togglePlay() {
-    if (this.data.anim && this.data.anim.playing) this.pauseAnimation();
-    else this.startAnimation(true);
+    if (this.data.anim && this.data.anim.playing) { this.pauseAnimation(); return; }
+    if (!this._revealActive()) { this.restartAnimation(); return; }
+    this.startAnimation(true);
   };
 
   // Cancela el requestAnimationFrame en curso (sin tocar el estado playing/t).
@@ -3977,6 +4455,7 @@
     var sec = p.querySelector("#vf-section-anim");
     var play = p.querySelector("#vf-anim-play");
     var restart = p.querySelector("#vf-anim-restart");
+    var showall = p.querySelector("#vf-anim-showall");
     var hayLinea = !!(this._flightLine && this._flightLine.length >= 2);
     if (sec) { if (hayLinea) sec.removeAttribute("hidden"); else sec.setAttribute("hidden", ""); }
     var playing = !!(this.data.anim && this.data.anim.playing);
@@ -3985,6 +4464,27 @@
       play.textContent = playing ? "⏸ Pausar" : "▶ Reproducir";
     }
     if (restart) restart.disabled = !hayLinea;
+    // "Mostrar todo": solo tiene sentido si hay línea y el modo de revelación
+    // progresiva está activo (si ya se mostró todo, queda deshabilitado).
+    if (showall) showall.disabled = !hayLinea || !this._revealActive();
+
+    // Slider de velocidad: sincroniza el valor mostrado y la duración estimada.
+    var speed = p.querySelector("#vf-anim-speed");
+    var speedVal = p.querySelector("#vf-anim-speed-val");
+    var speedHint = p.querySelector("#vf-anim-speed-hint");
+    var kmh = this._speedKmh();
+    if (speed) { speed.disabled = !hayLinea; if (String(speed.value) !== String(kmh)) speed.value = kmh; }
+    if (speedVal) speedVal.textContent = Math.round(kmh) + " km/h";
+    if (speedHint) {
+      if (hayLinea && this._flightTotal) {
+        var segs = this._animDurationMs() / 1000;
+        var distKm = this._flightTotal / 1000;
+        speedHint.textContent = "Recorrido " + distKm.toFixed(1) + " km · duración ≈ " +
+          (segs >= 60 ? (Math.floor(segs / 60) + " min " + Math.round(segs % 60) + " s") : (segs.toFixed(1) + " s"));
+      } else {
+        speedHint.textContent = "";
+      }
+    }
   };
 
   applyVisibility() {
@@ -4007,9 +4507,11 @@
         self._layers[k] = null;
       }
     });
-    // Elimina también el entity propio del avión en Cesium (el que gestiona el
-    // viewer directamente), para no duplicarlo tras el swap/re-render.
+    // Elimina también los entities propios del avión y de la traza en Cesium (los
+    // que gestiona el viewer directamente), para no duplicarlos tras el swap/re-render.
     this._removeAvionCesiumEntity();
+    this._removeTrazaCesium();
+    this._lineTraceMode = false;
   };
 
   clearData() {
@@ -4021,7 +4523,7 @@
     this.data.zoomDone = false; // sin datos: el próximo vuelo re-encuadrará
     // Detiene y reinicia la animación del avión.
     this._stopRAF();
-    this.data.anim = { playing: false, t: 0 };
+    this.data.anim = { playing: false, t: 0, reveal: true, speedKmh: (this.data.anim && this.data.anim.speedKmh) || AVION_SPEED_KMH_DEFAULT };
     this._flightLine = null;
     this.updateAnimUI();
     // Deselecciona el vuelo pero conserva la lista de vuelos encontrados, para
