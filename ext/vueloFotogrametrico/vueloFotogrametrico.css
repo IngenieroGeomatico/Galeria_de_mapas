@@ -199,12 +199,51 @@
 .g-herramienta_vuelo .vuelo-anim-controls {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
 }
 
 .g-herramienta_vuelo .vuelo-anim-controls .vuelo-btn {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 90px;
     padding: 8px 6px;
     white-space: nowrap;
+}
+
+/* Control de velocidad del avión (slider) */
+.g-herramienta_vuelo .vuelo-anim-speed {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.g-herramienta_vuelo .vuelo-anim-speed label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.g-herramienta_vuelo .vuelo-anim-speed-val {
+    font-weight: 700;
+    color: #db4938;
+}
+
+.g-herramienta_vuelo .vuelo-anim-speed input[type="range"] {
+    width: 100%;
+    accent-color: #db4938;
+    cursor: pointer;
+}
+
+.g-herramienta_vuelo .vuelo-anim-speed input[type="range"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.g-herramienta_vuelo .vuelo-anim-speed-hint {
+    font-size: 11px;
+    color: #666;
 }
 
 /* Checkbox de capas visibles */
