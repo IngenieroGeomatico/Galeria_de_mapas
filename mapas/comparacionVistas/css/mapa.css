@@ -1,0 +1,40 @@
+/* =====================================================================
+   Estilos base del visualizador "Comparación de vistas"
+   ===================================================================== */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Wrapper del visualizador: ocupa toda la ventana. El supraplugin marca su
+   padre (body) como .supra-layout (flex en columna) para apilar barra + mapa. */
+#mapaDIV {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* ---- Spinner de carga ---------------------------------------------- */
+#cargaSVG {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+#cargaSVG img {
+  width: 80px;
+  height: 80px;
+}
+/* El atributo [hidden] debe ganar al display:flex de arriba. */
+#cargaSVG[hidden] {
+  display: none;
+}

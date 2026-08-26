@@ -1,0 +1,108 @@
+/* =====================================================================
+   Estilos del supraplugin (barra transversal sobre el mapa)
+   --------------------------------------------------------------------
+   El supraplugin marca el PADRE del contenedor del visualizador como
+   .supra-layout (flex en columna) e inserta su barra como hermana del
+   mapa, arriba (--top) o abajo (--bottom). Así la barra y el mapa se
+   apilan sin solaparse y el mapa recibe el alto restante.
+   ===================================================================== */
+
+/* El contenedor host del visualizador (p. ej. #mapaDIV) debe ocupar el
+   espacio restante cuando hay una barra hermana. */
+.supra-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* Con layout de supraplugin, el mapa (host) crece para ocupar el resto. */
+.supra-layout > #mapaDIV,
+.supra-layout > #mapa {
+  flex: 1 1 auto;
+  min-height: 0; /* imprescindible en flex para que el mapa pueda encoger */
+}
+
+/* ---- Barra ---------------------------------------------------------- */
+.supra-bar {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  background: #ffffff;
+  border-bottom: 1px solid #d9d9d9;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  z-index: 30; /* por encima de los controles del mapa */
+  font-family: "Muli", "Segoe UI", system-ui, sans-serif;
+  color: #1a1a1a;
+}
+
+.supra-bar--bottom {
+  border-bottom: none;
+  border-top: 1px solid #d9d9d9;
+  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.supra-bar__inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 4px 12px;
+  overflow-x: auto;
+}
+
+.supra-bar__title {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  color: #db4938; /* color de marca del repo */
+}
+
+.supra-bar__items {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.supra-bar__slot {
+  display: flex;
+  align-items: center;
+}
+
+.supra-bar__toggle {
+  margin-left: auto;
+  border: 1px solid #ccc;
+  background: #f7f7f7;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  line-height: 1;
+  font-size: 14px;
+}
+.supra-bar__toggle:hover { background: #eee; }
+
+/* Plegado: oculta los items y reduce la barra a su cabecera. */
+.supra-bar--collapsed .supra-bar__items { display: none; }
+
+/* ---- Supraplugin anidado ------------------------------------------- */
+.supra-bar__nested {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  border-left: 1px solid #e5e5e5;
+}
+
+/* ---- HTML suelto insertado como item ------------------------------- */
+.supra-bar__html {
+  display: flex;
+  align-items: center;
+}
+
+/* ---- Responsive ---------------------------------------------------- */
+@media (max-width: 640px) {
+  .supra-bar__inner { gap: 8px; padding: 4px 8px; }
+  .supra-bar__title { font-size: 13px; }
+}

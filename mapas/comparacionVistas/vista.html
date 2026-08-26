@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="cnig" content="yes">
+
+  <title>Vista (comparación)</title>
+
+  <!--
+    Página de UNA vista para el comparador, pensada para cargarse dentro de un
+    <iframe>. La implementación (OpenLayers 2D o Cesium 3D) se elige por el
+    parámetro GET ?impl=ol|cesium. Como cada iframe es un documento aislado, su
+    objeto global `IDEE` es independiente: así pueden coexistir en la misma
+    página padre una vista 2D (OL) y otra 3D (Cesium) sin colisión de globals.
+
+    La comunicación con el padre (el plugin comparacionVistas) es por
+    postMessage: recibe setView {lon,lat,zoom} y emite viewChanged {lon,lat,zoom}
+    de forma continua. Ver js/vista.js.
+  -->
+
+  <!-- La CSS y el JS de la API se inyectan por js/vista.js según ?impl= -->
+
+  <!-- Estilo del botón de cambio de implementación (🌐 2D/3D) -->
+  <link type="text/css" rel="stylesheet" href="../../ext/cambioImpl/cambioImpl.css">
+
+  <link href="./css/vista.css" rel="stylesheet" />
+</head>
+
+<body>
+  <div id="cargaSVG">
+    <img src="../../img/iconos/gear-spinner.svg">
+  </div>
+
+  <div id="mapaDIV"></div>
+
+  <script type="text/javascript" src="./js/vista.js"></script>
+</body>
+
+</html>
