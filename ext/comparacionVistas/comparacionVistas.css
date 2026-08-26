@@ -1,0 +1,384 @@
+/* =====================================================================
+   Estilos del comparador de vistas (item de supraplugin)
+   --------------------------------------------------------------------
+   Estética inspirada en el comparadorMapas de QGIS2API-IDEE:
+     - Barra de herramientas con iconos grandes; la activa en NARANJA.
+     - Panel de configuración tipo "sidenav" off-canvas (cabecera naranja,
+       botón de cierre y tabla de gestión de vistas).
+   Paleta principal: naranja #f57105 / #ff6600 (acento), verde #04AA6D.
+   ===================================================================== */
+
+:root {
+  --cmpv-orange: #f57105;
+  --cmpv-orange-2: #ff6600;
+  --cmpv-green: #04aa6d;
+}
+
+.cmpv {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: "Muli", "Segoe UI", system-ui, sans-serif;
+  position: relative;
+}
+
+/* ---- Barra de herramientas (iconos) -------------------------------- */
+.cmpv-tools {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.cmpv-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 58px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+.cmpv-tool:hover {
+  background: rgba(245, 113, 5, 0.12);
+  color: var(--cmpv-orange);
+}
+.cmpv-tool .cmpv-ico {
+  font-size: 24px;
+  line-height: 1;
+}
+.cmpv-tool .cmpv-lbl {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Herramienta activa: resaltada en naranja (equivalente a .activeSVG). */
+.cmpv-tool--active,
+.cmpv-tool--active:hover {
+  color: #fff;
+  background: var(--cmpv-orange);
+}
+
+.cmpv-select,
+.cmpv-num {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+  background: #fff;
+}
+.cmpv-num { width: 60px; }
+
+/* =====================================================================
+   Sidenav de configuración (off-canvas desde la derecha)
+   ===================================================================== */
+.cmpv-sidenav {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 0;                 /* cerrado por defecto */
+  max-width: 90vw;
+  overflow: hidden;
+  background: #ffffff;
+  border-left: 0 solid var(--cmpv-orange-2);
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.18);
+  transition: width 0.35s ease;
+  z-index: 1000;
+}
+.cmpv-sidenav--open {
+  width: 360px;
+  border-left-width: 3px;
+}
+
+.cmpv-sidenav__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--cmpv-orange);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 14px 16px;
+  white-space: nowrap;
+}
+.cmpv-sidenav__close {
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.cmpv-sidenav__close:hover { color: #ffe0cc; }
+
+.cmpv-sidenav__body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  height: calc(100% - 52px);
+  white-space: normal;
+}
+
+.cmpv-sidenav__subtitle {
+  font-weight: 700;
+  color: var(--cmpv-orange);
+  font-size: 13px;
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+}
+
+.cmpv-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  flex-wrap: wrap;
+}
+
+/* Bloque de disposición (filas/columnas) */
+.cmpv-field--grid {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.cmpv-grid__title { font-weight: 600; }
+.cmpv-grid-inputs {
+  display: flex;
+  gap: 12px;
+}
+.cmpv-grid-inputs label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cmpv-grid-type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- Editor de grid irregular (tipo "Grid") ------------------------ */
+.cmpv-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cmpv-custom__hint {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.35;
+}
+.cmpv-custom__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cmpv-custom__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cmpv-custom__lbl {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  min-width: 52px;
+}
+.cmpv-custom__unit {
+  font-size: 12px;
+  color: #777;
+}
+.cmpv-custom__del {
+  margin-left: auto;
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 14px;
+}
+.cmpv-custom__del:hover:not(:disabled) { background: #fdecea; border-color: var(--cmpv-orange); }
+.cmpv-custom__del:disabled { opacity: 0.4; cursor: not-allowed; }
+.cmpv-custom__add {
+  align-self: flex-start;
+  border: 1px dashed var(--cmpv-orange);
+  background: rgba(245, 113, 5, 0.08);
+  color: var(--cmpv-orange);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cmpv-custom__add:hover { background: rgba(245, 113, 5, 0.16); }
+
+/* ---- Tabla de gestión de vistas (cabecera naranja) ----------------- */
+.cmpv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cmpv-table th,
+.cmpv-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+.cmpv-table th {
+  background: var(--cmpv-orange);
+  color: #fff;
+  font-weight: 600;
+}
+.cmpv-table tr:nth-child(even) { background: #f7f7f7; }
+.cmpv-table tr:hover { background: #f0e6dd; }
+
+.cmpv-vname {
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+/* Botón conmutador 2D/3D por vista (en la tabla de gestión). */
+.cmpv-mode {
+  min-width: 42px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #fff;
+}
+.cmpv-mode--d2 { background: #2b6cb0; border-color: #2b6cb0; }
+.cmpv-mode--d3 { background: #7c3aed; border-color: #7c3aed; }
+.cmpv-mode:hover { filter: brightness(1.08); }
+
+.cmpv-vdel {
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 14px;
+}
+.cmpv-vdel:hover:not(:disabled) { background: #fdecea; border-color: var(--cmpv-orange); }
+.cmpv-vdel:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Ojo de visualización activa (columna en la tabla de gestión). */
+.cmpv-eye {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+.cmpv-eye:hover { opacity: 0.85; background: #f2f2f2; }
+.cmpv-eye--active {
+  opacity: 1;
+  filter: none;
+  background: rgba(245, 113, 5, 0.15);
+  border-color: var(--cmpv-orange);
+}
+
+/* =====================================================================
+   Área de trabajo (stage) y vistas superpuestas
+   ===================================================================== */
+
+/* Contenedor que llena #mapaDIV y aloja los divs de todas las vistas.
+   Es la referencia de tamaño estable para el layout (nunca se redimensiona). */
+.cmpv-stage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.cmpv-view {
+  position: absolute;
+  inset: 0;
+  background: #eaeaea;
+  overflow: hidden;
+}
+
+/* El iframe de cada vista llena su div por completo. */
+.cmpv-iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.cmpv-view--overlay { will-change: clip-path; }
+
+/* Celda del CSS Grid (modo espejo): la posición la gobierna el grid del stage,
+   no el posicionamiento absoluto. Un borde fino separa las celdas. */
+.cmpv-view--cell {
+  position: relative;
+  inset: auto;
+  width: auto;
+  height: auto;
+  outline: 1px solid rgba(255, 255, 255, 0.9);
+  outline-offset: -1px;
+}
+
+/* ---- Divisor de la cortinilla -------------------------------------- */
+.cmpv-divisor {
+  position: absolute;
+  z-index: 20;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+}
+.cmpv-divisor--vertical {
+  top: 0;
+  width: 4px;
+  height: 100%;
+  transform: translateX(-2px);
+  cursor: ew-resize;
+}
+.cmpv-divisor--horizontal {
+  left: 0;
+  width: 100%;
+  height: 4px;
+  transform: translateY(-2px);
+  cursor: ns-resize;
+}
+.cmpv-divisor__handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--cmpv-orange);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+.cmpv-divisor--horizontal .cmpv-divisor__handle { cursor: ns-resize; }
+.cmpv-divisor--vertical .cmpv-divisor__handle { cursor: ew-resize; }
+
+/* ---- Responsive ---------------------------------------------------- */
+@media (max-width: 640px) {
+  .cmpv-tool { min-width: 46px; padding: 4px; }
+  .cmpv-tool .cmpv-lbl { font-size: 10px; }
+  .cmpv-sidenav--open { width: 300px; }
+}

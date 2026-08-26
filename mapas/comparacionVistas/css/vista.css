@@ -1,0 +1,53 @@
+/* Estilos de la página de una vista (iframe del comparador). */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+#mapaDIV {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+#cargaSVG {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+#cargaSVG[hidden] { display: none; }
+#cargaSVG img { width: 64px; height: 64px; }
+
+/* Botón 🌐 de cambio de implementación (2D/3D) dentro de la vista. */
+.cmpv-cambimpl {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 40;
+}
+.cmpv-cambimpl .buttonHerramienta_cambImpl {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-sizing: border-box;
+}
+/* Centra el glifo 🌐 (pseudo-elemento) dentro del botón. */
+.cmpv-cambimpl .buttonHerramienta_cambImpl:before {
+  display: block;
+  line-height: 1;
+  margin: 0;
+}
