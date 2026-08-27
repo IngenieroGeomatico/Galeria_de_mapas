@@ -1895,28 +1895,45 @@
       this._positionDivisors();
     }
 
-    // Posiciona los divisores visuales.
+    // Posiciona los divisores visuales y sus tiradores (handles) en la
+    // intersección entre el divisor vertical y los horizontales.
     _positionDivisors() {
       if (!this._divisors) return;
       var self = this;
+      var lay = this.swipe.layout;
       var pV = this.swipe.posV;
+      var pHL = this.swipe.posHL;
+      var pHR = this.swipe.posHR;
+
+      // Posición Y del handle del divisor vertical: en la intersección.
+      var handleY;
+      if (lay === "2x2") handleY = ((pHL + pHR) / 2 * 100).toFixed(2) + "%";
+      else if (lay === "1x2") handleY = (pHL * 100).toFixed(2) + "%";
+      else if (lay === "2x1") handleY = (pHR * 100).toFixed(2) + "%";
+      else handleY = "50%";
+
       this._divisors.forEach(function (div) {
         var axis = div.getAttribute("data-axis");
+        var handle = div.querySelector(".cmpv-divisor__handle");
         if (axis === "v") {
           div.style.left = (pV * 100).toFixed(2) + "%";
           div.style.top = "0";
           div.style.width = "";
           div.style.height = "100%";
+          // Tirador en la intersección con los horizontales.
+          if (handle) handle.style.top = handleY;
         } else if (axis === "hl") {
-          // Horizontal izquierdo: de 0 a posV.
-          div.style.top = (self.swipe.posHL * 100).toFixed(2) + "%";
+          div.style.top = (pHL * 100).toFixed(2) + "%";
           div.style.left = "0";
           div.style.width = (pV * 100).toFixed(2) + "%";
+          // Tirador en el extremo derecho (donde toca el vertical).
+          if (handle) { handle.style.left = "100%"; handle.style.display = "none"; }
         } else if (axis === "hr") {
-          // Horizontal derecho: de posV a 100%.
-          div.style.top = (self.swipe.posHR * 100).toFixed(2) + "%";
+          div.style.top = (pHR * 100).toFixed(2) + "%";
           div.style.left = (pV * 100).toFixed(2) + "%";
           div.style.width = ((1 - pV) * 100).toFixed(2) + "%";
+          // Tirador en el extremo izquierdo (donde toca el vertical).
+          if (handle) { handle.style.left = "0%"; handle.style.display = "none"; }
         }
       });
     }
