@@ -39,26 +39,451 @@
   var _uid = 0;
   function nextUid() { _uid += 1; return _uid; }
 
+  // URL base de ESTE plugin (carpeta ext/comparacionVistas/). Se detecta al
+  // cargar el script y sirve para el <base href> del srcdoc de las vistas y
+  // para resolver recursos relativos (spinner, cambioImpl.css) desde el iframe.
+  var PLUGIN_BASE = (function () {
+    try {
+      var s = document.currentScript;
+      if (!s) {
+        var scripts = document.getElementsByTagName("script");
+        for (var i = scripts.length - 1; i >= 0; i--) {
+          if (scripts[i].src && /comparacionVistas\.js(\?|$)/.test(scripts[i].src)) { s = scripts[i]; break; }
+        }
+      }
+      if (s && s.src) {
+        // Carpeta del script (con barra final): .../ext/comparacionVistas/
+        return s.src.replace(/[^/]*$/, "");
+      }
+    } catch (e) {}
+    return "";
+  })();
+
   // Máximo común divisor / mínimo común múltiplo (para el nº de columnas base
   // del CSS Grid cuando las filas tienen distinto número de celdas).
   function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = b; b = a % b; a = t; } return a || 1; }
   function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
 
+  // =====================================================================
+  //  Documento de VISTA (antes: vista.html + vista.js). Ahora se genera
+  //  dinámicamente y se inyecta en cada iframe vía srcdoc, para que el
+  //  plugin sea AUTOCONTENIDO (no depende de ficheros en mapas/).
+  //  --------------------------------------------------------------------
+  //  _vistaBoot es la lógica que corre DENTRO de cada iframe. Se serializa
+  //  con .toString() y se incrusta en el srcdoc. Lee sus parámetros de
+  //  window.__CMPV_PARAMS (inyectados por el padre en el propio srcdoc), NO
+  //  de location.search (el srcdoc no tiene query string).
+  //
+  //  Comunicación con el padre por postMessage (idéntica que antes):
+  //    Recibe: cmpv:setView, cmpv:setControls, cmpv:setConfig, cmpv:getView
+  //    Emite : cmpv:ready, cmpv:view, cmpv:implChange
+  //  El cambio 2D/3D ya NO recarga por location: emite cmpv:implChange y el
+  //  padre regenera el srcdoc con la otra implementación.
+  // =====================================================================
+  function _vistaBoot() {
+    "use strict";
+
+    // Parámetros inyectados por el padre en el srcdoc.
+    var P = window.__CMPV_PARAMS || {};
+    var IMPL = (P.impl === "cesium") ? "cesium" : "ol";
+    var VP_ID = P.vp || "vista";
+    var INIT_LON = (typeof P.lon === "number") ? P.lon : parseFloat(P.lon);
+    var INIT_LAT = (typeof P.lat === "number") ? P.lat : parseFloat(P.lat);
+    var INIT_ZOOM = (typeof P.zoom === "number") ? P.zoom : parseFloat(P.zoom);
+    if (isNaN(INIT_LON)) INIT_LON = -3.70;
+    if (isNaN(INIT_LAT)) INIT_LAT = 40.42;
+    if (isNaN(INIT_ZOOM)) INIT_ZOOM = 12;
+
+    var BASE_HOST = "https://componentes.idee.es/api-idee";
+    var SVGCarga = document.getElementById("cargaSVG");
+
+    // --- Carga dinámica de la API según implementación --------------------
+    function loadCSS(href) {
+      return new Promise(function (resolve) {
+        var l = document.createElement("link");
+        l.rel = "stylesheet"; l.href = href;
+        l.onload = function () { resolve(); };
+        l.onerror = function () { resolve(); };
+        document.head.appendChild(l);
+      });
+    }
+    function loadJS(src) {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement("script");
+        s.src = src;
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error("No se pudo cargar " + src)); };
+        document.head.appendChild(s);
+      });
+    }
+    function bundleSuffix() { return IMPL === "cesium" ? "cesium" : "ol"; }
+    async function loadApi() {
+      var suf = bundleSuffix();
+      await loadCSS(BASE_HOST + "/assets/css/apiidee." + suf + ".min.css");
+      await loadJS(BASE_HOST + "/vendor/browser-polyfill.js");
+      await loadJS(BASE_HOST + "/js/apiidee." + suf + ".min.js");
+      await loadJS(BASE_HOST + "/js/configuration.js");
+      await waitFor(function () { return window.IDEE && window.IDEE.map; }, 8000);
+    }
+    function waitFor(cond, timeoutMs) {
+      return new Promise(function (resolve, reject) {
+        var t0 = Date.now();
+        (function poll() {
+          try { if (cond()) return resolve(); } catch (e) {}
+          if (Date.now() - t0 > timeoutMs) return reject(new Error("timeout"));
+          setTimeout(poll, 60);
+        })();
+      });
+    }
+
+    // --- Capas base IGN ---------------------------------------------------
+    function configBaseLayers() {
+      var IDEE = window.IDEE;
+      try {
+        var base = new IDEE.layer.TMS({
+          url: "https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg",
+          legend: "IGNBaseTodo", visible: true, isBase: true, tileGridMaxZoom: 17,
+          name: "IGNBaseTodo_cmpv",
+          attribution: '<p><b>Mapa base</b>: <a style="color:#0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
+        }, { crossOrigin: "anonymous", displayInLayerSwitcher: false });
+        IDEE.addQuickLayers({ IGNBaseTodo_cmpv: base });
+        IDEE.config("tms", { base: "QUICK*IGNBaseTodo_cmpv" });
+        IDEE.config.backgroundlayers = [
+          { id: "mapa", title: "Callejero", layers: ["QUICK*IGNBaseTodo_cmpv"] },
+          { id: "imagen", title: "Imagen", layers: ["QUICK*BASE_PNOA_MA_TMS"] },
+        ];
+        IDEE.proxy(false);
+      } catch (e) { /* usa config por defecto */ }
+    }
+
+    // --- Conversión de encuadre ------------------------------------------
+    function altitudeForZoom(z) { var base = 40075016.686; return (base / Math.pow(2, z)) * 1.0; }
+    function zoomForAltitude(alt) { var base = 40075016.686; return Math.log2(base / Math.max(1, alt)); }
+
+    // Lee el extent visible actual en grados.
+    function readExtent(map) {
+      try {
+        var impl = map.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          var size = impl.getSize();
+          if (!size || !size[0] || !size[1]) return null;
+          var ext = view.calculateExtent(size);
+          var code = view.getProjection().getCode();
+          var sw = window.ol.proj.toLonLat([ext[0], ext[1]], code);
+          var ne = window.ol.proj.toLonLat([ext[2], ext[3]], code);
+          return { west: sw[0], south: sw[1], east: ne[0], north: ne[1] };
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          var rect = impl.camera.computeViewRectangle(impl.scene.globe.ellipsoid);
+          if (!rect) {
+            var carto = impl.camera.positionCartographic;
+            var lon = C.Math.toDegrees(carto.longitude);
+            var lat = C.Math.toDegrees(carto.latitude);
+            var half = (carto.height / 40075016.686) * 180;
+            return { west: lon - half, south: lat - half, east: lon + half, north: lat + half };
+          }
+          return {
+            west: C.Math.toDegrees(rect.west), south: C.Math.toDegrees(rect.south),
+            east: C.Math.toDegrees(rect.east), north: C.Math.toDegrees(rect.north),
+          };
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function applyExtent(map, ext) {
+      if (!ext) return false;
+      try {
+        var impl = map.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          var size = impl.getSize();
+          var code = view.getProjection().getCode();
+          var min = window.ol.proj.fromLonLat([ext.west, ext.south], code);
+          var max = window.ol.proj.fromLonLat([ext.east, ext.north], code);
+          var olExt = [
+            Math.min(min[0], max[0]), Math.min(min[1], max[1]),
+            Math.max(min[0], max[0]), Math.max(min[1], max[1]),
+          ];
+          view.fit(olExt, { size: size, duration: 0, constrainResolution: false });
+          return true;
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          var rect = C.Rectangle.fromDegrees(ext.west, ext.south, ext.east, ext.north);
+          impl.camera.setView({ destination: rect });
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function readCenterZoom(map) {
+      try {
+        var impl = map.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          var c = view.getCenter();
+          var ll = window.ol.proj.toLonLat(c, view.getProjection().getCode());
+          return { lon: ll[0], lat: ll[1], zoom: view.getZoom() };
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          var carto = impl.camera.positionCartographic;
+          return { lon: C.Math.toDegrees(carto.longitude), lat: C.Math.toDegrees(carto.latitude), zoom: zoomForAltitude(carto.height) };
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function applyView(map, v) {
+      try {
+        var impl = map.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          var c = window.ol.proj.fromLonLat([v.lon, v.lat], view.getProjection().getCode());
+          view.setCenter(c);
+          if (typeof v.zoom === "number") view.setZoom(v.zoom);
+          return true;
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          var alt = altitudeForZoom(v.zoom);
+          impl.camera.setView({
+            destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
+            orientation: { heading: 0.0, pitch: -C.Math.PI_OVER_TWO, roll: 0.0 },
+          });
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    // --- postMessage con el padre ----------------------------------------
+    function postToParent(msg) {
+      try { window.parent.postMessage(Object.assign({ vpId: VP_ID, source: "cmpv-vista" }, msg), "*"); } catch (e) {}
+    }
+
+    var _map = null;
+    var _prog = 0;
+    var _controlsVisible = true;
+    var _configApplied = false;
+
+    function onNativeChange() {
+      if (_prog > 0) return;
+      var ext = readExtent(_map);
+      if (ext) postToParent({ type: "cmpv:view", extent: ext });
+    }
+
+    function wireContinuousSync() {
+      var impl = _map.getMapImpl();
+      if (impl && typeof impl.getView === "function") {
+        var view = impl.getView();
+        view.on("change:center", onNativeChange);
+        view.on("change:resolution", onNativeChange);
+      } else if (impl && impl.scene && impl.camera) {
+        impl.camera.percentageChanged = 0.001;
+        impl.camera.changed.addEventListener(onNativeChange);
+      }
+    }
+
+    function handleParentMessage(ev) {
+      var d = ev.data;
+      if (!d || typeof d.type !== "string") return;
+      if (d.type === "cmpv:setView") {
+        _prog += 1;
+        if (d.extent) applyExtent(_map, d.extent);
+        else applyView(_map, { lon: d.lon, lat: d.lat, zoom: d.zoom });
+        setTimeout(function () { _prog = Math.max(0, _prog - 1); }, 0);
+      } else if (d.type === "cmpv:getView") {
+        var ext = readExtent(_map);
+        if (ext) postToParent({ type: "cmpv:view", extent: ext });
+      } else if (d.type === "cmpv:setControls") {
+        applyControlsVisibility(d.visible !== false);
+      } else if (d.type === "cmpv:setConfig") {
+        applyConfig(d.config);
+      } else if (d.type === "cmpv:updateSize") {
+        // El padre acaba de mostrar esta vista (o cambiar su tamaño). Forzar
+        // que el mapa recalcule su viewport para que pinte correctamente.
+        try {
+          if (_map) {
+            var impl = _map.getMapImpl();
+            var isCesium = !!(impl && impl.scene && impl.camera);
+            if (impl && typeof impl.updateSize === "function") impl.updateSize();        // OpenLayers
+            else if (isCesium && typeof impl.resize === "function") impl.resize();       // Cesium
+            // Después de redimensionar, enviar el extent ACTUAL al padre.
+            // OpenLayers es síncrono (updateSize actualiza de inmediato), pero
+            // Cesium renderiza de forma asíncrona: el globo necesita tiempo para
+            // cargar teselas y actualizar la vista. Usamos un delay mayor para
+            // Cesium y uno corto para OL.
+            var delay = isCesium ? 300 : 0;
+            setTimeout(function () {
+              var ext = readExtent(_map);
+              if (ext) postToParent({ type: "cmpv:view", extent: ext });
+            }, delay);
+          }
+        } catch (e) {}
+      }
+    }
+
+    // Reconstruye capas/plugins/controles serializados con el IDEE del iframe.
+    function applyConfig(cfg) {
+      if (!cfg || _configApplied || !_map) return;
+      _configApplied = true;
+      var IDEE = window.IDEE;
+      try {
+        var layers = [];
+        (cfg.layers || []).forEach(function (l) {
+          if (!l) return;
+          if (l.kind === "string") { layers.push(l.def); }
+          else if (l.kind === "object" && l.type && IDEE.layer && IDEE.layer[l.type]) {
+            try { layers.push(new IDEE.layer[l.type](l.params || {})); }
+            catch (e) { console.warn("[vista] Layer " + l.type + " no reconstruible:", e); }
+          }
+        });
+        if (layers.length) _map.addLayers(layers);
+      } catch (e) { console.warn("[vista] Error añadiendo capas:", e); }
+      try {
+        if (cfg.controls && cfg.controls.length && _map.addControls) _map.addControls(cfg.controls.slice());
+      } catch (e) { console.warn("[vista] Error añadiendo controles:", e); }
+      try {
+        (cfg.plugins || []).forEach(function (p) {
+          if (!p || !p.name) return;
+          if (IDEE.plugin && IDEE.plugin[p.name]) {
+            try { _map.addPlugin(new IDEE.plugin[p.name](p.params || {})); }
+            catch (e) { console.warn("[vista] Plugin " + p.name + " no reconstruible:", e); }
+          } else { console.warn("[vista] Plugin no disponible en este iframe:", p.name); }
+        });
+      } catch (e) { console.warn("[vista] Error añadiendo plugins:", e); }
+      applyControlsVisibility(_controlsVisible);
+    }
+
+    // Oculta/muestra el chrome del mapa (controles/plugins IDEE + botón 2D/3D).
+    function applyControlsVisibility(visible) {
+      _controlsVisible = (visible !== false);
+      var areas = document.querySelectorAll(".m-area");
+      for (var i = 0; i < areas.length; i++) areas[i].style.display = _controlsVisible ? "" : "none";
+      var camb = document.querySelector(".cmpv-cambimpl");
+      if (camb) camb.style.display = _controlsVisible ? "" : "none";
+    }
+
+    // --- Arranque ---------------------------------------------------------
+    (async function boot() {
+      try { await loadApi(); }
+      catch (e) { console.error("[vista] No se pudo cargar la API-IDEE (" + IMPL + "):", e); return; }
+      var IDEE = window.IDEE;
+      if (IMPL === "cesium") { try { IDEE.config.DPI = 25.4 / 0.28; } catch (e) {} }
+      configBaseLayers();
+
+      _map = IDEE.map({ container: "mapaDIV" });
+      window._cmpvMap = _map;
+      window.mapajs = _map;
+
+      var applyInitial = function () {
+        _prog += 1;
+        applyView(_map, { lon: INIT_LON, lat: INIT_LAT, zoom: INIT_ZOOM });
+        setTimeout(function () { _prog = Math.max(0, _prog - 1); }, 0);
+      };
+      try { _map.on(IDEE.evt.COMPLETED, applyInitial); } catch (e) {}
+      setTimeout(applyInitial, 1200);
+
+      waitFor(function () {
+        try {
+          var impl = _map.getMapImpl();
+          return impl && ((typeof impl.getView === "function") || (impl.scene && impl.camera));
+        } catch (e) { return false; }
+      }, 12000).then(function () {
+        applyInitial();
+        wireContinuousSync();
+        if (SVGCarga) SVGCarga.hidden = true;
+        buildCambioImplButton();
+        postToParent({ type: "cmpv:ready", impl: IMPL });
+        // Para Cesium: el globo carga teselas de forma asíncrona. El primer
+        // cmpv:ready se envía cuando scene+camera existen, pero el globo puede
+        // no estar texturizado aún. Escuchamos postRender para enviar el extent
+        // REAL cuando Cesium haya terminado su primer render completo.
+        if (IMPL === "cesium") {
+          try {
+            var impl = _map.getMapImpl();
+            var onceRendered = false;
+            impl.scene.postRender.addEventListener(function () {
+              if (onceRendered) return;
+              onceRendered = true;
+              var ext = readExtent(_map);
+              if (ext) postToParent({ type: "cmpv:view", extent: ext });
+            });
+          } catch (e) {}
+        }
+      }).catch(function () {
+        if (SVGCarga) SVGCarga.hidden = true;
+        buildCambioImplButton();
+        postToParent({ type: "cmpv:ready", impl: IMPL, warning: "map-not-detected" });
+      });
+
+      window.addEventListener("message", handleParentMessage);
+    })();
+
+    // Botón 🌐 2D/3D. Ya NO recarga por location: emite cmpv:implChange y el
+    // padre regenera el srcdoc del iframe con la otra implementación.
+    function buildCambioImplButton() {
+      if (document.getElementById("cmpv-cambimpl-btn")) return;
+      var wrap = document.createElement("div");
+      wrap.className = "cmpv-cambimpl m-herramienta-container_cambImpl";
+      var btn = document.createElement("button");
+      btn.id = "cmpv-cambimpl-btn";
+      btn.className = "buttonHerramienta_cambImpl";
+      btn.title = "Cambiar a " + (IMPL === "cesium" ? "2D (OpenLayers)" : "3D (Cesium)");
+      if (IMPL === "cesium") btn.classList.add("activated");
+      wrap.appendChild(btn);
+      document.body.appendChild(wrap);
+      btn.addEventListener("click", function () {
+        var target = (IMPL === "cesium") ? "ol" : "cesium";
+        var st = readCenterZoom(_map) || { lon: INIT_LON, lat: INIT_LAT, zoom: INIT_ZOOM };
+        postToParent({ type: "cmpv:implChange", impl: target, lon: st.lon, lat: st.lat, zoom: st.zoom });
+      });
+      applyControlsVisibility(_controlsVisible);
+    }
+  }
+
   class miPlugin_comparacionVistas {
     /**
      * @param {Object} options
-     * @param {string} [options.vistaUrl] URL de la página de vista (iframe).
-     *        Por defecto "./vista.html" relativo al visualizador.
+     * @param {string} [options.id]
+     *
+     * El documento de cada vista (iframe) se genera dinámicamente vía srcdoc
+     * (el plugin es autocontenido; ya no depende de vista.html/vista.js).
+     *
+     * --- Configuración de comparación INICIAL (arranca en cualquier modo) ---
+     * @param {("single"|"swipe"|"mirror")} [options.mode="single"] Modo inicial.
+     * @param {Object} [options.swipe] Cortinilla: { rows:1|2, cols:1|2 }.
+     * @param {Object} [options.layout] Espejo: { type:"grid", rows, cols } o { type:"custom", spec:[1,3,1] }.
+     * @param {boolean} [options.sync=true] Sincronizar encuadre entre vistas.
+     * @param {boolean} [options.showControls=true] Mostrar controles/plugins de IDEE + botón 2D/3D.
+     *
+     * --- Vistas iniciales (cada una con su config de mapa) ---
+     * @param {Array<Object>} [options.views] Lista de vistas. Cada vista:
+     *   {
+     *     name?: string,
+     *     implementation?: "2D"|"3D"|"ol"|"cesium",   // acepta ambos formatos
+     *     center?: [lon,lat] | {lon,lat}, zoom?: number,
+     *     isPrimary?: boolean,                         // vista principal (clonada al "Crear")
+     *     layers?: Array<IDEE.layer.* | string>,       // objetos IDEE.layer o strings API
+     *     plugins?: Array<IDEE.plugin.* | {name,params}>,
+     *     controls?: Array<string>                     // p.ej. ["scale","panzoom"]
+     *   }
+     *   NOTA: no se aceptan objetos IDEE.map (el motor OL/Cesium es único por
+     *   documento). Sí se aceptan IDEE.layer / IDEE.plugin: se serializan aquí y
+     *   se reconstruyen dentro de cada iframe.
+     * @param {Array<number|string>} [options.slots] Qué vista ocupa cada slot
+     *   inicial (por índice o id). Opcional.
+     *
+     * --- Retrocompatibilidad ---
      * @param {number} [options.lon] Centro inicial (lon). Def. -3.70
      * @param {number} [options.lat] Centro inicial (lat). Def. 40.42
      * @param {number} [options.zoom] Zoom inicial. Def. 12
-     * @param {string} [options.id]
      */
     constructor(options = {}) {
       this.name = "miPlugin_comparacionVistas";
       this.options = options || {};
       this.id = this.options.id || ("comparacionVistas-" + nextUid());
-      this.vistaUrl = this.options.vistaUrl || "./vista.html";
       this.initLon = (typeof this.options.lon === "number") ? this.options.lon : -3.70;
       this.initLat = (typeof this.options.lat === "number") ? this.options.lat : 40.42;
       this.initZoom = (typeof this.options.zoom === "number") ? this.options.zoom : 12;
@@ -67,28 +492,137 @@
       this.ui = null;
       this._workArea = null;
 
-      // view = { id, name, impl:'ol'|'cesium', iframe, div, ready, lastView, _progUpdates }
+      // view = { id, name, impl:'ol'|'cesium', iframe, div, ready, lastView,
+      //          _progUpdates, config:{layers,plugins,controls} }
       this.views = [];
-      this.mode = "single";          // "single" | "swipe" | "mirror"
-      this.sync = true;
+      // Modo inicial (single/swipe/mirror). Retrocompat: si no se indica, single.
+      this.mode = (["single", "swipe", "mirror"].indexOf(this.options.mode) !== -1)
+        ? this.options.mode : "single";
+      this.sync = (this.options.sync !== false);
+      this.showControls = (this.options.showControls !== false);
       this.activeViewId = null;
-      this.swipe = { a: null, b: null, pos: 0.5, orientation: "vertical" };
-      // Estructura del grid de espejo: array de FILAS; cada fila es un array de
-      // viewIds (celdas). Permite grid IRREGULAR (filas con distinto nº de
-      // celdas). Se inicializa al entrar en modo espejo si está vacío.
+
+      // Cortinilla: disposition en grid (1–2 filas × 1–2 columnas) con
+      // divisores arrastrables entre celdas.
+      var sw = this.options.swipe || {};
+      this.swipe = {
+        rows: Math.max(1, Math.min(parseInt(sw.rows, 10) || 1, 2)),
+        cols: Math.max(1, Math.min(parseInt(sw.cols, 10) || 2, 2)),
+        grid: [],             // [[viewId, ...], ...] — misma estructura que mirror
+        dividersV: [],        // posiciones 0..1 de divisores verticales (entre columnas)
+        dividersH: [],        // posiciones 0..1 de divisores horizontales (entre filas)
+      };
+
+      // Espejo: array de FILAS (cada fila = array de viewIds). Grid irregular
+      // permitido. Se inicializa al entrar en modo espejo si está vacío.
       this.grid = [];
-      // Tipo de disposición del espejo: "grid" (regular, filas × columnas) o
-      // "custom" (irregular: cada fila tiene su propio nº de celdas).
-      this.layoutType = "grid";
-      // Especificación del grid irregular: array con el nº de celdas por fila.
-      // p.ej. [1, 3, 2] = fila1 con 1 celda, fila2 con 3, fila3 con 2.
-      this.customSpec = [1, 2];
-      this._divisor = null;
+      // Tipo de disposición del espejo y su especificación inicial.
+      var lay = this.options.layout || {};
+      this.layoutType = (lay.type === "custom") ? "custom" : "grid";
+      this._initGridRows = (typeof lay.rows === "number") ? lay.rows : 1;
+      this._initGridCols = (typeof lay.cols === "number") ? lay.cols : 2;
+      this.customSpec = Array.isArray(lay.spec) && lay.spec.length ? lay.spec.slice() : [1, 2];
+
+      // Config de vistas iniciales (serializada, lista para consumir en addTo).
+      this._initialViews = this._normalizeInitialViews(this.options.views);
+      this._initialSlots = Array.isArray(this.options.slots) ? this.options.slots.slice() : null;
+
+      // Vistas que esperan sincronización inicial (la ref no ha reportado extent).
+      this._pendingSyncViews = new Set();
 
       // Escucha global de mensajes de los iframes.
       var self = this;
       this._onMessage = function (ev) { self._handleViewMessage(ev); };
       window.addEventListener("message", this._onMessage);
+    }
+
+    // =====================================================================
+    //  Normalización / serialización de configuración
+    // =====================================================================
+    // Acepta "2D"/"3D" y "ol"/"cesium"; devuelve siempre "ol"|"cesium".
+    _normalizeImpl(impl) {
+      if (impl === "cesium" || impl === "3D" || impl === "3d") return "cesium";
+      return "ol"; // "2D","ol" y cualquier otro -> ol
+    }
+
+    // Extrae {lon,lat} de center:[lon,lat] | {lon,lat}.
+    _normalizeCenter(center) {
+      if (Array.isArray(center) && center.length >= 2) {
+        return { lon: Number(center[0]), lat: Number(center[1]) };
+      }
+      if (center && typeof center === "object" && typeof center.lon === "number") {
+        return { lon: center.lon, lat: center.lat };
+      }
+      return null;
+    }
+
+    // Serializa un layer para transportarlo al iframe y reconstruirlo allí.
+    // Acepta: string (definición API-IDEE) u objeto IDEE.layer.* (usa su
+    // constructorParameters). Devuelve { kind, ... } o null si no se puede.
+    _serializeLayer(layer) {
+      if (!layer) return null;
+      if (typeof layer === "string") return { kind: "string", def: layer };
+      // Objeto IDEE.layer.*: type ("WMS","GeoJSON","TMS"...) + constructorParameters.
+      try {
+        var type = layer.type || (layer.constructorParameters && layer.constructorParameters.type);
+        var cp = layer.constructorParameters;
+        if (type && cp) {
+          // WMS usa {userParameters}, otros usan {parameters}. Unificamos.
+          var params = cp.userParameters || cp.parameters || cp;
+          // Sólo si es JSON-serializable (evita referencias a impl/map).
+          var safe = JSON.parse(JSON.stringify(params));
+          return { kind: "object", type: type, params: safe };
+        }
+      } catch (e) { /* no serializable: se ignora abajo */ }
+      console.warn("[comparacionVistas] Layer no serializable, se omite:", layer);
+      return null;
+    }
+
+    // Serializa un plugin: acepta objeto IDEE.plugin.* (usa name + params/options)
+    // o { name, params }. Devuelve { name, params } o null.
+    _serializePlugin(plugin) {
+      if (!plugin) return null;
+      if (typeof plugin === "object" && plugin.name && !plugin.addTo) {
+        // Ya es una definición { name, params }.
+        try { return { name: plugin.name, params: JSON.parse(JSON.stringify(plugin.params || {})) }; }
+        catch (e) { return { name: plugin.name, params: {} }; }
+      }
+      try {
+        var name = plugin.name;
+        var raw = plugin.options || plugin.params || {};
+        var params = JSON.parse(JSON.stringify(raw));
+        if (name) return { name: name, params: params };
+      } catch (e) { /* no serializable */ }
+      console.warn("[comparacionVistas] Plugin no serializable, se omite:", plugin);
+      return null;
+    }
+
+    // Normaliza la lista de vistas del constructor a una forma interna estable:
+    // [{ name?, impl, center?, zoom?, isPrimary, config:{layers,plugins,controls} }]
+    _normalizeInitialViews(views) {
+      var self = this;
+      if (!Array.isArray(views) || !views.length) return null;
+      var out = views.map(function (v, i) {
+        v = v || {};
+        var center = self._normalizeCenter(v.center);
+        var layers = Array.isArray(v.layers)
+          ? v.layers.map(function (l) { return self._serializeLayer(l); }).filter(Boolean) : [];
+        var plugins = Array.isArray(v.plugins)
+          ? v.plugins.map(function (p) { return self._serializePlugin(p); }).filter(Boolean) : [];
+        var controls = Array.isArray(v.controls) ? v.controls.slice() : [];
+        return {
+          name: v.name || ("Vista " + (i + 1)),
+          impl: self._normalizeImpl(v.implementation),
+          lon: center ? center.lon : undefined,
+          lat: center ? center.lat : undefined,
+          zoom: (typeof v.zoom === "number") ? v.zoom : undefined,
+          isPrimary: !!v.isPrimary,
+          config: { layers: layers, plugins: plugins, controls: controls },
+        };
+      });
+      // Garantiza exactamente una principal: la marcada, o la primera.
+      if (!out.some(function (v) { return v.isPrimary; })) out[0].isPrimary = true;
+      return out;
     }
 
     // --- Contrato de item del supraplugin ----------------------------------
@@ -97,10 +631,29 @@
       this._resolveWorkArea();
       this._adoptPrimaryView();
       this.ui = this._buildUI();
+      // Aplica la configuración de comparación INICIAL (modo + swipe/grid).
+      this._applyInitialComparison();
       this._refreshUI();
-      // Coloca la vista inicial.
-      this._relayout();
       return this.ui;
+    }
+
+    // Aplica el modo inicial y su configuración específica (swipe/layout). Si el
+    // constructor no indicó nada, equivale a arrancar en "single" (retrocompat).
+    _applyInitialComparison() {
+      if (this.mode === "mirror") {
+        // Prepara el grid según el layout inicial antes de entrar en el modo.
+        if (this.layoutType === "custom") {
+          this._setGridCustom(this.customSpec);
+        } else {
+          this._setGridRegular(this._initGridRows, this._initGridCols);
+        }
+        this.setMode("mirror");
+      } else if (this.mode === "swipe") {
+        // swipe.rows y swipe.cols ya vienen del constructor.
+        this.setMode("swipe");
+      } else {
+        this.setMode("single");
+      }
     }
 
     // Área de trabajo: un stage que llena #mapaDIV y aloja los iframes de vistas.
@@ -127,6 +680,28 @@
     // como vista: el comparador toma el control del área con sus iframes.
     _adoptPrimaryView() {
       if (this.views.length) return;
+
+      // Si el constructor trajo vistas iniciales, créalas todas con su config.
+      if (this._initialViews && this._initialViews.length) {
+        var self = this;
+        var firstPrimaryId = null;
+        this._initialViews.forEach(function (vc) {
+          var v = self._makeView({
+            name: vc.name,
+            impl: vc.impl,
+            isPrimary: vc.isPrimary,
+            lon: (typeof vc.lon === "number") ? vc.lon : self.initLon,
+            lat: (typeof vc.lat === "number") ? vc.lat : self.initLat,
+            zoom: (typeof vc.zoom === "number") ? vc.zoom : self.initZoom,
+            config: vc.config,
+          });
+          if (vc.isPrimary && !firstPrimaryId) firstPrimaryId = v.id;
+        });
+        this.activeViewId = firstPrimaryId || (this.views[0] && this.views[0].id);
+        return;
+      }
+
+      // Retrocompat: una sola vista OL con el encuadre lon/lat/zoom clásicos.
       var primary = this._makeView({
         name: "Vista 1",
         impl: "ol",
@@ -134,6 +709,12 @@
         lon: this.initLon, lat: this.initLat, zoom: this.initZoom,
       });
       this.activeViewId = primary.id;
+    }
+
+    // Devuelve la vista principal (isPrimary) o, en su defecto, la primera.
+    _getPrimaryView() {
+      for (var i = 0; i < this.views.length; i++) if (this.views[i].isPrimary) return this.views[i];
+      return this.views[0] || null;
     }
 
     // Crea el objeto vista + su iframe dentro del stage.
@@ -152,9 +733,10 @@
       var lat = (typeof opts.lat === "number") ? opts.lat : this.initLat;
       var zoom = (typeof opts.zoom === "number") ? opts.zoom : this.initZoom;
       var impl = (opts.impl === "cesium") ? "cesium" : "ol";
-      iframe.src = this._buildVistaUrl(id, impl, lon, lat, zoom);
       div.appendChild(iframe);
       this._workArea.appendChild(div);
+      // El iframe ya está en el DOM (about:blank): escribimos su documento.
+      this._writeIframeDoc(iframe, id, impl, lon, lat, zoom);
 
       var view = {
         id: id,
@@ -166,17 +748,92 @@
         ready: false,
         lastView: { lon: lon, lat: lat, zoom: zoom },
         _progUpdates: 0,
+        _extentReported: false,
+        // Config de mapa de la vista (capas/plugins/controles serializados),
+        // que se envía al iframe cuando esté listo y se clona al "Crear".
+        config: opts.config || { layers: [], plugins: [], controls: [] },
       };
       this.views.push(view);
       return view;
     }
 
-    _buildVistaUrl(vpId, impl, lon, lat, zoom) {
-      var q = "?impl=" + impl + "&vp=" + encodeURIComponent(vpId) +
-        "&lon=" + encodeURIComponent(lon) +
-        "&lat=" + encodeURIComponent(lat) +
-        "&zoom=" + encodeURIComponent(zoom);
-      return this.vistaUrl + q;
+    // Genera el documento COMPLETO de una vista para inyectarlo en iframe.srcdoc.
+    // Antes esto era vista.html + vista.js; ahora el plugin es autocontenido.
+    //  - <base href> apunta a la carpeta del plugin (PLUGIN_BASE), para que las
+    //    rutas relativas (spinner ../../img, cambioImpl.css) resuelvan.
+    //  - Los parámetros van en window.__CMPV_PARAMS (no en query string).
+    //  - El script de la vista es _vistaBoot serializado con .toString().
+    _buildVistaSrcdoc(vpId, impl, lon, lat, zoom) {
+      var params = {
+        impl: impl, vp: vpId,
+        lon: Number(lon), lat: Number(lat), zoom: Number(zoom),
+      };
+      // IMPORTANTE: NO usamos <base href>. Un <base> rompe la carga de los Web
+      // Workers de CesiumJS (resuelve mal sus rutas de worker/asset), dejando el
+      // globo 3D en negro aunque las teselas se descarguen. En su lugar, TODAS
+      // nuestras rutas de recursos se hacen ABSOLUTAS contra PLUGIN_BASE.
+      // PLUGIN_BASE = .../ext/comparacionVistas/  →  resolvemos con new URL().
+      var abs = function (rel) {
+        try { return new URL(rel, PLUGIN_BASE || location.href).href; }
+        catch (e) { return rel; }
+      };
+      var cssCambioImpl = abs("../cambioImpl/cambioImpl.css");   // ext/cambioImpl/
+      var spinner = abs("../../img/iconos/gear-spinner.svg");    // img/iconos/
+      return "" +
+        "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">" +
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0\">" +
+        "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">" +
+        "<meta name=\"cnig\" content=\"yes\">" +
+        "<title>Vista (comparación)</title>" +
+        // Estilo del botón 🌐 (reutiliza el del plugin cambioImpl), ruta absoluta.
+        "<link type=\"text/css\" rel=\"stylesheet\" href=\"" + cssCambioImpl + "\">" +
+        // Estilos de la vista (antes vista.css), ahora inline.
+        "<style>" +
+        "html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden}" +
+        "#mapaDIV{width:100%;height:100%;position:relative}" +
+        "#cargaSVG{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.85);pointer-events:none}" +
+        "#cargaSVG[hidden]{display:none}#cargaSVG img{width:64px;height:64px}" +
+        ".cmpv-cambimpl{position:absolute;top:10px;left:10px;z-index:40}" +
+        ".cmpv-cambimpl .buttonHerramienta_cambImpl{width:40px;height:40px;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;box-sizing:border-box}" +
+        ".cmpv-cambimpl .buttonHerramienta_cambImpl:before{display:block;line-height:1;margin:0}" +
+        "</style></head><body>" +
+        "<div id=\"cargaSVG\"><img src=\"" + spinner + "\"></div>" +
+        "<div id=\"mapaDIV\"></div>" +
+        "<script>window.__CMPV_PARAMS=" + JSON.stringify(params) + ";</scr" + "ipt>" +
+        "<script>(" + _vistaBoot.toString() + ")();</scr" + "ipt>" +
+        "</body></html>";
+    }
+
+    // Escribe el documento de la vista DENTRO de un iframe about:blank vía
+    // document.write. Es el único mecanismo que cumple las 3 restricciones:
+    //  - El iframe about:blank modificado por el padre HEREDA el origin real del
+    //    padre (no "null" como srcdoc, no opaco como blob:). Esto es CRÍTICO:
+    //    CesiumJS crea Web Workers para procesar la imaginería; con origin null
+    //    u opaco los workers fallan en silencio → globo NEGRO. Con origin real
+    //    funcionan y el globo se texturiza.
+    //  - Hereda la URL base del padre, así las rutas relativas de datos del
+    //    usuario (p.ej. ../../datos/x.geojson) resuelven correctamente.
+    //  - Autocontenido: el HTML se genera aquí, sin ficheros externos.
+    _writeIframeDoc(iframe, vpId, impl, lon, lat, zoom) {
+      var html = this._buildVistaSrcdoc(vpId, impl, lon, lat, zoom);
+      var write = function () {
+        try {
+          var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+          if (!doc) return false;
+          doc.open();
+          doc.write(html);
+          doc.close();
+          return true;
+        } catch (e) { return false; }
+      };
+      // El iframe recién insertado ya tiene un about:blank document listo.
+      if (!write()) {
+        // Respaldo defensivo: reintenta tras el load de about:blank.
+        iframe.addEventListener("load", function onL() {
+          iframe.removeEventListener("load", onL);
+          write();
+        });
+      }
     }
 
     _viewByFrame(win) {
@@ -203,18 +860,52 @@
         v.ready = true;
         // El iframe informa de su implementación real al estar listo.
         if (d.impl === "ol" || d.impl === "cesium") v.impl = d.impl;
-        // Reaplica el último encuadre conocido por si el iframe arrancó en otro.
-        if (v.lastView) this._sendSetView(v, v.lastView);
+        // Envía la config de mapa (capas/plugins/controles) para que el iframe
+        // la reconstruya con su propio IDEE (antes del encuadre).
+        this._sendConfig(v);
+        // Encuadre a aplicar cuando la vista queda lista. Si la sincronización
+        // está activa, alineamos SIEMPRE con la vista de referencia (la activa),
+        // no con el encuadre propio: así una vista que acaba de cargar (nueva, o
+        // recargada por 2D/3D, o que estaba oculta) aparece YA sincronizada sin
+        // necesidad de mover el mapa.
+        //
+        // Si la referencia NO ha reportado su extent aún (p.ej. es Cesium y el
+        // globo aún carga tiles), NO sincronizamos: su lastView podría ser un
+        // extent basado en dimensiones antiguas. En su lugar, encolamos la vista
+        // y esperamos a que la ref reporte cmpv:view con el extent real.
+        var deferred = false;
+        if (this.sync) {
+          var ref = this.getView(this.activeViewId) || this.views[0];
+          if (ref && ref !== v && ref._extentReported && ref.lastView) {
+            this._sendSetView(v, ref.lastView);
+          } else if (ref && ref !== v && !ref._extentReported) {
+            // La ref aún no ha reportado: encola para sincronizar después.
+            this._pendingSyncViews.add(v.id);
+            deferred = true;
+          }
+        }
+        if (!deferred) {
+          var stateToApply = v.lastView;
+          if (stateToApply) this._sendSetView(v, stateToApply);
+        }
+        // Aplica el estado actual de visibilidad de controles/plugins (para
+        // vistas nuevas o recargadas tras un cambio 2D/3D).
+        this._sendControls(v);
         this._refreshUI();
         return;
       }
 
-      // El botón 🌐 dentro de la vista cambió su implementación (2D<->3D). El
-      // iframe se recargará solo; aquí actualizamos estado y badge de inmediato.
+      // El botón 🌐 dentro de la vista pidió cambiar su implementación (2D<->3D).
+      // Con srcdoc, el iframe NO se recarga solo: lo regeneramos aquí con la otra
+      // implementación, preservando el encuadre que nos envió.
       if (d.type === "cmpv:implChange") {
-        if (d.impl === "ol" || d.impl === "cesium") v.impl = d.impl;
+        var newImpl = (d.impl === "ol" || d.impl === "cesium") ? d.impl
+          : ((v.impl === "cesium") ? "ol" : "cesium");
+        v.impl = newImpl;
         if (typeof d.lon === "number") v.lastView = { lon: d.lon, lat: d.lat, zoom: d.zoom };
         v.ready = false;
+        var cz = this._centerZoomFromState(v.lastView);
+        this._setIframeDoc(v, newImpl, cz.lon, cz.lat, cz.zoom);
         this._refreshUI();
         return;
       }
@@ -223,6 +914,13 @@
         // Guardamos el encuadre como EXTENT (área visible) si viene; si no,
         // como centro+zoom (compatibilidad con el arranque).
         v.lastView = d.extent ? { extent: d.extent } : { lon: d.lon, lat: d.lat, zoom: d.zoom };
+        // Marcar que esta vista ya ha reportado su extent real. El primer
+        // cmpv:view es el más importante: si hay vistas encoladas esperando
+        // sincronizarse con esta, les enviamos el extent fresco AHORA.
+        if (!v._extentReported) {
+          v._extentReported = true;
+          this._flushPendingSyncs(v);
+        }
         if (!this.sync) return;
         if (v._progUpdates > 0) return;   // eco de un setView que enviamos: ignora
         this._broadcast(v, v.lastView);
@@ -262,6 +960,65 @@
       this._broadcast(ref, ref.lastView);
     }
 
+    // Envía el extent fresco de una vista a todas las vistas que estaban
+    // esperando (encoladas en cmpv:ready porque la ref no había reportado).
+    _flushPendingSyncs(sourceView) {
+      if (!this._pendingSyncViews || !this._pendingSyncViews.size) return;
+      var self = this;
+      var ids = Array.from(this._pendingSyncViews);
+      this._pendingSyncViews.clear();
+      ids.forEach(function (id) {
+        var v = self.getView(id);
+        if (!v || !v.ready || !sourceView.lastView) return;
+        self._sendSetView(v, sourceView.lastView);
+      });
+    }
+
+    // Envía a una vista su config de mapa (capas/plugins/controles serializados)
+    // para que la reconstruya con su propio IDEE dentro del iframe.
+    _sendConfig(v) {
+      if (!v || !v.iframe || !v.iframe.contentWindow || !v.config) return;
+      var cfg = v.config;
+      if (!(cfg.layers && cfg.layers.length) &&
+          !(cfg.plugins && cfg.plugins.length) &&
+          !(cfg.controls && cfg.controls.length)) return; // nada que enviar
+      try {
+        v.iframe.contentWindow.postMessage(
+          { type: "cmpv:setConfig", target: v.id, config: cfg }, "*");
+      } catch (e) {}
+    }
+
+    // Envía a una vista el estado de visibilidad de controles/plugins.
+    _sendControls(v) {
+      if (!v || !v.iframe || !v.iframe.contentWindow) return;
+      try {
+        v.iframe.contentWindow.postMessage(
+          { type: "cmpv:setControls", target: v.id, visible: this.showControls }, "*");
+      } catch (e) {}
+    }
+
+    // Difunde el estado de controles/plugins a TODAS las vistas.
+    _broadcastControls() {
+      var self = this;
+      this.views.forEach(function (v) { self._sendControls(v); });
+    }
+
+    // Envía a una vista el aviso de que su contenedor cambió de tamaño y debe
+    // recalcular el viewport del mapa (OpenLayers updateSize / Cesium resize).
+    _sendUpdateSize(v) {
+      if (!v || !v.iframe || !v.iframe.contentWindow) return;
+      try { v.iframe.contentWindow.postMessage({ type: "cmpv:updateSize", target: v.id }, "*"); }
+      catch (e) {}
+    }
+
+    // Avisa a TODAS las vistas visibles de que deben redimensionar su mapa.
+    _broadcastUpdateSize() {
+      var self = this;
+      this.views.forEach(function (v) {
+        if (v.div && v.div.style.display !== "none") self._sendUpdateSize(v);
+      });
+    }
+
     // =====================================================================
     //  UI (barra + sidenav) — estilo QGIS2API-IDEE
     // =====================================================================
@@ -290,10 +1047,14 @@
         '  </div>' +
         '  <div class="cmpv-sidenav__body">' +
         '    <label class="cmpv-field"><input type="checkbox" data-role="sync" checked> Sincronizar encuadre entre vistas</label>' +
-        '    <label class="cmpv-field" data-only="swipe">Orientación de la cortinilla' +
-        '      <select class="cmpv-select" data-role="orientation">' +
-        '        <option value="vertical">Vertical</option>' +
-        '        <option value="horizontal">Horizontal</option></select></label>' +
+        '    <label class="cmpv-field"><input type="checkbox" data-role="controls" checked> Mostrar controles y plugins en las vistas</label>' +
+        '    <div class="cmpv-field cmpv-field--grid" data-only="swipe">' +
+        '      <span class="cmpv-grid__title">Disposición (cortinilla)</span>' +
+        '      <div class="cmpv-grid-inputs">' +
+        '        <label>Filas <input type="number" class="cmpv-num" data-role="swipe-rows" min="1" max="2" value="1"></label>' +
+        '        <label>Columnas <input type="number" class="cmpv-num" data-role="swipe-cols" min="1" max="2" value="2"></label>' +
+        '      </div>' +
+        '    </div>' +
         '    <div class="cmpv-field cmpv-field--grid" data-only="mirror">' +
         '      <span class="cmpv-grid__title">Disposición (espejo)</span>' +
         '      <label class="cmpv-grid-type">Tipo' +
@@ -312,10 +1073,22 @@
         '        <button type="button" class="cmpv-custom__add" data-role="add-row">➕ Añadir fila</button>' +
         '      </div>' +
         '    </div>' +
-        '    <div class="cmpv-sidenav__subtitle">Gestión de vistas</div>' +
-        '    <table class="cmpv-table">' +
-        '      <thead><tr><th data-role="th-eye" title="Vista visible en modo Ver">👁</th><th>Vista</th><th>Modo</th><th></th></tr></thead>' +
-        '      <tbody data-role="lista"></tbody></table>' +
+        '    <div class="cmpv-sidenav__section" data-role="seccion-comparacion">' +
+        '      <div class="cmpv-sidenav__subtitle">Mapas de comparación</div>' +
+        '      <div class="cmpv-slots__hint">Elige qué vista se muestra en cada mapa de la comparación.</div>' +
+        '      <div class="cmpv-slots" data-role="slots"></div>' +
+        '    </div>' +
+        '    <div class="cmpv-accordion" data-role="acc-vistas">' +
+        '      <div class="cmpv-accordion__header" role="button" tabindex="0" aria-expanded="true">' +
+        '        <span class="cmpv-sidenav__subtitle cmpv-accordion__title">Gestión de vistas</span>' +
+        '        <span class="cmpv-accordion__chevron">▸</span>' +
+        '      </div>' +
+        '      <div class="cmpv-accordion__body">' +
+        '        <table class="cmpv-table">' +
+        '          <thead><tr><th>Vista</th><th>Modo</th><th></th><th></th></tr></thead>' +
+        '          <tbody data-role="lista"></tbody></table>' +
+        '      </div>' +
+        '    </div>' +
         '  </div>' +
         '</div>';
 
@@ -333,9 +1106,26 @@
       root.querySelector('[data-role="sync"]').addEventListener("change", function () {
         self.sync = this.checked; if (self.sync) self._resyncFromActive();
       });
-      root.querySelector('[data-role="orientation"]').addEventListener("change", function () {
-        self.swipe.orientation = this.value; if (self.mode === "swipe") self._layoutSwipe();
+      root.querySelector('[data-role="controls"]').addEventListener("change", function () {
+        self.showControls = this.checked; self._broadcastControls();
       });
+
+      // --- Disposición de la cortinilla: filas × columnas (1–2 × 1–2) ---
+      var swipeRowsInput = root.querySelector('[data-role="swipe-rows"]');
+      var swipeColsInput = root.querySelector('[data-role="swipe-cols"]');
+      var applySwipeGrid = function () {
+        var r = parseInt(swipeRowsInput.value, 10) || 1;
+        var c = parseInt(swipeColsInput.value, 10) || 2;
+        self.swipe.rows = Math.max(1, Math.min(r, 2));
+        self.swipe.cols = Math.max(1, Math.min(c, 2));
+        if (self.mode === "swipe") {
+          self._initSwipeGrid();
+          self._relayout();
+          self._refreshUI();
+        }
+      };
+      if (swipeRowsInput) swipeRowsInput.addEventListener("change", applySwipeGrid);
+      if (swipeColsInput) swipeColsInput.addEventListener("change", applySwipeGrid);
 
       // --- Disposición del espejo: selector de tipo (regular | irregular) ---
       var typeSel = root.querySelector('[data-role="layout-type"]');
@@ -379,6 +1169,20 @@
       });
       syncTypeUI();
 
+      // --- Acordeón "Gestión de vistas" (mismo patrón que vueloFotogrametrico) ---
+      var accVistas = root.querySelector('[data-role="acc-vistas"]');
+      if (accVistas) {
+        var accHeader = accVistas.querySelector(".cmpv-accordion__header");
+        var toggleAcc = function () {
+          var collapsed = accVistas.classList.toggle("cmpv-accordion--collapsed");
+          accHeader.setAttribute("aria-expanded", String(!collapsed));
+        };
+        accHeader.addEventListener("click", toggleAcc);
+        accHeader.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleAcc(); }
+        });
+      }
+
       return root;
     }
 
@@ -395,6 +1199,7 @@
       this.ui.querySelectorAll("[data-only]").forEach(function (el) {
         el.style.display = (el.getAttribute("data-only") === self.mode) ? "" : "none";
       });
+      this._renderSlotsComparacion();
       this._renderListaVistas();
     }
 
@@ -407,39 +1212,131 @@
       if (cfgBtn) cfgBtn.classList.toggle("cmpv-tool--active", open);
     }
 
+    // =====================================================================
+    //  Slots de comparación
+    //  --------------------------------------------------------------------
+    //  Un "slot" es una posición ESTABLE de la comparación (un mapa concreto
+    //  que se está comparando): un lado del divisor en cortinilla, o una celda
+    //  del grid en espejo. La vista que ocupa el slot es intercambiable.
+    //
+    //  _getSlots() devuelve la lista ORDENADA de slots del modo actual, cada
+    //  uno con { label, viewId, set(newViewId) }. El setter muta la estructura
+    //  interna correspondiente (this.swipe / this.grid) y re-aplica el layout.
+    // =====================================================================
+    _getSlots() {
+      var self = this;
+      var slots = [];
+      if (this.mode === "swipe") {
+        // Slots del grid de cortinilla: una entrada por celda.
+        var n = 0;
+        (this.swipe.grid || []).forEach(function (row, ri) {
+          row.forEach(function (viewId, ci) {
+            n += 1;
+            slots.push({
+              label: "Mapa " + n,
+              viewId: viewId,
+              _ri: ri, _ci: ci,
+              set: function (newViewId) {
+                self.swipe.grid[ri][ci] = newViewId;
+                self._layoutSwipe();
+                self._resyncFromActive();
+              },
+            });
+          });
+        });
+      } else if (this.mode === "mirror") {
+        var n = 0;
+        (this.grid || []).forEach(function (row, ri) {
+          row.forEach(function (viewId, ci) {
+            n += 1;
+            slots.push({
+              label: "Mapa " + n,
+              viewId: viewId,
+              _ri: ri, _ci: ci,
+              set: function (newViewId) {
+                self.grid[ri][ci] = newViewId;
+                self._layoutMirror();
+                self._resyncFromActive();
+              },
+            });
+          });
+        });
+      } else {
+        // single: un único slot = la vista activa.
+        slots.push({
+          label: "Mapa 1",
+          viewId: this.activeViewId || (this.views[0] && this.views[0].id),
+          set: function (viewId) {
+            self.activeViewId = viewId;
+            self._layoutSingle();
+            self._resyncFromActive();
+          },
+        });
+      }
+      return slots;
+    }
+
+    // Pinta la sección "Mapas de comparación": una fila por slot con un
+    // selector de qué vista mostrar. Sólo visible en cortinilla/espejo.
+    _renderSlotsComparacion() {
+      var self = this;
+      var seccion = this.ui.querySelector('[data-role="seccion-comparacion"]');
+      var cont = this.ui.querySelector('[data-role="slots"]');
+      if (!seccion || !cont) return;
+
+      var show = (this.mode === "swipe" || this.mode === "mirror");
+      seccion.style.display = show ? "" : "none";
+      if (!show) { cont.innerHTML = ""; return; }
+
+      var slots = this._getSlots();
+      cont.innerHTML = "";
+      slots.forEach(function (slot) {
+        var row = document.createElement("div");
+        row.className = "cmpv-slot";
+
+        var lbl = document.createElement("span");
+        lbl.className = "cmpv-slot__lbl";
+        lbl.textContent = slot.label;
+
+        var sel = document.createElement("select");
+        sel.className = "cmpv-select cmpv-slot__select";
+        self.views.forEach(function (v) {
+          var opt = document.createElement("option");
+          opt.value = v.id;
+          opt.textContent = v.name + (v.impl === "cesium" ? " (3D)" : " (2D)");
+          if (v.id === slot.viewId) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        sel.addEventListener("change", function () {
+          slot.set(this.value);
+          self._refreshUI();
+        });
+
+        row.appendChild(lbl);
+        row.appendChild(sel);
+        cont.appendChild(row);
+      });
+    }
+
     _renderListaVistas() {
       var self = this;
       var lista = this.ui.querySelector('[data-role="lista"]');
       if (!lista) return;
 
-      // El selector de vista visible (ojo) sólo tiene sentido en modo "Ver"
-      // (una única vista). En cortinilla/espejo se ocultan la columna y su
-      // cabecera.
-      var eyeOn = (this.mode === "single");
-      var th = this.ui.querySelector('[data-role="th-eye"]');
-      if (th) th.style.display = eyeOn ? "" : "none";
+      // La columna ojo (seleccionar vista activa) sólo aparece en modo "ver".
+      var showEye = (this.mode === "single");
+
+      // Actualiza la cabecera de la tabla según el modo.
+      var thead = lista.closest("table").querySelector("thead tr");
+      if (thead) {
+        thead.innerHTML = "<th>Vista</th><th>Modo</th>" +
+          (showEye ? "<th></th>" : "") +
+          "<th></th>";
+      }
 
       lista.innerHTML = "";
       this.views.forEach(function (v) {
         var row = document.createElement("tr");
-
-        // Ojo de visualización activa: marca la vista visible en modo "Ver".
-        if (eyeOn) {
-          var tdEye = document.createElement("td");
-          var eye = document.createElement("button");
-          eye.type = "button";
-          var isActive = (v.id === self.activeViewId);
-          eye.className = "cmpv-eye" + (isActive ? " cmpv-eye--active" : "");
-          eye.textContent = isActive ? "👁" : "👁‍🗨";
-          eye.title = isActive ? "Vista visible en modo Ver" : "Mostrar esta vista (modo Ver)";
-          eye.setAttribute("aria-pressed", isActive ? "true" : "false");
-          eye.addEventListener("click", function () {
-            self.activeViewId = v.id;
-            self.setMode("single");   // activa modo Ver mostrando esta vista
-          });
-          tdEye.appendChild(eye);
-          row.appendChild(tdEye);
-        }
 
         var tdName = document.createElement("td");
         var name = document.createElement("input");
@@ -456,6 +1353,19 @@
         toggle.title = "Cambiar entre 2D (OpenLayers) y 3D (Cesium)";
         toggle.addEventListener("click", function () { self.toggleImpl(v.id); });
         tdMode.appendChild(toggle);
+
+        // Botón ojo: selecciona esta vista como activa (solo modo "ver").
+        if (showEye) {
+          var tdEye = document.createElement("td");
+          var eye = document.createElement("button");
+          eye.type = "button";
+          eye.className = "cmpv-eye" + (v.id === self.activeViewId ? " cmpv-eye--active" : "");
+          eye.textContent = "👁";
+          eye.title = "Mostrar esta vista";
+          eye.addEventListener("click", function () { self.verVista(v.id); });
+          tdEye.appendChild(eye);
+          row.appendChild(tdEye);
+        }
 
         var tdDel = document.createElement("td");
         var del = document.createElement("button");
@@ -496,18 +1406,33 @@
 
     crearVista(opts = {}) {
       if (!this._workArea) this._resolveWorkArea();
+      // El encuadre se toma de la vista activa (o la primera) para no descuadrar.
       var ref = this.getView(this.activeViewId) || this.views[0];
       var cz = this._centerZoomFromState(ref && ref.lastView);
+      // Las vistas creadas SIEMPRE clonan la config e implementación de la vista
+      // PRINCIPAL (isPrimary): capas, plugins, controles y motor 2D/3D.
+      var primary = this._getPrimaryView();
+      var clonedConfig = primary && primary.config
+        ? this._cloneConfig(primary.config)
+        : { layers: [], plugins: [], controls: [] };
+      var impl = opts.impl || (primary ? primary.impl : "ol");
       var view = this._makeView({
         name: opts.name || ("Vista " + (this.views.length + 1)),
-        impl: opts.impl || "ol",
+        impl: impl,
         lon: cz.lon, lat: cz.lat, zoom: cz.zoom,
+        config: clonedConfig,
       });
       // Hereda el encuadre de la referencia (extent) para sincronizar al estar listo.
       if (ref && ref.lastView) view.lastView = ref.lastView;
       this._refreshUI();
       this._relayout();
       return view;
+    }
+
+    // Copia profunda (JSON) de una config de vista serializable.
+    _cloneConfig(cfg) {
+      try { return JSON.parse(JSON.stringify(cfg)); }
+      catch (e) { return { layers: [], plugins: [], controls: [] }; }
     }
 
     verVista(id) {
@@ -522,7 +1447,7 @@
       if (v.div && v.div.parentNode) v.div.parentNode.removeChild(v.div);
       this.views = this.views.filter(function (x) { return x.id !== id; });
       if (this.activeViewId === id) this.activeViewId = this.views[0] && this.views[0].id;
-      if (this.swipe.a === id || this.swipe.b === id) this._pickSwipePair();
+      if (this.mode === "swipe") this._initSwipeGrid();
       this._relayout();
       this._refreshUI();
     }
@@ -536,9 +1461,26 @@
       v.impl = newImpl;
       v.ready = false;
       var cz = this._centerZoomFromState(v.lastView);
-      // Recarga el iframe con la nueva implementación y el encuadre preservado.
-      v.iframe.src = this._buildVistaUrl(v.id, newImpl, cz.lon, cz.lat, cz.zoom);
+      // Regenera el documento del iframe con la nueva implementación y el encuadre
+      // preservado. El nuevo documento emitirá cmpv:ready y el padre le reenviará
+      // config + encuadre + estado de controles automáticamente.
+      this._setIframeDoc(v, newImpl, cz.lon, cz.lat, cz.zoom);
       this._refreshUI();
+    }
+
+    // Reescribe el documento del iframe de una vista (para cambiar 2D<->3D).
+    // Recreamos el iframe para partir de un about:blank limpio (evita restos del
+    // motor anterior en el mismo documento).
+    _setIframeDoc(v, impl, lon, lat, zoom) {
+      var old = v.iframe;
+      var iframe = document.createElement("iframe");
+      iframe.className = "cmpv-iframe";
+      iframe.setAttribute("frameborder", "0");
+      iframe.setAttribute("allow", "fullscreen");
+      if (old && old.parentNode) old.parentNode.replaceChild(iframe, old);
+      else if (v.div) v.div.appendChild(iframe);
+      v.iframe = iframe;
+      this._writeIframeDoc(iframe, v.id, impl, lon, lat, zoom);
     }
 
     // =====================================================================
@@ -679,8 +1621,8 @@
     }
 
     setMode(mode) {
-      if (mode === "swipe" && this.views.length < 2) {
-        this.crearVista();
+      if (mode === "swipe") {
+        this._initSwipeGrid();
       }
       if (mode === "mirror") {
         // Inicializa el grid si está vacío, respetando el tipo activo.
@@ -698,14 +1640,56 @@
       this._refreshUI();
     }
 
+    // Inicializa el grid de la cortinilla a partir de swipe.rows × swipe.cols.
+    // Crea las vistas que falten y rellena swipe.grid. Inicializa los divisores
+    // en 0.5 (mitad).
+    _initSwipeGrid() {
+      var r = this.swipe.rows;
+      var c = this.swipe.cols;
+      var total = r * c;
+      while (this.views.length < total) this.crearVista();
+      var grid = [];
+      var idx = 0;
+      for (var ri = 0; ri < r; ri++) {
+        var row = [];
+        for (var ci = 0; ci < c; ci++) {
+          row.push(this.views[idx].id);
+          idx += 1;
+        }
+        grid.push(row);
+      }
+      this.swipe.grid = grid;
+      // Divisores: 1 por cada frontera entre columnas (vertical) y entre filas (horizontal).
+      this.swipe.dividersV = [];
+      for (var i = 0; i < c - 1; i++) this.swipe.dividersV.push(0.5);
+      this.swipe.dividersH = [];
+      for (var j = 0; j < r - 1; j++) this.swipe.dividersH.push(0.5);
+    }
+
     _relayout() {
       if (this.mode === "single") this._layoutSingle();
       else if (this.mode === "swipe") this._layoutSwipe();
       else if (this.mode === "mirror") this._layoutMirror();
-      // Tras dimensionar, reenvía el encuadre de la activa al resto.
+      // Tras mostrar/ocultar vistas, forzar que sus mapas recalcule el viewport
+      // (OpenLayers updateSize / Cesium resize). Sin esto, un mapa que estaba
+      // oculto (display:none) no pinta hasta que el usuario lo mueve.
       var self = this;
-      setTimeout(function () { self._resyncFromActive(); }, 120);
-      setTimeout(function () { self._resyncFromActive(); }, 400);
+      setTimeout(function () { self._broadcastUpdateSize(); }, 50);
+      // Tras dimensionar, reenvía el encuadre de la activa al resto. Con varios
+      // reintentos escalonados porque las vistas nuevas/ocultas o las 3D (Cesium)
+      // pueden tardar en estar listas; así no hace falta mover el mapa para que
+      // se sincronicen. Cada vista, además, se realinea al emitir cmpv:ready.
+      this._scheduleResync();
+    }
+
+    // Reenvía el encuadre de la vista activa al resto varias veces (0/150/500/
+    // 1200/2500 ms). Cubre la ventana en la que las vistas terminan de cargar.
+    _scheduleResync() {
+      var self = this;
+      if (this._resyncTimers) this._resyncTimers.forEach(function (t) { clearTimeout(t); });
+      this._resyncTimers = [0, 150, 500, 1200, 2500].map(function (ms) {
+        return setTimeout(function () { self._resyncFromActive(); }, ms);
+      });
     }
 
     // Deja el stage en modo posicionamiento ABSOLUTO (single/swipe) y limpia
@@ -729,7 +1713,7 @@
         d.style.inset = "0";
         d.style.display = "none";
       });
-      this._removeDivisor();
+      this._removeDivisors();
     }
 
     _layoutSingle() {
@@ -744,80 +1728,200 @@
 
     _layoutSwipe() {
       this._resetViewDivs();
-      this._pickSwipePair();
-      var a = this.getView(this.swipe.a);
-      var b = this.getView(this.swipe.b);
-      if (!a || !b) return;
-      [a, b].forEach(function (v, i) {
-        v.div.style.display = "";
-        v.div.style.zIndex = String(2 + i);
-      });
-      b.div.classList.add("cmpv-view--overlay");
-      this._applySwipeClip();
-      this._buildDivisor();
-    }
-
-    _pickSwipePair() {
-      var ids = this.views.map(function (v) { return v.id; });
-      if (ids.indexOf(this.swipe.a) === -1) this.swipe.a = ids[0] || null;
-      if (ids.indexOf(this.swipe.b) === -1 || this.swipe.b === this.swipe.a) {
-        var a = this.swipe.a;
-        this.swipe.b = ids.filter(function (id) { return id !== a; })[0] || null;
-      }
-    }
-
-    _applySwipeClip() {
-      var b = this.getView(this.swipe.b);
-      if (!b) return;
-      var pos = Math.max(0, Math.min(1, this.swipe.pos));
-      var pct = (pos * 100).toFixed(2) + "%";
-      var clip = (this.swipe.orientation === "horizontal")
-        ? "inset(0 0 " + (100 - pos * 100).toFixed(2) + "% 0)"
-        : "inset(0 " + (100 - pos * 100).toFixed(2) + "% 0 0)";
-      b.div.style.clipPath = clip;
-      b.div.style.webkitClipPath = clip;
-      if (this._divisor) {
-        if (this.swipe.orientation === "horizontal") { this._divisor.style.top = pct; this._divisor.style.left = "0"; }
-        else { this._divisor.style.left = pct; this._divisor.style.top = "0"; }
-      }
-    }
-
-    _buildDivisor() {
-      this._removeDivisor();
       var self = this;
-      var div = document.createElement("div");
-      div.className = "cmpv-divisor cmpv-divisor--" + this.swipe.orientation;
-      var handle = document.createElement("div");
-      handle.className = "cmpv-divisor__handle";
-      div.appendChild(handle);
-      this._workArea.appendChild(div);
-      this._divisor = div;
+      var rows = (this.swipe.grid || []).filter(function (r) { return r && r.length; });
+      if (!rows.length) return;
 
-      var dragging = false;
-      var onMove = function (x, y) {
-        var rect = self._workArea.getBoundingClientRect();
-        var pos = (self.swipe.orientation === "horizontal")
-          ? (y - rect.top) / rect.height
-          : (x - rect.left) / rect.width;
-        self.swipe.pos = Math.max(0, Math.min(1, pos));
-        self._applySwipeClip();
-      };
-      var start = function (e) { dragging = true; e.preventDefault(); self._setIframePointerEvents(false); };
-      var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
-      var move = function (e) { if (!dragging) return; var p = (e.touches && e.touches[0]) ? e.touches[0] : e; onMove(p.clientX, p.clientY); };
-      div.addEventListener("mousedown", start);
-      div.addEventListener("touchstart", start, { passive: false });
-      window.addEventListener("mousemove", move);
-      window.addEventListener("touchmove", move, { passive: false });
-      window.addEventListener("mouseup", end);
-      window.addEventListener("touchend", end);
-      this._divisorCleanup = function () {
-        window.removeEventListener("mousemove", move);
-        window.removeEventListener("touchmove", move);
-        window.removeEventListener("mouseup", end);
-        window.removeEventListener("touchend", end);
-      };
+      // Usar CSS Grid como en espejo para posicionar las vistas.
+      var stage = this._workArea;
+      stage.style.display = "grid";
+      stage.style.gridTemplateColumns = "repeat(" + this.swipe.cols + ", 1fr)";
+      stage.style.gridTemplateRows = "repeat(" + this.swipe.rows + ", 1fr)";
+
+      rows.forEach(function (row, ri) {
+        row.forEach(function (viewId, ci) {
+          var v = self.getView(viewId);
+          if (!v || !v.div) return;
+          v.div.style.display = "";
+          v.div.style.position = "";
+          v.div.style.inset = "";
+          v.div.style.gridRow = (ri + 1) + " / span 1";
+          v.div.style.gridColumn = (ci + 1) + " / span 1";
+          v.div.style.zIndex = "2";
+          v.div.classList.add("cmpv-view--overlay");
+        });
+      });
+
       this._applySwipeClip();
+      this._buildDivisors();
+    }
+
+    // Calcula el clip-path de cada celda del grid de cortinilla en función
+    // de las posiciones de los divisores verticales (entre columnas) y
+    // horizontales (entre filas). Cada celda se recorta para mostrar sólo
+    // su porción del área total.
+    _applySwipeClip() {
+      var self = this;
+      var grid = this.swipe.grid || [];
+      var dV = this.swipe.dividersV;   // posiciones 0..1 entre columnas
+      var dH = this.swipe.dividersH;   // posiciones 0..1 entre filas
+
+      // Si solo hay 1×1, no hay clip.
+      if (this.swipe.rows === 1 && this.swipe.cols === 1) {
+        grid.forEach(function (row) {
+          row.forEach(function (id) {
+            var v = self.getView(id);
+            if (v && v.div) { v.div.style.clipPath = ""; v.div.style.webkitClipPath = ""; }
+          });
+        });
+        return;
+      }
+
+      grid.forEach(function (row, ri) {
+        row.forEach(function (viewId, ci) {
+          var v = self.getView(viewId);
+          if (!v || !v.div) return;
+
+          // Límites de la celda en porcentaje (0..100).
+          var left = 0, right = 100, top = 0, bottom = 100;
+
+          // Divisores verticales: la columna ci ocupa el espacio entre el
+          // divisor anterior (o 0) y el divisor siguiente (o 100).
+          if (ci > 0 && dV[ci - 1] !== undefined) left = dV[ci - 1] * 100;
+          if (ci < self.swipe.cols - 1 && dV[ci] !== undefined) right = dV[ci] * 100;
+
+          // Divisores horizontales: la fila ri ocupa el espacio entre el
+          // divisor anterior (o 0) y el divisor siguiente (o 100).
+          if (ri > 0 && dH[ri - 1] !== undefined) top = dH[ri - 1] * 100;
+          if (ri < self.swipe.rows - 1 && dH[ri] !== undefined) bottom = dH[ri] * 100;
+
+          var insetTop = top.toFixed(2) + "%";
+          var insetRight = (100 - right).toFixed(2) + "%";
+          var insetBottom = (100 - bottom).toFixed(2) + "%";
+          var insetLeft = left.toFixed(2) + "%";
+          var clip = "inset(" + insetTop + " " + insetRight + " " + insetBottom + " " + insetLeft + ")";
+          v.div.style.clipPath = clip;
+          v.div.style.webkitClipPath = clip;
+        });
+      });
+
+      // Posiciona los divisores visuales.
+      this._positionDivisors();
+    }
+
+    // Crea divisores arrastrables para cada frontera del grid de cortinilla.
+    // Divisores verticales entre columnas, horizontales entre filas.
+    _buildDivisors() {
+      this._removeDivisors();
+      var self = this;
+      this._divisors = [];
+
+      // Divisores VERTICALES (entre columnas).
+      for (var ci = 0; ci < this.swipe.cols - 1; ci++) {
+        (function (idx) {
+          var div = document.createElement("div");
+          div.className = "cmpv-divisor cmpv-divisor--vertical";
+          div.setAttribute("data-didx", "v" + idx);
+          var handle = document.createElement("div");
+          handle.className = "cmpv-divisor__handle";
+          div.appendChild(handle);
+          self._workArea.appendChild(div);
+          self._divisors.push(div);
+
+          var dragging = false;
+          var onMove = function (x) {
+            var rect = self._workArea.getBoundingClientRect();
+            var pos = (x - rect.left) / rect.width;
+            // El divisor vertical idx separa la columna idx de la idx+1.
+            // Su posición debe estar entre el divisor anterior y el siguiente.
+            var minP = idx > 0 ? self.swipe.dividersV[idx - 1] + 0.05 : 0.05;
+            var maxP = idx < self.swipe.dividersV.length - 1 ? self.swipe.dividersV[idx + 1] - 0.05 : 0.95;
+            self.swipe.dividersV[idx] = Math.max(minP, Math.min(maxP, pos));
+            self._applySwipeClip();
+          };
+          var start = function (e) { dragging = true; e.preventDefault(); self._setIframePointerEvents(false); };
+          var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
+          var move = function (e) { if (!dragging) return; var p = (e.touches && e.touches[0]) ? e.touches[0] : e; onMove(p.clientX); };
+          div.addEventListener("mousedown", start);
+          div.addEventListener("touchstart", start, { passive: false });
+          window.addEventListener("mousemove", move);
+          window.addEventListener("touchmove", move, { passive: false });
+          window.addEventListener("mouseup", end);
+          window.addEventListener("touchend", end);
+          if (!self._divisorCleanups) self._divisorCleanups = [];
+          self._divisorCleanups.push(function () {
+            window.removeEventListener("mousemove", move);
+            window.removeEventListener("touchmove", move);
+            window.removeEventListener("mouseup", end);
+            window.removeEventListener("touchend", end);
+          });
+        })(ci);
+      }
+
+      // Divisores HORIZONTALES (entre filas).
+      for (var ri = 0; ri < this.swipe.rows - 1; ri++) {
+        (function (idx) {
+          var div = document.createElement("div");
+          div.className = "cmpv-divisor cmpv-divisor--horizontal";
+          div.setAttribute("data-didx", "h" + idx);
+          var handle = document.createElement("div");
+          handle.className = "cmpv-divisor__handle";
+          div.appendChild(handle);
+          self._workArea.appendChild(div);
+          self._divisors.push(div);
+
+          var dragging = false;
+          var onMove = function (y) {
+            var rect = self._workArea.getBoundingClientRect();
+            var pos = (y - rect.top) / rect.height;
+            var minP = idx > 0 ? self.swipe.dividersH[idx - 1] + 0.05 : 0.05;
+            var maxP = idx < self.swipe.dividersH.length - 1 ? self.swipe.dividersH[idx + 1] - 0.05 : 0.95;
+            self.swipe.dividersH[idx] = Math.max(minP, Math.min(maxP, pos));
+            self._applySwipeClip();
+          };
+          var start = function (e) { dragging = true; e.preventDefault(); self._setIframePointerEvents(false); };
+          var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
+          var move = function (e) { if (!dragging) return; var p = (e.touches && e.touches[0]) ? e.touches[0] : e; onMove(p.clientY); };
+          div.addEventListener("mousedown", start);
+          div.addEventListener("touchstart", start, { passive: false });
+          window.addEventListener("mousemove", move);
+          window.addEventListener("touchmove", move, { passive: false });
+          window.addEventListener("mouseup", end);
+          window.addEventListener("touchend", end);
+          if (!self._divisorCleanups) self._divisorCleanups = [];
+          self._divisorCleanups.push(function () {
+            window.removeEventListener("mousemove", move);
+            window.removeEventListener("touchmove", move);
+            window.removeEventListener("mouseup", end);
+            window.removeEventListener("touchend", end);
+          });
+        })(ri);
+      }
+
+      this._positionDivisors();
+    }
+
+    // Posiciona los divisores visuales según las posiciones actuales.
+    _positionDivisors() {
+      var self = this;
+      if (!this._divisors) return;
+      this._divisors.forEach(function (div) {
+        var key = div.getAttribute("data-didx");
+        if (!key) return;
+        if (key[0] === "v") {
+          var idx = parseInt(key.slice(1), 10);
+          var pos = self.swipe.dividersV[idx];
+          if (pos === undefined) return;
+          div.style.left = (pos * 100).toFixed(2) + "%";
+          div.style.top = "0";
+        } else if (key[0] === "h") {
+          var idx = parseInt(key.slice(1), 10);
+          var pos = self.swipe.dividersH[idx];
+          if (pos === undefined) return;
+          div.style.top = (pos * 100).toFixed(2) + "%";
+          div.style.left = "0";
+        }
+      });
     }
 
     // Durante el arrastre del divisor, desactiva los eventos de puntero de los
@@ -828,10 +1932,15 @@
       });
     }
 
-    _removeDivisor() {
-      if (this._divisorCleanup) { try { this._divisorCleanup(); } catch (e) {} this._divisorCleanup = null; }
-      if (this._divisor && this._divisor.parentNode) this._divisor.parentNode.removeChild(this._divisor);
-      this._divisor = null;
+    _removeDivisors() {
+      if (this._divisorCleanups) {
+        this._divisorCleanups.forEach(function (fn) { try { fn(); } catch (e) {} });
+        this._divisorCleanups = [];
+      }
+      if (this._divisors) {
+        this._divisors.forEach(function (d) { if (d && d.parentNode) d.parentNode.removeChild(d); });
+        this._divisors = [];
+      }
     }
 
     // Distribuye las vistas con CSS GRID nativo según this.grid (array de FILAS;

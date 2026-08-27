@@ -136,6 +136,73 @@
   padding-top: 12px;
 }
 
+/* ---- Sección "Mapas de comparación" (slots) ----------------------- */
+.cmpv-sidenav__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cmpv-slots__hint {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.35;
+}
+.cmpv-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cmpv-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cmpv-slot__lbl {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  min-width: 62px;
+}
+.cmpv-slot__select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- Acordeón "Gestión de vistas" (patrón de vueloFotogrametrico) --- */
+.cmpv-accordion__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+/* El título ya trae el border-top del subtitle; el header lo reutiliza. */
+.cmpv-accordion__title {
+  flex: 1;
+}
+.cmpv-accordion__chevron {
+  font-size: 14px;
+  color: var(--cmpv-orange);
+  transition: transform 0.3s ease-out;
+  transform: rotate(90deg);   /* expandido por defecto */
+  padding-left: 8px;
+}
+.cmpv-accordion--collapsed .cmpv-accordion__chevron {
+  transform: rotate(0deg);
+}
+.cmpv-accordion__body {
+  overflow: hidden;
+  max-height: 1500px;
+  opacity: 1;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding-top 0.3s ease-out;
+  padding-top: 8px;
+}
+.cmpv-accordion--collapsed .cmpv-accordion__body {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+}
+
 .cmpv-field {
   display: flex;
   align-items: center;
