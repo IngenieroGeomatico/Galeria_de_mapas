@@ -453,7 +453,7 @@
      *
      * --- Configuración de comparación INICIAL (arranca en cualquier modo) ---
      * @param {("single"|"swipe"|"mirror")} [options.mode="single"] Modo inicial.
-     * @param {Object} [options.swipe] Cortinilla: { rows:1|2, cols:1|2 }.
+     * @param {Object} [options.swipe] Cortinilla: { layout:"1x1"|"2x1"|"1x2"|"2x2" }.
      * @param {Object} [options.layout] Espejo: { type:"grid", rows, cols } o { type:"custom", spec:[1,3,1] }.
      * @param {boolean} [options.sync=true] Sincronizar encuadre entre vistas.
      * @param {boolean} [options.showControls=true] Mostrar controles/plugins de IDEE + botón 2D/3D.
@@ -502,15 +502,21 @@
       this.showControls = (this.options.showControls !== false);
       this.activeViewId = null;
 
-      // Cortinilla: grid fijo (1×1, 1×2, 2×1, 2×2) con un solo divisor
-      // vertical y/o horizontal que cruza toda la pantalla.
+      // Cortinilla: divisor vertical siempre presente (izq|der). Opcionalmente,
+      // cada lado se subdivide con un divisor horizontal propio.
+      //   "1x1" = 2 vistas:  izq | der
+      //   "2x1" = 3 vistas:  izq | (der-arr / der-abj)
+      //   "1x2" = 3 vistas:  (izq-arr / izq-abj) | der
+      //   "2x2" = 4 vistas:  (izq-arr / izq-abj) | (der-arr / der-abj)
+      // slots[] es un array plano de viewIds en orden:
+      //   [izq (o izq-arr), izq-abj?, der (o der-arr), der-abj?]
       var sw = this.options.swipe || {};
       this.swipe = {
-        rows: Math.max(1, Math.min(parseInt(sw.rows, 10) || 1, 2)),
-        cols: Math.max(1, Math.min(parseInt(sw.cols, 10) || 2, 2)),
-        grid: [],             // [[viewId, ...], ...] — cada celda es una vista
-        posV: 0.5,            // posición 0..1 del divisor vertical (entre columnas)
-        posH: 0.5,            // posición 0..1 del divisor horizontal (entre filas)
+        layout: sw.layout || "1x1",       // "1x1"|"2x1"|"1x2"|"2x2"
+        slots: [],                         // [viewId, ...]
+        posV: 0.5,                         // posición divisor vertical (0..1)
+        posHL: 0.5,                        // posición divisor horizontal izquierdo (0..1)
+        posHR: 0.5,                        // posición divisor horizontal derecho (0..1)
       };
 
       // Espejo: array de FILAS (cada fila = array de viewIds). Grid irregular
@@ -649,7 +655,7 @@
         }
         this.setMode("mirror");
       } else if (this.mode === "swipe") {
-        // swipe.rows y swipe.cols ya vienen del constructor.
+        // swipe.layout ya viene del constructor.
         this.setMode("swipe");
       } else {
         this.setMode("single");
@@ -1050,10 +1056,10 @@
         '    <label class="cmpv-field"><input type="checkbox" data-role="controls" checked> Mostrar controles y plugins en las vistas</label>' +
         '    <label class="cmpv-field" data-only="swipe">Disposición' +
         '      <select class="cmpv-select" data-role="swipe-layout">' +
-        '        <option value="1x2">1 × 2</option>' +
-        '        <option value="2x1">2 × 1</option>' +
-        '        <option value="2x2">2 × 2</option>' +
-        '        <option value="1x1">1 × 1</option>' +
+        '        <option value="1x1">Izq | Der</option>' +
+        '        <option value="2x1">Izq | Der ÷ 2</option>' +
+        '        <option value="1x2">Izq ÷ 2 | Der</option>' +
+        '        <option value="2x2">Izq ÷ 2 | Der ÷ 2</option>' +
         '      </select></label>' +
         '    <div class="cmpv-field cmpv-field--grid" data-only="mirror">' +
         '      <span class="cmpv-grid__title">Disposición (espejo)</span>' +
@@ -1110,14 +1116,12 @@
         self.showControls = this.checked; self._broadcastControls();
       });
 
-      // --- Disposición de la cortinilla: selector 1×1 / 1×2 / 2×1 / 2×2 ---
+      // --- Disposición de la cortinilla: selector de layout ---
       var swipeLayoutSel = root.querySelector('[data-role="swipe-layout"]');
       if (swipeLayoutSel) swipeLayoutSel.addEventListener("change", function () {
-        var parts = this.value.split("x");
-        self.swipe.rows = parseInt(parts[0], 10) || 1;
-        self.swipe.cols = parseInt(parts[1], 10) || 2;
+        self.swipe.layout = this.value;
         if (self.mode === "swipe") {
-          self._initSwipeGrid();
+          self._initSwipeSlots();
           self._relayout();
           self._refreshUI();
         }
@@ -1223,21 +1227,22 @@
       var self = this;
       var slots = [];
       if (this.mode === "swipe") {
-        // Slots del grid de cortinilla: una entrada por celda.
-        var n = 0;
-        (this.swipe.grid || []).forEach(function (row, ri) {
-          row.forEach(function (viewId, ci) {
-            n += 1;
-            slots.push({
-              label: "Mapa " + n,
-              viewId: viewId,
-              _ri: ri, _ci: ci,
-              set: function (newViewId) {
-                self.swipe.grid[ri][ci] = newViewId;
-                self._layoutSwipe();
-                self._resyncFromActive();
-              },
-            });
+        // Slots de la cortinilla: array plano de viewIds.
+        var labels = { "1x1": ["Izquierda", "Derecha"],
+          "2x1": ["Izquierda", "Derecha (arriba)", "Derecha (abajo)"],
+          "1x2": ["Izquierda (arriba)", "Izquierda (abajo)", "Derecha"],
+          "2x2": ["Izq. arriba", "Izq. abajo", "Der. arriba", "Der. abajo"] };
+        var lbls = labels[self.swipe.layout] || labels["1x1"];
+        (this.swipe.slots || []).forEach(function (viewId, i) {
+          slots.push({
+            label: lbls[i] || ("Mapa " + (i + 1)),
+            viewId: viewId,
+            _idx: i,
+            set: function (newViewId) {
+              self.swipe.slots[i] = newViewId;
+              self._layoutSwipe();
+              self._resyncFromActive();
+            },
           });
         });
       } else if (this.mode === "mirror") {
@@ -1443,7 +1448,7 @@
       if (v.div && v.div.parentNode) v.div.parentNode.removeChild(v.div);
       this.views = this.views.filter(function (x) { return x.id !== id; });
       if (this.activeViewId === id) this.activeViewId = this.views[0] && this.views[0].id;
-      if (this.mode === "swipe") this._initSwipeGrid();
+      if (this.mode === "swipe") this._initSwipeSlots();
       this._relayout();
       this._refreshUI();
     }
@@ -1618,7 +1623,7 @@
 
     setMode(mode) {
       if (mode === "swipe") {
-        this._initSwipeGrid();
+        this._initSwipeSlots();
       }
       if (mode === "mirror") {
         // Inicializa el grid si está vacío, respetando el tipo activo.
@@ -1636,24 +1641,29 @@
       this._refreshUI();
     }
 
-    // Inicializa el grid de la cortinilla a partir de swipe.rows × swipe.cols.
-    // Crea las vistas que falten y rellena swipe.grid.
-    _initSwipeGrid() {
-      var r = this.swipe.rows;
-      var c = this.swipe.cols;
-      var total = r * c;
+    // Nº de vistas del layout actual.
+    _swipeSlotCount() {
+      var l = this.swipe.layout;
+      if (l === "2x2") return 4;
+      if (l === "2x1" || l === "1x2") return 3;
+      return 2; // "1x1"
+    }
+
+    // Inicializa los slots de la cortinilla según el layout.
+    // Crea las vistas que falten y rellena swipe.slots.
+    _initSwipeSlots() {
+      var total = this._swipeSlotCount();
       while (this.views.length < total) this.crearVista();
-      var grid = [];
+      // Reutiliza los slots existentes si son válidos; completa con vistas nuevas.
+      var ids = this.views.map(function (v) { return v.id; });
+      var slots = (this.swipe.slots || []).filter(function (id) { return ids.indexOf(id) !== -1; });
       var idx = 0;
-      for (var ri = 0; ri < r; ri++) {
-        var row = [];
-        for (var ci = 0; ci < c; ci++) {
-          row.push(this.views[idx].id);
-          idx += 1;
-        }
-        grid.push(row);
+      while (slots.length < total) {
+        if (slots.indexOf(ids[idx]) === -1) slots.push(ids[idx]);
+        idx += 1;
+        if (idx >= ids.length) break;
       }
-      this.swipe.grid = grid;
+      this.swipe.slots = slots.slice(0, total);
     }
 
     _relayout() {
@@ -1719,102 +1729,115 @@
     _layoutSwipe() {
       this._resetViewDivs();
       var self = this;
-      var grid = this.swipe.grid || [];
-      if (!grid.length) return;
+      var slots = this.swipe.slots || [];
+      if (!slots.length) return;
 
       // Todas las vistas ocupan TODA la pantalla (absolute, inset:0).
       // Se recortan con clip-path según la posición de los divisores.
-      grid.forEach(function (row) {
-        row.forEach(function (viewId) {
-          var v = self.getView(viewId);
-          if (!v || !v.div) return;
-          v.div.style.display = "";
-          v.div.style.zIndex = "2";
-          v.div.classList.add("cmpv-view--overlay");
-        });
+      slots.forEach(function (viewId) {
+        var v = self.getView(viewId);
+        if (!v || !v.div) return;
+        v.div.style.display = "";
+        v.div.style.zIndex = "2";
+        v.div.classList.add("cmpv-view--overlay");
       });
 
       this._applySwipeClip();
       this._buildDivisors();
     }
 
-    // Calcula el clip-path de cada celda del grid de cortinilla.
-    // Cada vista ocupa TODA la pantalla (inset:0) y se recorta con clip-path
-    // para mostrar sólo su cuadrante. Un solo divisor vertical (posV) y/o
-    // horizontal (posH) controlan la separación.
+    // Calcula el clip-path de cada slot de la cortinilla.
+    // Todas las vistas ocupan inset:0 (pantalla completa) y se recortan.
+    //
+    // Modelo de árbol:
+    //   "1x1" slots: [izq, der]
+    //        izq  → inset(0  R%  0  0)     con R = 100-posV*100
+    //        der  → inset(0  0   0  L%)    con L = posV*100
+    //   "2x1" slots: [izq, der-arr, der-abj]
+    //        izq      → inset(0  R%  0  0)
+    //        der-arr  → inset(0  0   B%  L%)   con B = 100-posHR*100
+    //        der-abj  → inset(T%  0  0   L%)   con T = posHR*100
+    //   "1x2" slots: [izq-arr, izq-abj, der]
+    //        izq-arr  → inset(0  R%  B%  0)    con B = 100-posHL*100
+    //        izq-abj  → inset(T%  R%  0  0)    con T = posHL*100
+    //        der      → inset(0  0   0  L%)
+    //   "2x2" slots: [izq-arr, izq-abj, der-arr, der-abj]
+    //        izq-arr  → inset(0     R%  B_L%  0)
+    //        izq-abj  → inset(T_L%  R%  0     0)
+    //        der-arr  → inset(0     0   B_R%  L%)
+    //        der-abj  → inset(T_R%  0   0     L%)
     _applySwipeClip() {
       var self = this;
-      var grid = this.swipe.grid || [];
-      var r = this.swipe.rows;
-      var c = this.swipe.cols;
-      var pV = this.swipe.posV;   // 0..1 posición del divisor vertical
-      var pH = this.swipe.posH;   // 0..1 posición del divisor horizontal
+      var slots = this.swipe.slots || [];
+      var lay = this.swipe.layout;
+      var V = this.swipe.posV * 100;       // % del divisor vertical
+      var HL = this.swipe.posHL * 100;     // % del divisor horizontal izquierdo
+      var HR = this.swipe.posHR * 100;     // % del divisor horizontal derecho
+      var L = V, R = 100 - V;             // left% y right-inset%
 
-      // 1×1: sin clip.
-      if (r === 1 && c === 1) {
-        var v0 = this.getView(grid[0] && grid[0][0]);
-        if (v0 && v0.div) { v0.div.style.clipPath = ""; v0.div.style.webkitClipPath = ""; }
-        this._positionDivisors();
-        return;
+      // Calcula los límites (top%, right%, bottom%, left%) de cada slot.
+      var rects = [];
+      if (lay === "1x1") {
+        rects = [
+          [0, R, 0, 0],          // izq
+          [0, 0, 0, L],          // der
+        ];
+      } else if (lay === "2x1") {
+        rects = [
+          [0, R, 0, 0],          // izq
+          [0, 0, 100 - HR, L],   // der-arr
+          [HR, 0, 0, L],         // der-abj
+        ];
+      } else if (lay === "1x2") {
+        rects = [
+          [0, R, 100 - HL, 0],   // izq-arr
+          [HL, R, 0, 0],         // izq-abj
+          [0, 0, 0, L],          // der
+        ];
+      } else if (lay === "2x2") {
+        rects = [
+          [0, R, 100 - HL, 0],   // izq-arr
+          [HL, R, 0, 0],         // izq-abj
+          [0, 0, 100 - HR, L],   // der-arr
+          [HR, 0, 0, L],         // der-abj
+        ];
       }
 
-      grid.forEach(function (row, ri) {
-        row.forEach(function (viewId, ci) {
-          var v = self.getView(viewId);
-          if (!v || !v.div) return;
-
-          // Límites de la celda en porcentaje (0..100).
-          // Columna 0 = de 0 a posV*100, columna 1 = de posV*100 a 100.
-          // Fila 0 = de 0 a posH*100, fila 1 = de posH*100 a 100.
-          var left = 0, right = 100, top = 0, bottom = 100;
-          if (c > 1) { if (ci === 0) right = pV * 100; else left = pV * 100; }
-          if (r > 1) { if (ri === 0) bottom = pH * 100; else top = pH * 100; }
-
-          var clip = "inset(" +
-            top.toFixed(2) + "% " +
-            (100 - right).toFixed(2) + "% " +
-            (100 - bottom).toFixed(2) + "% " +
-            left.toFixed(2) + "%)";
-          v.div.style.clipPath = clip;
-          v.div.style.webkitClipPath = clip;
-        });
+      rects.forEach(function (r, i) {
+        var v = self.getView(slots[i]);
+        if (!v || !v.div) return;
+        var clip = "inset(" +
+          r[0].toFixed(2) + "% " + r[1].toFixed(2) + "% " +
+          r[2].toFixed(2) + "% " + r[3].toFixed(2) + "%)";
+        v.div.style.clipPath = clip;
+        v.div.style.webkitClipPath = clip;
       });
 
       this._positionDivisors();
     }
 
-    // Crea como máximo 1 divisor vertical (si cols>1) y 1 horizontal (si
-    // rows>1), cada uno de punta a punta de la pantalla. En 2×2 forman una cruz.
+    // Crea los divisores arrastrables de la cortinilla:
+    //  - Siempre 1 divisor VERTICAL que cruza toda la pantalla (posV).
+    //  - Si el lado izquierdo está dividido ("1x2"|"2x2"): 1 divisor
+    //    HORIZONTAL en la mitad izquierda (posHL), de 0 a posV.
+    //  - Si el lado derecho está dividido ("2x1"|"2x2"): 1 divisor
+    //    HORIZONTAL en la mitad derecha (posHR), de posV a 100%.
     _buildDivisors() {
       this._removeDivisors();
       var self = this;
       this._divisors = [];
       this._divisorCleanups = [];
+      var lay = this.swipe.layout;
 
-      function makeDivisor(axis) {
-        var isV = (axis === "v");
-        var div = document.createElement("div");
-        div.className = "cmpv-divisor cmpv-divisor--" + (isV ? "vertical" : "horizontal");
-        div.setAttribute("data-axis", axis);
-        var handle = document.createElement("div");
-        handle.className = "cmpv-divisor__handle";
-        div.appendChild(handle);
-        self._workArea.appendChild(div);
-        self._divisors.push(div);
-
+      function addDrag(div, onMove) {
         var dragging = false;
-        var onMove = function (x, y) {
-          var rect = self._workArea.getBoundingClientRect();
-          var pos = isV
-            ? (x - rect.left) / rect.width
-            : (y - rect.top) / rect.height;
-          pos = Math.max(0.05, Math.min(0.95, pos));
-          if (isV) self.swipe.posV = pos; else self.swipe.posH = pos;
-          self._applySwipeClip();
-        };
         var start = function (e) { dragging = true; e.preventDefault(); self._setIframePointerEvents(false); };
         var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
-        var move = function (e) { if (!dragging) return; var p = (e.touches && e.touches[0]) ? e.touches[0] : e; onMove(p.clientX, p.clientY); };
+        var move = function (e) {
+          if (!dragging) return;
+          var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+          onMove(p.clientX, p.clientY);
+        };
         div.addEventListener("mousedown", start);
         div.addEventListener("touchstart", start, { passive: false });
         window.addEventListener("mousemove", move);
@@ -1829,23 +1852,71 @@
         });
       }
 
-      if (this.swipe.cols > 1) makeDivisor("v");
-      if (this.swipe.rows > 1) makeDivisor("h");
+      function makeDivisor(cls, axis) {
+        var div = document.createElement("div");
+        div.className = "cmpv-divisor " + cls;
+        div.setAttribute("data-axis", axis);
+        var handle = document.createElement("div");
+        handle.className = "cmpv-divisor__handle";
+        div.appendChild(handle);
+        self._workArea.appendChild(div);
+        self._divisors.push(div);
+        return div;
+      }
+
+      // Divisor vertical (siempre): cruza toda la pantalla.
+      var divV = makeDivisor("cmpv-divisor--vertical", "v");
+      addDrag(divV, function (x) {
+        var rect = self._workArea.getBoundingClientRect();
+        self.swipe.posV = Math.max(0.05, Math.min(0.95, (x - rect.left) / rect.width));
+        self._applySwipeClip();
+      });
+
+      // Divisor horizontal izquierdo ("1x2" o "2x2"): de left:0 a width:posV.
+      if (lay === "1x2" || lay === "2x2") {
+        var divHL = makeDivisor("cmpv-divisor--horizontal", "hl");
+        addDrag(divHL, function (x, y) {
+          var rect = self._workArea.getBoundingClientRect();
+          self.swipe.posHL = Math.max(0.05, Math.min(0.95, (y - rect.top) / rect.height));
+          self._applySwipeClip();
+        });
+      }
+
+      // Divisor horizontal derecho ("2x1" o "2x2"): de left:posV a right:0.
+      if (lay === "2x1" || lay === "2x2") {
+        var divHR = makeDivisor("cmpv-divisor--horizontal", "hr");
+        addDrag(divHR, function (x, y) {
+          var rect = self._workArea.getBoundingClientRect();
+          self.swipe.posHR = Math.max(0.05, Math.min(0.95, (y - rect.top) / rect.height));
+          self._applySwipeClip();
+        });
+      }
+
       this._positionDivisors();
     }
 
-    // Posiciona los divisores visuales según posV / posH.
+    // Posiciona los divisores visuales.
     _positionDivisors() {
       if (!this._divisors) return;
       var self = this;
+      var pV = this.swipe.posV;
       this._divisors.forEach(function (div) {
         var axis = div.getAttribute("data-axis");
         if (axis === "v") {
-          div.style.left = (self.swipe.posV * 100).toFixed(2) + "%";
+          div.style.left = (pV * 100).toFixed(2) + "%";
           div.style.top = "0";
-        } else if (axis === "h") {
-          div.style.top = (self.swipe.posH * 100).toFixed(2) + "%";
+          div.style.width = "";
+          div.style.height = "100%";
+        } else if (axis === "hl") {
+          // Horizontal izquierdo: de 0 a posV.
+          div.style.top = (self.swipe.posHL * 100).toFixed(2) + "%";
           div.style.left = "0";
+          div.style.width = (pV * 100).toFixed(2) + "%";
+        } else if (axis === "hr") {
+          // Horizontal derecho: de posV a 100%.
+          div.style.top = (self.swipe.posHR * 100).toFixed(2) + "%";
+          div.style.left = (pV * 100).toFixed(2) + "%";
+          div.style.width = ((1 - pV) * 100).toFixed(2) + "%";
         }
       });
     }
