@@ -502,15 +502,15 @@
       this.showControls = (this.options.showControls !== false);
       this.activeViewId = null;
 
-      // Cortinilla: disposition en grid (1–2 filas × 1–2 columnas) con
-      // divisores arrastrables entre celdas.
+      // Cortinilla: grid fijo (1×1, 1×2, 2×1, 2×2) con un solo divisor
+      // vertical y/o horizontal que cruza toda la pantalla.
       var sw = this.options.swipe || {};
       this.swipe = {
         rows: Math.max(1, Math.min(parseInt(sw.rows, 10) || 1, 2)),
         cols: Math.max(1, Math.min(parseInt(sw.cols, 10) || 2, 2)),
-        grid: [],             // [[viewId, ...], ...] — misma estructura que mirror
-        dividersV: [],        // posiciones 0..1 de divisores verticales (entre columnas)
-        dividersH: [],        // posiciones 0..1 de divisores horizontales (entre filas)
+        grid: [],             // [[viewId, ...], ...] — cada celda es una vista
+        posV: 0.5,            // posición 0..1 del divisor vertical (entre columnas)
+        posH: 0.5,            // posición 0..1 del divisor horizontal (entre filas)
       };
 
       // Espejo: array de FILAS (cada fila = array de viewIds). Grid irregular
@@ -1048,13 +1048,13 @@
         '  <div class="cmpv-sidenav__body">' +
         '    <label class="cmpv-field"><input type="checkbox" data-role="sync" checked> Sincronizar encuadre entre vistas</label>' +
         '    <label class="cmpv-field"><input type="checkbox" data-role="controls" checked> Mostrar controles y plugins en las vistas</label>' +
-        '    <div class="cmpv-field cmpv-field--grid" data-only="swipe">' +
-        '      <span class="cmpv-grid__title">Disposición (cortinilla)</span>' +
-        '      <div class="cmpv-grid-inputs">' +
-        '        <label>Filas <input type="number" class="cmpv-num" data-role="swipe-rows" min="1" max="2" value="1"></label>' +
-        '        <label>Columnas <input type="number" class="cmpv-num" data-role="swipe-cols" min="1" max="2" value="2"></label>' +
-        '      </div>' +
-        '    </div>' +
+        '    <label class="cmpv-field" data-only="swipe">Disposición' +
+        '      <select class="cmpv-select" data-role="swipe-layout">' +
+        '        <option value="1x2">1 × 2</option>' +
+        '        <option value="2x1">2 × 1</option>' +
+        '        <option value="2x2">2 × 2</option>' +
+        '        <option value="1x1">1 × 1</option>' +
+        '      </select></label>' +
         '    <div class="cmpv-field cmpv-field--grid" data-only="mirror">' +
         '      <span class="cmpv-grid__title">Disposición (espejo)</span>' +
         '      <label class="cmpv-grid-type">Tipo' +
@@ -1110,22 +1110,18 @@
         self.showControls = this.checked; self._broadcastControls();
       });
 
-      // --- Disposición de la cortinilla: filas × columnas (1–2 × 1–2) ---
-      var swipeRowsInput = root.querySelector('[data-role="swipe-rows"]');
-      var swipeColsInput = root.querySelector('[data-role="swipe-cols"]');
-      var applySwipeGrid = function () {
-        var r = parseInt(swipeRowsInput.value, 10) || 1;
-        var c = parseInt(swipeColsInput.value, 10) || 2;
-        self.swipe.rows = Math.max(1, Math.min(r, 2));
-        self.swipe.cols = Math.max(1, Math.min(c, 2));
+      // --- Disposición de la cortinilla: selector 1×1 / 1×2 / 2×1 / 2×2 ---
+      var swipeLayoutSel = root.querySelector('[data-role="swipe-layout"]');
+      if (swipeLayoutSel) swipeLayoutSel.addEventListener("change", function () {
+        var parts = this.value.split("x");
+        self.swipe.rows = parseInt(parts[0], 10) || 1;
+        self.swipe.cols = parseInt(parts[1], 10) || 2;
         if (self.mode === "swipe") {
           self._initSwipeGrid();
           self._relayout();
           self._refreshUI();
         }
-      };
-      if (swipeRowsInput) swipeRowsInput.addEventListener("change", applySwipeGrid);
-      if (swipeColsInput) swipeColsInput.addEventListener("change", applySwipeGrid);
+      });
 
       // --- Disposición del espejo: selector de tipo (regular | irregular) ---
       var typeSel = root.querySelector('[data-role="layout-type"]');
@@ -1641,8 +1637,7 @@
     }
 
     // Inicializa el grid de la cortinilla a partir de swipe.rows × swipe.cols.
-    // Crea las vistas que falten y rellena swipe.grid. Inicializa los divisores
-    // en 0.5 (mitad).
+    // Crea las vistas que falten y rellena swipe.grid.
     _initSwipeGrid() {
       var r = this.swipe.rows;
       var c = this.swipe.cols;
@@ -1659,11 +1654,6 @@
         grid.push(row);
       }
       this.swipe.grid = grid;
-      // Divisores: 1 por cada frontera entre columnas (vertical) y entre filas (horizontal).
-      this.swipe.dividersV = [];
-      for (var i = 0; i < c - 1; i++) this.swipe.dividersV.push(0.5);
-      this.swipe.dividersH = [];
-      for (var j = 0; j < r - 1; j++) this.swipe.dividersH.push(0.5);
     }
 
     _relayout() {
@@ -1729,24 +1719,16 @@
     _layoutSwipe() {
       this._resetViewDivs();
       var self = this;
-      var rows = (this.swipe.grid || []).filter(function (r) { return r && r.length; });
-      if (!rows.length) return;
+      var grid = this.swipe.grid || [];
+      if (!grid.length) return;
 
-      // Usar CSS Grid como en espejo para posicionar las vistas.
-      var stage = this._workArea;
-      stage.style.display = "grid";
-      stage.style.gridTemplateColumns = "repeat(" + this.swipe.cols + ", 1fr)";
-      stage.style.gridTemplateRows = "repeat(" + this.swipe.rows + ", 1fr)";
-
-      rows.forEach(function (row, ri) {
-        row.forEach(function (viewId, ci) {
+      // Todas las vistas ocupan TODA la pantalla (absolute, inset:0).
+      // Se recortan con clip-path según la posición de los divisores.
+      grid.forEach(function (row) {
+        row.forEach(function (viewId) {
           var v = self.getView(viewId);
           if (!v || !v.div) return;
           v.div.style.display = "";
-          v.div.style.position = "";
-          v.div.style.inset = "";
-          v.div.style.gridRow = (ri + 1) + " / span 1";
-          v.div.style.gridColumn = (ci + 1) + " / span 1";
           v.div.style.zIndex = "2";
           v.div.classList.add("cmpv-view--overlay");
         });
@@ -1756,24 +1738,23 @@
       this._buildDivisors();
     }
 
-    // Calcula el clip-path de cada celda del grid de cortinilla en función
-    // de las posiciones de los divisores verticales (entre columnas) y
-    // horizontales (entre filas). Cada celda se recorta para mostrar sólo
-    // su porción del área total.
+    // Calcula el clip-path de cada celda del grid de cortinilla.
+    // Cada vista ocupa TODA la pantalla (inset:0) y se recorta con clip-path
+    // para mostrar sólo su cuadrante. Un solo divisor vertical (posV) y/o
+    // horizontal (posH) controlan la separación.
     _applySwipeClip() {
       var self = this;
       var grid = this.swipe.grid || [];
-      var dV = this.swipe.dividersV;   // posiciones 0..1 entre columnas
-      var dH = this.swipe.dividersH;   // posiciones 0..1 entre filas
+      var r = this.swipe.rows;
+      var c = this.swipe.cols;
+      var pV = this.swipe.posV;   // 0..1 posición del divisor vertical
+      var pH = this.swipe.posH;   // 0..1 posición del divisor horizontal
 
-      // Si solo hay 1×1, no hay clip.
-      if (this.swipe.rows === 1 && this.swipe.cols === 1) {
-        grid.forEach(function (row) {
-          row.forEach(function (id) {
-            var v = self.getView(id);
-            if (v && v.div) { v.div.style.clipPath = ""; v.div.style.webkitClipPath = ""; }
-          });
-        });
+      // 1×1: sin clip.
+      if (r === 1 && c === 1) {
+        var v0 = this.getView(grid[0] && grid[0][0]);
+        if (v0 && v0.div) { v0.div.style.clipPath = ""; v0.div.style.webkitClipPath = ""; }
+        this._positionDivisors();
         return;
       }
 
@@ -1783,142 +1764,87 @@
           if (!v || !v.div) return;
 
           // Límites de la celda en porcentaje (0..100).
+          // Columna 0 = de 0 a posV*100, columna 1 = de posV*100 a 100.
+          // Fila 0 = de 0 a posH*100, fila 1 = de posH*100 a 100.
           var left = 0, right = 100, top = 0, bottom = 100;
+          if (c > 1) { if (ci === 0) right = pV * 100; else left = pV * 100; }
+          if (r > 1) { if (ri === 0) bottom = pH * 100; else top = pH * 100; }
 
-          // Divisores verticales: la columna ci ocupa el espacio entre el
-          // divisor anterior (o 0) y el divisor siguiente (o 100).
-          if (ci > 0 && dV[ci - 1] !== undefined) left = dV[ci - 1] * 100;
-          if (ci < self.swipe.cols - 1 && dV[ci] !== undefined) right = dV[ci] * 100;
-
-          // Divisores horizontales: la fila ri ocupa el espacio entre el
-          // divisor anterior (o 0) y el divisor siguiente (o 100).
-          if (ri > 0 && dH[ri - 1] !== undefined) top = dH[ri - 1] * 100;
-          if (ri < self.swipe.rows - 1 && dH[ri] !== undefined) bottom = dH[ri] * 100;
-
-          var insetTop = top.toFixed(2) + "%";
-          var insetRight = (100 - right).toFixed(2) + "%";
-          var insetBottom = (100 - bottom).toFixed(2) + "%";
-          var insetLeft = left.toFixed(2) + "%";
-          var clip = "inset(" + insetTop + " " + insetRight + " " + insetBottom + " " + insetLeft + ")";
+          var clip = "inset(" +
+            top.toFixed(2) + "% " +
+            (100 - right).toFixed(2) + "% " +
+            (100 - bottom).toFixed(2) + "% " +
+            left.toFixed(2) + "%)";
           v.div.style.clipPath = clip;
           v.div.style.webkitClipPath = clip;
         });
       });
 
-      // Posiciona los divisores visuales.
       this._positionDivisors();
     }
 
-    // Crea divisores arrastrables para cada frontera del grid de cortinilla.
-    // Divisores verticales entre columnas, horizontales entre filas.
+    // Crea como máximo 1 divisor vertical (si cols>1) y 1 horizontal (si
+    // rows>1), cada uno de punta a punta de la pantalla. En 2×2 forman una cruz.
     _buildDivisors() {
       this._removeDivisors();
       var self = this;
       this._divisors = [];
+      this._divisorCleanups = [];
 
-      // Divisores VERTICALES (entre columnas).
-      for (var ci = 0; ci < this.swipe.cols - 1; ci++) {
-        (function (idx) {
-          var div = document.createElement("div");
-          div.className = "cmpv-divisor cmpv-divisor--vertical";
-          div.setAttribute("data-didx", "v" + idx);
-          var handle = document.createElement("div");
-          handle.className = "cmpv-divisor__handle";
-          div.appendChild(handle);
-          self._workArea.appendChild(div);
-          self._divisors.push(div);
+      function makeDivisor(axis) {
+        var isV = (axis === "v");
+        var div = document.createElement("div");
+        div.className = "cmpv-divisor cmpv-divisor--" + (isV ? "vertical" : "horizontal");
+        div.setAttribute("data-axis", axis);
+        var handle = document.createElement("div");
+        handle.className = "cmpv-divisor__handle";
+        div.appendChild(handle);
+        self._workArea.appendChild(div);
+        self._divisors.push(div);
 
-          var dragging = false;
-          var onMove = function (x) {
-            var rect = self._workArea.getBoundingClientRect();
-            var pos = (x - rect.left) / rect.width;
-            // El divisor vertical idx separa la columna idx de la idx+1.
-            // Su posición debe estar entre el divisor anterior y el siguiente.
-            var minP = idx > 0 ? self.swipe.dividersV[idx - 1] + 0.05 : 0.05;
-            var maxP = idx < self.swipe.dividersV.length - 1 ? self.swipe.dividersV[idx + 1] - 0.05 : 0.95;
-            self.swipe.dividersV[idx] = Math.max(minP, Math.min(maxP, pos));
-            self._applySwipeClip();
-          };
-          var start = function (e) { dragging = true; e.preventDefault(); self._setIframePointerEvents(false); };
-          var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
-          var move = function (e) { if (!dragging) return; var p = (e.touches && e.touches[0]) ? e.touches[0] : e; onMove(p.clientX); };
-          div.addEventListener("mousedown", start);
-          div.addEventListener("touchstart", start, { passive: false });
-          window.addEventListener("mousemove", move);
-          window.addEventListener("touchmove", move, { passive: false });
-          window.addEventListener("mouseup", end);
-          window.addEventListener("touchend", end);
-          if (!self._divisorCleanups) self._divisorCleanups = [];
-          self._divisorCleanups.push(function () {
-            window.removeEventListener("mousemove", move);
-            window.removeEventListener("touchmove", move);
-            window.removeEventListener("mouseup", end);
-            window.removeEventListener("touchend", end);
-          });
-        })(ci);
+        var dragging = false;
+        var onMove = function (x, y) {
+          var rect = self._workArea.getBoundingClientRect();
+          var pos = isV
+            ? (x - rect.left) / rect.width
+            : (y - rect.top) / rect.height;
+          pos = Math.max(0.05, Math.min(0.95, pos));
+          if (isV) self.swipe.posV = pos; else self.swipe.posH = pos;
+          self._applySwipeClip();
+        };
+        var start = function (e) { dragging = true; e.preventDefault(); self._setIframePointerEvents(false); };
+        var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
+        var move = function (e) { if (!dragging) return; var p = (e.touches && e.touches[0]) ? e.touches[0] : e; onMove(p.clientX, p.clientY); };
+        div.addEventListener("mousedown", start);
+        div.addEventListener("touchstart", start, { passive: false });
+        window.addEventListener("mousemove", move);
+        window.addEventListener("touchmove", move, { passive: false });
+        window.addEventListener("mouseup", end);
+        window.addEventListener("touchend", end);
+        self._divisorCleanups.push(function () {
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("touchmove", move);
+          window.removeEventListener("mouseup", end);
+          window.removeEventListener("touchend", end);
+        });
       }
 
-      // Divisores HORIZONTALES (entre filas).
-      for (var ri = 0; ri < this.swipe.rows - 1; ri++) {
-        (function (idx) {
-          var div = document.createElement("div");
-          div.className = "cmpv-divisor cmpv-divisor--horizontal";
-          div.setAttribute("data-didx", "h" + idx);
-          var handle = document.createElement("div");
-          handle.className = "cmpv-divisor__handle";
-          div.appendChild(handle);
-          self._workArea.appendChild(div);
-          self._divisors.push(div);
-
-          var dragging = false;
-          var onMove = function (y) {
-            var rect = self._workArea.getBoundingClientRect();
-            var pos = (y - rect.top) / rect.height;
-            var minP = idx > 0 ? self.swipe.dividersH[idx - 1] + 0.05 : 0.05;
-            var maxP = idx < self.swipe.dividersH.length - 1 ? self.swipe.dividersH[idx + 1] - 0.05 : 0.95;
-            self.swipe.dividersH[idx] = Math.max(minP, Math.min(maxP, pos));
-            self._applySwipeClip();
-          };
-          var start = function (e) { dragging = true; e.preventDefault(); self._setIframePointerEvents(false); };
-          var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
-          var move = function (e) { if (!dragging) return; var p = (e.touches && e.touches[0]) ? e.touches[0] : e; onMove(p.clientY); };
-          div.addEventListener("mousedown", start);
-          div.addEventListener("touchstart", start, { passive: false });
-          window.addEventListener("mousemove", move);
-          window.addEventListener("touchmove", move, { passive: false });
-          window.addEventListener("mouseup", end);
-          window.addEventListener("touchend", end);
-          if (!self._divisorCleanups) self._divisorCleanups = [];
-          self._divisorCleanups.push(function () {
-            window.removeEventListener("mousemove", move);
-            window.removeEventListener("touchmove", move);
-            window.removeEventListener("mouseup", end);
-            window.removeEventListener("touchend", end);
-          });
-        })(ri);
-      }
-
+      if (this.swipe.cols > 1) makeDivisor("v");
+      if (this.swipe.rows > 1) makeDivisor("h");
       this._positionDivisors();
     }
 
-    // Posiciona los divisores visuales según las posiciones actuales.
+    // Posiciona los divisores visuales según posV / posH.
     _positionDivisors() {
-      var self = this;
       if (!this._divisors) return;
+      var self = this;
       this._divisors.forEach(function (div) {
-        var key = div.getAttribute("data-didx");
-        if (!key) return;
-        if (key[0] === "v") {
-          var idx = parseInt(key.slice(1), 10);
-          var pos = self.swipe.dividersV[idx];
-          if (pos === undefined) return;
-          div.style.left = (pos * 100).toFixed(2) + "%";
+        var axis = div.getAttribute("data-axis");
+        if (axis === "v") {
+          div.style.left = (self.swipe.posV * 100).toFixed(2) + "%";
           div.style.top = "0";
-        } else if (key[0] === "h") {
-          var idx = parseInt(key.slice(1), 10);
-          var pos = self.swipe.dividersH[idx];
-          if (pos === undefined) return;
-          div.style.top = (pos * 100).toFixed(2) + "%";
+        } else if (axis === "h") {
+          div.style.top = (self.swipe.posH * 100).toFixed(2) + "%";
           div.style.left = "0";
         }
       });
