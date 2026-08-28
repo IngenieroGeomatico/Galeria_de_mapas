@@ -531,6 +531,12 @@
       // Espejo: array de FILAS (cada fila = array de viewIds). Grid irregular
       // permitido. Se inicializa al entrar en modo espejo si está vacío.
       this.grid = [];
+      // Proporciones del grid espejo. Se inicializan equitativas y se
+      // actualizan al arrastrar los divisores.
+      this.mirrorSizes = {
+        rowPcts: [],    // porcentaje de alto de cada fila (suman 100)
+        colPcts: [],    // porcentaje de ancho de cada columna (suman 100) — solo grid regular
+      };
       // Tipo de disposición del espejo y su especificación inicial.
       var lay = this.options.layout || {};
       this.layoutType = (lay.type === "custom") ? "custom" : "grid";
@@ -2057,39 +2063,216 @@
       }
     }
 
-    // Distribuye las vistas con CSS GRID nativo según this.grid (array de FILAS;
-    // cada fila es un array de viewIds = celdas). Soporta grid IRREGULAR: el
-    // stage usa un nº de columnas = mínimo común múltiplo de las longitudes de
-    // fila, y cada celda ocupa (mcm / nºceldas) columnas con grid-column: span.
-    // Así cada fila reparte su ancho entre sus celdas aunque tengan distinto nº.
+    // Inicializa las proporciones del grid espejo (equitativas) si no
+    // coinciden con la estructura actual del grid.
+    _ensureMirrorSizes() {
+      var rows = (this.grid || []).filter(function (r) { return r && r.length; });
+      var nRows = rows.length;
+      if (!nRows) return;
+      var ms = this.mirrorSizes;
+      // Filas: reparto equitativo si no coincide.
+      if (!ms.rowPcts || ms.rowPcts.length !== nRows) {
+        ms.rowPcts = [];
+        for (var i = 0; i < nRows; i++) ms.rowPcts.push(100 / nRows);
+      }
+      // Columnas: el nº máximo de columnas de cualquier fila.
+      var maxCols = rows.reduce(function (m, r) { return Math.max(m, r.length); }, 1);
+      if (!ms.colPcts || ms.colPcts.length !== maxCols) {
+        ms.colPcts = [];
+        for (var j = 0; j < maxCols; j++) ms.colPcts.push(100 / maxCols);
+      }
+    }
+
+    // Distribuye las vistas con CSS GRID nativo según this.grid.
+    // Usa porcentajes (mirrorSizes) para permitir redimensionamiento y crea
+    // divisores arrastrables entre filas y columnas.
     _layoutMirror() {
       this._resetViewDivs();
       var self = this;
       var rows = (this.grid || []).filter(function (r) { return r && r.length; });
       if (!rows.length) return;
+      this._ensureMirrorSizes();
 
-      // Nº de columnas base del grid = mcm de las longitudes de fila.
       var lengths = rows.map(function (r) { return r.length; });
       var baseCols = lengths.reduce(function (a, b) { return lcm(a, b); }, 1);
 
       var stage = this._workArea;
       stage.style.display = "grid";
-      stage.style.gridTemplateColumns = "repeat(" + baseCols + ", 1fr)";
-      stage.style.gridTemplateRows = "repeat(" + rows.length + ", 1fr)";
+
+      // gridTemplateRows con porcentajes.
+      var rowTemplate = this.mirrorSizes.rowPcts.map(function (p) { return p + "%"; }).join(" ");
+      stage.style.gridTemplateRows = rowTemplate;
+
+      // gridTemplateColumns: usar porcentajes multiplicados por el span.
+      var colPcts = this.mirrorSizes.colPcts;
+      var maxCols = colPcts.length;
+      // Para grids irregulares: cada celda sigue usando span, pero las columnas
+      // base del grid se reparten según colPcts (subdivididas por baseCols/maxCols).
+      var colParts = [];
+      for (var ci = 0; ci < maxCols; ci++) {
+        var subCols = baseCols / maxCols;
+        var each = colPcts[ci] / subCols;
+        for (var s = 0; s < subCols; s++) colParts.push(each + "%");
+      }
+      stage.style.gridTemplateColumns = colParts.join(" ");
 
       rows.forEach(function (row, ri) {
-        var span = baseCols / row.length;  // columnas que ocupa cada celda de esta fila
+        var span = baseCols / row.length;
         row.forEach(function (viewId, ci) {
           var v = self.getView(viewId);
           if (!v || !v.div) return;
           v.div.style.display = "";
-          v.div.style.position = "";       // el grid gestiona la posición
+          v.div.style.position = "";
           v.div.style.inset = "";
           v.div.style.gridRow = (ri + 1) + " / span 1";
           v.div.style.gridColumn = (ci * span + 1) + " / span " + span;
           v.div.style.zIndex = "2";
           v.div.classList.add("cmpv-view--cell");
         });
+      });
+
+      this._buildMirrorDivisors();
+    }
+
+    // Crea divisores arrastrables entre las filas y columnas del grid espejo.
+    // Divisores HORIZONTALES: uno entre cada par de filas (ancho 100%).
+    // Divisores VERTICALES: uno entre cada par de columnas (alto 100%).
+    _buildMirrorDivisors() {
+      // Reutiliza el sistema de divisores de la cortinilla.
+      this._removeDivisors();
+      var self = this;
+      this._divisors = [];
+      this._divisorCleanups = [];
+
+      var rows = (this.grid || []).filter(function (r) { return r && r.length; });
+      var nRows = rows.length;
+      var nCols = this.mirrorSizes.colPcts.length;
+
+      function addDrag(el, onMove, stopProp) {
+        var dragging = false;
+        var start = function (e) { dragging = true; e.preventDefault(); if (stopProp) e.stopPropagation(); self._setIframePointerEvents(false); };
+        var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
+        var move = function (e) {
+          if (!dragging) return;
+          var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+          onMove(p.clientX, p.clientY);
+        };
+        el.addEventListener("mousedown", start);
+        el.addEventListener("touchstart", start, { passive: false });
+        window.addEventListener("mousemove", move);
+        window.addEventListener("touchmove", move, { passive: false });
+        window.addEventListener("mouseup", end);
+        window.addEventListener("touchend", end);
+        self._divisorCleanups.push(function () {
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("touchmove", move);
+          window.removeEventListener("mouseup", end);
+          window.removeEventListener("touchend", end);
+        });
+      }
+
+      // Acumula los porcentajes hasta la frontera idx para obtener la posición.
+      function cumPct(arr, idx) {
+        var sum = 0; for (var i = 0; i <= idx; i++) sum += arr[i]; return sum;
+      }
+
+      // Divisores HORIZONTALES (entre filas).
+      for (var ri = 0; ri < nRows - 1; ri++) {
+        (function (idx) {
+          var div = document.createElement("div");
+          div.className = "cmpv-divisor cmpv-divisor--horizontal";
+          var handle = document.createElement("div");
+          handle.className = "cmpv-divisor__handle";
+          div.appendChild(handle);
+          self._workArea.appendChild(div);
+          self._divisors.push(div);
+          // Posición inicial.
+          var top = cumPct(self.mirrorSizes.rowPcts, idx);
+          div.style.top = top + "%"; div.style.left = "0"; div.style.width = "100%";
+
+          addDrag(div, function (x, y) {
+            var rect = self._workArea.getBoundingClientRect();
+            var posY = (y - rect.top) / rect.height * 100;
+            // Redistribuir entre fila[idx] y fila[idx+1].
+            var before = cumPct(self.mirrorSizes.rowPcts, idx - 1);
+            var after = cumPct(self.mirrorSizes.rowPcts, idx + 1);
+            posY = Math.max(before + 5, Math.min(after - 5, posY));
+            self.mirrorSizes.rowPcts[idx] = posY - before;
+            self.mirrorSizes.rowPcts[idx + 1] = after - posY;
+            self._applyMirrorGrid();
+          });
+        })(ri);
+      }
+
+      // Divisores VERTICALES (entre columnas).
+      for (var ci = 0; ci < nCols - 1; ci++) {
+        (function (idx) {
+          var div = document.createElement("div");
+          div.className = "cmpv-divisor cmpv-divisor--vertical";
+          var handle = document.createElement("div");
+          handle.className = "cmpv-divisor__handle";
+          div.appendChild(handle);
+          self._workArea.appendChild(div);
+          self._divisors.push(div);
+          var left = cumPct(self.mirrorSizes.colPcts, idx);
+          div.style.left = left + "%"; div.style.top = "0"; div.style.height = "100%";
+
+          addDrag(div, function (x) {
+            var rect = self._workArea.getBoundingClientRect();
+            var posX = (x - rect.left) / rect.width * 100;
+            var before = cumPct(self.mirrorSizes.colPcts, idx - 1);
+            var after = cumPct(self.mirrorSizes.colPcts, idx + 1);
+            posX = Math.max(before + 5, Math.min(after - 5, posX));
+            self.mirrorSizes.colPcts[idx] = posX - before;
+            self.mirrorSizes.colPcts[idx + 1] = after - posX;
+            self._applyMirrorGrid();
+          });
+        })(ci);
+      }
+
+      this._applyDivisorStyle();
+    }
+
+    // Actualiza el CSS Grid y reposiciona los divisores del espejo sin
+    // destruir/recrear todo el layout. Se llama al arrastrar un divisor.
+    _applyMirrorGrid() {
+      var rows = (this.grid || []).filter(function (r) { return r && r.length; });
+      if (!rows.length) return;
+      var stage = this._workArea;
+
+      // Actualizar gridTemplateRows.
+      var rowTemplate = this.mirrorSizes.rowPcts.map(function (p) { return p + "%"; }).join(" ");
+      stage.style.gridTemplateRows = rowTemplate;
+
+      // Actualizar gridTemplateColumns.
+      var colPcts = this.mirrorSizes.colPcts;
+      var maxCols = colPcts.length;
+      var lengths = rows.map(function (r) { return r.length; });
+      var baseCols = lengths.reduce(function (a, b) { return lcm(a, b); }, 1);
+      var colParts = [];
+      for (var ci = 0; ci < maxCols; ci++) {
+        var subCols = baseCols / maxCols;
+        var each = colPcts[ci] / subCols;
+        for (var s = 0; s < subCols; s++) colParts.push(each + "%");
+      }
+      stage.style.gridTemplateColumns = colParts.join(" ");
+
+      // Reposicionar divisores.
+      var self = this;
+      var hIdx = 0, vIdx = 0;
+      function cumPct(arr, idx) {
+        var sum = 0; for (var i = 0; i <= idx; i++) sum += arr[i]; return sum;
+      }
+      if (this._divisors) this._divisors.forEach(function (div) {
+        if (div.classList.contains("cmpv-divisor--horizontal")) {
+          var top = cumPct(self.mirrorSizes.rowPcts, hIdx);
+          div.style.top = top + "%";
+          hIdx++;
+        } else if (div.classList.contains("cmpv-divisor--vertical")) {
+          var left = cumPct(self.mirrorSizes.colPcts, vIdx);
+          div.style.left = left + "%";
+          vIdx++;
+        }
       });
     }
 
