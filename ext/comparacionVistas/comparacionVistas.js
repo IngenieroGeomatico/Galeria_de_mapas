@@ -1095,7 +1095,7 @@
         '      </div>' +
         '      <div class="cmpv-accordion__body">' +
         '        <label class="cmpv-field"><input type="checkbox" data-role="sync" checked> Sincronizar encuadre</label>' +
-        '        <label class="cmpv-field" data-role="sync-mode-field">Tipo de sincronización' +
+        '        <label class="cmpv-field" data-role="sync-mode-field" data-only="mirror">Tipo de sincronización' +
         '          <select class="cmpv-select" data-role="sync-mode">' +
         '            <option value="extent">Extensión (sincronización total)</option>' +
         '            <option value="center">Solo centro (zoom independiente)</option>' +
