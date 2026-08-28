@@ -499,6 +499,37 @@
   stroke-width: 3px;
 }
 
+/* ---- Moldbar: selector / añadir / quitar moldes ---------------------- */
+.cmpv-moldbar { margin-bottom: 6px; }
+.cmpv-moldbar__row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+.cmpv-moldbar__sel { flex: 1; min-width: 0; }
+.cmpv-moldbar__btn { 
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 3px 8px;
+  font-size: 14px;
+  line-height: 1.3;
+}
+.cmpv-moldbar__btn:hover:not(:disabled) { background: #fdecea; border-color: var(--cmpv-orange); }
+.cmpv-moldbar__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cmpv-moldbar__del {
+  width: 100%;
+  margin-top: 6px;
+  border-style: solid;
+  font-size: 13px;
+  font-weight: 600;
+}
+/* Molde activo: su SVG queda por encima (agarre prioritario) y muestra el
+   tirador; los demás conservan su contorno arrastrable (arrastrar activa). */
+.cmpv-mold--sel { z-index: 26; }
+
 /* ---- Responsive ---------------------------------------------------- */
 @media (max-width: 640px) {
   .cmpv-tool { min-width: 46px; padding: 4px; }
