@@ -269,8 +269,12 @@
 
     function onNativeChange() {
       if (_prog > 0) return;
+      var msg = { type: "cmpv:view" };
       var ext = readExtent(_map);
-      if (ext) postToParent({ type: "cmpv:view", extent: ext });
+      if (ext) msg.extent = ext;
+      var cz = readCenterZoom(_map);
+      if (cz) { msg.lon = cz.lon; msg.lat = cz.lat; msg.zoom = cz.zoom; }
+      if (ext || cz) postToParent(msg);
     }
 
     function wireContinuousSync() {
@@ -316,8 +320,12 @@
             // Cesium y uno corto para OL.
             var delay = isCesium ? 300 : 0;
             setTimeout(function () {
+              var msg = { type: "cmpv:view" };
               var ext = readExtent(_map);
-              if (ext) postToParent({ type: "cmpv:view", extent: ext });
+              if (ext) msg.extent = ext;
+              var cz = readCenterZoom(_map);
+              if (cz) { msg.lon = cz.lon; msg.lat = cz.lat; msg.zoom = cz.zoom; }
+              if (ext || cz) postToParent(msg);
             }, delay);
           }
         } catch (e) {}
@@ -407,8 +415,12 @@
             impl.scene.postRender.addEventListener(function () {
               if (onceRendered) return;
               onceRendered = true;
+              var msg = { type: "cmpv:view" };
               var ext = readExtent(_map);
-              if (ext) postToParent({ type: "cmpv:view", extent: ext });
+              if (ext) msg.extent = ext;
+              var cz = readCenterZoom(_map);
+              if (cz) { msg.lon = cz.lon; msg.lat = cz.lat; msg.zoom = cz.zoom; }
+              if (ext || cz) postToParent(msg);
             });
           } catch (e) {}
         }
@@ -499,6 +511,7 @@
       this.mode = (["single", "swipe", "mirror"].indexOf(this.options.mode) !== -1)
         ? this.options.mode : "single";
       this.sync = (this.options.sync !== false);
+      this.syncMode = (this.options.syncMode === "center") ? "center" : "extent";
       this.showControls = (this.options.showControls !== false);
       this.activeViewId = null;
 
@@ -926,9 +939,11 @@
       }
 
       if (d.type === "cmpv:view") {
-        // Guardamos el encuadre como EXTENT (área visible) si viene; si no,
-        // como centro+zoom (compatibilidad con el arranque).
-        v.lastView = d.extent ? { extent: d.extent } : { lon: d.lon, lat: d.lat, zoom: d.zoom };
+        // Guardamos AMBOS formatos (extent y center+zoom) para que
+        // _sendSetView pueda elegir según syncMode.
+        v.lastView = {};
+        if (d.extent) v.lastView.extent = d.extent;
+        if (typeof d.lon === "number") { v.lastView.lon = d.lon; v.lastView.lat = d.lat; v.lastView.zoom = d.zoom; }
         // Marcar que esta vista ya ha reportado su extent real. El primer
         // cmpv:view es el más importante: si hay vistas encoladas esperando
         // sincronizarse con esta, les enviamos el extent fresco AHORA.
@@ -950,8 +965,16 @@
       v._progUpdates += 1;
       try {
         var msg = { type: "cmpv:setView", target: v.id };
-        if (state.extent) msg.extent = state.extent;       // sincronización por área visible
-        else { msg.lon = state.lon; msg.lat = state.lat; msg.zoom = state.zoom; }
+        // Según syncMode: "extent" envía el área visible (todas las vistas
+        // muestran lo mismo), "center" envía centro+zoom (misma escala, pero
+        // el área visible depende del tamaño de cada vista).
+        if (this.syncMode === "center" && typeof state.lon === "number") {
+          msg.lon = state.lon; msg.lat = state.lat; msg.zoom = state.zoom;
+        } else if (state.extent) {
+          msg.extent = state.extent;
+        } else if (typeof state.lon === "number") {
+          msg.lon = state.lon; msg.lat = state.lat; msg.zoom = state.zoom;
+        }
         v.iframe.contentWindow.postMessage(msg, "*");
       } catch (e) {}
       // Libera el guard tras un margen (el iframe emite su 'view' de eco poco después).
@@ -1069,6 +1092,11 @@
         '      </div>' +
         '      <div class="cmpv-accordion__body">' +
         '        <label class="cmpv-field"><input type="checkbox" data-role="sync" checked> Sincronizar encuadre</label>' +
+        '        <label class="cmpv-field" data-role="sync-mode-field">Tipo de sincronización' +
+        '          <select class="cmpv-select" data-role="sync-mode">' +
+        '            <option value="extent">Extensión (misma área visible)</option>' +
+        '            <option value="center">Centro + Zoom (misma escala)</option>' +
+        '          </select></label>' +
         '        <label class="cmpv-field"><input type="checkbox" data-role="controls" checked> Mostrar controles</label>' +
         '        <div class="cmpv-field--sep"></div>' +
         '        <span class="cmpv-field__title">Apariencia de los divisores</span>' +
@@ -1141,8 +1169,16 @@
         });
       });
       root.querySelector('[data-role="close-cfg"]').addEventListener("click", function () { self.toggleOpciones(false); });
+      var syncModeField = root.querySelector('[data-role="sync-mode-field"]');
+      var syncModeSel = root.querySelector('[data-role="sync-mode"]');
       root.querySelector('[data-role="sync"]').addEventListener("change", function () {
-        self.sync = this.checked; if (self.sync) self._resyncFromActive();
+        self.sync = this.checked;
+        if (syncModeField) syncModeField.style.display = self.sync ? "" : "none";
+        if (self.sync) self._resyncFromActive();
+      });
+      if (syncModeSel) syncModeSel.addEventListener("change", function () {
+        self.syncMode = this.value;
+        if (self.sync) self._resyncFromActive();
       });
       root.querySelector('[data-role="controls"]').addEventListener("change", function () {
         self.showControls = this.checked; self._broadcastControls();
