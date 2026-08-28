@@ -1829,9 +1829,9 @@
       this._divisorCleanups = [];
       var lay = this.swipe.layout;
 
-      function addDrag(div, onMove) {
+      function addDrag(div, onMove, stopProp) {
         var dragging = false;
-        var start = function (e) { dragging = true; e.preventDefault(); self._setIframePointerEvents(false); };
+        var start = function (e) { dragging = true; e.preventDefault(); if (stopProp) e.stopPropagation(); self._setIframePointerEvents(false); };
         var end = function () { if (dragging) { dragging = false; self._setIframePointerEvents(true); } };
         var move = function (e) {
           if (!dragging) return;
@@ -1865,19 +1865,31 @@
       }
 
       // Divisor vertical (siempre): cruza toda la pantalla.
-      // Su handle es el ÚNICO tirador visible y captura movimiento en AMBOS
-      // ejes: X mueve el divisor vertical, Y mueve los horizontales.
+      // - Arrastrar la BARRA → solo mueve X (posV).
+      // - Arrastrar el HANDLE (círculo naranja) → mueve X+Y (omnidireccional).
       var divV = makeDivisor("cmpv-divisor--vertical", "v");
-      addDrag(divV, function (x, y) {
+      var handleV = divV.querySelector(".cmpv-divisor__handle");
+
+      // Drag de la barra (solo X).
+      addDrag(divV, function (x) {
         var rect = self._workArea.getBoundingClientRect();
-        var clamp = function (v) { return Math.max(0.05, Math.min(0.95, v)); };
-        self.swipe.posV = clamp((x - rect.left) / rect.width);
-        // Mover los horizontales con la Y del tirador.
-        var posY = clamp((y - rect.top) / rect.height);
-        if (lay === "1x2" || lay === "2x2") self.swipe.posHL = posY;
-        if (lay === "2x1" || lay === "2x2") self.swipe.posHR = posY;
+        self.swipe.posV = Math.max(0.05, Math.min(0.95, (x - rect.left) / rect.width));
         self._applySwipeClip();
       });
+
+      // Drag del handle (X + Y) — solo si hay horizontales.
+      if (handleV && lay !== "1x1") {
+        handleV.style.cursor = "move";
+        addDrag(handleV, function (x, y) {
+          var rect = self._workArea.getBoundingClientRect();
+          var clamp = function (v) { return Math.max(0.05, Math.min(0.95, v)); };
+          self.swipe.posV = clamp((x - rect.left) / rect.width);
+          var posY = clamp((y - rect.top) / rect.height);
+          if (lay === "1x2" || lay === "2x2") self.swipe.posHL = posY;
+          if (lay === "2x1" || lay === "2x2") self.swipe.posHR = posY;
+          self._applySwipeClip();
+        }, true);
+      }
 
       // Divisores horizontales: se crean para la línea visual, pero SIN
       // tirador propio — el arrastre se hace desde el tirador del vertical.
