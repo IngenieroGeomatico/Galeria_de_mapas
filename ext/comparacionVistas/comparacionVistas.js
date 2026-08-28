@@ -1467,9 +1467,16 @@
         });
       } else if (this.mode === "molde") {
         // Base (compartida, se ve fuera de las figuras) + un slot por molde.
+        // Slots EXCLUSIVOS: las vistas de base y moldes se superponen en el
+        // mismo mapa, así que cada vista sólo puede ocupar un slot. _blocked
+        // son las vistas ya ocupadas por OTROS slots (la propia vista del slot
+        // se mantiene seleccionable para conservar el valor actual).
+        var moldTopIds = this.molds.map(function (m) { return m.topId; });
         slots.push({
           label: "Base (abajo)",
           viewId: this.moldBaseId,
+          _exclusive: true,
+          _blocked: moldTopIds,
           set: function (newViewId) {
             self.moldBaseId = newViewId;
             self._layoutMold();
@@ -1480,6 +1487,10 @@
           slots.push({
             label: "Molde " + (i + 1) + " (arriba)",
             viewId: m.topId,
+            _exclusive: true,
+            _blocked: [self.moldBaseId].concat(
+              moldTopIds.filter(function (id, j) { return j !== i; })
+            ),
             set: function (newViewId) {
               m.topId = newViewId;
               self._layoutMold();
@@ -1525,6 +1536,9 @@
         var sel = document.createElement("select");
         sel.className = "cmpv-select cmpv-slot__select";
         self.views.forEach(function (v) {
+          // En slots exclusivos (molde): ocultar las vistas ocupadas por OTROS
+          // slots; la propia vista del slot siempre queda seleccionable.
+          if (slot._exclusive && v.id !== slot.viewId && slot._blocked.indexOf(v.id) !== -1) return;
           var opt = document.createElement("option");
           opt.value = v.id;
           opt.textContent = v.name + (v.impl === "cesium" ? " (3D)" : " (2D)");
