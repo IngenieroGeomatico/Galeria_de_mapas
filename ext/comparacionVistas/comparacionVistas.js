@@ -519,6 +519,15 @@
         posHR: 0.5,                        // posición divisor horizontal derecho (0..1)
       };
 
+      // Estilo de los divisores (barras y tirador).
+      this._divStyle = {
+        visible: true,
+        color: "#ffffff",
+        width: 4,
+        handleColor: "#f57105",
+        handleSize: 32,
+      };
+
       // Espejo: array de FILAS (cada fila = array de viewIds). Grid irregular
       // permitido. Se inicializa al entrar en modo espejo si está vacío.
       this.grid = [];
@@ -1052,38 +1061,61 @@
         '    <button type="button" class="cmpv-sidenav__close" data-role="close-cfg" title="Cerrar">&times;</button>' +
         '  </div>' +
         '  <div class="cmpv-sidenav__body">' +
-        '    <label class="cmpv-field"><input type="checkbox" data-role="sync" checked> Sincronizar encuadre entre vistas</label>' +
-        '    <label class="cmpv-field"><input type="checkbox" data-role="controls" checked> Mostrar controles y plugins en las vistas</label>' +
-        '    <label class="cmpv-field" data-only="swipe">Disposición' +
-        '      <select class="cmpv-select" data-role="swipe-layout">' +
-        '        <option value="1x1">Izq | Der</option>' +
-        '        <option value="2x1">Izq | Der ÷ 2</option>' +
-        '        <option value="1x2">Izq ÷ 2 | Der</option>' +
-        '        <option value="2x2">Izq ÷ 2 | Der ÷ 2</option>' +
-        '      </select></label>' +
-        '    <div class="cmpv-field cmpv-field--grid" data-only="mirror">' +
-        '      <span class="cmpv-grid__title">Disposición (espejo)</span>' +
-        '      <label class="cmpv-grid-type">Tipo' +
-        '        <select class="cmpv-select" data-role="layout-type">' +
-        '          <option value="grid">Filas × columnas</option>' +
-        '          <option value="custom">Grid (irregular)</option>' +
-        '        </select>' +
-        '      </label>' +
-        '      <div class="cmpv-grid-inputs" data-role="grid-inputs">' +
-        '        <label>Filas <input type="number" class="cmpv-num" data-role="rows" min="1" max="6" value="1"></label>' +
-        '        <label>Columnas <input type="number" class="cmpv-num" data-role="cols" min="1" max="6" value="2"></label>' +
+        // ── Acordeón: Opciones ──
+        '    <div class="cmpv-accordion" data-role="acc-opciones">' +
+        '      <div class="cmpv-accordion__header" role="button" tabindex="0" aria-expanded="true">' +
+        '        <span class="cmpv-sidenav__subtitle cmpv-accordion__title">Opciones</span>' +
+        '        <span class="cmpv-accordion__chevron">▸</span>' +
         '      </div>' +
-        '      <div class="cmpv-custom" data-role="custom-inputs" style="display:none">' +
-        '        <div class="cmpv-custom__hint">Define cada fila y cuántas celdas (vistas) tiene. Cada fila reparte su ancho entre sus celdas.</div>' +
-        '        <div class="cmpv-custom__rows" data-role="custom-rows"></div>' +
-        '        <button type="button" class="cmpv-custom__add" data-role="add-row">➕ Añadir fila</button>' +
+        '      <div class="cmpv-accordion__body">' +
+        '        <label class="cmpv-field"><input type="checkbox" data-role="sync" checked> Sincronizar encuadre</label>' +
+        '        <label class="cmpv-field"><input type="checkbox" data-role="controls" checked> Mostrar controles</label>' +
+        '        <div class="cmpv-field--sep"></div>' +
+        '        <span class="cmpv-field__title">Apariencia de los divisores</span>' +
+        '        <label class="cmpv-field"><input type="checkbox" data-role="div-visible" checked> Mostrar barras de división</label>' +
+        '        <label class="cmpv-field">Color barra <input type="color" data-role="div-color" value="#ffffff" class="cmpv-color"></label>' +
+        '        <label class="cmpv-field">Ancho barra <input type="range" data-role="div-width" min="1" max="12" value="4" class="cmpv-range"> <span data-role="div-width-val">4</span>px</label>' +
+        '        <label class="cmpv-field">Color tirador <input type="color" data-role="handle-color" value="#f57105" class="cmpv-color"></label>' +
+        '        <label class="cmpv-field">Tamaño tirador <input type="range" data-role="handle-size" min="16" max="56" value="32" class="cmpv-range"> <span data-role="handle-size-val">32</span>px</label>' +
         '      </div>' +
         '    </div>' +
-        '    <div class="cmpv-sidenav__section" data-role="seccion-comparacion">' +
-        '      <div class="cmpv-sidenav__subtitle">Mapas de comparación</div>' +
-        '      <div class="cmpv-slots__hint">Elige qué vista se muestra en cada mapa de la comparación.</div>' +
-        '      <div class="cmpv-slots" data-role="slots"></div>' +
+        // ── Acordeón: Mapas de comparación ──
+        '    <div class="cmpv-accordion" data-role="acc-comparacion">' +
+        '      <div class="cmpv-accordion__header" role="button" tabindex="0" aria-expanded="true">' +
+        '        <span class="cmpv-sidenav__subtitle cmpv-accordion__title">Mapas de comparación</span>' +
+        '        <span class="cmpv-accordion__chevron">▸</span>' +
+        '      </div>' +
+        '      <div class="cmpv-accordion__body">' +
+        '        <label class="cmpv-field" data-only="swipe">Disposición' +
+        '          <select class="cmpv-select" data-role="swipe-layout">' +
+        '            <option value="1x1">Izq | Der</option>' +
+        '            <option value="2x1">Izq | Der ÷ 2</option>' +
+        '            <option value="1x2">Izq ÷ 2 | Der</option>' +
+        '            <option value="2x2">Izq ÷ 2 | Der ÷ 2</option>' +
+        '          </select></label>' +
+        '        <div class="cmpv-field cmpv-field--grid" data-only="mirror">' +
+        '          <span class="cmpv-grid__title">Disposición (espejo)</span>' +
+        '          <label class="cmpv-grid-type">Tipo' +
+        '            <select class="cmpv-select" data-role="layout-type">' +
+        '              <option value="grid">Filas × columnas</option>' +
+        '              <option value="custom">Grid (irregular)</option>' +
+        '            </select>' +
+        '          </label>' +
+        '          <div class="cmpv-grid-inputs" data-role="grid-inputs">' +
+        '            <label>Filas <input type="number" class="cmpv-num" data-role="rows" min="1" max="6" value="1"></label>' +
+        '            <label>Columnas <input type="number" class="cmpv-num" data-role="cols" min="1" max="6" value="2"></label>' +
+        '          </div>' +
+        '          <div class="cmpv-custom" data-role="custom-inputs" style="display:none">' +
+        '            <div class="cmpv-custom__hint">Define cada fila y cuántas celdas (vistas) tiene. Cada fila reparte su ancho entre sus celdas.</div>' +
+        '            <div class="cmpv-custom__rows" data-role="custom-rows"></div>' +
+        '            <button type="button" class="cmpv-custom__add" data-role="add-row">➕ Añadir fila</button>' +
+        '          </div>' +
+        '        </div>' +
+        '        <div class="cmpv-slots__hint">Elige qué vista se muestra en cada mapa.</div>' +
+        '        <div class="cmpv-slots" data-role="slots"></div>' +
+        '      </div>' +
         '    </div>' +
+        // ── Acordeón: Gestión de vistas ──
         '    <div class="cmpv-accordion" data-role="acc-vistas">' +
         '      <div class="cmpv-accordion__header" role="button" tabindex="0" aria-expanded="true">' +
         '        <span class="cmpv-sidenav__subtitle cmpv-accordion__title">Gestión de vistas</span>' +
@@ -1169,19 +1201,45 @@
       });
       syncTypeUI();
 
-      // --- Acordeón "Gestión de vistas" (mismo patrón que vueloFotogrametrico) ---
-      var accVistas = root.querySelector('[data-role="acc-vistas"]');
-      if (accVistas) {
-        var accHeader = accVistas.querySelector(".cmpv-accordion__header");
-        var toggleAcc = function () {
-          var collapsed = accVistas.classList.toggle("cmpv-accordion--collapsed");
-          accHeader.setAttribute("aria-expanded", String(!collapsed));
+      // --- Controles de apariencia de divisores ---
+      var applyStyle = function () { self._applyDivisorStyle(); };
+      var divVisibleCb = root.querySelector('[data-role="div-visible"]');
+      var divColorIn = root.querySelector('[data-role="div-color"]');
+      var divWidthIn = root.querySelector('[data-role="div-width"]');
+      var divWidthVal = root.querySelector('[data-role="div-width-val"]');
+      var handleColorIn = root.querySelector('[data-role="handle-color"]');
+      var handleSizeIn = root.querySelector('[data-role="handle-size"]');
+      var handleSizeVal = root.querySelector('[data-role="handle-size-val"]');
+
+      if (divVisibleCb) divVisibleCb.addEventListener("change", function () {
+        self._divStyle.visible = this.checked; applyStyle();
+      });
+      if (divColorIn) divColorIn.addEventListener("input", function () {
+        self._divStyle.color = this.value; applyStyle();
+      });
+      if (divWidthIn) divWidthIn.addEventListener("input", function () {
+        self._divStyle.width = parseInt(this.value, 10); if (divWidthVal) divWidthVal.textContent = this.value; applyStyle();
+      });
+      if (handleColorIn) handleColorIn.addEventListener("input", function () {
+        self._divStyle.handleColor = this.value; applyStyle();
+      });
+      if (handleSizeIn) handleSizeIn.addEventListener("input", function () {
+        self._divStyle.handleSize = parseInt(this.value, 10); if (handleSizeVal) handleSizeVal.textContent = this.value; applyStyle();
+      });
+
+      // --- Toggle de todos los acordeones ---
+      root.querySelectorAll(".cmpv-accordion").forEach(function (acc) {
+        var hdr = acc.querySelector(".cmpv-accordion__header");
+        if (!hdr) return;
+        var toggle = function () {
+          var collapsed = acc.classList.toggle("cmpv-accordion--collapsed");
+          hdr.setAttribute("aria-expanded", String(!collapsed));
         };
-        accHeader.addEventListener("click", toggleAcc);
-        accHeader.addEventListener("keydown", function (e) {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleAcc(); }
+        hdr.addEventListener("click", toggle);
+        hdr.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
         });
-      }
+      });
 
       return root;
     }
@@ -1281,12 +1339,10 @@
     // selector de qué vista mostrar. Sólo visible en cortinilla/espejo.
     _renderSlotsComparacion() {
       var self = this;
-      var seccion = this.ui.querySelector('[data-role="seccion-comparacion"]');
       var cont = this.ui.querySelector('[data-role="slots"]');
-      if (!seccion || !cont) return;
+      if (!cont) return;
 
       var show = (this.mode === "swipe" || this.mode === "mirror");
-      seccion.style.display = show ? "" : "none";
       if (!show) { cont.innerHTML = ""; return; }
 
       var slots = this._getSlots();
@@ -1913,6 +1969,7 @@
       }
 
       this._positionDivisors();
+      this._applyDivisorStyle();
     }
 
     // Posiciona los divisores visuales y sus tiradores (handles) en la
@@ -1963,6 +2020,29 @@
     _setIframePointerEvents(on) {
       this.views.forEach(function (v) {
         if (v.iframe) v.iframe.style.pointerEvents = on ? "" : "none";
+      });
+    }
+
+    // Aplica el estilo visual (color, ancho, visibilidad, tirador) a todos
+    // los divisores existentes en el DOM.
+    _applyDivisorStyle() {
+      var s = this._divStyle;
+      if (!this._divisors) return;
+      this._divisors.forEach(function (div) {
+        var axis = div.getAttribute("data-axis");
+        var isV = (axis === "v");
+        // Barra: color, ancho, visibilidad.
+        div.style.background = s.visible ? s.color : "transparent";
+        div.style.boxShadow = s.visible ? "0 0 4px rgba(0,0,0,0.5)" : "none";
+        if (isV) { div.style.width = s.width + "px"; div.style.transform = "translateX(-" + (s.width / 2) + "px)"; }
+        else { div.style.height = s.width + "px"; div.style.transform = "translateY(-" + (s.width / 2) + "px)"; }
+        // Tirador (handle).
+        var handle = div.querySelector(".cmpv-divisor__handle");
+        if (handle) {
+          handle.style.background = s.handleColor;
+          handle.style.width = s.handleSize + "px";
+          handle.style.height = s.handleSize + "px";
+        }
       });
     }
 
