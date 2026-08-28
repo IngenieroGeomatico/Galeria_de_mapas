@@ -1214,6 +1214,7 @@
           else if (act === "cortinilla") self.setMode("swipe");
           else if (act === "espejo") self.setMode("mirror");
           else if (act === "single") self.setMode("single");
+          else if (act === "molde") self.setMode("molde");
           else if (act === "opciones") self.toggleOpciones();
         });
       });
