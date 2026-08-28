@@ -246,7 +246,10 @@
           return true;
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
-          var alt = altitudeForZoom(v.zoom);
+          // Si no viene zoom, conservar la altitud actual de la cámara.
+          var alt = (typeof v.zoom === "number")
+            ? altitudeForZoom(v.zoom)
+            : impl.camera.positionCartographic.height;
           impl.camera.setView({
             destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
             orientation: { heading: 0.0, pitch: -C.Math.PI_OVER_TWO, roll: 0.0 },
@@ -965,11 +968,11 @@
       v._progUpdates += 1;
       try {
         var msg = { type: "cmpv:setView", target: v.id };
-        // Según syncMode: "extent" envía el área visible (todas las vistas
-        // muestran lo mismo), "center" envía centro+zoom (misma escala, pero
-        // el área visible depende del tamaño de cada vista).
+        // "extent": sync total (misma área visible).
+        // "center": solo sincroniza el centro, cada vista conserva su zoom.
         if (this.syncMode === "center" && typeof state.lon === "number") {
-          msg.lon = state.lon; msg.lat = state.lat; msg.zoom = state.zoom;
+          msg.lon = state.lon; msg.lat = state.lat;
+          // NO enviamos zoom: cada vista mantiene el suyo.
         } else if (state.extent) {
           msg.extent = state.extent;
         } else if (typeof state.lon === "number") {
@@ -1094,8 +1097,8 @@
         '        <label class="cmpv-field"><input type="checkbox" data-role="sync" checked> Sincronizar encuadre</label>' +
         '        <label class="cmpv-field" data-role="sync-mode-field">Tipo de sincronización' +
         '          <select class="cmpv-select" data-role="sync-mode">' +
-        '            <option value="extent">Extensión (misma área visible)</option>' +
-        '            <option value="center">Centro + Zoom (misma escala)</option>' +
+        '            <option value="extent">Extensión (sincronización total)</option>' +
+        '            <option value="center">Solo centro (zoom independiente)</option>' +
         '          </select></label>' +
         '        <label class="cmpv-field"><input type="checkbox" data-role="controls" checked> Mostrar controles</label>' +
         '        <div class="cmpv-field--sep"></div>' +
