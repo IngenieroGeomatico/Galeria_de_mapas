@@ -1183,7 +1183,7 @@
         '            <span class="cmpv-grid__title">Moldes</span>' +
         '            <div class="cmpv-moldbar__row">' +
         '              <select class="cmpv-select cmpv-moldbar__sel" data-role="mold-select" title="Molde activo"></select>' +
-        '              <button type="button" class="cmpv-moldbar__btn" data-role="mold-add" title="Añadir molde">➕</button>' +
+        '              <button type="button" class="cmpv-moldbar__btn" data-role="mold-add" title="Añadir molde">➕ Añadir</button>' +
         '            </div>' +
         '            <button type="button" class="cmpv-moldbar__btn cmpv-moldbar__del" data-role="mold-del" title="Eliminar el molde activo">🗑 Eliminar molde</button>' +
         '          </div>' +
@@ -1203,7 +1203,7 @@
         '              <option value="duck">Patito de goma</option>' +
         '            </select>' +
         '          </label>' +
-        '          <div class="cmpv-grid-inputs">' +
+        '          <div class="cmpv-grid-inputs cmpv-grid-inputs--stack">' +
         '            <label>Tamaño <input type="range" class="cmpv-range" data-role="mold-size" min="8" max="60" value="25"> <span data-role="mold-size-val">25</span>%</label>' +
         '            <label>Giro <input type="range" class="cmpv-range" data-role="mold-angle" min="0" max="360" value="0"> <span data-role="mold-angle-val">0</span>°</label>' +
         '          </div>' +
