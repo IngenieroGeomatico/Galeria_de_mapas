@@ -2356,15 +2356,23 @@
         var getGeom = function () {
           var st = self._workArea;
           var W = st.clientWidth, H = st.clientHeight;
+          var minDim = Math.min(W, H);
+          var k = (self.mold.radius / 100 * minDim) / 100;
+          var g = self._moldPathData(self.mold.shape);
+          // Mismo recorte que el render (clampToFit): el tirador renderizado
+          // usa cxPx/cyPx recortados, así el punto de agarre coincide.
+          function clampToFit(c, half, max) {
+            if (half >= max / 2) return max / 2;
+            return Math.max(half, Math.min(max - half, c));
+          }
           return {
             W: W, H: H,
-            minDim: Math.min(W, H),
-            k: (self.mold.radius / 100 * Math.min(W, H)) / 100,
-            rad: self.mold.angle * Math.PI / 180,
-            g: self._moldPathData(self.mold.shape),
+            minDim: minDim,
+            k: k,
+            g: g,
             ang: self.mold.angle,
-            cx: self.mold.cx / 100 * W,
-            cy: self.mold.cy / 100 * H,
+            cx: clampToFit(self.mold.cx / 100 * W, g.maxX * k, W),
+            cy: clampToFit(self.mold.cy / 100 * H, g.maxY * k, H),
           };
         };
         var moving = false;
@@ -2394,22 +2402,16 @@
         // ---- Drag: tirador (escala + rotación) ----
         var siz = false;
         var sDist, sK, sAng, sPX0, sPY0;
-        // Punto de agarre del tirador en px (grip normalizado rotado*escala).
-        var gripPx = function (gm) {
-          var cos = Math.cos(gm.rad), sin = Math.sin(gm.rad);
-          var gx = gm.g.gx * cos - gm.g.gy * sin;
-          var gy = gm.g.gx * sin + gm.g.gy * cos;
-          return { x: gm.cx + gm.k * gx, y: gm.cy + gm.k * gy };
-        };
         var startSize = function (e) {
           siz = true;
           e.preventDefault();
           e.stopPropagation();
           var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
           var gm = getGeom();
-          var gp = gripPx(gm);
           sPX0 = p.clientX; sPY0 = p.clientY;
-          sDist = Math.hypot(sPX0 - gp.x, sPY0 - gp.y) || 1;
+          // Referencia estable: distancia del puntero al CENTRO (el centro no
+          // se mueve al escalar; el agarre sí, lo que realimentaba el cálculo).
+          sDist = Math.hypot(sPX0 - gm.cx, sPY0 - gm.cy) || 1;
           sK = gm.k; sAng = gm.ang;
           self._setIframePointerEvents(false);
         };
@@ -2417,13 +2419,9 @@
           if (!siz) return;
           var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
           var gm = getGeom();
-          // Escala: proporción entre la distancia actual del puntero al AGARRE
-          // y la distancia al agarrar (así el tirador no "salta" al empezar).
-          var gp = gripPx(gm);
-          var dist = Math.hypot(p.clientX - gp.x, p.clientY - gp.y) || 1;
-          // Escala proporcional: sin límite absoluto intermedio (k real ≈
-          // radius*minDim/10000, p. ej. 2.0 con 25%/800px); solo se recorta el
-          // radio final para no difuminar la figura.
+          // Distancia del puntero al CENTRO: crece/shrink radial y de forma
+          // estable al arrastrar hacia fuera/dentro (sin realimentación).
+          var dist = Math.hypot(p.clientX - gm.cx, p.clientY - gm.cy) || 1;
           var kNew = sK * (dist / sDist);
           self.mold.radius = Math.max(8, Math.min(60, kNew * 10000 / gm.minDim));
           // Rotación: delta angular del puntero alrededor del CENTRO.
