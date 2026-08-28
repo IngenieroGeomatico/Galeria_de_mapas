@@ -426,8 +426,6 @@
   inset: auto;
   width: auto;
   height: auto;
-  outline: 1px solid rgba(255, 255, 255, 0.9);
-  outline-offset: -1px;
 }
 
 /* ---- Divisor de la cortinilla -------------------------------------- */
