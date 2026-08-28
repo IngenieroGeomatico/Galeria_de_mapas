@@ -1795,6 +1795,8 @@
         stage.style.display = "";           // vuelve a block (posición absoluta)
         stage.style.gridTemplateColumns = "";
         stage.style.gridTemplateRows = "";
+        stage.style.gap = "";
+        stage.style.background = "";
       }
       this.views.forEach(function (v) {
         var d = v.div;
@@ -2063,11 +2065,11 @@
     }
 
     // Aplica el estilo visual (color, ancho, visibilidad, tirador) a todos
-    // los divisores existentes en el DOM.
+    // los divisores existentes en el DOM y al gap del grid espejo.
     _applyDivisorStyle() {
       var s = this._divStyle;
-      if (!this._divisors) return;
-      this._divisors.forEach(function (div) {
+      // --- Divisores de la cortinilla ---
+      if (this._divisors) this._divisors.forEach(function (div) {
         var axis = div.getAttribute("data-axis");
         var isV = (axis === "v");
         // Barra: color, ancho, visibilidad.
@@ -2075,14 +2077,24 @@
         div.style.boxShadow = s.visible ? "0 0 4px rgba(0,0,0,0.5)" : "none";
         if (isV) { div.style.width = s.width + "px"; div.style.transform = "translateX(-" + (s.width / 2) + "px)"; }
         else { div.style.height = s.width + "px"; div.style.transform = "translateY(-" + (s.width / 2) + "px)"; }
-        // Tirador (handle).
+        // Tirador (handle): oculto si las barras no son visibles.
         var handle = div.querySelector(".cmpv-divisor__handle");
         if (handle) {
           handle.style.background = s.handleColor;
           handle.style.width = s.handleSize + "px";
           handle.style.height = s.handleSize + "px";
+          if (handle.style.display !== "none") {
+            handle.style.visibility = s.visible ? "" : "hidden";
+          }
         }
       });
+      // --- Grid espejo: gap + background del stage ---
+      var stage = this._workArea;
+      if (stage && this.mode === "mirror") {
+        var gap = s.visible ? s.width + "px" : "0";
+        stage.style.gap = gap;
+        stage.style.background = s.visible ? s.color : "";
+      }
     }
 
     _removeDivisors() {
@@ -2130,6 +2142,8 @@
           v.div.classList.add("cmpv-view--cell");
         });
       });
+
+      this._applyDivisorStyle();
     }
 
     getHelp() {
