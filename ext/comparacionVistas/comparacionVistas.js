@@ -592,10 +592,32 @@
       // Vistas que esperan sincronización inicial (la ref no ha reportado extent).
       this._pendingSyncViews = new Set();
 
+      // ── Ventana sincronizada (BroadcastChannel) ──────────────────────
+      // rol: "master" (ventana normal) | "child" (espejo abierto con 🔗).
+      // El child recibe ?sync=child&sid=<sesión> en su URL y refleja la sesión
+      // del maestro: estado estructural (vistas/modo/slots/molde) y encuadres.
+      // Es BIDIRECCIONAL: cualquier ventana puede interactuar.
+      var qp = new URLSearchParams(location.search);
+      this.syncRole = (qp.get("sync") === "child") ? "child" : "master";
+      this.syncSid = qp.get("sid") || null;
+      this.syncViewId = null;   // vista elegida para las ventanas sincronizadas
+      this._syncChannel = null;
+      this._applyingRemote = false;   // suprime republicación al aplicar estado remoto
+      this._stateDirty = false;       // debounce de publicación de estado
+      this._syncHelloTimer = null;
+      this._remotePending = null;     // encuadres remotos para vistas aún no listas
+
       // Escucha global de mensajes de los iframes.
       var self = this;
       this._onMessage = function (ev) { self._handleViewMessage(ev); };
       window.addEventListener("message", this._onMessage);
+
+      // Cierra el canal al salir (evita ventanas espejo colgadas).
+      this._onUnload = function () {
+        if (self._syncChannel) { try { self._syncChannel.close(); } catch (e) {} }
+        if (self._syncHelloTimer) clearTimeout(self._syncHelloTimer);
+      };
+      window.addEventListener("beforeunload", this._onUnload);
     }
 
     // =====================================================================
@@ -702,6 +724,11 @@
     // Aplica el modo inicial y su configuración específica (swipe/layout). Si el
     // constructor no indicó nada, equivale a arrancar en "single" (retrocompat).
     _applyInitialComparison() {
+      // Ventana espejo: enlaza con el maestro por el canal y espera su snapshot.
+      if (this.syncRole === "child") {
+        this._startSyncChild();
+        return;
+      }
       if (this.mode === "mirror") {
         // Prepara el grid según el layout inicial antes de entrar en el modo.
         if (this.layoutType === "custom") {
@@ -746,6 +773,9 @@
     _adoptPrimaryView() {
       if (this.views.length) return;
 
+      // Ventana espejo: no crea vistas propias; espera el snapshot del maestro.
+      if (this.syncRole === "child") return;
+
       // Si el constructor trajo vistas iniciales, créalas todas con su config.
       if (this._initialViews && this._initialViews.length) {
         var self = this;
@@ -785,7 +815,7 @@
     // Crea el objeto vista + su iframe dentro del stage.
     _makeView(opts) {
       opts = opts || {};
-      var id = "vista-" + nextUid();
+      var id = opts.id || ("vista-" + nextUid());
       var div = document.createElement("div");
       div.className = "cmpv-view";
       div.id = "cmpv-view-" + id;
@@ -953,6 +983,11 @@
           var stateToApply = v.lastView;
           if (stateToApply) this._sendSetView(v, stateToApply);
         }
+        // Encuadre remoto pendiente (llegó de otra ventana antes de estar lista).
+        if (this._remotePending && this._remotePending[v.id]) {
+          this._sendSetView(v, this._remotePending[v.id]);
+          delete this._remotePending[v.id];
+        }
         // Aplica el estado actual de visibilidad de controles/plugins (para
         // vistas nuevas o recargadas tras un cambio 2D/3D).
         this._sendControls(v);
@@ -991,6 +1026,8 @@
         if (!this.sync) return;
         if (v._progUpdates > 0) return;   // eco de un setView que enviamos: ignora
         this._broadcast(v, v.lastView);
+        // Difunde el encuadre también a las ventanas espejo (BroadcastChannel).
+        this._publishCamera(v);
       }
     }
 
@@ -1097,6 +1134,329 @@
     // =====================================================================
     //  UI (barra + sidenav) — estilo QGIS2API-IDEE
     // =====================================================================
+    // =====================================================================
+    //  Ventana sincronizada (BroadcastChannel)
+    //  --------------------------------------------------------------------
+    //  El botón 🔗 "Ventana" abre una segunda ventana (misma URL +
+    //  ?sync=child&sid=<sesión>) que refleja ESTA sesión en tiempo real:
+    //  - Estado estructural: vistas (con su 2D/3D y config), modo, slots de
+    //    la cortinilla, grid del espejo, moldes y su geometría, con debounce.
+    //  - Navegación: los encuadres (cmpv:view) se propagan al canal.
+    //  Es BIDIRECCIONAL: da igual en qué ventana actúes, todas se actualizan.
+    //  Los bucles de cámara los corta el anti-eco _progUpdates ya existente;
+    //  los de estado, _applyingRemote (no se republica mientras se aplica).
+    // =====================================================================
+    _syncActive() {
+      return !!(this._syncChannel
+        || (this.syncRole === "child" && this._syncPeerWin)
+        || (this._syncPeers && this._syncPeers.length));
+    }
+
+    // Abre el transporte de sincronización entre ventanas:
+    //  - BroadcastChannel en http(s): el origen es real, todas las ventanas del
+    //    canal se oyen entre sí (multi-ventana).
+    //  - postMessage DIRECTO en file://: los orígenes file:// son opacos y
+    //    BroadcastChannel (y localStorage) no propagan entre ventanas; pero la
+    //    pareja maestro↔espejo SÍ puede hablarse por postMessage a través de la
+    //    referencia window.open (el maestro guarda `win`; el espejo, `opener`).
+    _openSyncChannel() {
+      if (this._syncChannel || this._syncPeerWin || this._syncPeers) return;
+      if (this.syncRole === "child" && !this.syncSid) return;
+      var self = this;
+      if (("BroadcastChannel" in window) && location.protocol !== "file:") {
+        try {
+          this._usingBroadcast = true;
+          this._syncChannel = new BroadcastChannel("cmpv-sync-" + (this.syncSid || ("anon-" + Date.now())));
+          this._syncChannel.onmessage = function (ev) { self._onSyncMessage(ev.data); };
+          return;
+        } catch (e) {
+          this._usingBroadcast = false;
+          this._syncChannel = null;
+        }
+      }
+      // Transporte directo (file:// o navegador sin BroadcastChannel).
+      this._usingBroadcast = false;
+      if (this.syncRole === "child" && window.opener) {
+        this._syncPeerWin = window.opener;
+      } else {
+        this._syncPeers = [];
+      }
+      if (!this._onSyncWinMsg) {
+        this._onSyncWinMsg = function (ev) { self._handleSyncWinMessage(ev); };
+        window.addEventListener("message", this._onSyncWinMsg);
+      }
+    }
+
+    // Envía un mensaje por el transporte activo.
+    _sendSyncMsg(msg) {
+      if (!this._syncActive()) return;
+      if (msg && typeof msg === "object") msg._sync = true;   // marca anti-colisión
+      if (this._syncChannel) {
+        try { this._syncChannel.postMessage(msg); } catch (e) {}
+      }
+      if (this._usingBroadcast && this._syncChannel) return;
+      // Substitución directa entre las ventanas del par.
+      try {
+        if (this.syncRole === "child" && this._syncPeerWin) {
+          this._syncPeerWin.postMessage(msg, "*");
+        } else if (this._syncPeers) {
+          this._syncPeers = this._syncPeers.filter(function (w) { return w && !w.closed; });
+          this._syncPeers.forEach(function (w) { w.postMessage(msg, "*"); });
+        }
+      } catch (e) {}
+    }
+
+    // Receptor del transporte directo (mensajes con marca _sync entre ventanas).
+    _handleSyncWinMessage(ev) {
+      var m = ev.data;
+      if (!m || m._sync !== true || typeof m.type !== "string") return;
+      this._onSyncMessage(m);
+    }
+
+    // ¿Difunde estado a las ventanas espejo? No mientras se esté aplicando un
+    // snapshot remoto (corta los bucles de realimentación de estado).
+    _syncShares() {
+      return this._syncActive() && !this._applyingRemote;
+    }
+
+    // Gestión de mensajes entrantes del canal.
+    _onSyncMessage(msg) {
+      if (!msg || typeof msg.type !== "string") return;
+      if (msg.type === "cmpvSync:hello") {
+        // Sólo el MAESTRO responde a los saludos: las ventanas espejo que
+        // respondieran publicarían su snapshot obsoleto y harían que el
+        // maestro se revirtiera a sí mismo (bug corregido).
+        if (this.syncRole !== "master") return;
+        this._openSyncChannel();
+        this._publishState();
+        return;
+      }
+      if (msg.type === "cmpvSync:state") {
+        // El maestro es la única fuente de verdad del estado: NUNCA aplica
+        // snapshots ajenos (evita que un espejo obsoleto lo revierta).
+        // Sólo el rol espejo (plugin con ?sync=child) aplica estados.
+        if (this.syncRole !== "child") return;
+        if (this._applyingRemote) return;   // eco de un snapshot nuestro
+        if (this._syncHelloTimer) { clearTimeout(this._syncHelloTimer); this._syncHelloTimer = null; }
+        this._applySnapshot(msg.snapshot);
+        return;
+      }
+      if (msg.type === "cmpvSync:view") {
+        if (!this.sync) return;   // si el encuadre local no sincroniza, tampoco el remoto
+        var lv = this.getView(msg.viewId);
+        if (!lv) return;
+        if (!lv.ready) {
+          // Vista aún cargando: aplica el encuadre cuando emita cmpv:ready.
+          this._remotePending = this._remotePending || {};
+          this._remotePending[lv.id] = msg.state;
+          return;
+        }
+        this._sendSetView(lv, msg.state);
+        this._broadcast(lv, msg.state);
+      }
+    }
+
+    // Ventana espejo: enlaza con el maestro y pide el estado.
+    _startSyncChild() {
+      var self = this;
+      this._openSyncChannel();
+      var tryHello = function () {
+        if (!self._syncActive()) return;
+        self._sendSyncMsg({ type: "cmpvSync:hello" });
+        self._syncHelloTimer = setTimeout(tryHello, 400);
+      };
+      tryHello();
+    }
+
+    // Snapshot completo y serializable del estado de la sesión.
+    _snapshot() {
+      return {
+        v: 1,
+        views: this.views.map(function (v) {
+          return {
+            id: v.id, name: v.name, impl: v.impl, isPrimary: !!v.isPrimary,
+            lastView: v.lastView || null,
+            config: v.config || null,
+          };
+        }),
+        mode: this.mode,
+        activeViewId: this.activeViewId,
+        sync: this.sync, syncMode: this.syncMode,
+        showControls: this.showControls,
+        swipe: { layout: this.swipe.layout, slots: (this.swipe.slots || []).slice() },
+        grid: this.grid.map(function (row) { return row.slice(); }),
+        layoutType: this.layoutType,
+        mold: {
+          baseId: this.moldBaseId,
+          selId: this.moldSelId,
+          seq: this._moldSeq,
+          molds: this.molds.map(function (m) {
+            return { id: m.id, shape: m.shape, topId: m.topId, cx: m.cx, cy: m.cy, radius: m.radius, angle: m.angle };
+          }),
+        },
+      };
+    }
+
+    // Publica el snapshot en el canal (todas las ventanas lo aplican).
+    _publishState() {
+      if (!this._syncActive()) return;
+      this._sendSyncMsg({ type: "cmpvSync:state", snapshot: this._snapshot() });
+    }
+
+    // Debounce de la publicación: muchos cambios estructurales se encadenan
+    // (p.ej. crear vista + relayout + refreshUI) y basta con el último.
+    _schedulePublishState() {
+      if (!this._syncShares() || this._stateDirty) return;
+      this._stateDirty = true;
+      var self = this;
+      setTimeout(function () {
+        self._stateDirty = false;
+        self._publishState();
+      }, 150);
+    }
+
+    // Difunde el encuadre de una vista a las ventanas espejo.
+    _publishCamera(v) {
+      if (!this._syncActive() || !v || !v.lastView) return;
+      this._sendSyncMsg({ type: "cmpvSync:view", viewId: v.id, state: v.lastView });
+    }
+
+    // Abre una ventana sincronizada de la sesión. Ahora la ventana es una
+    // página 100% INDEPENDIENTE (ventana.html, sin el supraplugin) que carga
+    // la API-CNIG por sí sola y muestra la vista elegida (vid o la del
+    // selector sync-view). Cada vista tiene SU ventana ("cmpv-sync-win-<vid>"):
+    // reabrir la misma vista reutiliza su ventana en vez de duplicarla.
+    abrirVentanaSincronizada(vid) {
+      if (!this.syncSid) {
+        this.syncSid = "cmpv-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+      }
+      this._openSyncChannel();
+      var target = vid || this.syncViewId || this.activeViewId || (this.views[0] && this.views[0].id);
+      var v = this.getView(target);
+      if (!v) { alert("No hay ninguna vista para sincronizar."); return; }
+      // ventana.html vive junto a la PÁGINA anfitriona (no junto al plugin):
+      // resuelve la URL relativa a la carpeta de la página actual, que
+      // funciona igual en http(s) y en file:// (location.origin es "null").
+      var base = location.href.split("?")[0];
+      var dir = base.slice(0, base.lastIndexOf("/") + 1);
+      var url = dir + "ventana.html?" + new URLSearchParams({ sid: this.syncSid, vid: v.id }).toString();
+      var win = window.open(url, "cmpv-sync-win-" + v.id);
+      if (!win) {
+        alert("El navegador bloqueó la apertura de la ventana. Permite los popups para esta página.");
+        return;
+      }
+      if (!this._usingBroadcast) {
+        // Transporte directo (file://): registra la ventana espejo como par.
+        if (!this._syncPeers) this._syncPeers = [];
+        if (this._syncPeers.indexOf(win) === -1) this._syncPeers.push(win);
+      }
+      // Refuerza el arranque de la ventana: además del handshake por hello,
+      // reenvía el estado actual dos veces (el hello de la ventana puede
+      // llegar antes de que esté lista para aplicar el snapshot).
+      var self = this;
+      setTimeout(function () { self._publishState(); }, 300);
+      setTimeout(function () { self._publishState(); }, 1000);
+    }
+
+    // Aplica un snapshot remoto a esta ventana (rol espejo o bidireccional).
+    _applySnapshot(s) {
+      if (!s || typeof s !== "object") return;
+      this._applyingRemote = true;
+      var self = this;
+      try {
+        // 1) Reconciliar vistas: crea las que faltan, cambia impl si procede,
+        //    elimina las sobrantes, actualiza nombre/encuadre.
+        var ids = {};
+        (s.views || []).forEach(function (sv) {
+          ids[sv.id] = true;
+          // Mantiene el contador de ids por encima de los remotos: el child
+          // arranca su contador en 0 y así no colisiona al crear vistas.
+          var vm = /^vista-(\d+)$/.exec(sv.id);
+          if (vm) _uid = Math.max(_uid, parseInt(vm[1], 10));
+          var lv = self.getView(sv.id);
+          if (!lv) {
+            var cz = self._centerZoomFromState(sv.lastView);
+            lv = self._makeView({
+              id: sv.id,
+              name: sv.name || ("Vista " + (self.views.length + 1)),
+              impl: sv.impl === "cesium" ? "cesium" : "ol",
+              lon: cz.lon, lat: cz.lat, zoom: cz.zoom,
+              config: sv.config || undefined,
+            });
+            if (sv.isPrimary) lv.isPrimary = true;
+            if (sv.lastView) lv.lastView = sv.lastView;
+          } else {
+            if (sv.name) lv.name = sv.name;
+            if (sv.isPrimary && !lv.isPrimary) lv.isPrimary = true;
+            if (sv.lastView) lv.lastView = sv.lastView;
+            var want = sv.impl === "cesium" ? "cesium" : "ol";
+            if (want !== lv.impl) {
+              lv.impl = want;
+              lv.ready = false;
+              var cz2 = self._centerZoomFromState(lv.lastView);
+              self._setIframeDoc(lv, want, cz2.lon, cz2.lat, cz2.zoom);
+            }
+          }
+        });
+        this.views.slice().forEach(function (v) {
+          if (!ids[v.id] && !v.isPrimary) self.eliminarVista(v.id);
+        });
+
+        // 2) Estado global.
+        if (typeof s.sync === "boolean") this.sync = s.sync;
+        if (s.syncMode === "center" || s.syncMode === "extent") this.syncMode = s.syncMode;
+        if (typeof s.activeViewId === "string") this.activeViewId = s.activeViewId;
+        // Refleja el estado en los controles del panel.
+        var syncChk = this.ui && this.ui.querySelector('[data-role="sync"]');
+        if (syncChk) syncChk.checked = !!this.sync;
+        var syncModeSel = this.ui && this.ui.querySelector('[data-role="sync-mode"]');
+        if (syncModeSel && (this.syncMode === "center" || this.syncMode === "extent")) {
+          syncModeSel.value = this.syncMode;
+        }
+
+        // 3) Estructuras de los modos.
+        if (s.swipe && typeof s.swipe.layout === "string") this.swipe.layout = s.swipe.layout;
+        if (Array.isArray(s.swipe && s.swipe.slots)) {
+          this.swipe.slots = s.swipe.slots.filter(function (id) { return self.getView(id); });
+        }
+        if (Array.isArray(s.grid)) {
+          this.grid = s.grid
+            .filter(function (row) { return Array.isArray(row); })
+            .map(function (row) { return row.filter(function (id) { return self.getView(id); }); });
+        }
+        if (typeof s.layoutType === "string") this.layoutType = s.layoutType;
+        if (s.mold) {
+          if (typeof s.mold.seq === "number") this._moldSeq = s.mold.seq;
+          this.molds = (s.mold.molds || []).map(function (m) {
+            return {
+              id: m.id || ("m" + (self._moldSeq + 1)),
+              shape: m.shape || "circle",
+              topId: m.topId || null,
+              cx: (typeof m.cx === "number") ? m.cx : 50,
+              cy: (typeof m.cy === "number") ? m.cy : 50,
+              radius: (typeof m.radius === "number") ? m.radius : 25,
+              angle: (typeof m.angle === "number") ? m.angle : 0,
+            };
+          });
+          if (this.getView(s.mold.baseId)) this.moldBaseId = s.mold.baseId;
+          if (this.molds.length && this.molds.some(function (m) { return m.id === s.mold.selId; })) {
+            this.moldSelId = s.mold.selId;
+          }
+        }
+
+        // 4) Aplica el modo (relayout + refreshUI) y sincroniza encuadres.
+        if (typeof s.mode === "string" && ["single", "swipe", "mirror", "molde"].indexOf(s.mode) !== -1) {
+          this.setMode(s.mode);
+        } else {
+          this._relayout();
+          this._refreshUI();
+        }
+        this._resyncFromActive();
+      } finally {
+        this._applyingRemote = false;
+      }
+    }
+
     _buildUI() {
       var self = this;
       var root = document.createElement("div");
@@ -1114,6 +1474,8 @@
         '    <span class="cmpv-ico">🪞</span><span class="cmpv-lbl">Espejo</span></button>' +
         '  <button type="button" class="cmpv-tool" data-act="molde" title="Comparar con molde (una figura recorta la vista superior)">' +
         '    <span class="cmpv-ico">🔷</span><span class="cmpv-lbl">Molde</span></button>' +
+        '  <button type="button" class="cmpv-tool" data-act="sync-win" title="Abrir una ventana sincronizada (ideal para dos pantallas)">' +
+        '    <span class="cmpv-ico">🔗</span><span class="cmpv-lbl">Ventana</span></button>' +
         '  <button type="button" class="cmpv-tool cmpv-tool--cfg" data-act="opciones" title="Opciones / configuración">' +
         '    <span class="cmpv-ico">⚙</span><span class="cmpv-lbl">Opciones</span></button>' +
         '</div>' +
@@ -1137,6 +1499,11 @@
         '            <option value="center">Solo centro (zoom independiente)</option>' +
         '          </select></label>' +
         '        <label class="cmpv-field"><input type="checkbox" data-role="controls" checked> Mostrar controles</label>' +
+        '        <div class="cmpv-field--sep"></div>' +
+        '        <span class="cmpv-field__title">Ventanas sincronizadas</span>' +
+        '        <label class="cmpv-field">Vista a mostrar' +
+        '          <select class="cmpv-select" data-role="sync-view" title="Vista que se mostrará en la ventana sincronizada"></select></label>' +
+        '        <button type="button" class="cmpv-moldbar__btn" data-act="open-sync-win" title="Abrir una ventana sincronizada con esa vista (ideal para dos pantallas)">🔗 Abrir ventana</button>' +
         '        <div class="cmpv-field--sep"></div>' +
         '        <span class="cmpv-field__title">Apariencia de los divisores</span>' +
         '        <label class="cmpv-field"><input type="checkbox" data-role="div-visible" checked> Mostrar barras de división</label>' +
@@ -1235,6 +1602,7 @@
           else if (act === "espejo") self.setMode("mirror");
           else if (act === "single") self.setMode("single");
           else if (act === "molde") self.setMode("molde");
+          else if (act === "sync-win") self.abrirVentanaSincronizada();
           else if (act === "opciones") self.toggleOpciones();
         });
       });
@@ -1369,6 +1737,12 @@
       if (moldAddBtn) moldAddBtn.addEventListener("click", function () { self._addMold(); });
       if (moldDelBtn) moldDelBtn.addEventListener("click", function () { self._removeMold(self._curMold()); });
 
+      // --- Ventanas sincronizadas: selector de vista + botón de apertura ---
+      var syncViewSel = root.querySelector('[data-role="sync-view"]');
+      if (syncViewSel) syncViewSel.addEventListener("change", function () { self.syncViewId = this.value; });
+      var openSyncWinBtn = root.querySelector('[data-act="open-sync-win"]');
+      if (openSyncWinBtn) openSyncWinBtn.addEventListener("click", function () { self.abrirVentanaSincronizada(); });
+
       // --- Toggle de todos los acordeones ---
       root.querySelectorAll(".cmpv-accordion").forEach(function (acc) {
         var hdr = acc.querySelector(".cmpv-accordion__header");
@@ -1403,7 +1777,10 @@
       this._renderSlotsComparacion();
       this._renderListaVistas();
       this._renderMoldSelect();
+      this._renderSyncViewSelect();
       if (self.mode === "molde") this._selectMold(this.moldSelId);
+      // Los cambios de estado se difunden a las ventanas espejo (con debounce).
+      this._schedulePublishState();
     }
 
     toggleOpciones(force) {
@@ -2362,6 +2739,30 @@
       selEl.value = (this.getMold(this.moldSelId) ? this.moldSelId : this.molds[0].id);
       var delBtn = this.ui.querySelector('[data-role="mold-del"]');
       if (delBtn) delBtn.disabled = (this.molds.length <= 1);
+    }
+
+    // Puebla el selector de vista para las ventanas sincronizadas. Mantiene la
+    // selección previa si esa vista sigue existiendo; si no, usa la vista
+    // activa (o la primera). Refleja el resultado en this.syncViewId.
+    _renderSyncViewSelect() {
+      var selEl = this.ui && this.ui.querySelector('[data-role="sync-view"]');
+      if (!selEl) return;
+      var prev = selEl.value;
+      selEl.innerHTML = "";
+      var self = this;
+      this.views.forEach(function (v) {
+        var opt = document.createElement("option");
+        opt.value = v.id;
+        opt.textContent = v.name + (v.impl === "cesium" ? " (3D)" : " (2D)");
+        selEl.appendChild(opt);
+      });
+      var keep = this.getView(prev) ? prev : this.syncViewId;
+      var def = (this.getView(keep) && keep)
+        || (this.getView(this.activeViewId) && this.activeViewId)
+        || (this.views[0] && this.views[0].id)
+        || "";
+      selEl.value = def;
+      this.syncViewId = def;
     }
 
     // Añade un molde nuevo (con una vista libre para recortar) y lo activa.
