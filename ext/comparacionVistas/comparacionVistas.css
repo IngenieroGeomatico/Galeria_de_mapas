@@ -466,6 +466,39 @@
 .cmpv-divisor--horizontal .cmpv-divisor__handle { cursor: ns-resize; }
 .cmpv-divisor--vertical .cmpv-divisor__handle { cursor: ew-resize; }
 
+/* ---- Molde (figura que recorta la vista superior) ------------------- */
+/* El SVG vive sobre las vistas (z 25) pero deja pasar el ratón: sólo la
+   "ruta gorda" (agarre) y el tirador capturan eventos. */
+.cmpv-mold {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  overflow: visible;
+}
+/* Zona de agarre: trazo transparente y ANCHO para poder mover el molde
+   con el ratón sin que el interior de la figura bloquee el mapa. */
+.cmpv-mold__hit {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0);
+  stroke-width: 22px;
+  pointer-events: stroke;
+  cursor: move;
+}
+/* Contorno visible: color/ancho los gestiona _applyDivisorStyle. */
+.cmpv-mold__vis {
+  fill: none;
+  pointer-events: none;
+}
+/* Tirador: esquina inferior-derecha de la figura (escala + giro). */
+.cmpv-mold__handle {
+  pointer-events: all;
+  cursor: nwse-resize;
+  fill: var(--cmpv-orange);
+  stroke: #fff;
+  stroke-width: 3px;
+}
+
 /* ---- Responsive ---------------------------------------------------- */
 @media (max-width: 640px) {
   .cmpv-tool { min-width: 46px; padding: 4px; }

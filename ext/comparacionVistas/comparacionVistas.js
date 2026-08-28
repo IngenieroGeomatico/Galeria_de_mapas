@@ -22,6 +22,8 @@
      - Ver vista          -> elige qué vista ocupa el área principal.
      - Cortinilla (swipe) -> dos vistas superpuestas + divisor (clip-path).
      - Espejo             -> N vistas en rejilla lado a lado, sincronizadas.
+     - Molde              -> una figura (SVG clip-path) recorta la vista
+                             superior y por la abertura se ve la inferior.
      - Opciones           -> gestión de vistas (renombrar, eliminar, 2D/3D
                              por vista, nº columnas, sincronización on/off).
 
@@ -510,8 +512,8 @@
       // view = { id, name, impl:'ol'|'cesium', iframe, div, ready, lastView,
       //          _progUpdates, config:{layers,plugins,controls} }
       this.views = [];
-      // Modo inicial (single/swipe/mirror). Retrocompat: si no se indica, single.
-      this.mode = (["single", "swipe", "mirror"].indexOf(this.options.mode) !== -1)
+      // Modo inicial (single/swipe/mirror/molde). Retrocompat: single.
+      this.mode = (["single", "swipe", "mirror", "molde"].indexOf(this.options.mode) !== -1)
         ? this.options.mode : "single";
       this.sync = (this.options.sync !== false);
       this.syncMode = (this.options.syncMode === "center") ? "center" : "extent";
@@ -553,6 +555,24 @@
       this._initGridRows = (typeof lay.rows === "number") ? lay.rows : 1;
       this._initGridCols = (typeof lay.cols === "number") ? lay.cols : 2;
       this.customSpec = Array.isArray(lay.spec) && lay.spec.length ? lay.spec.slice() : [1, 2];
+
+      // Molde: dos vistas superpuestas; la SUPERIOR se recorta con una figura
+      // (SVG clip-path) y por la abertura se ve la INFERIOR.
+      //   baseId = vista de abajo (se ve fuera de la figura)
+      //   topId  = vista de arriba (recortada por la figura)
+      //   cx/cy  = centro de la figura en % del stage
+      //   radius = radio de la figura en % del lado menor del stage
+      //   angle  = rotación de la figura en grados
+      var mo = this.options.mold || {};
+      this.mold = {
+        shape: mo.shape || "circle",       // circle|ellipse|rect|triangle|diamond|pentagon|hexagon|octagon|star|heart
+        baseId: null,
+        topId: null,
+        cx: (typeof mo.cx === "number") ? mo.cx : 50,
+        cy: (typeof mo.cy === "number") ? mo.cy : 50,
+        radius: (typeof mo.radius === "number") ? mo.radius : 25,
+        angle: (typeof mo.angle === "number") ? mo.angle : 0,
+      };
 
       // Config de vistas iniciales (serializada, lista para consumir en addTo).
       this._initialViews = this._normalizeInitialViews(this.options.views);
@@ -682,6 +702,9 @@
       } else if (this.mode === "swipe") {
         // swipe.layout ya viene del constructor.
         this.setMode("swipe");
+      } else if (this.mode === "molde") {
+        // mold.shape ya viene del constructor.
+        this.setMode("molde");
       } else {
         this.setMode("single");
       }
@@ -1078,6 +1101,8 @@
         '    <span class="cmpv-ico">🪟</span><span class="cmpv-lbl">Cortinilla</span></button>' +
         '  <button type="button" class="cmpv-tool" data-act="espejo" title="Comparar en espejo">' +
         '    <span class="cmpv-ico">🪞</span><span class="cmpv-lbl">Espejo</span></button>' +
+        '  <button type="button" class="cmpv-tool" data-act="molde" title="Comparar con molde (una figura recorta la vista superior)">' +
+        '    <span class="cmpv-ico">🔷</span><span class="cmpv-lbl">Molde</span></button>' +
         '  <button type="button" class="cmpv-tool cmpv-tool--cfg" data-act="opciones" title="Opciones / configuración">' +
         '    <span class="cmpv-ico">⚙</span><span class="cmpv-lbl">Opciones</span></button>' +
         '</div>' +
@@ -1140,6 +1165,27 @@
         '            <div class="cmpv-custom__hint">Define cada fila y cuántas celdas (vistas) tiene. Cada fila reparte su ancho entre sus celdas.</div>' +
         '            <div class="cmpv-custom__rows" data-role="custom-rows"></div>' +
         '            <button type="button" class="cmpv-custom__add" data-role="add-row">➕ Añadir fila</button>' +
+        '          </div>' +
+        '        </div>' +
+        '        <div class="cmpv-field cmpv-field--grid" data-only="molde">' +
+        '          <span class="cmpv-grid__title">Figura del molde</span>' +
+        '          <label class="cmpv-field">Figura' +
+        '            <select class="cmpv-select" data-role="mold-shape">' +
+        '              <option value="circle">Círculo</option>' +
+        '              <option value="ellipse">Elipse</option>' +
+        '              <option value="rect">Rectángulo</option>' +
+        '              <option value="triangle">Triángulo</option>' +
+        '              <option value="diamond">Rombo</option>' +
+        '              <option value="pentagon">Pentágono</option>' +
+        '              <option value="hexagon">Hexágono</option>' +
+        '              <option value="octagon">Octágono</option>' +
+        '              <option value="star">Estrella</option>' +
+        '              <option value="heart">Corazón</option>' +
+        '            </select>' +
+        '          </label>' +
+        '          <div class="cmpv-grid-inputs">' +
+        '            <label>Tamaño <input type="range" class="cmpv-range" data-role="mold-size" min="8" max="60" value="25"> <span data-role="mold-size-val">25</span>%</label>' +
+        '            <label>Giro <input type="range" class="cmpv-range" data-role="mold-angle" min="0" max="360" value="0"> <span data-role="mold-angle-val">0</span>°</label>' +
         '          </div>' +
         '        </div>' +
         '        <div class="cmpv-slots__hint">Elige qué vista se muestra en cada mapa.</div>' +
@@ -1266,6 +1312,28 @@
         self._divStyle.handleSize = parseInt(this.value, 10); if (handleSizeVal) handleSizeVal.textContent = this.value; applyStyle();
       });
 
+      // --- Controles de la figura del molde ---
+      var moldShapeSel = root.querySelector('[data-role="mold-shape"]');
+      var moldSizeIn = root.querySelector('[data-role="mold-size"]');
+      var moldSizeVal = root.querySelector('[data-role="mold-size-val"]');
+      var moldAngleIn = root.querySelector('[data-role="mold-angle"]');
+      var moldAngleVal = root.querySelector('[data-role="mold-angle-val"]');
+
+      if (moldShapeSel) moldShapeSel.addEventListener("change", function () {
+        self.mold.shape = this.value;
+        if (self.mode === "molde") self._applyMoldGeometry();
+      });
+      if (moldSizeIn) moldSizeIn.addEventListener("input", function () {
+        self.mold.radius = parseInt(this.value, 10);
+        if (moldSizeVal) moldSizeVal.textContent = this.value;
+        if (self.mode === "molde") self._applyMoldGeometry();
+      });
+      if (moldAngleIn) moldAngleIn.addEventListener("input", function () {
+        self.mold.angle = parseInt(this.value, 10);
+        if (moldAngleVal) moldAngleVal.textContent = this.value;
+        if (self.mode === "molde") self._applyMoldGeometry();
+      });
+
       // --- Toggle de todos los acordeones ---
       root.querySelectorAll(".cmpv-accordion").forEach(function (acc) {
         var hdr = acc.querySelector(".cmpv-accordion__header");
@@ -1290,7 +1358,8 @@
         var act = btn.getAttribute("data-act");
         var on = (act === "single" && self.mode === "single")
           || (act === "cortinilla" && self.mode === "swipe")
-          || (act === "espejo" && self.mode === "mirror");
+          || (act === "espejo" && self.mode === "mirror")
+          || (act === "molde" && self.mode === "molde");
         btn.classList.toggle("cmpv-tool--active", on);
       });
       this.ui.querySelectorAll("[data-only]").forEach(function (el) {
@@ -1359,6 +1428,27 @@
             });
           });
         });
+      } else if (this.mode === "molde") {
+        // Dos slots: la vista que se ve FUERA de la figura (base, abajo) y la
+        // que se ve DENTRO (molde, arriba, recortada).
+        slots.push({
+          label: "Base (abajo)",
+          viewId: this.mold.baseId,
+          set: function (newViewId) {
+            self.mold.baseId = newViewId;
+            self._layoutMold();
+            self._resyncFromActive();
+          },
+        });
+        slots.push({
+          label: "Molde (arriba)",
+          viewId: this.mold.topId,
+          set: function (newViewId) {
+            self.mold.topId = newViewId;
+            self._layoutMold();
+            self._resyncFromActive();
+          },
+        });
       } else {
         // single: un único slot = la vista activa.
         slots.push({
@@ -1375,13 +1465,13 @@
     }
 
     // Pinta la sección "Mapas de comparación": una fila por slot con un
-    // selector de qué vista mostrar. Sólo visible en cortinilla/espejo.
+    // selector de qué vista mostrar. Visible en cortinilla/espejo/molde.
     _renderSlotsComparacion() {
       var self = this;
       var cont = this.ui.querySelector('[data-role="slots"]');
       if (!cont) return;
 
-      var show = (this.mode === "swipe" || this.mode === "mirror");
+      var show = (this.mode === "swipe" || this.mode === "mirror" || this.mode === "molde");
       if (!show) { cont.innerHTML = ""; return; }
 
       var slots = this._getSlots();
@@ -1731,6 +1821,12 @@
           }
         }
       }
+      if (mode === "molde") {
+        // Necesita al menos 2 vistas: base (abajo) y molde (arriba).
+        if (this.views.length < 2) this.crearVista();
+        if (!this.getView(this.mold.baseId)) this.mold.baseId = this.views[0].id;
+        if (!this.getView(this.mold.topId)) this.mold.topId = this.views[1].id;
+      }
       this.mode = mode;
       this._relayout();
       this._refreshUI();
@@ -1765,6 +1861,7 @@
       if (this.mode === "single") this._layoutSingle();
       else if (this.mode === "swipe") this._layoutSwipe();
       else if (this.mode === "mirror") this._layoutMirror();
+      else if (this.mode === "molde") this._layoutMold();
       // Tras mostrar/ocultar vistas, forzar que sus mapas recalcule el viewport
       // (OpenLayers updateSize / Cesium resize). Sin esto, un mapa que estaba
       // oculto (display:none) no pinta hasta que el usuario lo mueve.
@@ -1811,6 +1908,7 @@
         d.style.display = "none";
       });
       this._removeDivisors();
+      this._removeMold();
     }
 
     _layoutSingle() {
@@ -2095,6 +2193,18 @@
         stage.style.gap = gap;
         stage.style.background = s.visible ? s.color : "";
       }
+      // --- Molde: contorno (barra) + tirador ---
+      if (this.mode === "molde" && this._moldVis) {
+        this._moldVis.style.stroke = s.visible ? s.color : "transparent";
+        this._moldVis.style.strokeWidth = s.visible ? s.width + "px" : "0px";
+        // Zona de agarre: siempre algo más ancha que el trazo visible.
+        this._moldHit.style.strokeWidth = (s.width + 14) + "px";
+        this._moldHit.style.display = s.visible ? "" : "none";
+        this._moldHandle.style.fill = s.handleColor;
+        this._moldHandle.style.stroke = s.visible ? "#fff" : "transparent";
+        var hs = s.handleSize;
+        this._moldHandle.setAttribute("r", (hs / 2) + "px");
+      }
     }
 
     _removeDivisors() {
@@ -2106,6 +2216,298 @@
         this._divisors.forEach(function (d) { if (d && d.parentNode) d.parentNode.removeChild(d); });
         this._divisors = [];
       }
+    }
+
+    // =====================================================================
+    //  MODO MOLDE
+    //  --------------------------------------------------------------------
+    //  Dos vistas superpuestas: la INFERIOR (base) se ve a través de una
+    //  FIGURA (SVG clip-path) que recorta a la SUPERIOR (molde). El contorno
+    //  de la figura es arrastrable (mover) y un tirador en su esquina
+    //  inferior-derecha la escala y rota.
+    // =====================================================================
+
+    // Datos de la figura en espacio normalizado (centro 0,0, radio ~100):
+    // { d: path-data, maxX, maxY, gx, gy } — maxX/maxY = extensión del bbox;
+    // (gx,gy) = punto SOBRE el contorno donde se coloca el tirador (esquina
+    // inferior-derecha de la propia figura, no del bbox).
+    _moldPathData(shape) {
+      var R = 105;
+      function poly(n, r, startDeg, innerR) {
+        var pts = [];
+        for (var i = 0; i < n; i++) {
+          var a = (startDeg + i * 360 / n) * Math.PI / 180;
+          var rr = (innerR && (i % 2 === 1)) ? innerR : r;
+          pts.push(rr * Math.cos(a), rr * Math.sin(a));
+        }
+        return pts;
+      }
+      function toD(pts) {
+        var s = "M " + pts[0].toFixed(2) + " " + pts[1].toFixed(2);
+        for (var i = 2; i < pts.length; i += 2) s += " L " + pts[i].toFixed(2) + " " + pts[i + 1].toFixed(2);
+        return s + " Z";
+      }
+      var pts, d;
+      switch (shape) {
+        case "ellipse":
+          d = "M 140 0 A 140 80 0 1 1 -140 0 A 140 80 0 1 1 140 0 Z";
+          return { d: d, maxX: 140, maxY: 80, gx: 99, gy: 56.6 };
+        case "rect":
+          d = "M 110 58 A 12 12 0 0 1 98 70 L -98 70 A 12 12 0 0 1 -110 58 L -110 -58 A 12 12 0 0 1 -98 -70 L 98 -70 A 12 12 0 0 1 110 -58 Z";
+          return { d: d, maxX: 110, maxY: 70, gx: 98, gy: 58 };
+        case "triangle":
+          return { d: toD(poly(3, 120, -90)), maxX: 104, maxY: 60, gx: 104, gy: 60 };
+        case "diamond":
+          return { d: toD(poly(4, 130, -90)), maxX: 95, maxY: 130, gx: 47.5, gy: 65 };
+        case "pentagon":
+          return { d: toD(poly(5, R, -90)), maxX: 100, maxY: 105, gx: 61.7, gy: 84.9 };
+        case "hexagon":
+          return { d: toD(poly(6, R, -90)), maxX: 91, maxY: 105, gx: 90.9, gy: 52.5 };
+        case "octagon":
+          return { d: toD(poly(8, R, -67.5)), maxX: 97, maxY: 97, gx: 97, gy: 40.2 };
+        case "star": {
+          pts = [];
+          for (var i = 0; i < 5; i++) {
+            var o = (-90 + i * 72) * Math.PI / 180;
+            var inn = (o - 36 * Math.PI / 180);
+            pts.push(105 * Math.cos(o), 105 * Math.sin(o));
+            pts.push(42 * Math.cos(inn), 42 * Math.sin(inn));
+          }
+          return { d: toD(pts), maxX: 100, maxY: 105, gx: 61.7, gy: 84.9 };
+        }
+        case "heart":
+          d = "M 0 40 C 0 0 -20 -45 -55 -45 C -90 -45 -95 -10 -95 25 C -95 65 -55 95 0 140 C 55 95 95 65 95 25 C 95 -10 90 -45 55 -45 C 20 -45 0 0 0 40 Z";
+          return { d: d, maxX: 95, maxY: 140, gx: 75, gy: 70 };
+        default: // circle
+          return { d: "M 100 0 A 100 100 0 1 1 -100 0 A 100 100 0 1 1 100 0 Z", maxX: 100, maxY: 100, gx: 70.7, gy: 70.7 };
+      }
+    }
+
+    // Construye el recorte (clip-path) y el contorno arrastrable del molde.
+    // Se re-aplica en cada movimiento/escala/rotación actualizando atributos
+    // SVG (barato), sin recrear nodos.
+    _applyMoldGeometry() {
+      var self = this;
+      var stage = this._workArea;
+      var top = this.getView(this.mold.topId);
+      if (!stage || !top || !top.div) return;
+      var W = stage.clientWidth, H = stage.clientHeight;
+      if (!W || !H) return;
+      var minDim = Math.min(W, H);
+
+      var g = this._moldPathData(this.mold.shape);
+      var k = (this.mold.radius / 100 * minDim) / 100;  // escala: radio normalizado ~100
+      var ang = this.mold.angle;
+
+      // Centro en px, recortado para que la figura no se salga del stage.
+      function clampToFit(c, half, max) {
+        if (half >= max / 2) return max / 2;
+        return Math.max(half, Math.min(max - half, c));
+      }
+      var cxPx = clampToFit(this.mold.cx / 100 * W, g.maxX * k, W);
+      var cyPx = clampToFit(this.mold.cy / 100 * H, g.maxY * k, H);
+
+      var trans = "translate(" + cxPx.toFixed(1) + " " + cyPx.toFixed(1) +
+        ") rotate(" + ang + ") scale(" + k.toFixed(3) + ")";
+
+      var SVGNS = "http://www.w3.org/2000/svg";
+      if (!this._moldSvg) {
+        var svg = document.createElementNS(SVGNS, "svg");
+        svg.setAttribute("class", "cmpv-mold");
+        svg.setAttribute("xmlns", SVGNS);
+        // Defs con el clipPath (misma geometría que el contorno).
+        var defs = document.createElementNS(SVGNS, "defs");
+        var clp = document.createElementNS(SVGNS, "clipPath");
+        var clipId = this.id + "-moldshape";
+        clp.setAttribute("id", clipId);
+        clp.setAttribute("clipPathUnits", "userSpaceOnUse");
+        var clipPathEl = document.createElementNS(SVGNS, "path");
+        clp.appendChild(clipPathEl);
+        defs.appendChild(clp);
+        svg.appendChild(defs);
+        // Ruta "gorda" transparente: zona de agarre para MOVER el molde.
+        var hit = document.createElementNS(SVGNS, "path");
+        hit.setAttribute("class", "cmpv-mold__hit");
+        svg.appendChild(hit);
+        // Ruta visible: contorno (color/ancho = apariencia de divisores).
+        var vis = document.createElementNS(SVGNS, "path");
+        vis.setAttribute("class", "cmpv-mold__vis");
+        vis.setAttribute("fill", "none");
+        svg.appendChild(vis);
+        // Tirador: esquina inferior-derecha del bbox (escala + rota).
+        var handle = document.createElementNS(SVGNS, "circle");
+        handle.setAttribute("class", "cmpv-mold__handle");
+        svg.appendChild(handle);
+        stage.appendChild(svg);
+
+        this._moldSvg = svg;
+        this._moldClipEl = clipPathEl;
+        this._moldHit = hit;
+        this._moldVis = vis;
+        this._moldHandle = handle;
+
+        top.div.style.clipPath = "url(#" + clipId + ")";
+        top.div.style.webkitClipPath = "url(#" + clipId + ")";
+
+        // ---- Drag: mover el molde arrastrando el contorno ----
+        // Geometría FRESCA en cada evento (el estado puede cambiar por el
+        // slider o por otro drag: nunca usar capturas de la primera llamada).
+        var getGeom = function () {
+          var st = self._workArea;
+          var W = st.clientWidth, H = st.clientHeight;
+          return {
+            W: W, H: H,
+            minDim: Math.min(W, H),
+            k: (self.mold.radius / 100 * Math.min(W, H)) / 100,
+            rad: self.mold.angle * Math.PI / 180,
+            g: self._moldPathData(self.mold.shape),
+            ang: self.mold.angle,
+            cx: self.mold.cx / 100 * W,
+            cy: self.mold.cy / 100 * H,
+          };
+        };
+        var moving = false;
+        var sCx, sCy, sPX, sPY;
+        var startMove = function (e) {
+          moving = true;
+          e.preventDefault();
+          var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+          sCx = self.mold.cx; sCy = self.mold.cy; sPX = p.clientX; sPY = p.clientY;
+          self._setIframePointerEvents(false);
+        };
+        var moveMove = function (e) {
+          if (!moving) return;
+          var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+          self.mold.cx = Math.max(0, Math.min(100, sCx + (p.clientX - sPX) / stage.clientWidth * 100));
+          self.mold.cy = Math.max(0, Math.min(100, sCy + (p.clientY - sPY) / stage.clientHeight * 100));
+          self._applyMoldGeometry();
+        };
+        var endMove = function () { if (moving) { moving = false; self._setIframePointerEvents(true); } };
+        hit.addEventListener("mousedown", startMove);
+        hit.addEventListener("touchstart", startMove, { passive: false });
+        window.addEventListener("mousemove", moveMove);
+        window.addEventListener("touchmove", moveMove, { passive: false });
+        window.addEventListener("mouseup", endMove);
+        window.addEventListener("touchend", endMove);
+
+        // ---- Drag: tirador (escala + rotación) ----
+        var siz = false;
+        var sDist, sK, sAng, sPX0, sPY0;
+        // Punto de agarre del tirador en px (grip normalizado rotado*escala).
+        var gripPx = function (gm) {
+          var cos = Math.cos(gm.rad), sin = Math.sin(gm.rad);
+          var gx = gm.g.gx * cos - gm.g.gy * sin;
+          var gy = gm.g.gx * sin + gm.g.gy * cos;
+          return { x: gm.cx + gm.k * gx, y: gm.cy + gm.k * gy };
+        };
+        var startSize = function (e) {
+          siz = true;
+          e.preventDefault();
+          e.stopPropagation();
+          var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+          var gm = getGeom();
+          var gp = gripPx(gm);
+          sPX0 = p.clientX; sPY0 = p.clientY;
+          sDist = Math.hypot(sPX0 - gp.x, sPY0 - gp.y) || 1;
+          sK = gm.k; sAng = gm.ang;
+          self._setIframePointerEvents(false);
+        };
+        var moveSize = function (e) {
+          if (!siz) return;
+          var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+          var gm = getGeom();
+          // Escala: proporción entre la distancia actual del puntero al AGARRE
+          // y la distancia al agarrar (así el tirador no "salta" al empezar).
+          var gp = gripPx(gm);
+          var dist = Math.hypot(p.clientX - gp.x, p.clientY - gp.y) || 1;
+          // Escala proporcional: sin límite absoluto intermedio (k real ≈
+          // radius*minDim/10000, p. ej. 2.0 con 25%/800px); solo se recorta el
+          // radio final para no difuminar la figura.
+          var kNew = sK * (dist / sDist);
+          self.mold.radius = Math.max(8, Math.min(60, kNew * 10000 / gm.minDim));
+          // Rotación: delta angular del puntero alrededor del CENTRO.
+          var a0 = Math.atan2(sPY0 - gm.cy, sPX0 - gm.cx);
+          var a1 = Math.atan2(p.clientY - gm.cy, p.clientX - gm.cx);
+          self.mold.angle = (sAng + (a1 - a0) * 180 / Math.PI + 360) % 360;
+          self._applyMoldGeometry();
+        };
+        var endSize = function () { if (siz) { siz = false; self._setIframePointerEvents(true); } };
+        handle.addEventListener("mousedown", startSize);
+        handle.addEventListener("touchstart", startSize, { passive: false });
+        window.addEventListener("mousemove", moveSize);
+        window.addEventListener("touchmove", moveSize, { passive: false });
+        window.addEventListener("mouseup", endSize);
+        window.addEventListener("touchend", endSize);
+
+        // Redimensionar el stage (ventana) re-cuadra la geometría.
+        this._moldOnResize = function () { if (self.mode === "molde") self._applyMoldGeometry(); };
+        window.addEventListener("resize", this._moldOnResize);
+        this._moldCleanups = [
+          function () {
+            window.removeEventListener("mousemove", moveMove);
+            window.removeEventListener("touchmove", moveMove);
+            window.removeEventListener("mouseup", endMove);
+            window.removeEventListener("touchend", endMove);
+            window.removeEventListener("mousemove", moveSize);
+            window.removeEventListener("touchmove", moveSize);
+            window.removeEventListener("mouseup", endSize);
+            window.removeEventListener("touchend", endSize);
+            if (self._moldOnResize) window.removeEventListener("resize", self._moldOnResize);
+          },
+        ];
+      }
+
+      // Actualiza geometría (posición en px del tirador, con rotación).
+      var rad = ang * Math.PI / 180;
+      var cos = Math.cos(rad), sin = Math.sin(rad);
+      var hx = cxPx + k * (g.gx * cos - g.gy * sin);
+      var hy = cyPx + k * (g.gx * sin + g.gy * cos);
+
+      this._moldSvg.setAttribute("viewBox", "0 0 " + W + " " + H);
+      this._moldSvg.style.width = W + "px";
+      this._moldSvg.style.height = H + "px";
+      this._moldClipEl.setAttribute("d", g.d);
+      this._moldClipEl.setAttribute("transform", trans);
+      this._moldHit.setAttribute("d", g.d);
+      this._moldHit.setAttribute("transform", trans);
+      this._moldVis.setAttribute("d", g.d);
+      this._moldVis.setAttribute("transform", trans);
+      this._moldHandle.setAttribute("cx", hx.toFixed(1));
+      this._moldHandle.setAttribute("cy", hy.toFixed(1));
+
+      this._applyDivisorStyle();
+    }
+
+    // Limpia el SVG del molde, el clip-path de la vista superior y los drags.
+    _removeMold() {
+      if (this._moldCleanups) {
+        this._moldCleanups.forEach(function (fn) { try { fn(); } catch (e) {} });
+        this._moldCleanups = null;
+      }
+      var top = this.getView(this.mold && this.mold.topId);
+      if (top && top.div) { top.div.style.clipPath = ""; top.div.style.webkitClipPath = ""; }
+      if (this._moldSvg && this._moldSvg.parentNode) this._moldSvg.parentNode.removeChild(this._moldSvg);
+      this._moldSvg = null;
+      this._moldClipEl = null; this._moldHit = null; this._moldVis = null; this._moldHandle = null;
+      this._moldOnResize = null;
+    }
+
+    _layoutMold() {
+      this._resetViewDivs();
+      var base = this.getView(this.mold.baseId);
+      var top = this.getView(this.mold.topId);
+      if (!base || !top) return;
+
+      // Ambas vistas ocupan toda la pantalla; la superior se recorta con la
+      // figura y deja ver la inferior a través de la abertura.
+      [base, top].forEach(function (v) {
+        v.div.style.display = "";
+        v.div.style.zIndex = "2";
+        v.div.classList.add("cmpv-view--overlay");
+      });
+      base.div.style.zIndex = "1";
+
+      this._applyMoldGeometry();
     }
 
     // Distribuye las vistas con CSS GRID nativo según this.grid (array de FILAS;
@@ -2158,6 +2560,7 @@
             "<ul><li><strong>Crear</strong>: nueva vista con el encuadre actual.</li>" +
             "<li><strong>Cortinilla</strong>: divisor arrastrable entre dos vistas.</li>" +
             "<li><strong>Espejo</strong>: vistas lado a lado sincronizadas.</li>" +
+            "<li><strong>Molde</strong>: una figura (círculo, estrella...) recorta la vista superior y deja ver la inferior.</li>" +
             "<li><strong>Opciones</strong>: renombrar/eliminar vistas y cambiar 2D/3D por vista.</li></ul></div>";
           try { html = IDEE.utils.stringToHtml(html); } catch (e) {}
           success(html);
