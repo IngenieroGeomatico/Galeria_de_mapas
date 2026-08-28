@@ -211,6 +211,29 @@
   color: #333;
   flex-wrap: wrap;
 }
+.cmpv-field__title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #555;
+}
+.cmpv-field--sep {
+  border-top: 1px solid #eee;
+  margin: 4px 0;
+}
+.cmpv-color {
+  width: 32px;
+  height: 26px;
+  padding: 1px 2px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+}
+.cmpv-range {
+  flex: 1;
+  min-width: 80px;
+  cursor: pointer;
+}
 
 /* Bloque de disposición (filas/columnas) */
 .cmpv-field--grid {
