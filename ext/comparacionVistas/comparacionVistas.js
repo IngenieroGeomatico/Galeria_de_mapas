@@ -170,9 +170,20 @@
     // centro + zoom + orientación en lugar de encajar un extent.
     function isRotatedOrientation(o) {
       if (!o || typeof o !== "object") return false;
-      return (typeof o.rotation === "number" && Math.abs(o.rotation) > 1e-4)
-        || (typeof o.heading === "number" && Math.abs(o.heading) > 1e-4)
-        || (typeof o.roll === "number" && Math.abs(o.roll) > 1e-4)
+      // Normaliza un ángulo a su equivalente en (-PI, PI]: un giro de ±2*PI es
+      // un giro nulo. OL/Cesium pueden reportar rotación como múltiplos de 2*PI
+      // (p.ej. -6.2831 en vez de 0); sin normalizar, una cámara sin rotar se
+      // consideraría "rotada" y el iframe descartaría el extent (la vista base
+      // quedaría en blanco al recibir applyView sin centro).
+      function norm(a) {
+        var r = a % (2 * Math.PI);
+        if (r > Math.PI) r -= 2 * Math.PI;
+        if (r < -Math.PI) r += 2 * Math.PI;
+        return r;
+      }
+      return (typeof o.rotation === "number" && Math.abs(norm(o.rotation)) > 1e-4)
+        || (typeof o.heading === "number" && Math.abs(norm(o.heading)) > 1e-4)
+        || (typeof o.roll === "number" && Math.abs(norm(o.roll)) > 1e-4)
         || (typeof o.pitch === "number" && Math.abs(o.pitch - (-Math.PI / 2)) > 1e-4);
     }
 
@@ -223,7 +234,15 @@
             Math.min(min[0], max[0]), Math.min(min[1], max[1]),
             Math.max(min[0], max[0]), Math.max(min[1], max[1]),
           ];
-          view.fit(olExt, { size: size, duration: 0, constrainResolution: false });
+          // Solo fija zoom con fit si ya hay tamaño (durante la transición al
+          // modo molde el iframe puede no estar dimensionado y "fit" dejaría el
+          // centro null → mapa en blanco). En cualquier caso se garantiza centro.
+          if (size && size[0] > 0 && size[1] > 0) {
+            view.fit(olExt, { size: size, duration: 0, constrainResolution: false });
+          }
+          if (!view.getCenter()) {
+            view.setCenter([(olExt[0] + olExt[2]) / 2, (olExt[1] + olExt[3]) / 2]);
+          }
           // La rotación se aplica después del fit (fit no la toca).
           if (typeof orient.rotation === "number") view.setRotation(orient.rotation);
           return true;
@@ -271,6 +290,10 @@
 
     function applyView(map, v) {
       try {
+        // Ignora encuadres sin coordenadas válidas (p.ej. un extent rechazado
+        // que derivaría en lon/lat undefined y dejaría el centro del mapa null,
+        // provocando que la vista quede en blanco).
+        if (!v || typeof v.lon !== "number" || typeof v.lat !== "number") return false;
         var impl = map.getMapImpl();
         if (impl && typeof impl.getView === "function") {
           var view = impl.getView();
@@ -624,9 +647,20 @@
     // girada): hay que sincronizar por centro + zoom + orientación.
     function isRotatedOrientation(o) {
       if (!o || typeof o !== "object") return false;
-      return (typeof o.rotation === "number" && Math.abs(o.rotation) > 1e-4)
-        || (typeof o.heading === "number" && Math.abs(o.heading) > 1e-4)
-        || (typeof o.roll === "number" && Math.abs(o.roll) > 1e-4)
+      // Normaliza un ángulo a su equivalente en (-PI, PI]: un giro de ±2*PI es
+      // un giro nulo. OL/Cesium pueden reportar rotación como múltiplos de 2*PI
+      // (p.ej. -6.2831 en vez de 0); sin normalizar, una cámara sin rotar se
+      // consideraría "rotada" y el iframe descartaría el extent (la vista base
+      // quedaría en blanco al recibir applyView sin centro).
+      function norm(a) {
+        var r = a % (2 * Math.PI);
+        if (r > Math.PI) r -= 2 * Math.PI;
+        if (r < -Math.PI) r += 2 * Math.PI;
+        return r;
+      }
+      return (typeof o.rotation === "number" && Math.abs(norm(o.rotation)) > 1e-4)
+        || (typeof o.heading === "number" && Math.abs(norm(o.heading)) > 1e-4)
+        || (typeof o.roll === "number" && Math.abs(norm(o.roll)) > 1e-4)
         || (typeof o.pitch === "number" && Math.abs(o.pitch - (-Math.PI / 2)) > 1e-4);
     }
 
@@ -676,7 +710,15 @@
             Math.min(min[0], max[0]), Math.min(min[1], max[1]),
             Math.max(min[0], max[0]), Math.max(min[1], max[1]),
           ];
-          view.fit(olExt, { size: size, duration: 0, constrainResolution: false });
+          // Solo fija zoom con fit si ya hay tamaño (durante la transición al
+          // modo molde el iframe puede no estar dimensionado y "fit" dejaría el
+          // centro null → mapa en blanco). En cualquier caso se garantiza centro.
+          if (size && size[0] > 0 && size[1] > 0) {
+            view.fit(olExt, { size: size, duration: 0, constrainResolution: false });
+          }
+          if (!view.getCenter()) {
+            view.setCenter([(olExt[0] + olExt[2]) / 2, (olExt[1] + olExt[3]) / 2]);
+          }
           // La rotación se aplica después del fit (fit no la toca).
           if (typeof orient.rotation === "number") view.setRotation(orient.rotation);
           return true;
@@ -723,6 +765,10 @@
 
     function applyView(m, v) {
       try {
+        // Ignora encuadres sin coordenadas válidas (p.ej. un extent rechazado
+        // que derivaría en lon/lat undefined y dejaría el centro del mapa null,
+        // provocando que la vista quede en blanco).
+        if (!v || typeof v.lon !== "number" || typeof v.lat !== "number") return false;
         var impl = m.getMapImpl();
         if (impl && typeof impl.getView === "function") {
           var view = impl.getView();
@@ -1612,6 +1658,9 @@
           v._extentReported = true;
           this._flushPendingSyncs(v);
         }
+        // Si la vista que reporta es la base del modo molde y hay lupas activas,
+        // re-encuadrar las vistas top para que sigan la nueva zona bajo el molde.
+        if (v.id === this.moldBaseId) this._updateAllMagnifiers();
         if (!this.sync) return;
         if (v._progUpdates > 0) return;   // eco de un setView que enviamos: ignora
         if (v._moldLock) return;          // estado magnificado del molde: no propagar
@@ -1647,10 +1696,21 @@
     // sincronizar por centro + zoom + orientación.
     _isRotated(state) {
       if (!state || typeof state !== "object") return false;
-      return (typeof state.rotation === "number" && Math.abs(state.rotation) > 1e-4)
-        || (typeof state.heading === "number" && Math.abs(state.heading) > 1e-4)
-        || (typeof state.roll === "number" && Math.abs(state.roll) > 1e-4)
-        || (typeof state.pitch === "number" && Math.abs(state.pitch - (-Math.PI / 2)) > 1e-4);
+      // Normaliza un ángulo a su equivalente en (-PI, PI]: un giro de ±2*PI es
+      // un giro nulo. OL/Cesium pueden reportar rotación como múltiplos de 2*PI
+      // (p.ej. -6.2831 en vez de 0); sin normalizar, una cámara sin rotar se
+      // consideraría "rotada" y bloquearía la lupa del molde.
+      function norm(a) {
+        var r = a % (2 * Math.PI);
+        if (r > Math.PI) r -= 2 * Math.PI;
+        if (r < -Math.PI) r += 2 * Math.PI;
+        return r;
+      }
+      if (typeof state.rotation === "number" && Math.abs(norm(state.rotation)) > 1e-4) return true;
+      if (typeof state.heading === "number" && Math.abs(norm(state.heading)) > 1e-4) return true;
+      if (typeof state.roll === "number" && Math.abs(norm(state.roll)) > 1e-4) return true;
+      if (typeof state.pitch === "number" && Math.abs(state.pitch - (-Math.PI / 2)) > 1e-4) return true;
+      return false;
     }
 
     // Envía un encuadre a una vista (marcándolo como programático para que su
@@ -3790,25 +3850,64 @@
       var ext = base.lastView && base.lastView.extent;
       if (!ext) return;
 
-      // Coordenada geográfica bajo el centro del molde. La base ocupa todo el
-      // stage (origen Y arriba: cy crece hacia abajo, de norte a sur).
-      var lon = ext.west + (m.cx / 100) * (ext.east - ext.west);
-      var lat = ext.north - (m.cy / 100) * (ext.north - ext.south);
+      var stage = this._workArea;
+      if (!stage) return;
+      var W = stage.clientWidth, H = stage.clientHeight;
+      if (!W || !H) return;
 
-      // Los niveles de zoom de un mapa son exponenciales: log2(m.zoom) traduce
-      // el factor visual en niveles (m.zoom=2 → +1 nivel, se ve el doble cerca).
-      var baseZoom = (typeof base.lastView.zoom === "number") ? base.lastView.zoom : 0;
-      var newZoom = baseZoom + Math.log2(m.zoom);
+      // Centro del molde en píxeles del stage (origen Y arriba: cy crece hacia
+      // abajo, de norte a sur).
+      var mx = (m.cx / 100) * W;
+      var my = (m.cy / 100) * H;
 
-      // Enviamos SIEMPRE centro+zoom completos (con independencia del syncMode),
+      // Coordenada geográfica bajo el centro del molde (en la base).
+      var moldLon = ext.west + (mx / W) * (ext.east - ext.west);
+      var moldLat = ext.north - (my / H) * (ext.north - ext.south);
+
+      // Resolución de la base (grados por px) en cada eje.
+      var rBaseLon = (ext.east - ext.west) / W;
+      var rBaseLat = (ext.north - ext.south) / H;
+      // La lupa amplía la vista top: su resolución es la de la base / m.zoom.
+      var rTopLon = rBaseLon / m.zoom;
+      var rTopLat = rBaseLat / m.zoom;
+
+      // Desplazamiento (px) del centro del molde respecto al CENTRO del lienzo.
+      var dx = mx - W / 2;
+      var dy = my - H / 2;
+
+      // Con la lupa la vista top ocupa todo el stage y su cámara centra la zona
+      // ampliada en el CENTRO del lienzo. Para que el clip-path del molde (que
+      // está descentrado) muestre EXACTAMENTE la zona ampliada bajo el molde, la
+      // cámara debe apuntar al punto desplazado tal que:
+      //   cameraLon + dx*rTopLon = moldLon  →  cameraLon = moldLon - dx*rTopLon
+      //   cameraLat - dy*rTopLat = moldLat  →  cameraLat = moldLat + dy*rTopLat
+      var camLon = moldLon - dx * rTopLon;
+      var camLat = moldLat + dy * rTopLat;
+
+      // El extent visible de la vista top: el área de la base bajo el molde
+      // ampliada m.zoom veces, centrada en la cámara corregida. Se envía como
+      // EXTENT (no como centro+zoom) porque así el iframe de destino lo encaja
+      // con applyExtent (fit OL / Rectangle Cesium), que SIEMPRE produce el área
+      // visible correcta. Un centro+zoom OL→Cesium depende de la conversión
+      // zoom↔altitud, que no es biunívoca y desencajaba la lupa cuando la vista
+      // top es Cesium 3D.
+      var halfW = ((ext.east - ext.west) / 2) / m.zoom;
+      var halfH = ((ext.north - ext.south) / 2) / m.zoom;
+
+      // Enviamos SIEMPRE un extent (con independencia del syncMode),
       // conservando la orientación/cámara de la base. No usamos _sendSetView
-      // porque en modo "center" ese método omite el zoom.
+      // porque en modo "center" ese método omite el extent.
       top._moldLock = true;
       top._progUpdates += 1;
       try {
         var msg = {
           type: "cmpv:setView", target: top.id,
-          lon: lon, lat: lat, zoom: newZoom,
+          extent: {
+            west: camLon - halfW,
+            east: camLon + halfW,
+            south: camLat - halfH,
+            north: camLat + halfH,
+          },
           rotation: base.lastView.rotation,
           heading: base.lastView.heading,
           pitch: base.lastView.pitch,
@@ -3817,6 +3916,15 @@
         top.iframe.contentWindow.postMessage(msg, "*");
       } catch (e) {}
       setTimeout(function () { top._progUpdates = Math.max(0, top._progUpdates - 1); }, 120);
+    }
+
+    // Re-encuadra la lupa de todos los moldes con zoom activo. Se invoca cuando
+    // la base se mueve para que la lupa siga la nueva zona bajo cada molde.
+    _updateAllMagnifiers() {
+      var self = this;
+      this.molds.forEach(function (m) {
+        if (typeof m.zoom === "number" && m.zoom > 1) self._applyMoldZoom(m);
+      });
     }
 
     // Suelta los nodos SVG, drags y el clip-path de UN molde (sin tocar la lista).
