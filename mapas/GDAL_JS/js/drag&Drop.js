@@ -192,6 +192,8 @@ async function readUrl(input) {
     // });
     // mapajs.addLayers(layerGroup)
 
+    try {
+
     if (dataset.datasets[0].type == "vector") {
       dataset.name = imgName
       groupLayerName = imgName.split(".")[0]
@@ -202,7 +204,7 @@ async function readUrl(input) {
         const options = [
           '-f', 'GeoJSON',
           '-t_srs', 'EPSG:4326',
-          '-sql', 'SELECT * from ' + name
+          '-sql', 'SELECT * from "' + name + '"'
         ];
         outputName = "gjson_" + groupLayerName + "_" + name
         const filePathExportGJSON = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
@@ -428,8 +430,9 @@ async function readUrl(input) {
 
           // Asignar contenido a las celdas
           celda1.innerHTML = capa.name;
-          celda2.innerHTML = capa.geometryFields[0].type;
-          celda3.innerHTML = capa.geometryFields[0].coordinateSystem.projjson.id.authority + ":" + capa.geometryFields[0].coordinateSystem.projjson.id.code;
+          var geomField = capa.geometryFields && capa.geometryFields[0];
+          celda2.innerHTML = geomField ? geomField.type : "Sin geometría";
+          try { celda3.innerHTML = geomField.coordinateSystem.projjson.id.authority + ":" + geomField.coordinateSystem.projjson.id.code; } catch (_) { celda3.innerHTML = "-"; }
           celda5.innerHTML = capa.featureCount;
           celda4.innerHTML = capa.fields.length;
         }
@@ -710,7 +713,7 @@ async function readUrl(input) {
                 const options = [
                     '-f', format,
                     '-t_srs', EPSG,
-                    '-sql', 'SELECT * from ' + name
+                    '-sql', 'SELECT * from "' + name + '"'
                 ];
     
                 const outputName = contenido.name.split(".")[0];
@@ -802,6 +805,13 @@ async function readUrl(input) {
     setTimeout(() => fileUpload.classList.remove("done"), 3000);
     setTimeout(() => fileUpload.classList.remove("drop"), 3000);
 
+    } catch (error) {
+      console.error("Error al procesar el archivo:", error);
+      setTimeout(() => fileUpload.classList.add("fail"), 1000);
+      setTimeout(() => fileUpload.classList.remove("fail"), 3000);
+      setTimeout(() => fileUpload.classList.remove("drop"), 3000);
+    }
+
   };
 
   function showModalAndGetEPSG() {
@@ -854,24 +864,32 @@ function start() {
 
 async function initGdalJS_() {
 
-  const workerData = await fetch('../../js/gdal/gdal3.js');
-  const workerUrl = window.URL.createObjectURL(await workerData.blob());
+  // Desde file:// el navegador bloquea fetch() y Web Workers con blob URL;
+  // en ese caso desactivamos el worker y usamos la ruta directa.
+  var useWorker = gdalWorker;
+  if (location.protocol === 'file:') {
+    useWorker = false;
+  } else {
+    try {
+      const workerData = await fetch('../../js/gdal/gdal3.js');
+      window.URL.createObjectURL(await workerData.blob());
+    } catch (e) {
+      console.warn('No se pudo crear blob URL del worker, ejecutando sin worker:', e);
+      useWorker = false;
+    }
+  }
 
   const path = 'https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package';
   const paths = {
-    // wasm: '../../js/gdal/gdal3WebAssembly.wasm',
-    // data: '../../js/gdal/gdal3WebAssembly.data',
     wasm: `${path}/gdal3WebAssembly.wasm`,
     data: `${path}/gdal3WebAssembly.data`,
     js: '../../js/gdal/gdal3.js',
-    // js: '../../js/gdal/gdal3.node.js',
   };
 
   // Esperamos a que gdal se haya inicializado
   await initGdalJs({
-    // path: '../../js/gdal',
     paths: paths,
-    useWorker: gdalWorker
+    useWorker: useWorker
   })
     .then((Gdal) => {
 
