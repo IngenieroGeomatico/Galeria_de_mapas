@@ -50,6 +50,11 @@ const capa2 = new IDEE.layer.GeoJSON({
 mapajs.addLayers(capa2);
 
 CSV = myFunction_CSV()
+CSV.catch(function (err) {
+  console.error('No se pudieron obtener los datos del paro:', err);
+  IDEE.toast.error('No se pudieron obtener los datos del SEPE. Prueba desde la versión publicada en GitHub Pages.', null, 10000);
+  SVGCarga.hidden = true;
+});
 CSV.then((data) => {
 
   capaMVT_Municipios.on(IDEE.evt.SELECT_FEATURES, (features, m) => {
@@ -212,43 +217,71 @@ async function myFunction_CSV() {
     // https://datos.gob.es/es/catalogo/ea0041513-paro-registrado-por-municipios
     const urlParo = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV}_csv.csv`;
     const urlParo_1 = `https://sede.sepe.gob.es/es/portaltrabaja/resources/sede/datos_abiertos/datos/Paro_por_municipios_${añoCSV - 1}_csv.csv`;
+    // Intenta descargar el CSV de paro; si falla o el contenido no es
+    // un CSV válido del SEPE, prueba con el año anterior.
+    function _esCsvParo(data) {
+      return data.length > 0 &&
+        Object.keys(data[0]).some(function (k) { return /c.digo\s*mes/i.test(k); });
+    }
+    function _parsearParo(res) {
+      var text = res.text;
+      // El CSV del SEPE viene en Latin-1; M.remote.get puede corromper
+      // los acentos, pero csvToJson sigue funcionando.
+      return csvToJson(text, id = false, headerRow = 1);
+    }
+
     M.remote.get(urlParo).then(function (res) {
       try {
-        const data = csvToJson(res.text, id = false, headerRow = 1);
-        resolve(data);
-      } catch (e) {
-        M.remote.get(urlParo_1).then(function (res) {
-          mesCSV = 12
-          añoCSV = añoCSV - 1
-          try {
-            const bytes = new Uint8Array([...res.text].map(ch => ch.charCodeAt(0)));
-            text = new TextDecoder('utf-8').decode(bytes);
-            const data = csvToJson(text, id = false, headerRow = 1);
-            resolve(data);
-          } catch (e) {
-            reject(e);
-          } finally {
-            //
-          }
-        })
-      }
-    }).catch(err => {
-      reject(err);
+        var data = _parsearParo(res);
+        if (_esCsvParo(data)) { resolve(data); return; }
+      } catch (_) { /* cae al fallback */ }
+
+      // Fallback: año anterior
+      M.remote.get(urlParo_1).then(function (res2) {
+        try {
+          var data2 = _parsearParo(res2);
+          if (_esCsvParo(data2)) { resolve(data2); return; }
+          reject(new Error('CSV del SEPE no contiene columna de mes'));
+        } catch (e) { reject(e); }
+      }).catch(function (err) { reject(err); });
+
+    }).catch(function () {
+      // M.remote.get rechazó (red caída, etc.): intentar año anterior
+      M.remote.get(urlParo_1).then(function (res2) {
+        try {
+          var data2 = _parsearParo(res2);
+          if (_esCsvParo(data2)) { resolve(data2); return; }
+          reject(new Error('CSV del SEPE no contiene columna de mes'));
+        } catch (e) { reject(e); }
+      }).catch(function (err) { reject(err); });
     })
   });
 
   dataParo = await myPromise_1_CSV;
-  
-  if (mesCSV.toString().length === 1) {
-    mesCSV_S = `0${mesCSV}`
+
+  // Detectar la clave de mes: puede ser "Código mes", "Codigo mes" o
+  // la variante corrupta con U+FFFD, según la codificación del CSV.
+  const keyCodMes = dataParo.length > 0
+    ? Object.keys(dataParo[0]).find(k => /c.digo\s*mes/i.test(k)) || "Codigo mes"
+    : "Codigo mes";
+
+  // Buscar el último mes con datos disponible en el CSV (el SEPE
+  // publica con retraso variable, no podemos asumir mes-1).
+  const mesesDisponibles = [...new Set(
+    dataParo.map(obj => obj[keyCodMes]).filter(Boolean)
+  )].sort();
+  const ultimoMes = mesesDisponibles.length > 0
+    ? mesesDisponibles[mesesDisponibles.length - 1]
+    : null;
+
+  if (ultimoMes) {
+    añoCSV = parseInt(ultimoMes.slice(0, 4), 10);
+    mesCSV = parseInt(ultimoMes.slice(4), 10);
   }
-    if ((mesCSV-1).toString().length === 1) {
-    mesCSV_1_S = `0${mesCSV-1}`
-  }
-  dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV_S}`)
-  if (dataParoFiltrado.length === 0) {
-    dataParoFiltrado = dataParo.filter(obj => obj["C�digo mes"] === `${añoCSV}${mesCSV_1_S}`)
-  }
+
+  dataParoFiltrado = ultimoMes
+    ? dataParo.filter(obj => obj[keyCodMes] === ultimoMes)
+    : [];
 
   const propsAEliminar = ["Paro mujer edad >=45", "Paro mujer edad < 25", "Paro mujer edad 25 -45",
     "Paro hombre edad >=45", "Paro hombre edad < 25", "Paro hombre edad 25 -45",
@@ -258,14 +291,81 @@ async function myFunction_CSV() {
   });
 
 
+  // URLs de población por provincia (fallback si CORS bloquea el índice del INE).
+  const CSV_POBLACION_FALLBACK = [
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2855.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2856.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2857.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2854.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2886.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2858.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2859.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2860.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2861.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2905.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2862.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2863.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2864.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2893.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2865.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2866.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2901.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2868.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2869.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2873.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2870.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2871.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2872.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2874.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2875.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2876.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2877.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2878.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2880.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2881.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2882.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2883.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2884.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2885.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2888.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2889.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2890.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2879.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2891.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2892.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2894.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2895.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2896.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2900.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2899.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2902.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2903.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2904.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2906.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2907.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2908.csv?nocab=1",
+    "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2909.csv?nocab=1"
+  ];
+
+  // Descarga y parsea un array de URLs CSV de población del INE.
+  async function _descargarPoblacion(urls) {
+    var dataPobl = [];
+    await Promise.all(
+      urls.map(async function (provUrl) {
+        var r = await M.remote.get(provUrl);
+        var csv = csvToJson(r.text, false, 0);
+        dataPobl.push(...csv);
+      })
+    );
+    return dataPobl;
+  }
+
   const myPromise_poblo_prov = new Promise(function (resolve, reject) {
     const urlPoblacion = `https://www.ine.es/dynt3/inebase/index.htm?padre=525`;
     M.remote.get(urlPoblacion).then(async function (res) {
       try {
-
         const parser = new DOMParser();
         const doc = parser.parseFromString(res.text, 'text/html')
-
 
         // Capturamos todos los <a href="...">
         const hrefs = Array.from(doc.querySelectorAll('a[href]'))
@@ -283,9 +383,8 @@ async function myFunction_CSV() {
         const ids = normalizados.map(href => {
           try {
             BASE = 'https://www.ine.es';
-            const abs = new URL(href, BASE);        // relativo -> absoluto
-            const t = abs.searchParams.get('t');    // parámetro principal
-            // Validar: debe ser un número
+            const abs = new URL(href, BASE);
+            const t = abs.searchParams.get('t');
             return t;
           } catch {
             return null;
@@ -294,90 +393,20 @@ async function myFunction_CSV() {
 
         // Construir la URL final CSV
         const csvUrls = ids.map(id => new URL(`/jaxiT3/files/t/es/csv_bdsc/${id}.csv?nocab=1`, BASE).href);
-        data = [...new Set(csvUrls)];
+        var data = [...new Set(csvUrls)];
+        if (data.length === 0) data = CSV_POBLACION_FALLBACK;
 
-        dataPobl = []
-
-        if (data.length === 0) {
-          // Si da problemas de CORS, activar extensión y pillar el array de data.
-          data = [
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2855.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2856.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2857.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2854.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2886.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2858.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2859.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2860.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2861.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2905.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2862.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2863.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2864.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2893.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2865.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2866.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2901.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2868.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2869.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2873.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2870.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2871.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2872.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2874.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2875.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2876.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2877.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2878.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2880.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2881.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2882.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2883.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2884.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2885.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2888.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2889.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2890.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2879.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2891.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2892.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2894.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2895.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2896.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2900.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2899.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2902.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2903.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2904.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2906.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2907.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2908.csv?nocab=1",
-            "https://www.ine.es/jaxiT3/files/t/es/csv_bdsc/2909.csv?nocab=1"
-          ]
-        }
-        const Pobl = await Promise.all(
-          data.map(async (provUrl) => {
-            const r = await M.remote.get(provUrl);
-            // Ajusta firma de csvToJson si es necesario
-            csv = csvToJson(r.text, false, 0);
-            // csv = csv.filter(obj => obj["Periodo"] === `${añoCSV}`).filter(obj => obj["Sexo"] === `Total`)
-            // if (csv.length === 0) {
-            //   dataParoFiltrado = csv.filter(obj => obj["Periodo"] === `${añoCSV-1}`).filter(obj => obj["Sexo"] === `Total`)
-            // }
-            dataPobl.push(...csv)
-            return
-          })
-        );
-
-
-        resolve(dataPobl);
+        resolve(await _descargarPoblacion(data));
       } catch (e) {
         reject(e);
-      } finally {
-        //
       }
-    }).catch(err => {
-      reject(err);
+    }).catch(async function () {
+      // CORS bloquea el índice del INE: usar URLs hardcodeadas directamente.
+      try {
+        resolve(await _descargarPoblacion(CSV_POBLACION_FALLBACK));
+      } catch (e) {
+        reject(e);
+      }
     });
   });
   dataPoblacion = await myPromise_poblo_prov;
@@ -455,11 +484,11 @@ async function myFunction_CSV() {
     return { porcParo, ...obj };
   });
 
-  if (!dataParoFiltrado[0]["C�digo mes"]) {
+  if (!dataParoFiltrado.length || !dataParoFiltrado[0][keyCodMes]) {
     IDEE.toast.error('Error al obtener los datos del paro', null, 8000);
     console.error('------ 0 ---------- : Error paro')
   }
-  if (!dataPoblacionFiltrado[0]["Sexo"]) {
+  if (!dataPoblacionFiltrado.length || !dataPoblacionFiltrado[0]["Sexo"]) {
     IDEE.toast.error('Error al obtener los datos de población', null, 8000);
     console.error('------ 1 ---------- : Error población')
   }
