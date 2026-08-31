@@ -1663,7 +1663,12 @@
         if (v.id === this.moldBaseId) this._updateAllMagnifiers();
         if (!this.sync) return;
         if (v._progUpdates > 0) return;   // eco de un setView que enviamos: ignora
-        if (v._moldLock) return;          // estado magnificado del molde: no propagar
+        // La vista top de un molde con aumentos está "bloqueada" (no debe
+        // propagar su estado MAGNIFICADO como si fuera la referencia global),
+        // pero si el usuario mueve la lupa sí debe desplazarse la base: se
+        // re-centra la base para que el punto geográfico bajo el molde vuelva
+        // a estar alineado con el centro de la lupa.
+        if (v._moldLock) { this._recenterBaseFromLoupe(v); return; }
         this._broadcast(v, v.lastView);
         // Difunde el encuadre también a las ventanas espejo (BroadcastChannel).
         this._publishCamera(v);
@@ -3925,6 +3930,54 @@
       this.molds.forEach(function (m) {
         if (typeof m.zoom === "number" && m.zoom > 1) self._applyMoldZoom(m);
       });
+    }
+
+    // Cuando el usuario mueve la lupa (vista top de un molde con aumentos),
+    // la base debe seguirlo: se calcula el punto geográfico que ahora queda bajo
+    // el centro del molde en la vista top y se re-centra la base para que ese
+    // mismo punto vuelva a quedar bajo el molde en el mapa base (conservando el
+    // nivel de zoom de la base). El eco de la base (line 1663) re-encuadra
+    // después todas las lupas vía _updateAllMagnifiers.
+    _recenterBaseFromLoupe(top) {
+      var base = this.getView(this.moldBaseId);
+      if (!base || !top || !top.lastView || !base.lastView) return;
+      var ext = top.lastView.extent;
+      var bExt = base.lastView.extent;
+      if (!ext || !bExt) return;
+      var stage = this._workArea;
+      if (!stage) return;
+      var W = stage.clientWidth, H = stage.clientHeight;
+      if (!W || !H) return;
+      var mold = null;
+      for (var i = 0; i < this.molds.length; i++) {
+        if (this.molds[i].topId === top.id && typeof this.molds[i].zoom === "number" && this.molds[i].zoom > 1) {
+          mold = this.molds[i]; break;
+        }
+      }
+      if (!mold) return;
+      var mx = (mold.cx / 100) * W;
+      var my = (mold.cy / 100) * H;
+      // Punto geográfico bajo el centro del molde en la vista top (tras el
+      // arrastre en la lupa).
+      var tpLon = ext.west + (mx / W) * (ext.east - ext.west);
+      var tpLat = ext.north - (my / H) * (ext.north - ext.south);
+      // Resolución de la base (grados por px).
+      var rBaseLon = (bExt.east - bExt.west) / W;
+      var rBaseLat = (bExt.north - bExt.south) / H;
+      // Centro de la base tal que el punto bajo el molde coincida con el de la
+      // lupa: bCtr + (mx - W/2)*rBase = tp.
+      var bCtrLon = tpLon - (mx - W / 2) * rBaseLon;
+      var bCtrLat = tpLat + (my - H / 2) * rBaseLat;
+      var b = base.lastView;
+      base._progUpdates += 1;
+      try {
+        base.iframe.contentWindow.postMessage({
+          type: "cmpv:setView", target: base.id,
+          lon: bCtrLon, lat: bCtrLat, zoom: (typeof b.zoom === "number") ? b.zoom : undefined,
+          rotation: b.rotation, heading: b.heading, pitch: b.pitch, roll: b.roll,
+        }, "*");
+      } catch (e) {}
+      setTimeout(function () { base._progUpdates = Math.max(0, base._progUpdates - 1); }, 120);
     }
 
     // Suelta los nodos SVG, drags y el clip-path de UN molde (sin tocar la lista).
