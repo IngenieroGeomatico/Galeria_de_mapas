@@ -209,7 +209,16 @@
   gap: 8px;
   font-size: 13px;
   color: #333;
-  flex-wrap: wrap;
+  /* Etiqueta y su control en una sola línea: con wrap las filas se parten en
+     dos líneas dentro del panel estrecho y el control queda "más bajo" que su
+     etiqueta (descuadrado). Ahora los selects/inputs flexibles se encogen. */
+  flex-wrap: nowrap;
+}
+/* Los selects dentro de una fila con etiqueta se encogen para no desbordar la
+   línea y mantener la etiqueta y el control alineados verticalmente. */
+.cmpv-field .cmpv-select {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .cmpv-field__title {
   font-weight: 600;
