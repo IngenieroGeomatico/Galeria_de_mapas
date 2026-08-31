@@ -1108,10 +1108,12 @@
           cy: (m && typeof m.cy === "number") ? m.cy : 50,
           radius: (m && typeof m.radius === "number") ? m.radius : 25,
           angle: (m && typeof m.angle === "number") ? m.angle : 0,
+          followPointer: !!(m && m.followPointer),  // el molde sigue al puntero del ratón
+          zoom: (m && typeof m.zoom === "number" && m.zoom >= 1) ? m.zoom : 1,  // aumentos (1 = sin lupa)
         });
       }, this);
       if (!this.molds.length) {
-        this.molds.push({ id: "m1", shape: "circle", topId: null, cx: 50, cy: 50, radius: 25, angle: 0 });
+        this.molds.push({ id: "m1", shape: "circle", topId: null, cx: 50, cy: 50, radius: 25, angle: 0, followPointer: false, zoom: 1 });
       }
       this._moldSeq = this.molds.length;   // ids únicos al añadir moldes en runtime
       this.moldBaseId = null;
@@ -1612,6 +1614,7 @@
         }
         if (!this.sync) return;
         if (v._progUpdates > 0) return;   // eco de un setView que enviamos: ignora
+        if (v._moldLock) return;          // estado magnificado del molde: no propagar
         this._broadcast(v, v.lastView);
         // Difunde el encuadre también a las ventanas espejo (BroadcastChannel).
         this._publishCamera(v);
@@ -1690,6 +1693,7 @@
       var self = this;
       this.views.forEach(function (v) {
         if (v === src) return;
+        if (v._moldLock) return;   // vista bajo control de la lupa: no realinear
         self._sendSetView(v, state);
       });
     }
@@ -1924,7 +1928,7 @@
           selId: this.moldSelId,
           seq: this._moldSeq,
           molds: this.molds.map(function (m) {
-            return { id: m.id, shape: m.shape, topId: m.topId, cx: m.cx, cy: m.cy, radius: m.radius, angle: m.angle };
+            return { id: m.id, shape: m.shape, topId: m.topId, cx: m.cx, cy: m.cy, radius: m.radius, angle: m.angle, followPointer: !!m.followPointer, zoom: m.zoom || 1 };
           }),
         },
       };
@@ -2081,6 +2085,8 @@
               cy: (typeof m.cy === "number") ? m.cy : 50,
               radius: (typeof m.radius === "number") ? m.radius : 25,
               angle: (typeof m.angle === "number") ? m.angle : 0,
+              followPointer: !!m.followPointer,
+              zoom: (typeof m.zoom === "number" && m.zoom >= 1) ? m.zoom : 1,
             };
           });
           if (this.getView(s.mold.baseId)) this.moldBaseId = s.mold.baseId;
@@ -2223,6 +2229,8 @@
         '          <div class="cmpv-grid-inputs cmpv-grid-inputs--stack">' +
         '            <label>Tamaño <input type="range" class="cmpv-range" data-role="mold-size" min="8" max="60" value="25"> <span data-role="mold-size-val">25</span>%</label>' +
         '            <label>Giro <input type="range" class="cmpv-range" data-role="mold-angle" min="0" max="360" value="0"> <span data-role="mold-angle-val">0</span>°</label>' +
+        '            <label>Aumentos <input type="range" class="cmpv-range" data-role="mold-zoom" min="1" max="5" step="0.5" value="1"> <span data-role="mold-zoom-val">1</span>×</label>' +
+        '            <label class="cmpv-field"><input type="checkbox" data-role="mold-follow"> Seguir puntero</label>' +
         '          </div>' +
         '        </div>' +
         '        <div class="cmpv-slots__hint">Elige qué vista se muestra en cada mapa.</div>' +
@@ -2379,6 +2387,22 @@
         m.angle = parseInt(this.value, 10);
         if (moldAngleVal) moldAngleVal.textContent = this.value;
         if (self.mode === "molde") self._applyMoldGeometry(m);
+      });
+      var moldZoomIn = root.querySelector('[data-role="mold-zoom"]');
+      var moldZoomVal = root.querySelector('[data-role="mold-zoom-val"]');
+      if (moldZoomIn) moldZoomIn.addEventListener("input", function () {
+        var m = self._curMold();
+        if (!m) return;
+        m.zoom = parseFloat(this.value) || 1;
+        if (moldZoomVal) moldZoomVal.textContent = this.value;
+        if (self.mode === "molde") self._applyMoldGeometry(m);
+      });
+      var moldFollowCb = root.querySelector('[data-role="mold-follow"]');
+      if (moldFollowCb) moldFollowCb.addEventListener("change", function () {
+        var m = self._curMold();
+        if (!m) return;
+        m.followPointer = this.checked;
+        self._updateMoldSelection();
       });
 
       // --- Moldbar: selector de molde activo / añadir / quitar ---
@@ -3364,6 +3388,12 @@
       if (angIn) angIn.value = m.angle;
       var angVal = this.ui.querySelector('[data-role="mold-angle-val"]');
       if (angVal) angVal.textContent = m.angle;
+      var zoomIn = this.ui.querySelector('[data-role="mold-zoom"]');
+      if (zoomIn) zoomIn.value = m.zoom || 1;
+      var zoomVal = this.ui.querySelector('[data-role="mold-zoom-val"]');
+      if (zoomVal) zoomVal.textContent = m.zoom || 1;
+      var followCb = this.ui.querySelector('[data-role="mold-follow"]');
+      if (followCb) followCb.checked = !!m.followPointer;
       this._updateMoldSelection();
     }
 
@@ -3434,6 +3464,8 @@
         cy: 50,
         radius: 25,
         angle: 0,
+        followPointer: false,
+        zoom: 1,
       };
       this.molds.push(m);
       this.moldSelId = m.id;
@@ -3682,10 +3714,15 @@
         ];
       }
 
-      // El clipPath del div top se re-aplica en CADA llamada: los layouts
-      // (_resetViewDivs) limpian los clipPaths, así que hay que reponerlo.
+      // El clipPath recorta la vista top a la figura del molde. Se aplica
+      // directamente sobre top.div (ya no hay wrapper: la lupa hace zoom real
+      // en el mapa, no escala píxeles, así que no hace falta separar niveles).
       top.div.style.clipPath = "url(#" + m.clipId + ")";
       top.div.style.webkitClipPath = "url(#" + m.clipId + ")";
+
+      // Lupa: zoom REAL en el mapa de la vista top (mayor resolución sin
+      // pixelado) centrado en el punto geográfico bajo el centro del molde.
+      this._applyMoldZoom(m);
 
       // Actualiza geometría (posición en px del tirador, con rotación).
       var rad = ang * Math.PI / 180;
@@ -3709,6 +3746,79 @@
       this._updateMoldSelection();
     }
 
+    // Lupa del molde con ZOOM REAL: en vez de escalar los píxeles del div (que
+    // se ve borroso), hace zoom en el mapa OL/Cesium de la vista top (mayor
+    // resolución) centrado en el punto geográfico bajo el centro del molde.
+    //
+    // Mientras la lupa está activa, la vista top queda marcada con _moldLock
+    // para que la sincronización (broadcast / resync / eco cmpv:view) no la
+    // realinee con la base ni propague su estado magnificado.
+    _applyMoldZoom(m) {
+      var top = this.getView(m.topId);
+      var base = this.getView(this.moldBaseId);
+      if (!top || !base) return;
+
+      var active = (typeof m.zoom === "number" && m.zoom > 1);
+      if (!active) {
+        // Lupa apagada: liberar la vista y restaurar EXACTAMENTE el encuadre
+        // de la base (centro+zoom), en vez de un fit de extent que podría
+        // recalcular un zoom distinto según el viewport interno de la vista.
+        if (top._moldLock) {
+          delete top._moldLock;
+          var bc = base.lastView;
+          if (bc && typeof bc.lon === "number" && typeof bc.zoom === "number") {
+            top._progUpdates += 1;
+            try {
+              top.iframe.contentWindow.postMessage({
+                type: "cmpv:setView", target: top.id,
+                lon: bc.lon, lat: bc.lat, zoom: bc.zoom,
+                rotation: bc.rotation, heading: bc.heading,
+                pitch: bc.pitch, roll: bc.roll,
+              }, "*");
+            } catch (e) {}
+            setTimeout(function () { top._progUpdates = Math.max(0, top._progUpdates - 1); }, 120);
+          }
+        }
+        return;
+      }
+
+      // Con la cámara rotada/inclinada la interpolación lineal del centro no es
+      // válida (el extent es la caja que envuelve el área girada): se desactiva
+      // la lupa para no enfocar una coordenada equivocada.
+      if (this._isRotated(base.lastView)) return;
+
+      var ext = base.lastView && base.lastView.extent;
+      if (!ext) return;
+
+      // Coordenada geográfica bajo el centro del molde. La base ocupa todo el
+      // stage (origen Y arriba: cy crece hacia abajo, de norte a sur).
+      var lon = ext.west + (m.cx / 100) * (ext.east - ext.west);
+      var lat = ext.north - (m.cy / 100) * (ext.north - ext.south);
+
+      // Los niveles de zoom de un mapa son exponenciales: log2(m.zoom) traduce
+      // el factor visual en niveles (m.zoom=2 → +1 nivel, se ve el doble cerca).
+      var baseZoom = (typeof base.lastView.zoom === "number") ? base.lastView.zoom : 0;
+      var newZoom = baseZoom + Math.log2(m.zoom);
+
+      // Enviamos SIEMPRE centro+zoom completos (con independencia del syncMode),
+      // conservando la orientación/cámara de la base. No usamos _sendSetView
+      // porque en modo "center" ese método omite el zoom.
+      top._moldLock = true;
+      top._progUpdates += 1;
+      try {
+        var msg = {
+          type: "cmpv:setView", target: top.id,
+          lon: lon, lat: lat, zoom: newZoom,
+          rotation: base.lastView.rotation,
+          heading: base.lastView.heading,
+          pitch: base.lastView.pitch,
+          roll: base.lastView.roll,
+        };
+        top.iframe.contentWindow.postMessage(msg, "*");
+      } catch (e) {}
+      setTimeout(function () { top._progUpdates = Math.max(0, top._progUpdates - 1); }, 120);
+    }
+
     // Suelta los nodos SVG, drags y el clip-path de UN molde (sin tocar la lista).
     _teardownMold(m) {
       if (!m) return;
@@ -3717,9 +3827,17 @@
         m.cleanups = null;
       }
       var top = this.getView(m.topId);
+      // Limpiar clip-path de lupa (ya no hay wrapper ni transform de escala).
       if (top && top.div && m.clipId) {
         top.div.style.clipPath = "";
         top.div.style.webkitClipPath = "";
+      }
+      // Liberar el bloqueo de lupa: la vista vuelve a participar en la
+      // sincronización (la re-alineación con la base la hace _resyncFromActive
+      // al final, o el _scheduleResync al cambiar de modo).
+      if (top && top._moldLock) {
+        delete top._moldLock;
+        if (this.sync) this._resyncFromActive();
       }
       if (m.svg && m.svg.parentNode) m.svg.parentNode.removeChild(m.svg);
       m.svg = null;
@@ -3731,6 +3849,12 @@
     _removeMolds() {
       var self = this;
       this.molds.forEach(function (m) { self._teardownMold(m); });
+      // Limpia el listener global de seguir puntero.
+      if (this._moldFollowFn) {
+        var stage = this._workArea;
+        if (stage) stage.removeEventListener("mousemove", this._moldFollowFn);
+        this._moldFollowFn = null;
+      }
     }
 
     // Elimina un molde de la lista y reconstruye el layout (botón "Quitar").
@@ -3764,11 +3888,26 @@
       this.molds.forEach(function (m) {
         var top = self.getView(m.topId);
         if (!top) return;
+
         top.div.style.display = "";
         top.div.style.zIndex = "2";
         top.div.classList.add("cmpv-view--overlay");
         self._applyMoldGeometry(m);
       });
+
+      // ── Seguir puntero: un solo listener en el stage para TODOS los moldes.
+      if (!this._moldFollowFn) {
+        var stage = this._workArea;
+        this._moldFollowFn = function (e) {
+          var cur = self._curMold();
+          if (!cur || !cur.followPointer) return;
+          var rect = stage.getBoundingClientRect();
+          cur.cx = Math.max(0, Math.min(100, (e.clientX - rect.left) / rect.width * 100));
+          cur.cy = Math.max(0, Math.min(100, (e.clientY - rect.top) / rect.height * 100));
+          self._applyMoldGeometry(cur);
+        };
+        stage.addEventListener("mousemove", this._moldFollowFn);
+      }
     }
 
     // Distribuye las vistas con CSS GRID nativo según this.grid (array de FILAS;
