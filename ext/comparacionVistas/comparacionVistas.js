@@ -520,6 +520,476 @@
     }
   }
 
+  // =====================================================================
+  //  Documento de la VENTANA sincronizada (antes: ventana.html). Ahora se
+  //  genera dinámicamente y se inyecta con document.write en una ventana
+  //  about:blank abierta por window.open, para que el plugin sea
+  //  AUTOCONTENIDO (no depende de ficheros en mapas/).
+  //  --------------------------------------------------------------------
+  //  _ventanaBoot es la lógica que corre DENTRO de la ventana. Se serializa
+  //  con .toString() y se incrusta en el HTML generado. Lee sus parámetros
+  //  de window.__CMPV_WINPARAMS (inyectados por el padre), NO de
+  //  location.search (la ventana about:blank no tiene query string útil).
+  //
+  //  Transporte con el maestro (idéntico a ventana.html):
+  //    - http(s): BroadcastChannel "cmpv-sync-<sid>".
+  //    - file://: postMessage DIRECTO con window.opener (origen opaco impide
+  //      BroadcastChannel). Todos los mensajes van marcados _sync:true para
+  //      que el maestro los distinga de los de sus iframes internos.
+  //  Emite/recibe: cmpvSync:hello, cmpvSync:state (snapshot), cmpvSync:view.
+  // =====================================================================
+  function _ventanaBoot() {
+    "use strict";
+
+    // Parámetros inyectados por el padre (equivalente a ?sid=&vid= de la
+    // antigua ventana.html).
+    var P = window.__CMPV_WINPARAMS || {};
+    var SID = P.sid || "";
+    var VID = P.vid || "";
+    var IS_FILE = location.protocol === "file:";
+    var BASE_HOST = "https://componentes.idee.es/api-idee";
+
+    var svc = document.getElementById("cargaSVG");
+    var aviso = document.getElementById("aviso");
+    var etiqueta = document.getElementById("etiqueta");
+
+    var _map = null;
+    var _prog = 0;            // anti-eco: ignoramos los cambios que aplicamos
+    var _receivedState = false;
+    var _built = false;
+    var _builtImpl = null;
+    var _syncMode = "extent";
+    var _showControls = true;
+
+    function showAviso(txt) {
+      if (aviso) { aviso.textContent = txt; aviso.style.display = "flex"; }
+    }
+
+    /* ---------- Utilidades de carga (igual que en las vistas) ---------- */
+    function loadCSS(href) {
+      return new Promise(function (resolve) {
+        var l = document.createElement("link");
+        l.rel = "stylesheet"; l.href = href;
+        l.onload = function () { resolve(); };
+        l.onerror = function () { resolve(); };
+        document.head.appendChild(l);
+      });
+    }
+    function loadJS(src) {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement("script");
+        s.src = src;
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error("No se pudo cargar " + src)); };
+        document.head.appendChild(s);
+      });
+    }
+    function waitFor(cond, timeoutMs) {
+      return new Promise(function (resolve, reject) {
+        var t0 = Date.now();
+        (function poll() {
+          try { if (cond()) return resolve(); } catch (e) {}
+          if (Date.now() - t0 > timeoutMs) return reject(new Error("timeout"));
+          setTimeout(poll, 60);
+        })();
+      });
+    }
+
+    /* ---------- Capas base IGN ---------- */
+    function configBaseLayers() {
+      var IDEE = window.IDEE;
+      try {
+        var base = new IDEE.layer.TMS({
+          url: "https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg",
+          legend: "IGNBaseTodo", visible: true, isBase: true, tileGridMaxZoom: 17,
+          name: "IGNBaseTodo_cmpv",
+          attribution: '<p><b>Mapa base</b>: <a style="color:#0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
+        }, { crossOrigin: "anonymous", displayInLayerSwitcher: false });
+        IDEE.addQuickLayers({ IGNBaseTodo_cmpv: base });
+        IDEE.config("tms", { base: "QUICK*IGNBaseTodo_cmpv" });
+        IDEE.config.backgroundlayers = [
+          { id: "mapa", title: "Callejero", layers: ["QUICK*IGNBaseTodo_cmpv"] },
+          { id: "imagen", title: "Imagen", layers: ["QUICK*BASE_PNOA_MA_TMS"] },
+        ];
+        IDEE.proxy(false);
+      } catch (e) { /* usa config por defecto */ }
+    }
+
+    /* ---------- Conversión de encuadre (idéntica a _vistaBoot) ---------- */
+    function altitudeForZoom(z) { var base = 40075016.686; return (base / Math.pow(2, z)) * 1.0; }
+    function zoomForAltitude(alt) { var base = 40075016.686; return Math.log2(base / Math.max(1, alt)); }
+
+    // ¿La cámara está rotada/inclinada? Con orientación no trivial el extent
+    // visible NO es comparable entre vistas (es la caja que envuelve el área
+    // girada): hay que sincronizar por centro + zoom + orientación.
+    function isRotatedOrientation(o) {
+      if (!o || typeof o !== "object") return false;
+      return (typeof o.rotation === "number" && Math.abs(o.rotation) > 1e-4)
+        || (typeof o.heading === "number" && Math.abs(o.heading) > 1e-4)
+        || (typeof o.roll === "number" && Math.abs(o.roll) > 1e-4)
+        || (typeof o.pitch === "number" && Math.abs(o.pitch - (-Math.PI / 2)) > 1e-4);
+    }
+
+    function readExtent(m) {
+      try {
+        var impl = m.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          var size = impl.getSize();
+          if (!size || !size[0] || !size[1]) return null;
+          var ext = view.calculateExtent(size);
+          var code = view.getProjection().getCode();
+          var sw = window.ol.proj.toLonLat([ext[0], ext[1]], code);
+          var ne = window.ol.proj.toLonLat([ext[2], ext[3]], code);
+          return { west: sw[0], south: sw[1], east: ne[0], north: ne[1] };
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          var rect = impl.camera.computeViewRectangle(impl.scene.globe.ellipsoid);
+          if (!rect) {
+            var carto = impl.camera.positionCartographic;
+            var lon = C.Math.toDegrees(carto.longitude);
+            var lat = C.Math.toDegrees(carto.latitude);
+            var half = (carto.height / 40075016.686) * 180;
+            return { west: lon - half, south: lat - half, east: lon + half, north: lat + half };
+          }
+          return {
+            west: C.Math.toDegrees(rect.west), south: C.Math.toDegrees(rect.south),
+            east: C.Math.toDegrees(rect.east), north: C.Math.toDegrees(rect.north),
+          };
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function applyExtent(m, ext, orient) {
+      if (!ext) return false;
+      orient = orient || {};
+      try {
+        var impl = m.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          var size = impl.getSize();
+          var code = view.getProjection().getCode();
+          var min = window.ol.proj.fromLonLat([ext.west, ext.south], code);
+          var max = window.ol.proj.fromLonLat([ext.east, ext.north], code);
+          var olExt = [
+            Math.min(min[0], max[0]), Math.min(min[1], max[1]),
+            Math.max(min[0], max[0]), Math.max(min[1], max[1]),
+          ];
+          view.fit(olExt, { size: size, duration: 0, constrainResolution: false });
+          // La rotación se aplica después del fit (fit no la toca).
+          if (typeof orient.rotation === "number") view.setRotation(orient.rotation);
+          return true;
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          var rect = C.Rectangle.fromDegrees(ext.west, ext.south, ext.east, ext.north);
+          var set = { destination: rect };
+          // Si hay orientación remota, se aplica; si no, se conserva la actual.
+          if (typeof orient.heading === "number" || typeof orient.pitch === "number") {
+            set.orientation = {
+              heading: (typeof orient.heading === "number") ? orient.heading : 0.0,
+              pitch: (typeof orient.pitch === "number") ? orient.pitch : -C.Math.PI_OVER_TWO,
+              roll: (typeof orient.roll === "number") ? orient.roll : 0.0,
+            };
+          }
+          impl.camera.setView(set);
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function readCenterZoom(m) {
+      try {
+        var impl = m.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          var c = view.getCenter();
+          var ll = window.ol.proj.toLonLat(c, view.getProjection().getCode());
+          // La rotación 2D se incluye siempre (0 = north-up).
+          return { lon: ll[0], lat: ll[1], zoom: view.getZoom(), rotation: view.getRotation() };
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          var carto = impl.camera.positionCartographic;
+          return {
+            lon: C.Math.toDegrees(carto.longitude), lat: C.Math.toDegrees(carto.latitude),
+            zoom: zoomForAltitude(carto.height),
+            heading: impl.camera.heading, pitch: impl.camera.pitch, roll: impl.camera.roll,
+          };
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function applyView(m, v) {
+      try {
+        var impl = m.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          var c = window.ol.proj.fromLonLat([v.lon, v.lat], view.getProjection().getCode());
+          view.setCenter(c);
+          if (typeof v.zoom === "number") view.setZoom(v.zoom);
+          // Rotación 2D del view remoto (0 = north-up).
+          if (typeof v.rotation === "number") view.setRotation(v.rotation);
+          return true;
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          var alt = (typeof v.zoom === "number")
+            ? altitudeForZoom(v.zoom)
+            : impl.camera.positionCartographic.height;
+          impl.camera.setView({
+            destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
+            orientation: {
+              heading: (typeof v.heading === "number") ? v.heading : 0.0,
+              pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
+              roll: (typeof v.roll === "number") ? v.roll : 0.0,
+            },
+          });
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    // Solo centro (modo sincronización "center": cada vista conserva su zoom).
+    function applyCenterOnly(m, lon, lat, orient) {
+      orient = orient || {};
+      try {
+        var impl = m.getMapImpl();
+        if (impl && typeof impl.getView === "function") {
+          var view = impl.getView();
+          view.setCenter(window.ol.proj.fromLonLat([lon, lat], view.getProjection().getCode()));
+          if (typeof orient.rotation === "number") view.setRotation(orient.rotation);
+          return true;
+        } else if (impl && impl.scene && impl.camera) {
+          var C = window.Cesium;
+          impl.camera.setView({
+            destination: C.Cartesian3.fromDegrees(lon, lat, impl.camera.positionCartographic.height),
+            orientation: {
+              heading: (typeof orient.heading === "number") ? orient.heading : 0.0,
+              pitch: (typeof orient.pitch === "number") ? orient.pitch : -C.Math.PI_OVER_TWO,
+              roll: (typeof orient.roll === "number") ? orient.roll : 0.0,
+            },
+          });
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    /* ---------- Reconstrucción de capas/plugins/controles ---------- */
+    function applyConfig(cfg) {
+      if (!cfg || !_map) return;
+      var IDEE = window.IDEE;
+      try {
+        var layers = [];
+        (cfg.layers || []).forEach(function (l) {
+          if (!l) return;
+          if (l.kind === "string") { layers.push(l.def); }
+          else if (l.kind === "object" && l.type && IDEE.layer && IDEE.layer[l.type]) {
+            try { layers.push(new IDEE.layer[l.type](l.params || {})); }
+            catch (e) { console.warn("[ventana] Layer " + l.type + " no reconstruible:", e); }
+          }
+        });
+        if (layers.length) _map.addLayers(layers);
+      } catch (e) { console.warn("[ventana] Error añadiendo capas:", e); }
+      try {
+        if (cfg.controls && cfg.controls.length && _map.addControls) _map.addControls(cfg.controls.slice());
+      } catch (e) { console.warn("[ventana] Error añadiendo controles:", e); }
+      try {
+        (cfg.plugins || []).forEach(function (p) {
+          if (!p || !p.name) return;
+          if (IDEE.plugin && IDEE.plugin[p.name]) {
+            try { _map.addPlugin(new IDEE.plugin[p.name](p.params || {})); }
+            catch (e) { console.warn("[ventana] Plugin " + p.name + " no reconstruible:", e); }
+          } else { console.warn("[ventana] Plugin no disponible:", p.name); }
+        });
+      } catch (e) { console.warn("[ventana] Error añadiendo plugins:", e); }
+    }
+
+    function applyControlsVisibility(visible) {
+      _showControls = (visible !== false);
+      var areas = document.querySelectorAll(".m-area");
+      for (var i = 0; i < areas.length; i++) areas[i].style.display = _showControls ? "" : "none";
+    }
+
+    /* ---------- Sincronización de cámara con el maestro ---------- */
+    function send(msg) {
+      msg._sync = true;
+      if (!IS_FILE) {
+        if (window.bcSync) { try { window.bcSync.postMessage(msg); } catch (e) {} }
+      } else if (window.opener) {
+        try { window.opener.postMessage(msg, "*"); } catch (e) {}
+      }
+    }
+
+    function onNativeChange() {
+      if (_prog > 0) return;
+      var msg = { type: "cmpvSync:view", viewId: VID };
+      var ext = readExtent(_map);
+      if (ext) msg.state = { extent: ext };
+      var cz = readCenterZoom(_map);
+      if (cz) {
+        msg.state = msg.state || {};
+        msg.state.lon = cz.lon; msg.state.lat = cz.lat; msg.state.zoom = cz.zoom;
+        // Orientación de la cámara: rotación 2D y heading/pitch/roll 3D.
+        msg.state.rotation = cz.rotation;
+        msg.state.heading = cz.heading;
+        msg.state.pitch = cz.pitch;
+        msg.state.roll = cz.roll;
+      }
+      if (msg.state) send(msg);
+    }
+
+    function wireContinuousSync() {
+      var impl = _map.getMapImpl();
+      if (impl && typeof impl.getView === "function") {
+        var view = impl.getView();
+        view.on("change:center", onNativeChange);
+        view.on("change:resolution", onNativeChange);
+        // La rotación 2D también debe sincronizarse.
+        view.on("change:rotation", onNativeChange);
+      } else if (impl && impl.scene && impl.camera) {
+        impl.camera.percentageChanged = 0.001;
+        impl.camera.changed.addEventListener(onNativeChange);
+      }
+    }
+
+    // Aplica un encuadre recibido del maestro (respeta el modo de
+    // sincronización de la sesión: "extent" total o "center" solo centro).
+    function applyRemote(state) {
+      if (!_map || !state) return;
+      _prog += 1;
+      try {
+        if (_syncMode === "center" && typeof state.lon === "number") {
+          applyCenterOnly(_map, state.lon, state.lat, state);
+        } else if (state.extent && !isRotatedOrientation(state)) {
+          // Extent solo sin rotación: con la cámara rotada el extent es la
+          // caja que envuelve el área girada y encajarla da otra imagen.
+          applyExtent(_map, state.extent, state);
+        } else if (typeof state.lon === "number") {
+          applyView(_map, {
+            lon: state.lon, lat: state.lat, zoom: state.zoom,
+            rotation: state.rotation, heading: state.heading, pitch: state.pitch, roll: state.roll,
+          });
+        }
+      } catch (e) {}
+      setTimeout(function () { _prog = Math.max(0, _prog - 1); }, 0);
+    }
+
+    /* ---------- Construcción del mapa de la vista ---------- */
+    function loadApi(impl) {
+      var suf = (impl === "cesium") ? "cesium" : "ol";
+      return loadCSS(BASE_HOST + "/assets/css/apiidee." + suf + ".min.css")
+        .then(function () { return loadJS(BASE_HOST + "/vendor/browser-polyfill.js"); })
+        .then(function () { return loadJS(BASE_HOST + "/js/apiidee." + suf + ".min.js"); })
+        .then(function () { return loadJS(BASE_HOST + "/js/configuration.js"); })
+        .then(function () {
+          return waitFor(function () { return window.IDEE && window.IDEE.map; }, 8000);
+        });
+    }
+
+    function build(v, impl) {
+      _built = true;
+      _builtImpl = impl;
+      loadApi(impl).then(function () {
+        var IDEE = window.IDEE;
+        if (impl === "cesium") { try { IDEE.config.DPI = 25.4 / 0.28; } catch (e) {} }
+        configBaseLayers();
+        _map = IDEE.map({ container: "mapaDIV" });
+        window._cmpvMap = _map;
+        var applyInitial = function () { if (v.lastView) applyRemote(v.lastView); };
+        try { _map.on(IDEE.evt.COMPLETED, applyInitial); } catch (e) {}
+        waitFor(function () {
+          try {
+            var i = _map.getMapImpl();
+            return i && ((typeof i.getView === "function") || (i.scene && i.camera));
+          } catch (e) { return false; }
+        }, 12000).then(function () {
+          applyInitial();
+          wireContinuousSync();
+          applyConfig(v.config);
+          applyControlsVisibility(_showControls);
+          if (svc) svc.hidden = true;
+          if (aviso) aviso.style.display = "none";
+        }).catch(function () {
+          if (svc) svc.hidden = true;
+          applyConfig(v.config);
+          applyControlsVisibility(_showControls);
+          if (aviso) aviso.style.display = "none";
+        });
+      }).catch(function (err) {
+        if (svc) svc.hidden = true;
+        showAviso("No se pudo cargar la API-CNIG (" + impl + "): " + (err && err.message ? err.message : err));
+      });
+    }
+
+    /* ---------- Recepción de mensajes del maestro ---------- */
+    function onState(snap) {
+      _receivedState = true;
+      if (!snap || !snap.views) return;
+      if (snap.syncMode === "center" || snap.syncMode === "extent") _syncMode = snap.syncMode;
+      if (typeof snap.showControls === "boolean") {
+        _showControls = snap.showControls;
+        // Si el mapa ya está construido, aplica el cambio en vivo (ocultar/
+        // mostrar los controles/plugins). applyControlsVisibility también
+        // guarda _showControls.
+        if (_built) applyControlsVisibility(_showControls);
+      }
+
+      var v = null;
+      (snap.views || []).forEach(function (sv) { if (sv.id === VID) v = sv; });
+      if (!v) {
+        showAviso("La vista \"" + VID + "\" ya no existe en la comparación de la ventana principal.");
+        return;
+      }
+      if (etiqueta) {
+        etiqueta.textContent = v.name || VID;
+        etiqueta.style.display = "";
+      }
+      document.title = (v.name || VID) + " · sincronizada";
+
+      var impl = (v.impl === "cesium") ? "cesium" : "ol";
+      if (!_built) { build(v, impl); return; }
+      if (impl !== _builtImpl) {
+        // El maestro cambió la implementación 2D/3D: recargamos para que
+        // esta página cargue el bundle correcto.
+        location.reload();
+        return;
+      }
+      if (v.lastView) applyRemote(v.lastView);
+    }
+
+    function handle(msg) {
+      if (!msg || typeof msg.type !== "string") return;
+      if (msg.type === "cmpvSync:state") onState(msg.snapshot);
+      else if (msg.type === "cmpvSync:view" && msg.viewId === VID) applyRemote(msg.state);
+    }
+
+    // Conecta y saluda al maestro (con reintentos hasta recibir estado).
+    function connect() {
+      if (!IS_FILE && ("BroadcastChannel" in window)) {
+        try {
+          window.bcSync = new BroadcastChannel("cmpv-sync-" + SID);
+          window.bcSync.onmessage = function (ev) { handle(ev.data); };
+        } catch (e) { window.bcSync = null; }
+      }
+      if (IS_FILE || !window.bcSync) {
+        window.addEventListener("message", function (ev) {
+          var m = ev.data;
+          if (m && m._sync === true) handle(m);
+        });
+      }
+      var tries = 0;
+      (function hello() {
+        send({ type: "cmpvSync:hello" });
+        if (!_receivedState && tries++ < 20) setTimeout(hello, 400);
+      })();
+    }
+
+    connect();
+  }
+
   class miPlugin_comparacionVistas {
     /**
      * @param {Object} options
@@ -534,6 +1004,8 @@
      * @param {Object} [options.layout] Espejo: { type:"grid", rows, cols } o { type:"custom", spec:[1,3,1] }.
      * @param {boolean} [options.sync=true] Sincronizar encuadre entre vistas.
      * @param {boolean} [options.showControls=true] Mostrar controles/plugins de IDEE + botón 2D/3D.
+     * @param {("tab"|"popup")} [options.windowKind="tab"] Cómo abrir la ventana
+     *   sincronizada: "tab" (pestaña reutilizable) o "popup" (ventana nueva).
      *
      * --- Vistas iniciales (cada una con su config de mapa) ---
      * @param {Array<Object>} [options.views] Lista de vistas. Cada vista:
@@ -661,6 +1133,9 @@
       this.syncRole = (qp.get("sync") === "child") ? "child" : "master";
       this.syncSid = qp.get("sid") || null;
       this.syncViewId = null;   // vista elegida para las ventanas sincronizadas
+      // Cómo se abre la ventana sincronizada: "tab" (pestaña reutilizable) o
+      // "popup" (ventana nueva separada). Configurable en Opciones → Ventanas.
+      this.syncWinKind = (this.options.windowKind === "popup") ? "popup" : "tab";
       this._syncChannel = null;
       this._applyingRemote = false;   // suprime republicación al aplicar estado remoto
       this._stateDirty = false;       // debounce de publicación de estado
@@ -959,6 +1434,42 @@
         "</body></html>";
     }
 
+    // Genera el documento HTML completo de la VENTANA sincronizada (la que
+    // antes era fichero mapas/comparacionVistas/ventana.html). Se inyecta con
+    // document.write en una ventana about:blank abierta con window.open, de
+    // modo que el plugin es totalmente AUTOCONTENIDO.
+    // Igual que en _buildVistaSrcdoc: NO usamos <base href> (rompería los Web
+    // Workers de Cesium) y todas las rutas de recursos son ABSOLUTAS contra
+    // PLUGIN_BASE. Los parámetros viajan en window.__CMPV_WINPARAMS (no hay
+    // query string útil en about:blank).
+    _buildVentanaSrcdoc(vid, impl, sid) {
+      var params = { vid: vid, impl: impl, sid: sid };
+      var spinner = (function (rel) {
+        try { return new URL(rel, PLUGIN_BASE || location.href).href; }
+        catch (e) { return rel; }
+      })("../../img/iconos/gear-spinner.svg");
+      return "" +
+        "<!DOCTYPE html><html><head><meta charset=\"UTF-8\">" +
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0\">" +
+        "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">" +
+        "<title>Vista sincronizada</title>" +
+        "<style>" +
+        "html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}" +
+        "#mapaDIV{width:100%;height:100%;position:relative}" +
+        "#cargaSVG{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.85);pointer-events:none}" +
+        "#cargaSVG[hidden]{display:none}#cargaSVG img{width:64px;height:64px}" +
+        "#aviso{display:none;position:fixed;z-index:10000;left:20px;right:20px;bottom:20px;padding:12px 16px;background:#b00020;color:#fff;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.3);font-size:14px;align-items:center}" +
+        "#etiqueta{display:none;position:fixed;z-index:10000;left:20px;top:20px;padding:8px 14px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;font-size:13px;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.3)}" +
+        "</style></head><body>" +
+        "<div id=\"cargaSVG\"><img src=\"" + spinner + "\"></div>" +
+        "<div id=\"aviso\"></div>" +
+        "<div id=\"etiqueta\"></div>" +
+        "<div id=\"mapaDIV\"></div>" +
+        "<script>window.__CMPV_WINPARAMS=" + JSON.stringify(params) + ";</scr" + "ipt>" +
+        "<script>(" + _ventanaBoot.toString() + ")();</scr" + "ipt>" +
+        "</body></html>";
+    }
+
     // Escribe el documento de la vista DENTRO de un iframe about:blank vía
     // document.write. Es el único mecanismo que cumple las 3 restricciones:
     //  - El iframe about:blank modificado por el padre HEREDA el origin real del
@@ -1232,6 +1743,9 @@
     _broadcastControls() {
       var self = this;
       this.views.forEach(function (v) { self._sendControls(v); });
+      // Propaga también a las ventanas sincronizadas: el snapshot incluye
+      // showControls y la ventana lo aplica en onState (applyControlsVisibility).
+      if (this._syncShares()) this._publishState();
     }
 
     // Envía a una vista el aviso de que su contenedor cambió de tamaño y debe
@@ -1453,17 +1967,29 @@
       var target = vid || this.syncViewId || this.activeViewId || (this.views[0] && this.views[0].id);
       var v = this.getView(target);
       if (!v) { alert("No hay ninguna vista para sincronizar."); return; }
-      // ventana.html vive junto a la PÁGINA anfitriona (no junto al plugin):
-      // resuelve la URL relativa a la carpeta de la página actual, que
-      // funciona igual en http(s) y en file:// (location.origin es "null").
-      var base = location.href.split("?")[0];
-      var dir = base.slice(0, base.lastIndexOf("/") + 1);
-      var url = dir + "ventana.html?" + new URLSearchParams({ sid: this.syncSid, vid: v.id }).toString();
-      var win = window.open(url, "cmpv-sync-win-" + v.id);
+      // La ventana ya NO es un fichero (ventana.html): se genera su documento
+      // completo desde el plugin y se inyecta con window.open about:blank +
+      // document.write. Con window.open('', nombre) la nueva ventana recibe
+      // window.opener (necesario para el transporte file://) y es 100%
+      // AUTOCONTENIDA (no depende de ficheros en mapas/).
+      var impl = (v.impl === "cesium") ? "cesium" : "ol";
+      var html = this._buildVentanaSrcdoc(v.id, impl, this.syncSid);
+      // Elige pestaña reutilizable o ventana nueva según syncWinKind (opción
+      // "Abrir como"). Cada modo usa su propio nombre de target para que la
+      // reutilización sea coherente y no colisionen al cambiar el selector.
+      // En ambos casos window.open conserva window.opener (transporte file://).
+      var kind = (this.syncWinKind === "popup") ? "popup" : "tab";
+      var name = (kind === "popup") ? "cmpv-sync-pop-" + v.id : "cmpv-sync-win-" + v.id;
+      var win = (kind === "popup")
+        ? window.open("", name, "width=980,height=720,resizable=yes,scrollbars=yes")
+        : window.open("", name);
       if (!win) {
         alert("El navegador bloqueó la apertura de la ventana. Permite los popups para esta página.");
         return;
       }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
       if (!this._usingBroadcast) {
         // Transporte directo (file://): registra la ventana espejo como par.
         if (!this._syncPeers) this._syncPeers = [];
@@ -1622,6 +2148,11 @@
         '        <span class="cmpv-field__title">Ventanas sincronizadas</span>' +
         '        <label class="cmpv-field">Vista a mostrar' +
         '          <select class="cmpv-select" data-role="sync-view" title="Vista que se mostrará en la ventana sincronizada"></select></label>' +
+        '        <label class="cmpv-field">Abrir como' +
+        '          <select class="cmpv-select" data-role="sync-win-kind" title="Cómo se abre la ventana sincronizada: como pestaña reutilizable o como ventana nueva separada">' +
+        '            <option value="tab">Pestaña</option>' +
+        '            <option value="popup">Ventana nueva</option>' +
+        '          </select></label>' +
         '        <button type="button" class="cmpv-moldbar__btn" data-act="open-sync-win" title="Abrir una ventana sincronizada con esa vista (ideal para dos pantallas)">🔗 Abrir ventana</button>' +
         '        <div class="cmpv-field--sep"></div>' +
         '        <span class="cmpv-field__title">Apariencia de los divisores</span>' +
@@ -1736,6 +2267,8 @@
       if (syncModeSel) syncModeSel.addEventListener("change", function () {
         self.syncMode = this.value;
         if (self.sync) self._resyncFromActive();
+        // Propaga el modo de sincronización a las ventanas sincronizadas.
+        if (self._syncShares()) self._publishState();
       });
       root.querySelector('[data-role="controls"]').addEventListener("change", function () {
         self.showControls = this.checked; self._broadcastControls();
@@ -1859,6 +2392,8 @@
       // --- Ventanas sincronizadas: selector de vista + botón de apertura ---
       var syncViewSel = root.querySelector('[data-role="sync-view"]');
       if (syncViewSel) syncViewSel.addEventListener("change", function () { self.syncViewId = this.value; });
+      var syncWinKindSel = root.querySelector('[data-role="sync-win-kind"]');
+      if (syncWinKindSel) syncWinKindSel.addEventListener("change", function () { self.syncWinKind = this.value; });
       var openSyncWinBtn = root.querySelector('[data-act="open-sync-win"]');
       if (openSyncWinBtn) openSyncWinBtn.addEventListener("click", function () { self.abrirVentanaSincronizada(); });
 
@@ -2882,6 +3417,10 @@
         || "";
       selEl.value = def;
       this.syncViewId = def;
+
+      // Refleja el modo de apertura (pestaña/ventana) seleccionado.
+      var kindEl = this.ui.querySelector('[data-role="sync-win-kind"]');
+      if (kindEl) kindEl.value = (this.syncWinKind === "popup") ? "popup" : "tab";
     }
 
     // Añade un molde nuevo (con una vista libre para recortar) y lo activa.
