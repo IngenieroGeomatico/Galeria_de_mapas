@@ -137,6 +137,17 @@
       /* ---------- Conversión de encuadre ---------- */
       function altitudeForZoom(z) { var base = 40075016.686; return (base / Math.pow(2, z)) * 1.0; }
 
+      // ¿La cámara está rotada/inclinada? Con orientación no trivial el extent
+      // visible NO es comparable entre vistas (es la caja que envuelve el área
+      // girada): hay que sincronizar por centro + zoom + orientación.
+      function isRotatedOrientation(o) {
+        if (!o || typeof o !== "object") return false;
+        return (typeof o.rotation === "number" && Math.abs(o.rotation) > 1e-4)
+          || (typeof o.heading === "number" && Math.abs(o.heading) > 1e-4)
+          || (typeof o.roll === "number" && Math.abs(o.roll) > 1e-4)
+          || (typeof o.pitch === "number" && Math.abs(o.pitch - (-Math.PI / 2)) > 1e-4);
+      }
+
       function readExtent(m) {
         try {
           var impl = m.getMapImpl();
@@ -168,8 +179,9 @@
         return null;
       }
 
-      function applyExtent(m, ext) {
+      function applyExtent(m, ext, orient) {
         if (!ext) return false;
+        orient = orient || {};
         try {
           var impl = m.getMapImpl();
           if (impl && typeof impl.getView === "function") {
@@ -183,11 +195,22 @@
               Math.max(min[0], max[0]), Math.max(min[1], max[1]),
             ];
             view.fit(olExt, { size: size, duration: 0, constrainResolution: false });
+            // La rotación se aplica después del fit (fit no la toca).
+            if (typeof orient.rotation === "number") view.setRotation(orient.rotation);
             return true;
           } else if (impl && impl.scene && impl.camera) {
             var C = window.Cesium;
             var rect = C.Rectangle.fromDegrees(ext.west, ext.south, ext.east, ext.north);
-            impl.camera.setView({ destination: rect });
+            var set = { destination: rect };
+            // Si hay orientación remota, se aplica; si no, se conserva la actual.
+            if (typeof orient.heading === "number" || typeof orient.pitch === "number") {
+              set.orientation = {
+                heading: (typeof orient.heading === "number") ? orient.heading : 0.0,
+                pitch: (typeof orient.pitch === "number") ? orient.pitch : -C.Math.PI_OVER_TWO,
+                roll: (typeof orient.roll === "number") ? orient.roll : 0.0,
+              };
+            }
+            impl.camera.setView(set);
             return true;
           }
         } catch (e) {}
@@ -201,11 +224,17 @@
             var view = impl.getView();
             var c = view.getCenter();
             var ll = window.ol.proj.toLonLat(c, view.getProjection().getCode());
-            return { lon: ll[0], lat: ll[1], zoom: view.getZoom() };
+            // La rotación 2D se incluye siempre (0 = north-up) para que el resto
+            // de vistas puedan replicarla.
+            return { lon: ll[0], lat: ll[1], zoom: view.getZoom(), rotation: view.getRotation() };
           } else if (impl && impl.scene && impl.camera) {
             var C = window.Cesium;
             var carto = impl.camera.positionCartographic;
-            return { lon: C.Math.toDegrees(carto.longitude), lat: C.Math.toDegrees(carto.latitude), zoom: zoomForAltitude(carto.height) };
+            return {
+              lon: C.Math.toDegrees(carto.longitude), lat: C.Math.toDegrees(carto.latitude),
+              zoom: zoomForAltitude(carto.height),
+              heading: impl.camera.heading, pitch: impl.camera.pitch, roll: impl.camera.roll,
+            };
           }
         } catch (e) {}
         return null;
@@ -221,6 +250,8 @@
             var c = window.ol.proj.fromLonLat([v.lon, v.lat], view.getProjection().getCode());
             view.setCenter(c);
             if (typeof v.zoom === "number") view.setZoom(v.zoom);
+            // Rotación 2D del view remoto (0 = north-up).
+            if (typeof v.rotation === "number") view.setRotation(v.rotation);
             return true;
           } else if (impl && impl.scene && impl.camera) {
             var C = window.Cesium;
@@ -229,7 +260,11 @@
               : impl.camera.positionCartographic.height;
             impl.camera.setView({
               destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
-              orientation: { heading: 0.0, pitch: -C.Math.PI_OVER_TWO, roll: 0.0 },
+              orientation: {
+                heading: (typeof v.heading === "number") ? v.heading : 0.0,
+                pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
+                roll: (typeof v.roll === "number") ? v.roll : 0.0,
+              },
             });
             return true;
           }
@@ -238,17 +273,24 @@
       }
 
       // Solo centro (modo sincronización "center": cada vista conserva su zoom).
-      function applyCenterOnly(m, lon, lat) {
+      function applyCenterOnly(m, lon, lat, orient) {
+        orient = orient || {};
         try {
           var impl = m.getMapImpl();
           if (impl && typeof impl.getView === "function") {
             var view = impl.getView();
             view.setCenter(window.ol.proj.fromLonLat([lon, lat], view.getProjection().getCode()));
+            if (typeof orient.rotation === "number") view.setRotation(orient.rotation);
             return true;
           } else if (impl && impl.scene && impl.camera) {
             var C = window.Cesium;
             impl.camera.setView({
               destination: C.Cartesian3.fromDegrees(lon, lat, impl.camera.positionCartographic.height),
+              orientation: {
+                heading: (typeof orient.heading === "number") ? orient.heading : 0.0,
+                pitch: (typeof orient.pitch === "number") ? orient.pitch : -C.Math.PI_OVER_TWO,
+                roll: (typeof orient.roll === "number") ? orient.roll : 0.0,
+              },
             });
             return true;
           }
@@ -308,7 +350,15 @@
         var ext = readExtent(_map);
         if (ext) msg.state = { extent: ext };
         var cz = readCenterZoom(_map);
-        if (cz) { msg.state = msg.state || {}; msg.state.lon = cz.lon; msg.state.lat = cz.lat; msg.state.zoom = cz.zoom; }
+        if (cz) {
+          msg.state = msg.state || {};
+          msg.state.lon = cz.lon; msg.state.lat = cz.lat; msg.state.zoom = cz.zoom;
+          // Orientación de la cámara: rotación 2D y heading/pitch/roll 3D.
+          msg.state.rotation = cz.rotation;
+          msg.state.heading = cz.heading;
+          msg.state.pitch = cz.pitch;
+          msg.state.roll = cz.roll;
+        }
         if (msg.state) send(msg);
       }
 
@@ -318,6 +368,8 @@
           var view = impl.getView();
           view.on("change:center", onNativeChange);
           view.on("change:resolution", onNativeChange);
+          // La rotación 2D también debe sincronizarse.
+          view.on("change:rotation", onNativeChange);
         } else if (impl && impl.scene && impl.camera) {
           impl.camera.percentageChanged = 0.001;
           impl.camera.changed.addEventListener(onNativeChange);
@@ -331,11 +383,16 @@
         _prog += 1;
         try {
           if (_syncMode === "center" && typeof state.lon === "number") {
-            applyCenterOnly(_map, state.lon, state.lat);
-          } else if (state.extent) {
-            applyExtent(_map, state.extent);
+            applyCenterOnly(_map, state.lon, state.lat, state);
+          } else if (state.extent && !isRotatedOrientation(state)) {
+            // Extent solo sin rotación: con la cámara rotada el extent es la
+            // caja que envuelve el área girada y encajarla da otra imagen.
+            applyExtent(_map, state.extent, state);
           } else if (typeof state.lon === "number") {
-            applyView(_map, { lon: state.lon, lat: state.lat, zoom: state.zoom });
+            applyView(_map, {
+              lon: state.lon, lat: state.lat, zoom: state.zoom,
+              rotation: state.rotation, heading: state.heading, pitch: state.pitch, roll: state.roll,
+            });
           }
         } catch (e) {}
         setTimeout(function () { _prog = Math.max(0, _prog - 1); }, 0);
