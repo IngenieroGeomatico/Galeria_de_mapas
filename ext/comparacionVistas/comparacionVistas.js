@@ -162,6 +162,20 @@
     function altitudeForZoom(z) { var base = 40075016.686; return (base / Math.pow(2, z)) * 1.0; }
     function zoomForAltitude(alt) { var base = 40075016.686; return Math.log2(base / Math.max(1, alt)); }
 
+    // ¿La cámara está rotada/inclinada? rotation (OL) ≠ 0, heading ≠ 0, roll ≠ 0
+    // o pitch alejado del nadir (-PI/2) / girado ±PI (mirando hacia arriba).
+    // Con orientación no trivial el extent visible NO es comparable entre
+    // vistas (calculateExtent/computeViewRectangle devuelven la caja que
+    // envolvería el área girada), así que hay que sincronizar por
+    // centro + zoom + orientación en lugar de encajar un extent.
+    function isRotatedOrientation(o) {
+      if (!o || typeof o !== "object") return false;
+      return (typeof o.rotation === "number" && Math.abs(o.rotation) > 1e-4)
+        || (typeof o.heading === "number" && Math.abs(o.heading) > 1e-4)
+        || (typeof o.roll === "number" && Math.abs(o.roll) > 1e-4)
+        || (typeof o.pitch === "number" && Math.abs(o.pitch - (-Math.PI / 2)) > 1e-4);
+    }
+
     // Lee el extent visible actual en grados.
     function readExtent(map) {
       try {
@@ -194,8 +208,9 @@
       return null;
     }
 
-    function applyExtent(map, ext) {
+    function applyExtent(map, ext, orient) {
       if (!ext) return false;
+      orient = orient || {};
       try {
         var impl = map.getMapImpl();
         if (impl && typeof impl.getView === "function") {
@@ -209,11 +224,22 @@
             Math.max(min[0], max[0]), Math.max(min[1], max[1]),
           ];
           view.fit(olExt, { size: size, duration: 0, constrainResolution: false });
+          // La rotación se aplica después del fit (fit no la toca).
+          if (typeof orient.rotation === "number") view.setRotation(orient.rotation);
           return true;
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
           var rect = C.Rectangle.fromDegrees(ext.west, ext.south, ext.east, ext.north);
-          impl.camera.setView({ destination: rect });
+          var set = { destination: rect };
+          // Si hay orientación remota, se aplica; si no, se conserva la actual.
+          if (typeof orient.heading === "number" || typeof orient.pitch === "number") {
+            set.orientation = {
+              heading: (typeof orient.heading === "number") ? orient.heading : 0.0,
+              pitch: (typeof orient.pitch === "number") ? orient.pitch : -C.Math.PI_OVER_TWO,
+              roll: (typeof orient.roll === "number") ? orient.roll : 0.0,
+            };
+          }
+          impl.camera.setView(set);
           return true;
         }
       } catch (e) {}
@@ -227,11 +253,17 @@
           var view = impl.getView();
           var c = view.getCenter();
           var ll = window.ol.proj.toLonLat(c, view.getProjection().getCode());
-          return { lon: ll[0], lat: ll[1], zoom: view.getZoom() };
+          // La rotación 2D se incluye siempre (0 = north-up) para que el resto
+          // de vistas puedan replicarla.
+          return { lon: ll[0], lat: ll[1], zoom: view.getZoom(), rotation: view.getRotation() };
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
           var carto = impl.camera.positionCartographic;
-          return { lon: C.Math.toDegrees(carto.longitude), lat: C.Math.toDegrees(carto.latitude), zoom: zoomForAltitude(carto.height) };
+          return {
+            lon: C.Math.toDegrees(carto.longitude), lat: C.Math.toDegrees(carto.latitude),
+            zoom: zoomForAltitude(carto.height),
+            heading: impl.camera.heading, pitch: impl.camera.pitch, roll: impl.camera.roll,
+          };
         }
       } catch (e) {}
       return null;
@@ -245,6 +277,8 @@
           var c = window.ol.proj.fromLonLat([v.lon, v.lat], view.getProjection().getCode());
           view.setCenter(c);
           if (typeof v.zoom === "number") view.setZoom(v.zoom);
+          // Rotación 2D del view remoto (0 = north-up).
+          if (typeof v.rotation === "number") view.setRotation(v.rotation);
           return true;
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
@@ -254,7 +288,11 @@
             : impl.camera.positionCartographic.height;
           impl.camera.setView({
             destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
-            orientation: { heading: 0.0, pitch: -C.Math.PI_OVER_TWO, roll: 0.0 },
+            orientation: {
+              heading: (typeof v.heading === "number") ? v.heading : 0.0,
+              pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
+              roll: (typeof v.roll === "number") ? v.roll : 0.0,
+            },
           });
           return true;
         }
@@ -274,12 +312,27 @@
 
     function onNativeChange() {
       if (_prog > 0) return;
+      var msg = buildViewMsg();
+      if (msg) postToParent(msg);
+    }
+
+    // Construye el mensaje cmpv:view con extent, centro/zoom y ORIENTACIÓN de
+    // la cámara (rotación 2D y heading/pitch/roll 3D). Lo usan onNativeChange,
+    // updateSize y el postRender de Cesium para que el lastView del padre
+    // conserve siempre la rotación.
+    function buildViewMsg() {
       var msg = { type: "cmpv:view" };
       var ext = readExtent(_map);
       if (ext) msg.extent = ext;
       var cz = readCenterZoom(_map);
-      if (cz) { msg.lon = cz.lon; msg.lat = cz.lat; msg.zoom = cz.zoom; }
-      if (ext || cz) postToParent(msg);
+      if (cz) {
+        msg.lon = cz.lon; msg.lat = cz.lat; msg.zoom = cz.zoom;
+        msg.rotation = (typeof cz.rotation === "number") ? cz.rotation : undefined;
+        msg.heading = (typeof cz.heading === "number") ? cz.heading : undefined;
+        msg.pitch = (typeof cz.pitch === "number") ? cz.pitch : undefined;
+        msg.roll = (typeof cz.roll === "number") ? cz.roll : undefined;
+      }
+      return (ext || cz) ? msg : null;
     }
 
     function wireContinuousSync() {
@@ -288,6 +341,8 @@
         var view = impl.getView();
         view.on("change:center", onNativeChange);
         view.on("change:resolution", onNativeChange);
+        // La rotación 2D también debe sincronizarse.
+        view.on("change:rotation", onNativeChange);
       } else if (impl && impl.scene && impl.camera) {
         impl.camera.percentageChanged = 0.001;
         impl.camera.changed.addEventListener(onNativeChange);
@@ -299,12 +354,18 @@
       if (!d || typeof d.type !== "string") return;
       if (d.type === "cmpv:setView") {
         _prog += 1;
-        if (d.extent) applyExtent(_map, d.extent);
-        else applyView(_map, { lon: d.lon, lat: d.lat, zoom: d.zoom });
+        // Con la cámara rotada/inclinada el extent NO replica la imagen (es la
+        // caja que envuelve el área girada): aplicar centro+zoom+orientación.
+        if (d.extent && !isRotatedOrientation(d)) applyExtent(_map, d.extent, d);
+        else applyView(_map, {
+          lon: d.lon, lat: d.lat, zoom: d.zoom,
+          rotation: d.rotation, heading: d.heading, pitch: d.pitch, roll: d.roll,
+        });
         setTimeout(function () { _prog = Math.max(0, _prog - 1); }, 0);
       } else if (d.type === "cmpv:getView") {
-        var ext = readExtent(_map);
-        if (ext) postToParent({ type: "cmpv:view", extent: ext });
+        // Responder con el estado completo (extent + centro/zoom + orientación).
+        var msg = buildViewMsg();
+        if (msg) postToParent(msg);
       } else if (d.type === "cmpv:setControls") {
         applyControlsVisibility(d.visible !== false);
       } else if (d.type === "cmpv:setConfig") {
@@ -325,12 +386,9 @@
             // Cesium y uno corto para OL.
             var delay = isCesium ? 300 : 0;
             setTimeout(function () {
-              var msg = { type: "cmpv:view" };
-              var ext = readExtent(_map);
-              if (ext) msg.extent = ext;
-              var cz = readCenterZoom(_map);
-              if (cz) { msg.lon = cz.lon; msg.lat = cz.lat; msg.zoom = cz.zoom; }
-              if (ext || cz) postToParent(msg);
+              // Reusar buildViewMsg: incluye extent + centro/zoom + orientación.
+              var msg = buildViewMsg();
+              if (msg) postToParent(msg);
             }, delay);
           }
         } catch (e) {}
@@ -420,12 +478,9 @@
             impl.scene.postRender.addEventListener(function () {
               if (onceRendered) return;
               onceRendered = true;
-              var msg = { type: "cmpv:view" };
-              var ext = readExtent(_map);
-              if (ext) msg.extent = ext;
-              var cz = readCenterZoom(_map);
-              if (cz) { msg.lon = cz.lon; msg.lat = cz.lat; msg.zoom = cz.zoom; }
-              if (ext || cz) postToParent(msg);
+              // Reusar buildViewMsg: incluye extent + centro/zoom + orientación.
+              var msg = buildViewMsg();
+              if (msg) postToParent(msg);
             });
           } catch (e) {}
         }
@@ -454,7 +509,12 @@
       btn.addEventListener("click", function () {
         var target = (IMPL === "cesium") ? "ol" : "cesium";
         var st = readCenterZoom(_map) || { lon: INIT_LON, lat: INIT_LAT, zoom: INIT_ZOOM };
-        postToParent({ type: "cmpv:implChange", impl: target, lon: st.lon, lat: st.lat, zoom: st.zoom });
+        postToParent({
+          type: "cmpv:implChange", impl: target,
+          lon: st.lon, lat: st.lat, zoom: st.zoom,
+          // Orientación actual para que el cambio 2D↔3D la preserve.
+          rotation: st.rotation, heading: st.heading, pitch: st.pitch, roll: st.roll,
+        });
       });
       applyControlsVisibility(_controlsVisible);
     }
@@ -1002,7 +1062,13 @@
         var newImpl = (d.impl === "ol" || d.impl === "cesium") ? d.impl
           : ((v.impl === "cesium") ? "ol" : "cesium");
         v.impl = newImpl;
-        if (typeof d.lon === "number") v.lastView = { lon: d.lon, lat: d.lat, zoom: d.zoom };
+        if (typeof d.lon === "number") {
+          v.lastView = {
+            lon: d.lon, lat: d.lat, zoom: d.zoom,
+            rotation: d.rotation, heading: d.heading, pitch: d.pitch, roll: d.roll,
+          };
+          this._normalizeOrientation(v.lastView);
+        }
         v.ready = false;
         var cz = this._centerZoomFromState(v.lastView);
         this._setIframeDoc(v, newImpl, cz.lon, cz.lat, cz.zoom);
@@ -1016,6 +1082,16 @@
         v.lastView = {};
         if (d.extent) v.lastView.extent = d.extent;
         if (typeof d.lon === "number") { v.lastView.lon = d.lon; v.lastView.lat = d.lat; v.lastView.zoom = d.zoom; }
+        // Orientación de la cámara: rotación 2D y heading/pitch/roll 3D.
+        v.lastView.rotation = d.rotation;
+        v.lastView.heading = d.heading;
+        v.lastView.pitch = d.pitch;
+        v.lastView.roll = d.roll;
+        // Reconciliar 2D↔3D: si solo llega rotation (OL) o solo heading
+        // (Cesium), rellenar el campo equivalente para que las vistas del
+        // otro motor reciban la orientación (misma convención: radianes
+        // positivos en el sentido horario desde el norte).
+        this._normalizeOrientation(v.lastView);
         // Marcar que esta vista ya ha reportado su extent real. El primer
         // cmpv:view es el más importante: si hay vistas encoladas esperando
         // sincronizarse con esta, les enviamos el extent fresco AHORA.
@@ -1031,11 +1107,46 @@
       }
     }
 
+    // Reconciliar orientación entre motores: OL usa `rotation` (2D, radianes,
+    // POSITIVO EN SENTIDO HORARIO: con rotation>0 el mapa gira a la derecha en
+    // pantalla) y Cesium usa `heading` (convención brújula: positivo hacia el
+    // ESTE, por lo que con heading>0 la cámara mira al este y el norte queda a
+    // la izquierda → giro antihorario aparente). Son SENTIDOS OPUESTOS en
+    // pantalla, así que la conversión exige cambiar el signo:
+    //   heading = -rotation   y   rotation = -heading
+    // (verificable con el giro Kappa: sin el signo, la vista espejo rota al
+    // revés).
+    _normalizeOrientation(state) {
+      if (!state || typeof state !== "object") return state;
+      if (typeof state.rotation !== "number" && typeof state.heading === "number") {
+        state.rotation = -state.heading;
+      } else if (typeof state.heading !== "number" && typeof state.rotation === "number") {
+        state.heading = -state.rotation;
+      }
+      return state;
+    }
+
+    // ¿La cámara está rotada/inclinada? Con orientación no trivial el extent
+    // visible NO es comparable entre vistas (calculateExtent OL /
+    // computeViewRectangle Cesium devuelven la caja que envuelve el área
+    // girada): encajarla daría otra imagen y otro zoom. En ese caso hay que
+    // sincronizar por centro + zoom + orientación.
+    _isRotated(state) {
+      if (!state || typeof state !== "object") return false;
+      return (typeof state.rotation === "number" && Math.abs(state.rotation) > 1e-4)
+        || (typeof state.heading === "number" && Math.abs(state.heading) > 1e-4)
+        || (typeof state.roll === "number" && Math.abs(state.roll) > 1e-4)
+        || (typeof state.pitch === "number" && Math.abs(state.pitch - (-Math.PI / 2)) > 1e-4);
+    }
+
     // Envía un encuadre a una vista (marcándolo como programático para que su
     // eco no vuelva a difundirse: el propio iframe ya ignora _prog, pero además
     // marcamos aquí para el caso de que el 'view' llegue antes de asentar).
     _sendSetView(v, state) {
       if (!v || !v.iframe || !v.iframe.contentWindow || !state) return;
+      // Reconciliar orientación 2D↔3D antes de enviar: si solo viene uno de los
+      // campos, derivar el otro con el signo correcto (heading = -rotation).
+      this._normalizeOrientation(state);
       v._progUpdates += 1;
       try {
         var msg = { type: "cmpv:setView", target: v.id };
@@ -1044,11 +1155,19 @@
         if (this.syncMode === "center" && typeof state.lon === "number") {
           msg.lon = state.lon; msg.lat = state.lat;
           // NO enviamos zoom: cada vista mantiene el suyo.
-        } else if (state.extent) {
+        } else if (state.extent && !this._isRotated(state)) {
+          // Extent solo con la cámara norte-arriba: si está rotada/inclinada,
+          // el extent es la caja que envuelve el área girada y encajarla daría
+          // otra imagen; en ese caso se sincroniza centro+zoom+orientación.
           msg.extent = state.extent;
         } else if (typeof state.lon === "number") {
           msg.lon = state.lon; msg.lat = state.lat; msg.zoom = state.zoom;
         }
+        // Orientación de la cámara: rotación 2D y heading/pitch/roll 3D.
+        if (typeof state.rotation === "number") msg.rotation = state.rotation;
+        if (typeof state.heading === "number") msg.heading = state.heading;
+        if (typeof state.pitch === "number") msg.pitch = state.pitch;
+        if (typeof state.roll === "number") msg.roll = state.roll;
         v.iframe.contentWindow.postMessage(msg, "*");
       } catch (e) {}
       // Libera el guard tras un margen (el iframe emite su 'view' de eco poco después).
