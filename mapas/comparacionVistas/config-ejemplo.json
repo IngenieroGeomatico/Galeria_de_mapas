@@ -1,0 +1,55 @@
+{
+  "id": "comparador-pnoa-historico",
+
+  "mode": "mirror",
+  "layout": { "type": "grid", "rows": 1, "cols": 2 },
+  "sync": true,
+  "syncMode": "extent",
+  "showControls": true,
+
+  "lon": -3.70,
+  "lat": 40.42,
+  "zoom": 14,
+
+  "views": [
+    {
+      "name": "PNOA 2004",
+      "implementation": "2D",
+      "center": [-3.70, 40.42],
+      "zoom": 14,
+      "isPrimary": true,
+      "layers": [
+        {
+          "type": "WMS",
+          "params": {
+            "url": "https://www.ign.es/wms/pnoa-historico",
+            "name": "PNOA2004",
+            "legend": "PNOA 2004",
+            "transparent": true,
+            "tiled": true,
+            "version": "1.3.0"
+          }
+        }
+      ]
+    },
+    {
+      "name": "PNOA 2021",
+      "implementation": "2D",
+      "center": [-3.70, 40.42],
+      "zoom": 14,
+      "layers": [
+        {
+          "type": "WMS",
+          "params": {
+            "url": "https://www.ign.es/wms/pnoa-historico",
+            "name": "PNOA2021",
+            "legend": "PNOA 2021",
+            "transparent": true,
+            "tiled": true,
+            "version": "1.3.0"
+          }
+        }
+      ]
+    }
+  ]
+}

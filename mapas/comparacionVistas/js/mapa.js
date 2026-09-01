@@ -16,6 +16,19 @@
    El mapa principal aquí es mínimo: sólo sirve de anfitrión para añadir el
    supraplugin (barra). El área del visualizador la ocupan los iframes de las
    vistas gestionados por el comparador.
+
+   ── Configuración externa por URL ─────────────────────────────────────
+   El parámetro GET "configViewsJSON" permite pasar la URL de un JSON con
+   la configuración del comparador (vistas, modo, layout, etc.), de forma
+   que el mismo visualizador pueda cargarse con distintas configuraciones
+   sin tocar el código. Ejemplo:
+
+     index.html?configViewsJSON=./config-ejemplo.json
+     index.html?configViewsJSON=https://mi-servidor/mi-config.json
+
+   El JSON tiene la misma estructura que el objeto options del constructor
+   de miPlugin_comparacionVistas. Si el parámetro no está presente se usa
+   la configuración por defecto embebida en este fichero.
    ===================================================================== */
 
 const SVGCarga = document.getElementById("cargaSVG");
@@ -23,34 +36,14 @@ window.onload = (event) => {
   SVGCarga.hidden = true;
 };
 
-function mapa() {
-  SVGCarga.hidden = false;
-
-  // Mapa anfitrión mínimo (no se ve: el comparador cubre el área con iframes).
-  mapajs = IDEE.map({ container: "mapaDIV" });
-
-  // Supraplugin (barra) con el comparador de vistas dentro.
-  const supra = new miPlugin_supraplugin({
-    id: 'supra-comparacion',
-    position: 'top',
-    title: 'Comparación de vistas',
-  });
-
-  // Ejemplo del constructor ampliado: arranca en una configuración concreta
-  // (modo espejo 1×2), con dos vistas de config propia —una 2D y otra 3D— y una
-  // capa WMS de ejemplo en la vista principal (se clona al pulsar "Crear").
-  // Se pueden pasar objetos IDEE.layer.* / IDEE.plugin.*: el comparador los
-  // serializa y los reconstruye dentro de cada iframe (no se admiten IDEE.map).
-  const comparador = new miPlugin_comparacionVistas({
+// ── Configuración por defecto (embebida) ────────────────────────────
+function configPorDefecto() {
+  return {
     id: 'comparador-principal',
-
-    // Configuración de comparación inicial.
     mode: 'mirror',
     layout: { type: 'grid', rows: 1, cols: 2 },
     sync: true,
     showControls: true,
-
-    // Vistas iniciales, cada una con su propia configuración de mapa.
     views: [
       {
         name: 'Callejero 2D',
@@ -58,8 +51,6 @@ function mapa() {
         center: [-3.70, 40.42],
         zoom: 12,
         isPrimary: true,
-        // Objeto IDEE.layer: se serializa y se recrea dentro del iframe.
-        // GeoJSON local del repo (sin CORS) con los barrios de Madrid.
         layers: [
           new IDEE.layer.GeoJSON({
             name: 'Barrios de Madrid',
@@ -75,8 +66,53 @@ function mapa() {
         zoom: 12,
       },
     ],
+  };
+}
+
+// ── Rehidratación de capas del JSON ─────────────────────────────────
+// El JSON no puede contener `new IDEE.layer.WMS(...)`, sólo objetos planos
+// { type: "WMS", params: { url, name, ... } }. Esta función recorre las
+// vistas y sustituye cada definición plana por el objeto IDEE.layer.*
+// correspondiente, de modo que el constructor del comparador reciba
+// instancias reales — igual que cuando se hardcodean en JS.
+function rehidratarCapas(config) {
+  if (!config || !Array.isArray(config.views)) return config;
+  config.views.forEach(function (v) {
+    if (!Array.isArray(v.layers)) return;
+    v.layers = v.layers.map(function (l) {
+      // String → se deja tal cual (el plugin ya lo acepta).
+      if (typeof l === "string") return l;
+      // Objeto plano { type, params } → instanciar IDEE.layer.<type>(params).
+      if (l && typeof l.type === "string" && l.params) {
+        var Ctor = IDEE.layer[l.type];
+        if (typeof Ctor === "function") {
+          try { return new Ctor(l.params); } catch (e) {
+            console.warn("[configViewsJSON] No se pudo crear IDEE.layer." + l.type + ":", e);
+          }
+        }
+      }
+      // Cualquier otro formato → se pasa tal cual al plugin.
+      return l;
+    });
+  });
+  return config;
+}
+
+// ── Arranque con configuración (embebida o remota) ──────────────────
+function iniciar(config) {
+  SVGCarga.hidden = false;
+
+  // Mapa anfitrión mínimo (no se ve: el comparador cubre el área con iframes).
+  mapajs = IDEE.map({ container: "mapaDIV" });
+
+  // Supraplugin (barra) con el comparador de vistas dentro.
+  const supra = new miPlugin_supraplugin({
+    id: 'supra-comparacion',
+    position: 'top',
+    title: 'Comparación de vistas',
   });
 
+  const comparador = new miPlugin_comparacionVistas(config);
   supra.addItem(comparador);
   mapajs.addPlugin(supra);
 
@@ -84,5 +120,34 @@ function mapa() {
   return mapajs;
 }
 
-// Arranque.
-mapajs_0 = mapa();
+// ── Lectura del parámetro GET y arranque ─────────────────────────────
+(function () {
+  var params = new URLSearchParams(location.search);
+  var jsonUrl = params.get('configViewsJSON');
+
+  if (!jsonUrl) {
+    // Sin parámetro: usar la configuración por defecto embebida.
+    mapajs_0 = iniciar(configPorDefecto());
+    return;
+  }
+
+  // Con parámetro: cargar el JSON externo.
+  SVGCarga.hidden = false;
+  fetch(jsonUrl)
+    .then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' al cargar ' + jsonUrl);
+      return res.json();
+    })
+    .then(function (config) {
+      // Asegurar un id si el JSON no lo trae.
+      if (!config.id) config.id = 'comparador-principal';
+      // Convertir { type, params } → new IDEE.layer.<type>(params).
+      rehidratarCapas(config);
+      mapajs_0 = iniciar(config);
+    })
+    .catch(function (err) {
+      console.error('[comparacionVistas] Error al cargar configViewsJSON:', err);
+      // Fallback: arrancar con la configuración por defecto.
+      mapajs_0 = iniciar(configPorDefecto());
+    });
+})();
