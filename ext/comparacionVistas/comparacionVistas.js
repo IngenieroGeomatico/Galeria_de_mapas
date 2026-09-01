@@ -1629,6 +1629,15 @@
     _serializeLayer(layer) {
       if (!layer) return null;
       if (typeof layer === "string") return { kind: "string", def: layer };
+      // Ya serializado (viene de un JSON externo con configViewsJSON): devolver tal cual.
+      if (layer.kind === "string" && layer.def) return layer;
+      if (layer.kind === "object" && layer.type && layer.params) return layer;
+      // Objeto plano { type, params } (formato abreviado para JSON externo):
+      // equivale a { kind:"object", type, params }.
+      if (typeof layer.type === "string" && typeof layer.params === "object" && !layer.constructorParameters) {
+        try { return { kind: "object", type: layer.type, params: JSON.parse(JSON.stringify(layer.params)) }; }
+        catch (e) { /* no serializable */ }
+      }
       // Objeto IDEE.layer.*: type ("WMS","GeoJSON","TMS"...) + constructorParameters.
       try {
         var type = layer.type || (layer.constructorParameters && layer.constructorParameters.type);
