@@ -86,14 +86,17 @@
   max-width: 90vw;
   overflow: hidden;
   background: #ffffff;
-  border-left: 0 solid var(--cmpv-orange-2);
-  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.18);
-  transition: width 0.35s ease;
+  border-left: 1px solid #e2e5e9;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.10);
+  transition: width 0.35s ease, box-shadow 0.35s ease;
   z-index: 1000;
+  /* Columnas: el cabecera ocupa su alto real y el cuerpo rellena el resto,
+     garantizando que el scroll inferior quede siempre dentro del viewport. */
+  display: flex;
+  flex-direction: column;
 }
 .cmpv-sidenav--open {
   width: 360px;
-  border-left-width: 3px;
 }
 
 .cmpv-sidenav__header {
@@ -102,10 +105,13 @@
   justify-content: space-between;
   background: var(--cmpv-orange);
   color: #fff;
-  font-weight: 700;
-  font-size: 15px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.2px;
   padding: 14px 16px;
   white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
 }
 .cmpv-sidenav__close {
   border: none;
@@ -124,7 +130,11 @@
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  height: calc(100% - 52px);
+  /* Rellena el alto restante tras el header (flex) y permite scroll interno
+     sin desbordarse por debajo del viewport. */
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
   white-space: normal;
 }
 
@@ -196,6 +206,11 @@
   opacity: 1;
   transition: max-height 0.3s ease-out, opacity 0.3s ease-out, padding-top 0.3s ease-out;
   padding-top: 8px;
+  /* Apila las filas con respiración vertical (evita que los campos se
+     apegoten unas contra otras). */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .cmpv-accordion--collapsed .cmpv-accordion__body {
   max-height: 0;
@@ -230,18 +245,114 @@
   margin: 4px 0;
 }
 .cmpv-color {
-  width: 32px;
-  height: 26px;
-  padding: 1px 2px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  width: 34px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
   cursor: pointer;
   background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+.cmpv-color:hover { border-color: var(--cmpv-orange); }
+.cmpv-color:focus-visible {
+  outline: 2px solid var(--cmpv-orange);
+  outline-offset: 1px;
 }
 .cmpv-range {
   flex: 1;
   min-width: 80px;
   cursor: pointer;
+  appearance: none;
+  background: transparent;
+  height: 22px;
+}
+/* Track del slider (custom, monocromo) */
+.cmpv-range::-webkit-slider-runnable-track {
+  height: 5px;
+  background: #e5e7eb;
+  border-radius: 3px;
+}
+.cmpv-range::-moz-range-track {
+  height: 5px;
+  background: #e5e7eb;
+  border-radius: 3px;
+}
+/* Thumb del slider (naranja, con sombra) */
+.cmpv-range::-webkit-slider-thumb {
+  appearance: none;
+  height: 16px;
+  width: 16px;
+  background: var(--cmpv-orange);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  margin-top: -5.5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.cmpv-range::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  background: var(--cmpv-orange);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.cmpv-range:hover::-webkit-slider-thumb { background: var(--cmpv-orange-2); }
+.cmpv-range:hover::-moz-range-thumb { background: var(--cmpv-orange-2); }
+.cmpv-range:focus-visible { outline: none; }
+
+/* ---- Checkboxes → toggles switch ------------------------------------ */
+/* Aplica a todos los checkboxes del panel (opciones, molde, grid). */
+.cmpv-sidenav__body input[type="checkbox"] {
+  appearance: none;
+  width: 34px;
+  height: 20px;
+  background: #d1d5db;
+  border-radius: 10px;
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  margin: 0;
+}
+.cmpv-sidenav__body input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease;
+}
+.cmpv-sidenav__body input[type="checkbox"]:checked {
+  background: var(--cmpv-orange);
+}
+.cmpv-sidenav__body input[type="checkbox"]:checked::before {
+  transform: translateX(14px);
+}
+.cmpv-sidenav__body input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--cmpv-orange);
+  outline-offset: 2px;
+}
+
+/* ---- Accesibilidad: focus ring naranja en todos los interactivos ---- */
+.cmpv-sidenav__body select:focus-visible,
+.cmpv-sidenav__body input[type="text"]:focus-visible,
+.cmpv-sidenav__body button:focus-visible {
+  outline: 2px solid var(--cmpv-orange);
+  outline-offset: 1px;
+}
+.cmpv-select:focus-visible { border-color: var(--cmpv-orange); }
+/* Valores numéricos junto a sliders (px / % / ° / ×) en naranja. */
+.cmpv-sidenav__body [data-role$="-val"] {
+  color: var(--cmpv-orange);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 20px;
+  text-align: right;
 }
 
 /* Bloque de disposición (filas/columnas) */
@@ -327,7 +438,7 @@
 }
 .cmpv-custom__add:hover { background: rgba(245, 113, 5, 0.16); }
 
-/* ---- Tabla de gestión de vistas (cabecera naranja) ----------------- */
+/* ---- Tabla de gestión de vistas (estilo hairline) ------------------- */
 .cmpv-table {
   width: 100%;
   border-collapse: collapse;
@@ -335,17 +446,27 @@
 }
 .cmpv-table th,
 .cmpv-table td {
-  border: 1px solid #ddd;
-  padding: 8px;
+  padding: 9px 8px;
   text-align: left;
+  vertical-align: middle;
 }
+/* Cabecera sutil: texto naranja sobre fondo neutro, sin relleno plano. */
 .cmpv-table th {
-  background: var(--cmpv-orange);
-  color: #fff;
-  font-weight: 600;
+  background: #faf6f1;
+  color: var(--cmpv-orange);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid #eee;
 }
-.cmpv-table tr:nth-child(even) { background: #f7f7f7; }
-.cmpv-table tr:hover { background: #f0e6dd; }
+/* Separadores solo entre filas (hairline), sin bordes laterales. */
+.cmpv-table td {
+  border: none;
+  border-bottom: 1px solid #f0f0f0;
+}
+.cmpv-table tr:last-child td { border-bottom: none; }
+.cmpv-table tbody tr:hover td { background: #faf5f0; }
 
 .cmpv-vname {
   width: 100%;
