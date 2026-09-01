@@ -162,6 +162,61 @@
     function altitudeForZoom(z) { var base = 40075016.686; return (base / Math.pow(2, z)) * 1.0; }
     function zoomForAltitude(alt) { var base = 40075016.686; return Math.log2(base / Math.max(1, alt)); }
 
+    // Resolución efectiva (metros por píxel) en el CENTRO de la pantalla de una
+    // vista Cesium: distancia sobre el globo entre el rayo del centro y el del
+    // píxel inmediatamente a su izquierda. Se usa como métrica de escala común
+    // con OpenLayers (view.getResolution). Mide el terreno real, así que es
+    // robusta al FoV, al tamaño del canvas e incluso a una cámara inclinada.
+    function getCesiumCenterRes(impl) {
+      try {
+        var C = window.Cesium;
+        var cam = impl.camera, scene = impl.scene;
+        var W = scene.canvas.clientWidth, H = scene.canvas.clientHeight;
+        var c = new C.Cartesian2(Math.floor(W / 2), Math.floor(H / 2));
+        var l = new C.Cartesian2(Math.floor(W / 2) - 1, Math.floor(H / 2));
+        var rc = cam.getPickRay(c), rl = cam.getPickRay(l);
+        var pc = rc ? scene.globe.pick(rc, scene) : undefined;
+        var pl = rl ? scene.globe.pick(rl, scene) : undefined;
+        if (!pc || !pl) return null;
+        return C.Cartesian3.distance(pc, pl);
+      } catch (e) { return null; }
+    }
+
+    // Elevación del terreno (m sobre el elipsoide) bajo la cámara, para
+    // convertir resolución m/px ↔ altitud DESCONTANDO el terreno: la resolución
+    // de un píxel es proporcional a la altura sobre el terreno (alt − elevación),
+    // no a la altitud elipsoidal (que deja la cámara ~660 m demasiado alta sobre
+    // terreno elevado tipo Madrid). Si el terreno aún no está cargado en ese
+    // punto devuelve undefined (se cae a la conversión lineal actual).
+    function cesiumGroundHeight(impl) {
+      try {
+        var C = window.Cesium;
+        var cam = impl.camera, scene = impl.scene;
+        var globe = scene && scene.globe;
+        if (!globe || !cam || !cam.positionCartographic) return undefined;
+        var carto = cam.positionCartographic;
+        var h;
+        if (typeof globe.getHeight === "function") {
+          h = globe.getHeight(new C.Cartographic(carto.longitude, carto.latitude));
+        }
+        if (typeof h !== "number") {
+          // Fallback: elevación del punto del globo al que apunta el centro de
+          // la pantalla (look-at), si getHeight no existe o el tile aún no está.
+          var W = scene.canvas.clientWidth, H = scene.canvas.clientHeight;
+          var ray = cam.getPickRay(new C.Cartesian2(Math.floor(W / 2), Math.floor(H / 2)));
+          var ip = ray ? globe.pick(ray, scene) : undefined;
+          if (ip) h = C.Cartographic.fromCartesian(ip).height;
+        }
+        // Sanidad: descartar valores espurios de un globo aún sin teselas
+        // cargadas (p.ej. −45 524 m). Todo terreno real de la Tierra está
+        // entre −500 m (fondo del mar Muerto) y +9 000 m (Everest); además
+        // el suelo no puede estar POR ENCIMA de la cámara.
+        if (typeof h !== "number" || !isFinite(h)) return undefined;
+        if (h < -500 || h > 9000 || h >= carto.height) return undefined;
+        return h;
+      } catch (e) { return undefined; }
+    }
+
     // ¿La cámara está rotada/inclinada? rotation (OL) ≠ 0, heading ≠ 0, roll ≠ 0
     // o pitch alejado del nadir (-PI/2) / girado ±PI (mirando hacia arriba).
     // Con orientación no trivial el extent visible NO es comparable entre
@@ -281,8 +336,22 @@
           var c = view.getCenter();
           var ll = window.ol.proj.toLonLat(c, view.getProjection().getCode());
           // La rotación 2D se incluye siempre (0 = north-up) para que el resto
-          // de vistas puedan replicarla.
-          return { lon: ll[0], lat: ll[1], zoom: view.getZoom(), rotation: view.getRotation() };
+          // de vistas puedan replicarla. La resolución se normaliza a METROS
+          // REALES de terreno por píxel (misma métrica que la medida en Cesium):
+          // la resolución de OL está en unidades de proyección Web Mercator,
+          // cuyo factor de escala respecto al terreno es cos(latitud). Los
+          // accesos a la vista se protegen con typeof: un impl con getView que
+          // NO sea un view de OpenLayers (p.ej. el de Cesium en API-CNIG) no
+          // debe romper el reporte (view.getResolution es undefined → la
+          // resolución se omite y el receptor cae a la rama por zoom).
+          return {
+            lon: ll[0], lat: ll[1],
+            zoom: (typeof view.getZoom === "function") ? view.getZoom() : undefined,
+            resolution: (typeof view.getResolution === "function")
+              ? view.getResolution() * Math.cos(ll[1] * Math.PI / 180)
+              : undefined,
+            rotation: (typeof view.getRotation === "function") ? view.getRotation() : undefined,
+          };
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
           // Centro de la vista: el punto del globo al que la cámara APUNTA en el
@@ -307,6 +376,7 @@
           return {
             lon: lon, lat: lat,
             zoom: zoomForAltitude(carto.height),
+            resolution: getCesiumCenterRes(impl),
             heading: cam.heading, pitch: cam.pitch, roll: cam.roll,
           };
         }
@@ -325,24 +395,85 @@
           var view = impl.getView();
           var c = window.ol.proj.fromLonLat([v.lon, v.lat], view.getProjection().getCode());
           view.setCenter(c);
-          if (typeof v.zoom === "number") view.setZoom(v.zoom);
+          // La resolución llega en METROS REALES de terreno por píxel (la
+          // emisora la corrigió con el factor de escala cos(lat) si era OL,
+          // y Cesium mide el terreno directamente): deshacer el factor para
+          // convertirla a unidades de proyección Web Mercator. Si no viene,
+          // caer al zoom.
+          if (typeof v.resolution === "number") view.setResolution(v.resolution / Math.cos(v.lat * Math.PI / 180));
+          else if (typeof v.zoom === "number") view.setZoom(v.zoom);
           // Rotación 2D del view remoto (0 = north-up).
           if (typeof v.rotation === "number") view.setRotation(v.rotation);
           return true;
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
-          // Si no viene zoom, conservar la altitud actual de la cámara.
-          var alt = (typeof v.zoom === "number")
-            ? altitudeForZoom(v.zoom)
-            : impl.camera.positionCartographic.height;
-          impl.camera.setView({
-            destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
-            orientation: {
-              heading: (typeof v.heading === "number") ? v.heading : 0.0,
-              pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
-              roll: (typeof v.roll === "number") ? v.roll : 0.0,
-            },
-          });
+          var cam = impl.camera;
+          var curAlt = cam.positionCartographic.height;
+          var applyCam = function (alt) {
+            cam.setView({
+              destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
+              orientation: {
+                heading: (typeof v.heading === "number") ? v.heading : 0.0,
+                pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
+                roll: (typeof v.roll === "number") ? v.roll : 0.0,
+              },
+            });
+          };
+          // Altitud objetivo a partir de la resolución (m/px) remota, que es
+          // la métrica de escala común con OL. La conversión exacta exige
+          // medir la resolución actual del centro del terreno (robusta al FoV,
+          // al canvas, a la inclinación y a la curvatura del globo). Si el
+          // globo aún no puede medir (primer encuadre del arranque), usar la
+          // última calibración res/altitud conocida o la conversión por zoom
+          // como estimación, y REINTENTAR con la medición real en cuanto la
+          // geometría esté lista para no quedarnos en el zoom descalibrado.
+          //
+          var curRes = getCesiumCenterRes(impl);
+          // Guard anti-resync: el padre re-envía el encuadre de la activa
+          // varias veces (_scheduleResync) durante el arranque. Si un
+          // postRender-retry ya espera para esta resolución Y el globo aún
+          // no puede medir (curRes <= 0), no reiniciar: cada intento caería
+          // al fallback altitudeForZoom y pisaría al postRender que SÍ va a
+          // converger. Si el globo YA puede medir (curRes > 0), dejar pasar
+          // para que la rama de terreno aplique directamente.
+          if (typeof v.resolution === "number" &&
+              impl.__cmpvRetryRes === v.resolution &&
+              !(curRes > 0)) {
+            return true; // postRender convergerá cuando el globo esté listo
+          }
+          if (typeof v.resolution === "number" && curRes > 0) {
+            // Terreno consciente: con terreno cargado la resolución es
+            // proporcional a la ALTURA SOBRE EL TERRENO (alt − elevación), no a
+            // la altitud elipsoidal; si no, se cae a la conversión lineal.
+            impl.__cmpvRetryRes = undefined; // convergencia directa
+            var gnd = cesiumGroundHeight(impl);
+            var hAb = (typeof gnd === "number") ? (curAlt - gnd) : curAlt;
+            impl.__cmpvCal = curRes / Math.max(1, hAb);
+            impl.__cmpvGround = gnd;
+            applyCam((typeof gnd === "number") ? (gnd + hAb * (v.resolution / curRes)) : (curAlt * (v.resolution / curRes)));
+          } else if (typeof v.resolution === "number") {
+            // El globo aún no puede medir: usar estimación inicial y DELEGAR
+            // la convergencia real al listener de postRender, que comprueba
+            // en cada frame si getCesiumCenterRes ya responde y ajusta la
+            // altitud en cuanto lo haga (sin ventana fija de timeout).
+            var altEst;
+            var gEst = cesiumGroundHeight(impl);
+            if (gEst === undefined) gEst = (typeof impl.__cmpvGround === "number") ? impl.__cmpvGround : 0;
+            if (impl.__cmpvCal > 0) altEst = gEst + v.resolution / impl.__cmpvCal;
+            else if (typeof v.zoom === "number") altEst = altitudeForZoom(v.zoom);
+            else altEst = curAlt;
+            applyCam(altEst);
+            // Marcar para que el postRender converja cuando el globo esté listo.
+            impl.__cmpvRetryRes = v.resolution;
+            impl.__cmpvRetryView = {
+              lon: v.lon, lat: v.lat,
+              heading: v.heading, pitch: v.pitch, roll: v.roll,
+            };
+          } else if (typeof v.zoom === "number") {
+            applyCam(altitudeForZoom(v.zoom));
+          } else {
+            applyCam(curAlt);
+          }
           return true;
         }
       } catch (e) {}
@@ -358,6 +489,7 @@
     var _prog = 0;
     var _controlsVisible = true;
     var _configApplied = false;
+    var _parentSynced = false; // el padre ya envió cmpv:setView con resolución
 
     function onNativeChange() {
       if (_prog > 0) return;
@@ -376,6 +508,7 @@
       var cz = readCenterZoom(_map);
       if (cz) {
         msg.lon = cz.lon; msg.lat = cz.lat; msg.zoom = cz.zoom;
+        if (typeof cz.resolution === "number") msg.resolution = cz.resolution;
         msg.rotation = (typeof cz.rotation === "number") ? cz.rotation : undefined;
         msg.heading = (typeof cz.heading === "number") ? cz.heading : undefined;
         msg.pitch = (typeof cz.pitch === "number") ? cz.pitch : undefined;
@@ -402,12 +535,16 @@
       var d = ev.data;
       if (!d || typeof d.type !== "string") return;
       if (d.type === "cmpv:setView") {
+        // Si el padre envía resolución, marcar que la sincronización por
+        // resolución ya está activa: applyInitial no debe machacar la altitud.
+        if (typeof d.resolution === "number") _parentSynced = true;
         _prog += 1;
-        // Con la cámara rotada/inclinada el extent NO replica la imagen (es la
-        // caja que envuelve el área girada): aplicar centro+zoom+orientación.
-        if (d.extent && !isRotatedOrientation(d)) applyExtent(_map, d.extent, d);
-        else applyView(_map, {
-          lon: d.lon, lat: d.lat, zoom: d.zoom,
+        // La sincronización es SIEMPRE centro + resolución (m/px) + orientación.
+        // El extent no se usa: con la cámara rotada/inclinada (kappa/omega/phi)
+        // es la caja que envuelve el área girada y encajarla no replica la
+        // imagen. La resolución es la métrica de escala común con el emisor.
+        applyView(_map, {
+          lon: d.lon, lat: d.lat, zoom: d.zoom, resolution: d.resolution,
           rotation: d.rotation, heading: d.heading, pitch: d.pitch, roll: d.roll,
         });
         setTimeout(function () { _prog = Math.max(0, _prog - 1); }, 0);
@@ -498,6 +635,11 @@
       window.mapajs = _map;
 
       var applyInitial = function () {
+        // Si el padre ya sincronizó con resolución (cmpv:setView), no machacar
+        // la altitud que la convergencia de terreno está ajustando: el zoom
+        // inicial (altitudeForZoom) es solo una estimación grosera que pisaría
+        // la altitud real calculada a partir de la resolución m/px del emisor.
+        if (_parentSynced) return;
         _prog += 1;
         applyView(_map, { lon: INIT_LON, lat: INIT_LAT, zoom: INIT_ZOOM });
         setTimeout(function () { _prog = Math.max(0, _prog - 1); }, 0);
@@ -523,15 +665,83 @@
         if (IMPL === "cesium") {
           try {
             var impl = _map.getMapImpl();
-            var onceRendered = false;
+            var firstReported = false;
             impl.scene.postRender.addEventListener(function () {
-              if (onceRendered) return;
-              onceRendered = true;
-              // Reusar buildViewMsg: incluye extent + centro/zoom + orientación.
-              var msg = buildViewMsg();
-              if (msg) postToParent(msg);
+              // 1) Primer reporte: enviar el estado real al padre cuando el
+              //    globo ya pueda medir resolución (tiles cargadas).
+              if (!firstReported) {
+                try {
+                  var msg = buildViewMsg();
+                  if (!msg || typeof msg.resolution !== "number") return;
+                  firstReported = true;
+                  postToParent(msg);
+                } catch (e) {}
+              }
+              // 2) Convergencia diferida de resolución: applyView marcó una
+              //    resolución objetivo (__cmpvRetryRes) porque el globo aún
+              //    no podía medir cuando llegó el primer cmpv:setView del
+              //    padre. En cada frame comprobamos si el globo ya responde;
+              //    en cuanto lo haga, ajustamos la altitud de la cámara para
+              //    igualar la resolución objetivo y limpiamos el marcador.
+              //    Esto sustituye al retry por setTimeout que expiraba antes
+              //    de que las teselas de terreno estuviesen listas.
+              if (typeof impl.__cmpvRetryRes === "number") {
+                try {
+                  var cr = getCesiumCenterRes(impl);
+                  if (cr > 0) {
+                    var tgtRes = impl.__cmpvRetryRes;
+                    impl.__cmpvRetryRes = undefined; // limpiar ANTES de mover
+                    var cam = impl.camera;
+                    var h = cam.positionCartographic.height;
+                    var gnd = cesiumGroundHeight(impl);
+                    impl.__cmpvGround = gnd;
+                    var hAb = (typeof gnd === "number") ? (h - gnd) : h;
+                    impl.__cmpvCal = cr / Math.max(1, hAb);
+                    var a = (typeof gnd === "number")
+                      ? (gnd + hAb * (tgtRes / cr))
+                      : (h * (tgtRes / cr));
+                    if (Math.abs(a - h) > 0.5) {
+                      var rv = impl.__cmpvRetryView || {};
+                      cam.setView({
+                        destination: window.Cesium.Cartesian3.fromDegrees(
+                          rv.lon || window.Cesium.Math.toDegrees(cam.positionCartographic.longitude),
+                          rv.lat || window.Cesium.Math.toDegrees(cam.positionCartographic.latitude),
+                          a),
+                        orientation: {
+                          heading: (typeof rv.heading === "number") ? rv.heading : cam.heading,
+                          pitch: (typeof rv.pitch === "number") ? rv.pitch : cam.pitch,
+                          roll: (typeof rv.roll === "number") ? rv.roll : cam.roll,
+                        },
+                      });
+                    }
+                  }
+                } catch (e) {}
+              }
             });
           } catch (e) {}
+        } else if (IMPL === "ol") {
+          // El primer estado de OL NUNCA llega por eventos: applyInitial aplica
+          // el encuadre con _prog>0 y onNativeChange lo descarta (guard), y sin
+          // un postRender-equivalente no hay otro disparador. Si el padre no
+          // recibe este primer cmpv:view, la ref (vista OL) queda con
+          // _extentReported=false y la vista Cesium encolada en
+          // _pendingSyncViews para siempre: en arranque frío Cesium se queda en
+          // su altitud por defecto y las vistas NO se sincronizan (ratio ~2.11x).
+          // Emitir el estado inicial explícitamente tras asentar el encuadre.
+          // applyInitial pudo fallar en silencio (API-IDEE aún sin cargar del
+          // todo) y el setView de configuración posterior llega con _prog>0
+          // (descartado por onNativeChange): reintentar hasta producir un
+          // mensaje con resolution antes de publicar una sola vez.
+          var firstEmitTries = 0;
+          (function emitFirstView() {
+            var m = buildViewMsg();
+            if (m && typeof m.resolution === "number") {
+              postToParent(m);
+              return;
+            }
+            firstEmitTries += 1;
+            if (firstEmitTries <= 40) setTimeout(emitFirstView, 150);
+          })();
         }
       }).catch(function () {
         if (SVGCarga) SVGCarga.hidden = true;
@@ -668,6 +878,59 @@
     function altitudeForZoom(z) { var base = 40075016.686; return (base / Math.pow(2, z)) * 1.0; }
     function zoomForAltitude(alt) { var base = 40075016.686; return Math.log2(base / Math.max(1, alt)); }
 
+    // Resolución efectiva (metros por píxel) en el CENTRO de la pantalla de una
+    // vista Cesium (ver getCesiumCenterRes en _vistaBoot): distancia sobre el
+    // globo entre el rayo del centro y el del píxel inmediatamente a su
+    // izquierda. Métrica de escala común con OpenLayers (view.getResolution).
+    function getCesiumCenterRes(impl) {
+      try {
+        var C = window.Cesium;
+        var cam = impl.camera, scene = impl.scene;
+        var W = scene.canvas.clientWidth, H = scene.canvas.clientHeight;
+        var c = new C.Cartesian2(Math.floor(W / 2), Math.floor(H / 2));
+        var l = new C.Cartesian2(Math.floor(W / 2) - 1, Math.floor(H / 2));
+        var rc = cam.getPickRay(c), rl = cam.getPickRay(l);
+        var pc = rc ? scene.globe.pick(rc, scene) : undefined;
+        var pl = rl ? scene.globe.pick(rl, scene) : undefined;
+        if (!pc || !pl) return null;
+        return C.Cartesian3.distance(pc, pl);
+      } catch (e) { return null; }
+    }
+
+    // Elevación del terreno (m sobre el elipsoide) bajo la cámara (ver
+    // cesiumGroundHeight en _vistaBoot): convierte resolución m/px ↔ altitud
+    // descontando el terreno, porque la resolución de un píxel es proporcional
+    // a la altura sobre el terreno (alt − elevación), no a la altitud
+    // elipsoidal. undefined si el terreno aún no está cargado en ese punto.
+    function cesiumGroundHeight(impl) {
+      try {
+        var C = window.Cesium;
+        var cam = impl.camera, scene = impl.scene;
+        var globe = scene && scene.globe;
+        if (!globe || !cam || !cam.positionCartographic) return undefined;
+        var carto = cam.positionCartographic;
+        var h;
+        if (typeof globe.getHeight === "function") {
+          h = globe.getHeight(new C.Cartographic(carto.longitude, carto.latitude));
+        }
+        if (typeof h !== "number") {
+          // Fallback: elevación del punto del globo al que apunta el centro de
+          // la pantalla (look-at), si getHeight no existe o el tile aún no está.
+          var W = scene.canvas.clientWidth, H = scene.canvas.clientHeight;
+          var ray = cam.getPickRay(new C.Cartesian2(Math.floor(W / 2), Math.floor(H / 2)));
+          var ip = ray ? globe.pick(ray, scene) : undefined;
+          if (ip) h = C.Cartographic.fromCartesian(ip).height;
+        }
+        // Sanidad: descartar valores espurios de un globo aún sin teselas
+        // cargadas (p.ej. −45 524 m). Todo terreno real de la Tierra está
+        // entre −500 m (fondo del mar Muerto) y +9 000 m (Everest); además
+        // el suelo no puede estar POR ENCIMA de la cámara.
+        if (typeof h !== "number" || !isFinite(h)) return undefined;
+        if (h < -500 || h > 9000 || h >= carto.height) return undefined;
+        return h;
+      } catch (e) { return undefined; }
+    }
+
     // ¿La cámara está rotada/inclinada? Con orientación no trivial el extent
     // visible NO es comparable entre vistas (es la caja que envuelve el área
     // girada): hay que sincronizar por centro + zoom + orientación.
@@ -781,8 +1044,22 @@
           var view = impl.getView();
           var c = view.getCenter();
           var ll = window.ol.proj.toLonLat(c, view.getProjection().getCode());
-          // La rotación 2D se incluye siempre (0 = north-up).
-          return { lon: ll[0], lat: ll[1], zoom: view.getZoom(), rotation: view.getRotation() };
+          // La rotación 2D se incluye siempre (0 = north-up). La resolución se
+          // normaliza a METROS REALES de terreno por píxel (misma métrica que
+          // la medida en Cesium): la resolución de OL está en unidades de
+          // proyección Web Mercator, cuyo factor de escala es cos(latitud). Los
+          // accesos a la vista se protegen con typeof: un impl con getView que
+          // NO sea un view de OpenLayers (p.ej. el de Cesium en API-CNIG) no
+          // debe romper el reporte (view.getResolution es undefined → la
+          // resolución se omite y el receptor cae a la rama por zoom).
+          return {
+            lon: ll[0], lat: ll[1],
+            zoom: (typeof view.getZoom === "function") ? view.getZoom() : undefined,
+            resolution: (typeof view.getResolution === "function")
+              ? view.getResolution() * Math.cos(ll[1] * Math.PI / 180)
+              : undefined,
+            rotation: (typeof view.getRotation === "function") ? view.getRotation() : undefined,
+          };
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
           // Centro de la vista: el punto del globo al que la cámara APUNTA en el
@@ -807,6 +1084,7 @@
           return {
             lon: lon, lat: lat,
             zoom: zoomForAltitude(carto.height),
+            resolution: getCesiumCenterRes(impl),
             heading: cam.heading, pitch: cam.pitch, roll: cam.roll,
           };
         }
@@ -825,23 +1103,92 @@
           var view = impl.getView();
           var c = window.ol.proj.fromLonLat([v.lon, v.lat], view.getProjection().getCode());
           view.setCenter(c);
-          if (typeof v.zoom === "number") view.setZoom(v.zoom);
+          // La resolución llega en METROS REALES de terreno por píxel (la
+          // emisora la corrigió con el factor de escala cos(lat) si era OL,
+          // y Cesium mide el terreno directamente): deshacer el factor para
+          // convertirla a unidades de proyección Web Mercator. Si no viene,
+          // caer al zoom.
+          if (typeof v.resolution === "number") view.setResolution(v.resolution / Math.cos(v.lat * Math.PI / 180));
+          else if (typeof v.zoom === "number") view.setZoom(v.zoom);
           // Rotación 2D del view remoto (0 = north-up).
           if (typeof v.rotation === "number") view.setRotation(v.rotation);
           return true;
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
-          var alt = (typeof v.zoom === "number")
-            ? altitudeForZoom(v.zoom)
-            : impl.camera.positionCartographic.height;
-          impl.camera.setView({
-            destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
-            orientation: {
-              heading: (typeof v.heading === "number") ? v.heading : 0.0,
-              pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
-              roll: (typeof v.roll === "number") ? v.roll : 0.0,
-            },
-          });
+          var cam = impl.camera;
+          var curAlt = cam.positionCartographic.height;
+          var applyCam = function (alt) {
+            cam.setView({
+              destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
+              orientation: {
+                heading: (typeof v.heading === "number") ? v.heading : 0.0,
+                pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
+                roll: (typeof v.roll === "number") ? v.roll : 0.0,
+              },
+            });
+          };
+          // Altitud objetivo a partir de la resolución (m/px) remota, que es
+          // la métrica de escala común con OL. La conversión exacta exige
+          // medir la resolución actual del centro del terreno (robusta al FoV,
+          // al canvas, a la inclinación y a la curvatura del globo). Si el
+          // globo aún no puede medir (primer encuadre del arranque), usar la
+          // última calibración res/altitud conocida o la conversión por zoom
+          // como estimación, y REINTENTAR con la medición real en cuanto la
+          // geometría esté lista para no quedarnos en el zoom descalibrado.
+          //
+          // Guard anti-resync: el padre re-envía el encuadre de la activa
+          // varias veces (_scheduleResync: 0/150/500/1200/2500 ms) durante el
+          // arranque para cubrir la ventana de carga. Si un retry ya está
+          // convergiendo hacia la MISMA resolución objetivo, no reiniciar:
+          // cada reintento restartea getCesiumCenterRes que aún vale null y
+          // cae al fallback altitudeForZoom → la cámara se queda enclavada
+          // en el zoom descalibrado. Solo reiniciar si la resolución cambia.
+          var curRes = getCesiumCenterRes(impl);
+          // Guard anti-resync: el padre re-envía el encuadre de la activa
+          // varias veces (_scheduleResync) durante el arranque. Si un
+          // postRender-retry ya espera para esta resolución Y el globo aún
+          // no puede medir (curRes <= 0), no reiniciar: cada intento caería
+          // al fallback altitudeForZoom y pisaría al postRender que SÍ va a
+          // converger. Si el globo YA puede medir (curRes > 0), dejar pasar
+          // para que la rama de terreno aplique directamente.
+          if (typeof v.resolution === "number" &&
+              impl.__cmpvRetryRes === v.resolution &&
+              !(curRes > 0)) {
+            return true; // postRender convergerá cuando el globo esté listo
+          }
+          if (typeof v.resolution === "number" && curRes > 0) {
+            // Terreno consciente: con terreno cargado la resolución es
+            // proporcional a la ALTURA SOBRE EL TERRENO (alt − elevación), no a
+            // la altitud elipsoidal; si no, se cae a la conversión lineal.
+            impl.__cmpvRetryRes = undefined; // convergencia directa
+            var gnd = cesiumGroundHeight(impl);
+            var hAb = (typeof gnd === "number") ? (curAlt - gnd) : curAlt;
+            impl.__cmpvCal = curRes / Math.max(1, hAb);
+            impl.__cmpvGround = gnd;
+            applyCam((typeof gnd === "number") ? (gnd + hAb * (v.resolution / curRes)) : (curAlt * (v.resolution / curRes)));
+          } else if (typeof v.resolution === "number") {
+            // El globo aún no puede medir: usar estimación inicial y DELEGAR
+            // la convergencia real al listener de postRender, que comprueba
+            // en cada frame si getCesiumCenterRes ya responde y ajusta la
+            // altitud en cuanto lo haga (sin ventana fija de timeout).
+            var altEst;
+            var gEst = cesiumGroundHeight(impl);
+            if (gEst === undefined) gEst = (typeof impl.__cmpvGround === "number") ? impl.__cmpvGround : 0;
+            if (impl.__cmpvCal > 0) altEst = gEst + v.resolution / impl.__cmpvCal;
+            else if (typeof v.zoom === "number") altEst = altitudeForZoom(v.zoom);
+            else altEst = curAlt;
+            applyCam(altEst);
+            // Marcar para que el postRender converja cuando el globo esté listo.
+            impl.__cmpvRetryRes = v.resolution;
+            impl.__cmpvRetryView = {
+              lon: v.lon, lat: v.lat,
+              heading: v.heading, pitch: v.pitch, roll: v.roll,
+            };
+          } else if (typeof v.zoom === "number") {
+            applyCam(altitudeForZoom(v.zoom));
+          } else {
+            applyCam(curAlt);
+          }
           return true;
         }
       } catch (e) {}
@@ -929,6 +1276,8 @@
       if (cz) {
         msg.state = msg.state || {};
         msg.state.lon = cz.lon; msg.state.lat = cz.lat; msg.state.zoom = cz.zoom;
+        // Resolución (m/px reales): métrica de escala común con OL.
+        msg.state.resolution = cz.resolution;
         // Orientación de la cámara: rotación 2D y heading/pitch/roll 3D.
         msg.state.rotation = cz.rotation;
         msg.state.heading = cz.heading;
@@ -953,20 +1302,20 @@
     }
 
     // Aplica un encuadre recibido del maestro (respeta el modo de
-    // sincronización de la sesión: "extent" total o "center" solo centro).
+    // sincronización de la sesión: "extent"/"full" o "center" solo centro).
     function applyRemote(state) {
       if (!_map || !state) return;
       _prog += 1;
       try {
         if (_syncMode === "center" && typeof state.lon === "number") {
           applyCenterOnly(_map, state.lon, state.lat, state);
-        } else if (state.extent && !isRotatedOrientation(state)) {
-          // Extent solo sin rotación: con la cámara rotada el extent es la
-          // caja que envuelve el área girada y encajarla da otra imagen.
-          applyExtent(_map, state.extent, state);
         } else if (typeof state.lon === "number") {
+          // La sincronización es SIEMPRE centro + resolución (m/px) + orientación.
+          // El extent no se usa: con la cámara rotada/inclinada es la caja que
+          // envuelve el área girada y encajarla no replica la imagen. La
+          // resolución es la métrica de escala común con el emisor.
           applyView(_map, {
-            lon: state.lon, lat: state.lat, zoom: state.zoom,
+            lon: state.lon, lat: state.lat, zoom: state.zoom, resolution: state.resolution,
             rotation: state.rotation, heading: state.heading, pitch: state.pitch, roll: state.roll,
           });
         }
@@ -1675,6 +2024,7 @@
         if (typeof d.lon === "number") {
           v.lastView = {
             lon: d.lon, lat: d.lat, zoom: d.zoom,
+            resolution: d.resolution,
             rotation: d.rotation, heading: d.heading, pitch: d.pitch, roll: d.roll,
           };
           this._normalizeOrientation(v.lastView);
@@ -1692,6 +2042,8 @@
         v.lastView = {};
         if (d.extent) v.lastView.extent = d.extent;
         if (typeof d.lon === "number") { v.lastView.lon = d.lon; v.lastView.lat = d.lat; v.lastView.zoom = d.zoom; }
+        // Resolución (m/px reales): métrica de escala común entre motores.
+        v.lastView.resolution = d.resolution;
         // Orientación de la cámara: rotación 2D y heading/pitch/roll 3D.
         v.lastView.rotation = d.rotation;
         v.lastView.heading = d.heading;
@@ -1714,6 +2066,12 @@
         if (v.id === this.moldBaseId) this._updateAllMagnifiers();
         if (!this.sync) return;
         if (v._progUpdates > 0) return;   // eco de un setView que enviamos: ignora
+        // No propagar estados sin resolución medible (m/px reales): la
+        // sincronización es SIEMPRE centro+zoom+resolución, y un view sin m/px
+        // (p.ej. la cámara por defecto de Cesium antes del primer encuadre, o
+        // el globo aún sin geometría) caería al fallback por zoom en la vista
+        // receptora, descalibrándola (~2.11x más zoom en el arranque frío).
+        if (!(v.lastView && v.lastView.resolution > 0)) return;
         // La vista top de un molde con aumentos está "bloqueada" (no debe
         // propagar su estado MAGNIFICADO como si fuera la referencia global),
         // pero si el usuario mueve la lupa sí debe desplazarse la base: se
@@ -1788,18 +2146,18 @@
       v._progUpdates += 1;
       try {
         var msg = { type: "cmpv:setView", target: v.id };
-        // "extent": sync total (misma área visible).
+        // La sincronización es SIEMPRE centro + zoom + resolución (m/px). El
+        // extent no se usa: con la cámara rotada/inclinada (kappa/omega/phi)
+        // es la caja que envuelve el área girada y encajarla no replica la
+        // imagen. La resolución es la métrica de escala común entre las vistas
+        // (OL view.getResolution ↔ Cesium m/px en el centro de la pantalla).
         // "center": solo sincroniza el centro, cada vista conserva su zoom.
         if (this.syncMode === "center" && typeof state.lon === "number") {
           msg.lon = state.lon; msg.lat = state.lat;
           // NO enviamos zoom: cada vista mantiene el suyo.
-        } else if (state.extent && !this._isRotated(state)) {
-          // Extent solo con la cámara norte-arriba: si está rotada/inclinada,
-          // el extent es la caja que envuelve el área girada y encajarla daría
-          // otra imagen; en ese caso se sincroniza centro+zoom+orientación.
-          msg.extent = state.extent;
         } else if (typeof state.lon === "number") {
           msg.lon = state.lon; msg.lat = state.lat; msg.zoom = state.zoom;
+          if (typeof state.resolution === "number") msg.resolution = state.resolution;
         }
         // Orientación de la cámara: rotación 2D y heading/pitch/roll 3D.
         if (typeof state.rotation === "number") msg.rotation = state.rotation;
@@ -1840,6 +2198,12 @@
       ids.forEach(function (id) {
         var v = self.getView(id);
         if (!v || !v.ready || !sourceView.lastView) return;
+        // No auto-enviarse a sí mismo: si la vista que acaba de reportar es la
+        // que estaba encolada esperando a la ref, este auto-envío subiría su
+        // _progUpdates y el guard de _handleViewMessage (eco de un setView
+        // nuestro) suprimiría el broadcast a las demás vistas: la ref NUNCA
+        // recibiría el estado y el arranque frío quedaría sin sincronizar.
+        if (v === sourceView) return;
         self._sendSetView(v, sourceView.lastView);
       });
     }
