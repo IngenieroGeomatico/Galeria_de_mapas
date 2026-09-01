@@ -181,8 +181,16 @@
         if (r < -Math.PI) r += 2 * Math.PI;
         return r;
       }
-      return (typeof o.rotation === "number" && Math.abs(norm(o.rotation)) > 1e-4)
-        || (typeof o.heading === "number" && Math.abs(norm(o.heading)) > 1e-4)
+      // Umbral de giro Kappa (rotation/heading): al girar la vista y volver a
+      // giro 0, OL deja un ángulo residual NO múltiplo exacto de 2π (p.ej.
+      // -2π + 0.05). Si se considera "rotado" se sincroniza por centro+zoom y la
+      // conversión zoom→altitud deja en Cesium ~2.18x más zoom. Con giro residual
+      // pequeño (<3°) el extent encaja casi exacto (error <0.2%), así que se
+      // relaja el umbral de Kappa a 3° (0.0524 rad) manteniendo el de pitch
+      // (inclinación 3D, que sí rompe el extent) estricto.
+      var KAPPA = 0.0524; // 3° en radianes
+      return (typeof o.rotation === "number" && Math.abs(norm(o.rotation)) > KAPPA)
+        || (typeof o.heading === "number" && Math.abs(norm(o.heading)) > KAPPA)
         || (typeof o.roll === "number" && Math.abs(norm(o.roll)) > 1e-4)
         || (typeof o.pitch === "number" && Math.abs(o.pitch - (-Math.PI / 2)) > 1e-4);
     }
@@ -277,11 +285,29 @@
           return { lon: ll[0], lat: ll[1], zoom: view.getZoom(), rotation: view.getRotation() };
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
-          var carto = impl.camera.positionCartographic;
+          // Centro de la vista: el punto del globo al que la cámara APUNTA en el
+          // centro de la pantalla (look-at), no la posición de la cámara. Con la
+          // cámara inclinada (pitch/roll, omega/phi) ambos puntos difieren y usar
+          // la posición desplazaría la vista sincronizada lejos de donde se mira.
+          var cam = impl.camera, scene = impl.scene;
+          var lon, lat;
+          try {
+            var ss = new C.Cartesian2(Math.floor(scene.canvas.clientWidth / 2), Math.floor(scene.canvas.clientHeight / 2));
+            var ray = cam.getPickRay(ss);
+            var ip = ray ? scene.globe.pick(ray, scene) : undefined;
+            if (ip) {
+              var cc = C.Cartographic.fromCartesian(ip);
+              lon = C.Math.toDegrees(cc.longitude);
+              lat = C.Math.toDegrees(cc.latitude);
+            }
+          } catch (e) {}
+          var carto = cam.positionCartographic;
+          if (typeof lon !== "number") lon = C.Math.toDegrees(carto.longitude);
+          if (typeof lat !== "number") lat = C.Math.toDegrees(carto.latitude);
           return {
-            lon: C.Math.toDegrees(carto.longitude), lat: C.Math.toDegrees(carto.latitude),
+            lon: lon, lat: lat,
             zoom: zoomForAltitude(carto.height),
-            heading: impl.camera.heading, pitch: impl.camera.pitch, roll: impl.camera.roll,
+            heading: cam.heading, pitch: cam.pitch, roll: cam.roll,
           };
         }
       } catch (e) {}
@@ -658,8 +684,15 @@
         if (r < -Math.PI) r += 2 * Math.PI;
         return r;
       }
-      return (typeof o.rotation === "number" && Math.abs(norm(o.rotation)) > 1e-4)
-        || (typeof o.heading === "number" && Math.abs(norm(o.heading)) > 1e-4)
+      // Umbral de giro Kappa (rotation/heading): al volver a giro 0, OL deja un
+      // ángulo residual NO múltiplo exacto de 2π que, si se considera "rotado",
+      // fuerza la sincronización por centro+zoom (conversión zoom→altitud que
+      // deja en Cesium ~2.18x más zoom). Con giro residual <3° el extent encaja
+      // casi exacto, así que se relaja el umbral de Kappa a 3° (0.0524 rad) y se
+      // mantiene estricto el de pitch (inclinación 3D, que sí rompe el extent).
+      var KAPPA = 0.0524; // 3° en radianes
+      return (typeof o.rotation === "number" && Math.abs(norm(o.rotation)) > KAPPA)
+        || (typeof o.heading === "number" && Math.abs(norm(o.heading)) > KAPPA)
         || (typeof o.roll === "number" && Math.abs(norm(o.roll)) > 1e-4)
         || (typeof o.pitch === "number" && Math.abs(o.pitch - (-Math.PI / 2)) > 1e-4);
     }
@@ -752,11 +785,29 @@
           return { lon: ll[0], lat: ll[1], zoom: view.getZoom(), rotation: view.getRotation() };
         } else if (impl && impl.scene && impl.camera) {
           var C = window.Cesium;
-          var carto = impl.camera.positionCartographic;
+          // Centro de la vista: el punto del globo al que la cámara APUNTA en el
+          // centro de la pantalla (look-at), no la posición de la cámara. Con la
+          // cámara inclinada (pitch/roll, omega/phi) ambos puntos difieren y usar
+          // la posición desplazaría la vista sincronizada lejos de donde se mira.
+          var cam = impl.camera, scene = impl.scene;
+          var lon, lat;
+          try {
+            var ss = new C.Cartesian2(Math.floor(scene.canvas.clientWidth / 2), Math.floor(scene.canvas.clientHeight / 2));
+            var ray = cam.getPickRay(ss);
+            var ip = ray ? scene.globe.pick(ray, scene) : undefined;
+            if (ip) {
+              var cc = C.Cartographic.fromCartesian(ip);
+              lon = C.Math.toDegrees(cc.longitude);
+              lat = C.Math.toDegrees(cc.latitude);
+            }
+          } catch (e) {}
+          var carto = cam.positionCartographic;
+          if (typeof lon !== "number") lon = C.Math.toDegrees(carto.longitude);
+          if (typeof lat !== "number") lat = C.Math.toDegrees(carto.latitude);
           return {
-            lon: C.Math.toDegrees(carto.longitude), lat: C.Math.toDegrees(carto.latitude),
+            lon: lon, lat: lat,
             zoom: zoomForAltitude(carto.height),
-            heading: impl.camera.heading, pitch: impl.camera.pitch, roll: impl.camera.roll,
+            heading: cam.heading, pitch: cam.pitch, roll: cam.roll,
           };
         }
       } catch (e) {}
@@ -1711,8 +1762,16 @@
         if (r < -Math.PI) r += 2 * Math.PI;
         return r;
       }
-      if (typeof state.rotation === "number" && Math.abs(norm(state.rotation)) > 1e-4) return true;
-      if (typeof state.heading === "number" && Math.abs(norm(state.heading)) > 1e-4) return true;
+      // Umbral de giro Kappa (rotation/heading): al girar la vista y volver a
+      // giro 0, OL deja un ángulo residual NO múltiplo exacto de 2π que, si se
+      // considera "rotado", fuerza la sincronización por centro+zoom (conversión
+      // zoom→altitud que deja en Cesium ~2.18x más zoom). Con giro residual <3°
+      // el extent encaja casi exacto (error <0.2%), así que se relaja el umbral
+      // de Kappa a 3° (0.0524 rad) y se mantiene estricto el de pitch (inclinación
+      // 3D, que sí rompe el extent).
+      var KAPPA = 0.0524; // 3° en radianes
+      if (typeof state.rotation === "number" && Math.abs(norm(state.rotation)) > KAPPA) return true;
+      if (typeof state.heading === "number" && Math.abs(norm(state.heading)) > KAPPA) return true;
       if (typeof state.roll === "number" && Math.abs(norm(state.roll)) > 1e-4) return true;
       if (typeof state.pitch === "number" && Math.abs(state.pitch - (-Math.PI / 2)) > 1e-4) return true;
       return false;
