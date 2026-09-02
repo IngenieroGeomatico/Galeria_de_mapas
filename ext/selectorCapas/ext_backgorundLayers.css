@@ -19,13 +19,13 @@
 }
 
 /* ── Contenedor del plugin (estructura del framework) ────────────── */
-/* IMPORTANTE: el ancho se fija en el CONTENEDOR INTERNO (.m-herramienta),
-   NO en .m-panel. Así, cuando el panel se pliega, el panel colapsado solo
-   mide su botón (~40px) y el botón vuelve a ser circular de forma natural
-   (igual que en vueloFotogrametrico/estereoscopia). Poner el ancho en
-   .m-panel es lo que estiraba el botón plegado y lo convertía en elipse. */
+/* IMPORTANTE: el ancho NO se fija aquí: se adapta automáticamente al
+   contenido (el grid de miniaturas). Así, con más capas el panel crece y
+   con menos se encoge, pero cada miniatura mide siempre lo mismo. Cuando
+   el panel se pliega, el panel colapsado solo mide su botón (~40px) y el
+   botón vuelve a ser circular de forma natural. */
 .g-herramienta_baseLayer .m-control.m-container.m-herramienta {
-  width: 320px;
+  width: auto;
   display: flex !important;
   flex-direction: column;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -38,15 +38,17 @@
 }
 
 /* ── Grid de imágenes ───────────────────────────────────────────── */
-/* minmax(0,1fr) fuerza columnas estrictamente iguales: todas las
-   imágenes quedan del mismo tamaño, sin que una se aplaste. */
+/* display:inline-grid + width:auto: el grid ocupa solo el espacio de sus
+   columnas (fijas a 110px en el JS), por lo que el panel se ajusta al
+   número de capas en lugar de estrechar las imágenes. */
 .bl-grid {
-  display: grid;
+  display: inline-grid;
+  width: auto;
   gap: 10px;
   padding: 10px;
   background: #f5f6fa;
   border-radius: 8px;
-  grid-auto-rows: minmax(0, 1fr);
+  grid-auto-rows: 110px;
 }
 
 /* ── Cada item (label que envuelve radio + thumbnail) ───────────── */
