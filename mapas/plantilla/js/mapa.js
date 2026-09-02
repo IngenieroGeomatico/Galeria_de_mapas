@@ -169,7 +169,7 @@ function pluginCapasBaseFunc() {
 }
 
 function pluginCapasSuperpuestasFunc() {
-  return new miPlugin_layerSwitcher()
+  return new miPlugin_layerSwitcher({ controlType: 'radio' })
 }
 
 function updateConfigBaseLayer() {
