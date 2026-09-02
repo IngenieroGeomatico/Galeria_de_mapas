@@ -81,12 +81,14 @@
   margin: 0.5em 0;
 }
 
-.overlay-layer-selector input[type="radio"] {
+.overlay-layer-selector input[type="radio"],
+.overlay-layer-selector input[type="checkbox"] {
   accent-color: #0078d4;
   /* color azul tipo Microsoft */
   margin-right: 0.5em;
   transform: scale(1.2);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .overlay-layer-selector label {
@@ -95,4 +97,53 @@
   color: #222;
   display: flex;
   align-items: center;
+}
+
+/* Nombre de la capa: ocupa el espacio sobrante, alineado a la izquierda */
+.overlay-layer-selector .ls-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Ojito de visibilidad por capa ────────────────────────────────── */
+/* Botón que muestra si la capa esta visible (abierto) u oculta (cerrado)
+   y permite alternarla. Colocado al final de cada fila. */
+.overlay-layer-selector .ls-eye {
+  flex-shrink: 0;
+  margin-left: 0.4em;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.overlay-layer-selector .ls-eye:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.overlay-layer-selector .ls-eye:active {
+  transform: scale(0.9);
+}
+
+/* Capa visible: ojito azul claro (relacionado con el estado activo) */
+.overlay-layer-selector .ls-eye-on {
+  background: #eaf3fc;
+  border: 1px solid #d3e4f5;
+}
+
+/* Capa oculta: el ojo se atenúa para señalar que no se ve */
+.overlay-layer-selector .ls-eye-off {
+  opacity: 0.55;
+  background: transparent;
 }
