@@ -12,6 +12,10 @@ class miPlugin_layerSwitcher {
     // En modo radio, al iniciar se fuerza que una sola capa quede visible
     // (excluyente) aunque el mapa las cree todas visibles.
     this._initialRadioApplied = false;
+    // idLayer de la capa cuyo desplegable de opciones (transparencia) está
+    // abierto. Se conserva entre re-renders para no cerrarlo al alternar
+    // la visibilidad de otra capa.
+    this._optionsOpen = null;
   }
 
   getHelp() {
@@ -26,6 +30,9 @@ class miPlugin_layerSwitcher {
   }
 
   addTo(map) {
+    // Referencia a la instancia para los handlers globales que necesitan
+    // acceder a this._optionsOpen / this.controlType.
+    const self = this;
     const panelExtra = new IDEE.ui.Panel('toolsExtra_layerSwitcher', {
       collapsible: true,
       className: 'g-herramienta_selectorCapa',
@@ -97,13 +104,27 @@ class miPlugin_layerSwitcher {
           const inputId = `layer_${index}_layerSwitcher`;
           // icono de ojo: abierto = capa visible, tachado/cerrado = oculta
           const eyeIcon = visible ? '👁' : '🚫';
+          // Transparencia actual en % (100 = totalmente transparente).
+          // La API usa opacidad 0..1, asi que transparencia = (1 - opacity).
+          let opacity = 1;
+          try { if (layer.getOpacity !== undefined) opacity = layer.getOpacity() || 0; } catch (e) { /* ignorar */ }
+          const transpPct = Math.round((1 - opacity) * 100);
+          const optionsOpen = this._optionsOpen === index;
           return `
             <li>
               <label>
                 <input id="${inputId}" type="${isRadio ? 'radio' : 'checkbox'}" ${isChecked} onchange="toggleLayerVisibility('${index}', '${this.controlType}')">
                 <span class="ls-nombre">${layerName}</span>
                 <button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}', '${this.controlType}', true)">${eyeIcon}</button>
+                <button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>
               </label>
+              <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
+                <div class="ls-option-row">
+                  <span class="ls-option-label" title="Transparencia de la capa">Transparencia</span>
+                  <input type="range" min="0" max="100" value="${transpPct}" class="ls-opacity-slider" aria-label="Transparencia de ${layerName}" oninput="setLayerOpacity('${index}', this.value, this)">
+                  <span class="ls-option-value">${transpPct}%</span>
+                </div>
+              </div>
             </li>`;
         }).join('');
 
@@ -165,6 +186,35 @@ class miPlugin_layerSwitcher {
           eye.title = visible ? 'Ocultar capa' : 'Mostrar capa';
         }
         if (cb) cb.checked = visible;
+      }
+    };
+
+    // ── Desplegable de opciones por capa ────────────────────────────────
+    // Abre/cierra el panel de opciones de una capa (por ahora transparencia).
+    // Conserva en self._optionsOpen que capa tiene el panel abierto para no
+    // cerrarlo al re-renderizar (p.ej. al alternar la visibilidad de otra).
+    window.toggleLayerOptions = function (index) {
+      self._optionsOpen = self._optionsOpen === index ? null : index;
+      renderLayerList();
+    };
+
+    // ── Slider de transparencia ─────────────────────────────────────────
+    // transpPct es 0..100 (0 = opaco, 100 = totalmente transparente). La API
+    // usa opacidad 0..1, asi que transladamos: opacity = 1 - transp/100.
+    window.setLayerOpacity = function (index, transpPct, sliderEl) {
+      const matches = map.getLayers().filter(layer => {
+        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
+      });
+      const layer = matches[0];
+      const pct = Math.max(0, Math.min(100, Number(transpPct) || 0));
+      if (layer && layer.setOpacity) {
+        layer.setOpacity(1 - pct / 100);
+      }
+      // Actualiza solo el texto del valor asociado al slider, sin re-render
+      // (re-renderizar perderia el foco mientras se arrastra).
+      if (sliderEl && sliderEl.parentElement) {
+        const val = sliderEl.parentElement.querySelector('.ls-option-value');
+        if (val) val.textContent = pct + '%';
       }
     };
 

@@ -147,3 +147,87 @@
   opacity: 0.55;
   background: transparent;
 }
+
+/* ── Botón de opciones (desplegable) ─────────────────────────────── */
+/* Chevron/flecha hacia abajo: abre el panel de opciones de la capa. */
+.overlay-layer-selector .ls-options {
+  flex-shrink: 0;
+  margin-left: 0.15em;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  color: #555;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.15s, color 0.2s;
+}
+
+.overlay-layer-selector .ls-options:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #1a1a1a;
+}
+
+/* Estado abierto: flecha rotada y resaltada */
+.overlay-layer-selector .ls-options-open {
+  transform: rotate(180deg);
+  color: #0078d4;
+  background: #eaf3fc;
+}
+
+/* ── Panel desplegable de opciones de la capa ────────────────────── */
+/* Colapsado por defecto (altura 0, oculto); con .open se expande. */
+.overlay-layer-selector .ls-options-panel {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.25s ease, opacity 0.25s ease, margin 0.25s ease;
+  margin-left: 1.6em;
+}
+
+.overlay-layer-selector .ls-options-panel.open {
+  max-height: 80px;
+  opacity: 1;
+  margin-top: 0.15em;
+  margin-bottom: 0.15em;
+}
+
+/* Fila de opcion (slider + etiqueta + valor) */
+.overlay-layer-selector .ls-option-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  background: #f7f9fc;
+  border: 1px solid #e3e9f2;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.overlay-layer-selector .ls-option-label {
+  font-size: 0.85em;
+  color: #444;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Slider de transparencia: ocupa el espacio disponible */
+.overlay-layer-selector .ls-opacity-slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: #0078d4;
+  cursor: pointer;
+}
+
+.overlay-layer-selector .ls-option-value {
+  font-size: 0.8em;
+  color: #0078d4;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: right;
+}
