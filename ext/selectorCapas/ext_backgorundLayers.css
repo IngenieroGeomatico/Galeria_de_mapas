@@ -1,0 +1,80 @@
+/* =================================================================
+   miPlugin_baseLayer — estilos del selector visual de capas base
+   ================================================================= */
+
+/* ── Icono del botón colapsado ──────────────────────────────────── */
+.g-herramienta_baseLayer .m-tools:before {
+  content: "🗺";
+  font-size: 22px;
+  font-family: -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+/* ── Grid de imágenes ───────────────────────────────────────────── */
+.bl-grid {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+/* ── Cada item (label que envuelve radio + imagen + texto) ─────── */
+.bl-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  border: 3px solid transparent;
+  border-radius: 8px;
+  padding: 4px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background: #fff;
+}
+
+.bl-item:hover {
+  border-color: #a0c4e8;
+  box-shadow: 0 0 0 1px #a0c4e8;
+}
+
+/* ── Radio oculto ───────────────────────────────────────────────── */
+.bl-radio {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ── Selección activa: borde azul ───────────────────────────────── */
+.bl-radio:checked + .bl-img {
+  /* no-op: el borde va en el label padre */
+}
+.bl-item:has(.bl-radio:checked) {
+  border-color: #0078d4;
+  box-shadow: 0 0 0 1px #0078d4;
+}
+
+/* ── Imagen cuadrada ────────────────────────────────────────────── */
+.bl-img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 4px;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Etiqueta de texto bajo la imagen ───────────────────────────── */
+.bl-label {
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.2;
+  margin-top: 3px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
