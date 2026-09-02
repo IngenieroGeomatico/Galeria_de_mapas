@@ -9,28 +9,32 @@
   font-family: -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
 }
 
-/* ── Panel: ancho y alto suficiente para mostrar todo el contenido ─ */
-/* IDEE fija un ancho de 250px en .m-panel; lo ampliamos para que el
-   grid y las miniaturas se vean con holgura. */
-.g-herramienta_baseLayer.m-panel {
-  width: 360px;
-  min-width: 300px;
-  overflow: visible;
+/* ── Fondo y sombra del panel (scopeado, como vueloFotogrametrico) ── */
+.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer.opened {
+  background-color: transparent !important;
 }
-/* El contenedor padre .m-area ajusta su ancho al panel */
-.m-area:has(.g-herramienta_baseLayer) {
-  width: auto;
+.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer,
+.m-panel.g-herramienta_baseLayer>button {
+  box-shadow: none;
 }
+
+/* ── Contenedor del plugin (estructura del framework) ────────────── */
+/* IMPORTANTE: el ancho se fija en el CONTENEDOR INTERNO (.m-herramienta),
+   NO en .m-panel. Así, cuando el panel se pliega, el panel colapsado solo
+   mide su botón (~40px) y el botón vuelve a ser circular de forma natural
+   (igual que en vueloFotogrametrico/estereoscopia). Poner el ancho en
+   .m-panel es lo que estiraba el botón plegado y lo convertía en elipse. */
+.g-herramienta_baseLayer .m-control.m-container.m-herramienta {
+  width: 420px;
+  display: flex !important;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #1a1a1a;
+}
+
 .g-herramienta_baseLayer .m-panel-controls {
   max-height: none !important;
-  overflow-y: auto;
-}
-/* El panel es más ancho (360px) pero los contenedores internos quedan
-   fijados a 250px por el CSS de IDEE; los forzamos a ocupar el 100%. */
-.g-herramienta_baseLayer .m-panel-controls,
-.g-herramienta_baseLayer .m-control.m-container.m-herramienta,
-.g-herramienta_baseLayer .m-herramienta-baseLayer {
-  width: 100%;
 }
 
 /* ── Grid de imágenes ───────────────────────────────────────────── */
@@ -72,7 +76,7 @@
   background: #eaf3fc;
 }
 
-/* ── Contenedor de la imagen + etiqueta superpuesta ─────────────── */
+/* ── Contenedor de la imagen + barra de título al pie ──────────── */
 .bl-thumb {
   position: relative;
   width: 100%;
@@ -82,6 +86,8 @@
 }
 
 /* ── Imagen cuadrada al mismo tamaño en todos los items ─────────── */
+/* Tamaño mayor que antes (~140px por columna con panel de 360px y
+   2 columnas) para que el pie de texto se lea con holgura. */
 .bl-img {
   width: 100%;
   height: 100%;
@@ -92,28 +98,28 @@
   transition: transform 0.35s ease;
 }
 
-/* ── Etiqueta superpuesta en el centro de la imagen ─────────────── */
-.bl-label {
+/* ── Barra de título al pie de la miniatura ─────────────────────── */
+/* Texto legible: fondo sólido blanco-gris, letra oscura y grande.
+   Se apoya sobre el borde inferior de la imagen (no en el centro). */
+.bl-title {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 90%;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.15;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
-  border-radius: 6px;
-  padding: 6px 8px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 6px;
   box-sizing: border-box;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: background 0.25s, transform 0.25s;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1a1a1a;
+  background: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 /* ── Efecto hover sobre la imagen ───────────────────────────────── */
@@ -121,23 +127,38 @@
   transform: scale(1.08);
 }
 
-/* Viñeta de oscurecimiento que aparece al pasar el ratón */
-.bl-item:hover .bl-thumb::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.2);
-  transition: background 0.25s;
-}
-
-/* Etiqueta resalta sobre el oscurecimiento */
-.bl-item:hover .bl-label {
-  background: rgba(0, 120, 212, 0.85);
-  transform: translate(-50%, -50%) scale(1.06);
+/* En hover, la barra de título se oscurece ligeramente para dar
+   contraste con la imagen escalada. */
+.bl-item:hover .bl-title {
+  background: rgba(255, 255, 255, 0.97);
 }
 
 /* ── Elevación sutil del item completo en hover ─────────────────── */
 .bl-item:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Cabecera / título del panel (arrastrable) ──────────────────── */
+/* Mismo patrón que vueloFotogrametrico/estereoscopia. */
+.g-herramienta_baseLayer .m-herramienta-header {
+  background-color: #71a7d3;
+  color: #fff;
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  height: 40px;
+  line-height: 40px;
+  padding: 0 5px;
+  text-align: center;
+  width: 100%;
+  cursor: move;
+}
+
+/* Contenido dinámico del plugin */
+.g-herramienta_baseLayer .m-herramienta-baseLayer {
+  padding: 10px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  background-color: #fff;
 }

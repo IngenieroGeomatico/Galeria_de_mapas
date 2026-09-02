@@ -45,9 +45,13 @@ function mapa() {
 
   // ── Plugin selector de capas base (grid de imágenes) ──────────────
   var baseLayerPlugin = new miPlugin_baseLayer({
-    rows: 1,
+    // 3 filas → 2 columnas de miniaturas grandes (texto legible al pie).
+    rows: 3,
     noBaseLayer: true,
     title: "Capas base",
+    // Capa base activa al iniciar. Puede ser el id ("imagen") o la
+    // posición (0 = primera capa base; la última es "sin mapa base").
+    initActiveLayer: "imagen",
   });
   mapajs.addPlugin(baseLayerPlugin);
 
