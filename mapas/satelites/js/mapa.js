@@ -505,7 +505,7 @@ mapajs.addLayers(layerOrbit);
 mapajs.addLayers(layerGalileo);
 mapajs.addLayers(layerGalileoOrbit);
 
-pluglinCambioCapaBase = new miPlugin_baseLayer()
+pluglinCambioCapaBase = new miPlugin_baseLayer({ rows: 1 })
 mapajs.addPlugin(pluglinCambioCapaBase)
 pluginCapasSuperpuestas = new miPlugin_layerSwitcher()
 mapajs.addPlugin(pluginCapasSuperpuestas)

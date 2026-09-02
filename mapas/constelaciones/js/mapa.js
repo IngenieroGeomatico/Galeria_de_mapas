@@ -360,7 +360,7 @@ layerSolLuna.setStyle(estilo_layerSolLuna);
 
 mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador, layerPlanetas, layerSolLuna]);
 
-pluglinCambioCapaBase = new miPlugin_baseLayer()
+pluglinCambioCapaBase = new miPlugin_baseLayer({ rows: 1 })
 mapajs.addPlugin(pluglinCambioCapaBase)
 pluginCapasSuperpuestas = new miPlugin_layerSwitcher()
 mapajs.addPlugin(pluginCapasSuperpuestas)

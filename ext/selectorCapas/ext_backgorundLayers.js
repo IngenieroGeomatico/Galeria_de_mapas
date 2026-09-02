@@ -117,9 +117,10 @@ class miPlugin_baseLayer {
     }).join('');
 
     var gridHtml =
-      // minmax(120px, 1fr): miniaturas de tamaño comedido pero con texto
-      // del pie legible, que crecen hasta llenar el panel.
-      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', minmax(120px, 1fr))">' +
+      // minmax(0, 1fr): en una única fila (rows=1 por defecto) todas las
+      // miniaturas se reparten el ancho del panel sin desbordar; si hay
+      // varias filas, las columnas crecen para llenar el panel.
+      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', minmax(0, 1fr))">' +
       htmlItems + '</div>';
 
     // ── Función de cambio de capa base ─────────────────────────────────
