@@ -9,31 +9,51 @@
   font-family: -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
 }
 
+/* ── Panel: ancho y alto suficiente para mostrar todo el contenido ─ */
+/* IDEE fija un ancho de 250px en .m-panel; lo ampliamos para que el
+   grid y las miniaturas se vean con holgura. */
+.g-herramienta_baseLayer.m-panel {
+  width: 360px;
+  min-width: 300px;
+  overflow: visible;
+}
+/* El contenedor padre .m-area ajusta su ancho al panel */
+.m-area:has(.g-herramienta_baseLayer) {
+  width: auto;
+}
+.g-herramienta_baseLayer .m-panel-controls {
+  max-height: none !important;
+  overflow-y: auto;
+}
+/* El panel es más ancho (360px) pero los contenedores internos quedan
+   fijados a 250px por el CSS de IDEE; los forzamos a ocupar el 100%. */
+.g-herramienta_baseLayer .m-panel-controls,
+.g-herramienta_baseLayer .m-control.m-container.m-herramienta,
+.g-herramienta_baseLayer .m-herramienta-baseLayer {
+  width: 100%;
+}
+
 /* ── Grid de imágenes ───────────────────────────────────────────── */
+/* minmax(0,1fr) fuerza columnas estrictamente iguales: todas las
+   imágenes quedan del mismo tamaño, sin que una se aplaste. */
 .bl-grid {
   display: grid;
-  gap: 6px;
-  padding: 8px;
-  background: #f5f5f5;
-  border-radius: 6px;
+  gap: 10px;
+  padding: 10px;
+  background: #f5f6fa;
+  border-radius: 8px;
+  grid-auto-rows: minmax(0, 1fr);
 }
 
-/* ── Cada item (label que envuelve radio + imagen + texto) ─────── */
+/* ── Cada item (label que envuelve radio + thumbnail) ───────────── */
 .bl-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   cursor: pointer;
   border: 3px solid transparent;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 4px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
   background: #fff;
-}
-
-.bl-item:hover {
-  border-color: #a0c4e8;
-  box-shadow: 0 0 0 1px #a0c4e8;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 /* ── Radio oculto ───────────────────────────────────────────────── */
@@ -46,35 +66,78 @@
 }
 
 /* ── Selección activa: borde azul ───────────────────────────────── */
-.bl-radio:checked + .bl-img {
-  /* no-op: el borde va en el label padre */
-}
 .bl-item:has(.bl-radio:checked) {
   border-color: #0078d4;
-  box-shadow: 0 0 0 1px #0078d4;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.35), 0 2px 6px rgba(0, 0, 0, 0.12);
+  background: #eaf3fc;
 }
 
-/* ── Imagen cuadrada ────────────────────────────────────────────── */
-.bl-img {
+/* ── Contenedor de la imagen + etiqueta superpuesta ─────────────── */
+.bl-thumb {
+  position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* ── Imagen cuadrada al mismo tamaño en todos los items ─────────── */
+.bl-img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: 4px;
   display: block;
   pointer-events: none;
   user-select: none;
+  transition: transform 0.35s ease;
 }
 
-/* ── Etiqueta de texto bajo la imagen ───────────────────────────── */
+/* ── Etiqueta superpuesta en el centro de la imagen ─────────────── */
 .bl-label {
-  display: block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
   text-align: center;
-  font-size: 11px;
-  line-height: 1.2;
-  margin-top: 3px;
-  color: #333;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  border-radius: 6px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
+  transition: background 0.25s, transform 0.25s;
+}
+
+/* ── Efecto hover sobre la imagen ───────────────────────────────── */
+.bl-item:hover .bl-img {
+  transform: scale(1.08);
+}
+
+/* Viñeta de oscurecimiento que aparece al pasar el ratón */
+.bl-item:hover .bl-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.25s;
+}
+
+/* Etiqueta resalta sobre el oscurecimiento */
+.bl-item:hover .bl-label {
+  background: rgba(0, 120, 212, 0.85);
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+/* ── Elevación sutil del item completo en hover ─────────────────── */
+.bl-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
 }
