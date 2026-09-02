@@ -17,20 +17,21 @@ function mapa() {
     {
       id: "mapa",
       title: "Callejero",
-      imgPreview: "https://componentes.idee.es/api-idee/assets/images/mapa.jpg",
-      layers: ["QUICK*BASE_IGNBaseTodo_TMS"],
+      imgPreview: "https://componentes.idee.es/api-idee/plugins/backimglayer/images/svqmapa.png",
+      layers: ["QUICK*BASE_MapaBase_IGNBaseTodo_WMTS"],
     },
     {
       id: "imagen",
       title: "Imagen",
-      imgPreview: "https://componentes.idee.es/api-idee/assets/images/satelite.jpg",
+      imgPreview: "https://componentes.idee.es/api-idee/plugins/backimglayer/images/svqimagen.png",
       layers: ["QUICK*BASE_PNOA_MA_TMS"],
     },
     {
       id: "hibrido",
       title: "Híbrido",
-      imgPreview: "https://componentes.idee.es/api-idee/assets/images/hibrido.jpg",
-      layers: ["QUICK*BASE_LiDAR_TMS"],
+      imgPreview: "https://componentes.idee.es/api-idee/plugins/backimglayer/images/svqhibrid.png",
+      // Grupo de capas oficial = ortofoto PNOA + nomenclátor IGNBaseOrto.
+      layers: ["QUICK*BASE_HIBRIDO_LayerGroup"],
     },
   ];
 

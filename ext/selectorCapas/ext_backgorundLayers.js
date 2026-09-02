@@ -94,18 +94,22 @@ class miPlugin_baseLayer {
     var cols = Math.ceil(items.length / rows);
 
     // ── Generar el grid de imágenes ───────────────────────────────────
+    // El título se muestra superpuesto en el centro de la imagen (overlay),
+    // con un efecto visual en hover gestionado desde el CSS.
     var htmlItems = items.map(function (layer) {
       var img = layer.imgPreview || blankImg;
       var safeId = (layer.id || '').replace(/[^a-zA-Z0-9_-]/g, '_');
       return '<label class="bl-item" data-bl-id="' + layer.id + '" title="' + (layer.title || '') + '">' +
         '<input type="radio" name="bl-selector" value="' + layer.id + '" class="bl-radio">' +
+        '<div class="bl-thumb">' +
         '<img src="' + img + '" alt="' + (layer.title || '') + '" class="bl-img" draggable="false">' +
         '<span class="bl-label">' + (layer.title || '') + '</span>' +
+        '</div>' +
         '</label>';
     }).join('');
 
     var gridHtml =
-      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ',1fr)">' +
+      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', minmax(0,1fr))">' +
       htmlItems + '</div>';
 
     // ── Función de cambio de capa base ─────────────────────────────────

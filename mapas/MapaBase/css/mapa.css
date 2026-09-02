@@ -28,6 +28,11 @@ body {
   z-index: 9999;
 }
 
+/* El atributo hidden debe ganar a display:flex del bloque anterior */
+#cargaSVG[hidden] {
+  display: none;
+}
+
 #cargaSVG img {
   width: 80px;
   height: 80px;
