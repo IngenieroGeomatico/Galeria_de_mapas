@@ -12,24 +12,26 @@ function mapa() {
   SVGCarga.hidden = false;
 
   // ── Configuración de capas base ───────────────────────────────────
-  // Cada entrada incluye imgPreview para el selector visual.
+  // Cada entrada incluye imgPreview para el selector visual. Las miniaturas
+  // son imágenes LOCALES del visualizador (carpeta img/), relativas a la
+  // página index.html.
   IDEE.config.backgroundlayers = [
     {
       id: "mapa",
       title: "Callejero",
-      imgPreview: "https://componentes.idee.es/api-idee/plugins/backimglayer/images/svqmapa.png",
+      imgPreview: "img/IGNBase.png",
       layers: ["QUICK*BASE_MapaBase_IGNBaseTodo_WMTS"],
     },
     {
       id: "imagen",
       title: "Imagen",
-      imgPreview: "https://componentes.idee.es/api-idee/plugins/backimglayer/images/svqimagen.png",
+      imgPreview: "img/imagen.png",
       layers: ["QUICK*BASE_PNOA_MA_TMS"],
     },
     {
       id: "hibrido",
       title: "Híbrido",
-      imgPreview: "https://componentes.idee.es/api-idee/plugins/backimglayer/images/svqhibrid.png",
+      imgPreview: "img/hibrido.png",
       // Grupo de capas oficial = ortofoto PNOA + nomenclátor IGNBaseOrto.
       layers: ["QUICK*BASE_HIBRIDO_LayerGroup"],
     },
