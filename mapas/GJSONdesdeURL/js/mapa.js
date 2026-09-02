@@ -165,7 +165,7 @@ function pluginCamioImplFunc() {
 }
 
 function pluginCapasBaseFunc() {
-  return new miPlugin_baseLayer()
+  return new miPlugin_baseLayer({ rows: 1 })
 }
 
 
