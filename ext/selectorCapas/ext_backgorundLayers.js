@@ -117,10 +117,10 @@ class miPlugin_baseLayer {
     }).join('');
 
     var gridHtml =
-      // minmax(0, 1fr): en una única fila (rows=1 por defecto) todas las
-      // miniaturas se reparten el ancho del panel sin desbordar; si hay
-      // varias filas, las columnas crecen para llenar el panel.
-      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', minmax(0, 1fr))">' +
+      // Tamaño FIJO de columna (110px): cada miniatura mide siempre lo
+      // mismo independientemente del nº de capas. El panel (contenedor
+      // .m-herramienta) se adapta automáticamente al número de columnas.
+      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', 110px)">' +
       htmlItems + '</div>';
 
     // ── Función de cambio de capa base ─────────────────────────────────
