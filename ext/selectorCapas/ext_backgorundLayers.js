@@ -5,14 +5,20 @@
    Cada capa base se define con un "imgPreview" (URL de la miniatura).
 
    Parámetros del constructor (options):
-     layers       Array de capas base. Cada elemento:
-                    { id, title, layers, imgPreview }
-                  Si se omite, se usa IDEE.config.backgroundlayers.
-     rows         Nº de filas del grid (por defecto 1).
-     noBaseLayer  true | { imgPreview, title } — añade una opción
-                  "Sin mapa base" (imagen blanca por defecto).
-     position     Posición del panel (por defecto IDEE.ui.position.TL).
-     title        Título del panel (por defecto "Capas base").
+     layers           Array de capas base. Cada elemento:
+                        { id, title, layers, imgPreview }
+                      Si se omite, se usa IDEE.config.backgroundlayers.
+     rows             Nº de filas del grid (por defecto 1).
+     noBaseLayer      true | { imgPreview, title } — añade una opción
+                      "Sin mapa base" (imagen blanca por defecto).
+     position         Posición del panel (por defecto IDEE.ui.position.TL).
+     title            Título del panel (por defecto "Capas base").
+     initActiveLayer  Capa base activa al iniciar el visualizador. Puede ser:
+                        - el id de una capa (string)
+                        - la posición (número, 0 = primera capa base). La
+                          opción "Sin mapa base", si existe, va SIEMPRE al
+                          final de la lista.
+                      Gana sobre la selección guardada en localStorage.
    ===================================================================== */
 class miPlugin_baseLayer {
   constructor(options = {}) {
@@ -47,8 +53,11 @@ class miPlugin_baseLayer {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="#fff"/></svg>'
     );
 
-    // Opción "sin mapa base": se inserta al principio de la lista.
+    // Lista de items: las capas base primero y la opción "sin mapa base"
+    // al final (si se usa initActiveLayer por posición, el índice de la
+    // opción "sin mapa base" es la última posición de la lista).
     var items = [];
+    baseLayers.forEach(function (l) { items.push(l); });
     if (opts.noBaseLayer) {
       var nbl = (typeof opts.noBaseLayer === 'object') ? opts.noBaseLayer : {};
       items.push({
@@ -58,7 +67,6 @@ class miPlugin_baseLayer {
         imgPreview: nbl.imgPreview || blankImg,
       });
     }
-    baseLayers.forEach(function (l) { items.push(l); });
 
     // ── Panel IDEE ────────────────────────────────────────────────────
     var panel = new IDEE.ui.Panel('toolsExtra_baseLayer', {
@@ -94,8 +102,8 @@ class miPlugin_baseLayer {
     var cols = Math.ceil(items.length / rows);
 
     // ── Generar el grid de imágenes ───────────────────────────────────
-    // El título se muestra superpuesto en el centro de la imagen (overlay),
-    // con un efecto visual en hover gestionado desde el CSS.
+    // Estructura por item: imagen cuadrada + barra de título al pie
+    // (el texto del pie es legible, al contrario que el overlay centrado).
     var htmlItems = items.map(function (layer) {
       var img = layer.imgPreview || blankImg;
       var safeId = (layer.id || '').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -103,13 +111,15 @@ class miPlugin_baseLayer {
         '<input type="radio" name="bl-selector" value="' + layer.id + '" class="bl-radio">' +
         '<div class="bl-thumb">' +
         '<img src="' + img + '" alt="' + (layer.title || '') + '" class="bl-img" draggable="false">' +
-        '<span class="bl-label">' + (layer.title || '') + '</span>' +
+        '<span class="bl-title">' + (layer.title || '') + '</span>' +
         '</div>' +
         '</label>';
     }).join('');
 
     var gridHtml =
-      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', minmax(0,1fr))">' +
+      // minmax(140px, 1fr): cada miniatura mide al menos 140px para que el
+      // texto del pie se lea con holgura, y crece hasta llenar el panel.
+      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', minmax(140px, 1fr))">' +
       htmlItems + '</div>';
 
     // ── Función de cambio de capa base ─────────────────────────────────
@@ -142,12 +152,34 @@ class miPlugin_baseLayer {
         });
       });
 
-      // Restaurar selección guardada o usar la primera.
-      var saved = localStorage.getItem('baseLayer_ID');
-      var target = saved
-        ? section.querySelector('.bl-radio[value="' + saved + '"]')
-        : null;
+      // ── Resolver el radio a marcar al iniciar ─────────────────────────
+      // Precedencia:
+      //   1. initActiveLayer definido por el usuario (por id o por posición).
+      //   2. Selección guardada en localStorage.
+      //   3. Primer item de la lista.
+      var target = null;
+
+      if (opts.initActiveLayer !== undefined && opts.initActiveLayer !== null) {
+        var ial = opts.initActiveLayer;
+        if (typeof ial === 'string') {
+          // Por id de la capa.
+          target = section.querySelector('.bl-radio[value="' + ial + '"]');
+        } else if (typeof ial === 'number') {
+          // Por posición (índice). Permite elegir también la opción
+          // "Sin mapa base" si está en esa posición.
+          var radios = section.querySelectorAll('.bl-radio');
+          target = (ial >= 0 && ial < radios.length) ? radios[ial] : null;
+        }
+      }
+
+      if (!target) {
+        var saved = localStorage.getItem('baseLayer_ID');
+        target = saved
+          ? section.querySelector('.bl-radio[value="' + saved + '"]')
+          : null;
+      }
       if (!target) target = section.querySelector('.bl-radio');
+
       if (target) {
         requestAnimationFrame(function () {
           target.checked = true;
