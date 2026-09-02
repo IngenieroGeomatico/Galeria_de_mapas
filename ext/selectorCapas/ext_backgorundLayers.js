@@ -117,9 +117,9 @@ class miPlugin_baseLayer {
     }).join('');
 
     var gridHtml =
-      // minmax(140px, 1fr): cada miniatura mide al menos 140px para que el
-      // texto del pie se lea con holgura, y crece hasta llenar el panel.
-      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', minmax(140px, 1fr))">' +
+      // minmax(120px, 1fr): miniaturas de tamaño comedido pero con texto
+      // del pie legible, que crecen hasta llenar el panel.
+      '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', minmax(120px, 1fr))">' +
       htmlItems + '</div>';
 
     // ── Función de cambio de capa base ─────────────────────────────────
