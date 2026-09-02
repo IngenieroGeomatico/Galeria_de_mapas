@@ -33,6 +33,7 @@ IDEE.config.backgroundlayers = [
   {
     "id": "mapa",
     "title": "Callejero",
+    "imgPreview": "img/IGNBase.png",
     "layers": [
       "QUICK*Base_IGNBaseTodo_TMS_2"
     ]
@@ -40,6 +41,7 @@ IDEE.config.backgroundlayers = [
   {
     "id": "imagen",
     "title": "Imagen",
+    "imgPreview": "img/imagen.png",
     "layers": [
       "QUICK*BASE_PNOA_MA_TMS"
     ]
@@ -47,6 +49,7 @@ IDEE.config.backgroundlayers = [
   {
     "id": "ning",
     "title": "Ninguno",
+    "imgPreview": "img/hibrido.png",
     "layers": [
       ""
     ]
