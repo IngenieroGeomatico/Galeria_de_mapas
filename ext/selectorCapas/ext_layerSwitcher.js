@@ -3,15 +3,12 @@ class miPlugin_layerSwitcher {
   constructor(options = {}) {
     this.name = 'miPlugin_layerSwitcher';
     this.options = options || {};
-    // Tipo de control para cada capa:
-    //  - 'checkbox' (por defecto): cada capa se muestra/oculta de forma
-    //    independiente (varias visibles a la vez).
-    //  - 'radio': exclusivo, solo una capa visible a la vez (al marcar una
-    //    se ocultan las demas). Parametrizable por visualizador.
+    // Tipo de INDICADOR de visibilidad de cada capa (solo visual):
+    //  - 'checkbox': casilla marcada/desmarcada segun la capa este visible.
+    //  - 'radio': bola marcada/desmarcada segun la capa este visible.
+    // En ambos casos el indicador es PASIVO: refleja el estado pero NO
+    // controla la visibilidad. Es el ojito quien muestra/oculta la capa.
     this.controlType = this.options.controlType === 'radio' ? 'radio' : 'checkbox';
-    // En modo radio, al iniciar se fuerza que una sola capa quede visible
-    // (excluyente) aunque el mapa las cree todas visibles.
-    this._initialRadioApplied = false;
     // idLayer de la capa cuyo desplegable de opciones (transparencia) está
     // abierto. Se conserva entre re-renders para no cerrarlo al alternar
     // la visibilidad de otra capa.
@@ -75,27 +72,6 @@ class miPlugin_layerSwitcher {
           } catch (e) { return true; }
         });
         const isRadio = this.controlType === 'radio';
-        // Modo radio excluyente: se fuerza que una sola capa quede visible.
-        // Como las capas overlay se cargan de forma asincrona (varios eventos
-        // ADDED_LAYER), se aplica con un "debounce": cuando dejan de llegar
-        // cargas (~800ms de silencio), se deja visible solo la primera.
-        if (isRadio && !this._initialRadioApplied) {
-          clearTimeout(this._radioDebounce);
-          this._radioDebounce = setTimeout(() => {
-            try {
-              const overlays = map.getOverlayLayers() || [];
-              let primerVisible = true;
-              overlays.forEach(function (l) {
-                if (l.isVisible && l.isVisible()) {
-                  if (primerVisible) { primerVisible = false; }
-                  else if (l.setVisible) { l.setVisible(false); }
-                }
-              });
-              this._initialRadioApplied = true;
-              if (window.renderLayerList) window.renderLayerList();
-            } catch (e) { /* ignorar */ }
-          }, 800);
-        }
         const htmlList = visibleLayers.map(layer => {
           const layerName = layer.legend || layer.name || 'Sin nombre';
           const index = layer.idLayer;
@@ -113,9 +89,9 @@ class miPlugin_layerSwitcher {
           return `
             <li>
               <label>
-                <input id="${inputId}" type="${isRadio ? 'radio' : 'checkbox'}" ${isChecked} onchange="toggleLayerVisibility('${index}', '${this.controlType}')">
+                <input id="${inputId}" type="${isRadio ? 'radio' : 'checkbox'}" class="ls-state-indicator" ${isChecked} tabindex="-1" aria-label="${visible ? 'Capa visible' : 'Capa oculta'}">
                 <span class="ls-nombre">${layerName}</span>
-                <button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}', '${this.controlType}', true)">${eyeIcon}</button>
+                <button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>
                 <button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>
               </label>
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
@@ -146,32 +122,16 @@ class miPlugin_layerSwitcher {
 
     control.deactivate = () => { };
 
-    window.toggleLayerVisibility = function (index, controlType, viaEye) {
+    window.toggleLayerVisibility = function (index) {
       const matches = map.getLayers().filter(layer => {
         try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
       });
       const layer = matches[0];
-      if (!layer) return;
+      if (!layer || typeof layer.setVisible !== 'function') return;
 
-      if (controlType === 'radio' && !viaEye) {
-        // Accion desde el radio: modo excluyente. Solo la capa que se marca
-        // queda visible; se ocultan todas las demas capas overlay y se
-        // muestra la seleccionada.
-        const overlays = map.getOverlayLayers() || [];
-        overlays.forEach(function (l) {
-          try {
-            if (l.idLayer != index && l.setVisible && l.isVisible && l.getImpl().displayInLayerSwitcher !== false) {
-              l.setVisible(false);
-            }
-          } catch (e) { /* ignorar */ }
-        });
-        layer.setVisible(true);
-      } else {
-        // Accion desde el ojito (o checkbox): alterna la visibilidad de esa
-        // capa concreta. En checkbox solo afecta a ella; en radio el ojito
-        // tambien puede ocultar la capa activa (quedando ninguna visible).
-        layer.setVisible(!layer.isVisible());
-      }
+      // El ojito es el unico control de visibilidad: alterna la capa de forma
+      // independiente (varias capas pueden estar visibles a la vez).
+      layer.setVisible(!layer.isVisible());
       // Actualiza el ojito (estado visible/oculto) tras el cambio.
       if (window.renderLayerList && typeof window.renderLayerList === 'function') {
         window.renderLayerList();
