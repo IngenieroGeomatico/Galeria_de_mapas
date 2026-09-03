@@ -518,6 +518,24 @@ class miPlugin_layerSwitcher {
           }
         } catch (e) { /* defensivo */ }
         map.addLayers(selLayer);
+        // IMPORTANTE: ni el 1er argumento (source.features) ni addFeatures() de
+        // la fachada pueblan la fuente OpenLayers que realmente renderiza el
+        // mapa (la dejan vacia y el resaltado no se veria). Se inserta el
+        // feature cacheado directamente en la fuente OpenLayers cuando existe.
+        try {
+          if (typeof selLayer.addFeatures === 'function' && item.feature) {
+            selLayer.addFeatures([item.feature]);
+          }
+          // Propaga el feature a la fuente OpenLayers nativa (la que dibuja).
+          const olLayer = selLayer.getImpl && selLayer.getImpl().olLayer;
+          const olSource = olLayer && olLayer.getSource ? olLayer.getSource() : null;
+          if (olSource && typeof olSource.addFeature === 'function' && item.feature) {
+            const feats = typeof olSource.getFeatures === 'function' ? olSource.getFeatures() : [];
+            if (!feats.some(function (f) { return f === item.feature; })) {
+              olSource.addFeature(item.feature);
+            }
+          }
+        } catch (e) { /* defensivo */ }
         // Refresca el listado del selector para que la capa temporal (oculta
         // con displayInLayerSwitcher:false) ya no aparezca entre las capas.
         renderLayerList();
