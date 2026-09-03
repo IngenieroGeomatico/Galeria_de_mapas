@@ -299,51 +299,93 @@
   background: #fdf0ef;
 }
 
-/* ── Modal de informacion / tabla de atributos ─────────────────────── */
-.ls-modal-overlay {
+/* ── Panel inferior (bottom sheet) de informacion / tabla de atributos ──
+   Anclado a la parte baja de la pantalla, ocupa TODO el ancho y se despliega
+   hacia arriba (tipo "sidenav" horizontal desde abajo). El mapa queda
+   interactivo (el overlay NO bloquea el raton): se puede mover el mapa y
+   pulsar entidades, y hay sincronia bidireccional tabla <-> mapa:
+   - pulsar una fila de la tabla localiza/resalta el feature en el mapa;
+   - pulsar un feature en el mapa resalta la fila correspondiente. */
+.ls-sheet-overlay {
   position: fixed;
   inset: 0;
   z-index: 2147483000;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Transparente y transparente a los eventos: NO bloquea el raton, asi el
+     mapa sigue siendo interactivo mientras el panel esta abierto. */
+  background: transparent;
+  pointer-events: none;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial;
+  display: flex;
+  align-items: flex-end;      /* panel anclado abajo */
+  justify-content: center;
 }
 
-.ls-modal {
+/* Caja del panel: ocupa EL 100% del ancho. Solo el propio panel recibe
+   eventos de raton (pointer-events auto) para no tapar el mapa. Oculta
+   (translada hacia abajo) hasta que se aplica .ls-sheet--open y sube. */
+.ls-sheet {
   background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  width: min(760px, 92vw);
-  max-height: 86vh;
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
+  width: 100%;
+  height: 60vh;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transform: translateY(102%);
+  transition: transform 0.35s ease;
 }
 
-.ls-modal-header {
+.ls-sheet--open {
+  transform: translateY(0);
+}
+
+/* Tirador para arrastrar: ademas de sugerir el gesto, permite REDIMENSIONAR
+   el panel (arrastrar arriba/abajo para hacerlo mas alto o mas bajo). */
+.ls-sheet__handle {
+  height: 16px;
+  width: 100%;
+  background: transparent;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: ns-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Barrita visual centrada dentro del area de agarre del tirador */
+.ls-sheet__handle::before {
+  content: '';
+  height: 4px;
+  width: 48px;
+  border-radius: 4px;
+  background: #ccd3dd;
+}
+
+.ls-sheet-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5em;
-  padding: 12px 16px;
-  background: #0078d4;
-  color: #fff;
+  padding: 8px 16px 10px;
   font-size: 1.05em;
   font-weight: 600;
+  color: #333;
+  flex-shrink: 0;
 }
 
-.ls-modal-title {
+.ls-sheet-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ls-modal-close {
+.ls-sheet-close {
   border: none;
   background: transparent;
-  color: #fff;
+  color: #333;
   font-size: 1.2em;
   line-height: 1;
   cursor: pointer;
@@ -353,23 +395,16 @@
   flex-shrink: 0;
 }
 
-.ls-modal-close:hover {
-  background: rgba(255, 255, 255, 0.2);
+.ls-sheet-close:hover {
+  background: rgba(0, 0, 0, 0.08);
 }
 
-.ls-modal-body {
-  padding: 12px 16px;
+.ls-sheet-body {
+  padding: 0 16px 16px;
   overflow: auto;
 }
 
-.ls-modal-footer {
-  padding: 10px 16px;
-  border-top: 1px solid #eef1f5;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.ls-modal-note {
+.ls-sheet-note {
   font-size: 0.82em;
   color: #666;
   margin: 0.4em 0 0.6em;
@@ -402,7 +437,9 @@
   text-align: right;
 }
 
-/* Tabla de atributos (vectorial) */
+/* Tabla de atributos (vectorial).
+   Las filas son clicables: al pulsar una se localiza y resalta el
+   feature correspondiente en el mapa (ver .ls-row-active). */
 .ls-attr-table {
   width: 100%;
   border-collapse: collapse;
@@ -434,6 +471,18 @@
   background: #fafbfd;
 }
 
+/* Filas clicables: cursor de mano y hover mas evidente */
+.ls-attr-table tbody tr.ls-clickable {
+  cursor: pointer;
+}
+
 .ls-attr-table tbody tr:hover {
   background: #eef6fd;
+}
+
+/* Fila seleccionada (feature localizado en el mapa) */
+.ls-attr-table tbody tr.ls-row-active {
+  background: #d6ecfe;
+  outline: 2px solid #0078d4;
+  outline-offset: -2px;
 }
