@@ -3,12 +3,6 @@ class miPlugin_layerSwitcher {
   constructor(options = {}) {
     this.name = 'miPlugin_layerSwitcher';
     this.options = options || {};
-    // Tipo de INDICADOR de visibilidad de cada capa (solo visual):
-    //  - 'checkbox': casilla marcada/desmarcada segun la capa este visible.
-    //  - 'radio': bola marcada/desmarcada segun la capa este visible.
-    // En ambos casos el indicador es PASIVO: refleja el estado pero NO
-    // controla la visibilidad. Es el ojito quien muestra/oculta la capa.
-    this.controlType = this.options.controlType === 'radio' ? 'radio' : 'checkbox';
     // idLayer de la capa cuyo desplegable de opciones (transparencia) está
     // abierto. Se conserva entre re-renders para no cerrarlo al alternar
     // la visibilidad de otra capa.
@@ -28,7 +22,7 @@ class miPlugin_layerSwitcher {
 
   addTo(map) {
     // Referencia a la instancia para los handlers globales que necesitan
-    // acceder a this._optionsOpen / this.controlType.
+    // acceder a this._optionsOpen.
     const self = this;
     const panelExtra = new IDEE.ui.Panel('toolsExtra_layerSwitcher', {
       collapsible: true,
@@ -71,13 +65,10 @@ class miPlugin_layerSwitcher {
             return !(l && (l._type === 'Terrain' || l.type === 'Terrain'));
           } catch (e) { return true; }
         });
-        const isRadio = this.controlType === 'radio';
         const htmlList = visibleLayers.map(layer => {
           const layerName = layer.legend || layer.name || 'Sin nombre';
           const index = layer.idLayer;
           const visible = layer.isVisible ? layer.isVisible() : true;
-          const isChecked = visible ? 'checked' : '';
-          const inputId = `layer_${index}_layerSwitcher`;
           // icono de ojo: abierto = capa visible, tachado/cerrado = oculta
           const eyeIcon = visible ? '👁' : '🚫';
           // Transparencia actual en % (100 = totalmente transparente).
@@ -86,10 +77,14 @@ class miPlugin_layerSwitcher {
           try { if (layer.getOpacity !== undefined) opacity = layer.getOpacity() || 0; } catch (e) { /* ignorar */ }
           const transpPct = Math.round((1 - opacity) * 100);
           const optionsOpen = this._optionsOpen === index;
+          // Gradiente del track del slider: representa la OPACIDAD (lo que
+          // queda visible). 0% de transparencia (opaco) => relleno hasta la
+          // derecha (100%); 100% de transparencia => riel vacio (0%).
+          const fillPct = 100 - transpPct;
+          const sliderFill = `linear-gradient(to right, #0078d4 0%, #0078d4 ${fillPct}%, #d7dde7 ${fillPct}%, #d7dde7 100%)`;
           return `
             <li>
               <label>
-                <input id="${inputId}" type="${isRadio ? 'radio' : 'checkbox'}" class="ls-state-indicator" ${isChecked} tabindex="-1" aria-label="${visible ? 'Capa visible' : 'Capa oculta'}">
                 <span class="ls-nombre">${layerName}</span>
                 <button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>
                 <button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>
@@ -97,7 +92,7 @@ class miPlugin_layerSwitcher {
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
                 <div class="ls-option-row">
                   <span class="ls-option-label" title="Transparencia de la capa">Transparencia</span>
-                  <input type="range" min="0" max="100" value="${transpPct}" class="ls-opacity-slider" aria-label="Transparencia de ${layerName}" oninput="setLayerOpacity('${index}', this.value, this)">
+                  <input type="range" min="0" max="100" value="${transpPct}" class="ls-opacity-slider" style="background:${sliderFill}" aria-label="Transparencia de ${layerName}" oninput="setLayerOpacity('${index}', this.value, this)">
                   <span class="ls-option-value">${transpPct}%</span>
                 </div>
               </div>
@@ -112,7 +107,7 @@ class miPlugin_layerSwitcher {
       }
     };
 
-    // Expone el re-render para que los controles (ojito/radio) refresquen
+    // Expone el re-render para que los controles (ojito) refresquen
     // la lista y el estado de visibilidad tras cada cambio.
     window.renderLayerList = async () => { await renderLayerList(); };
 
@@ -137,7 +132,6 @@ class miPlugin_layerSwitcher {
         window.renderLayerList();
       } else if (layer && layer.isVisible) {
         const eye = document.querySelector('.g-herramienta_selectorCapa .ls-eye[data-id="' + index + '"]');
-        const cb = document.getElementById('layer_' + index + '_layerSwitcher');
         const visible = layer.isVisible();
         if (eye) {
           eye.textContent = visible ? '👁' : '🚫';
@@ -145,7 +139,6 @@ class miPlugin_layerSwitcher {
           eye.classList.toggle('ls-eye-off', !visible);
           eye.title = visible ? 'Ocultar capa' : 'Mostrar capa';
         }
-        if (cb) cb.checked = visible;
       }
     };
 
@@ -170,11 +163,18 @@ class miPlugin_layerSwitcher {
       if (layer && layer.setOpacity) {
         layer.setOpacity(1 - pct / 100);
       }
-      // Actualiza solo el texto del valor asociado al slider, sin re-render
-      // (re-renderizar perderia el foco mientras se arrastra).
-      if (sliderEl && sliderEl.parentElement) {
-        const val = sliderEl.parentElement.querySelector('.ls-option-value');
-        if (val) val.textContent = pct + '%';
+      // Actualiza solo el texto del valor y el relleno del track del slider,
+      // sin re-render (re-renderizar perderia el foco mientras se arrastra).
+      // El relleno representa la opacidad (100 - transparencia): 0% de
+      // transparencia => relleno al 100%, 100% de transp. => vacio.
+      if (sliderEl) {
+        const fillPct = 100 - pct;
+        sliderEl.style.background =
+          `linear-gradient(to right, #0078d4 0%, #0078d4 ${fillPct}%, #d7dde7 ${fillPct}%, #d7dde7 100%)`;
+        if (sliderEl.parentElement) {
+          const val = sliderEl.parentElement.querySelector('.ls-option-value');
+          if (val) val.textContent = pct + '%';
+        }
       }
     };
 
