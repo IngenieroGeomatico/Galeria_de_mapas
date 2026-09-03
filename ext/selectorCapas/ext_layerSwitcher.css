@@ -81,25 +81,6 @@
   margin: 0.5em 0;
 }
 
-.overlay-layer-selector input[type="radio"],
-.overlay-layer-selector input[type="checkbox"] {
-  accent-color: #0078d4;
-  /* color azul tipo Microsoft */
-  margin-right: 0.5em;
-  transform: scale(1.2);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-/* INDICADOR PASIVO de visibilidad: el radio/checkbox solo refleja el estado
-   de la capa (marcado = visible, desmarcado = oculta). NO es interactivo:
-   quién controla la visibilidad es el ojito. Se desactiva el clic y el
-   cursor para que quede claro que es informativo, no un control. */
-.overlay-layer-selector .ls-state-indicator {
-  pointer-events: none;
-  cursor: default;
-}
-
 .overlay-layer-selector label {
   cursor: default;
   font-size: 1.1em;
@@ -224,12 +205,50 @@
   white-space: nowrap;
 }
 
-/* Slider de transparencia: ocupa el espacio disponible */
+/* Slider de transparencia: ocupa el espacio disponible.
+   Para que el control se vea SIEMPRE relleno (incluido al 0% de opacidad,
+   donde el accent-color nativo dejaba el riel vacio hasta ~50%), se pinta
+   el track con un gradiente lineal que refleja el valor actual y que el
+   JS actualiza en cada uso (ver setLayerOpacity / fill del render). */
 .overlay-layer-selector .ls-opacity-slider {
   flex: 1 1 auto;
   min-width: 0;
   accent-color: #0078d4;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 7px;
+  border-radius: 6px;
+  /* gradiente por defecto (0%): el JS lo sobrescribe con el valor real */
+  background: linear-gradient(to right, #0078d4 0%, #0078d4 0%, #d7dde7 0%, #d7dde7 100%);
+}
+
+/* "Rellena" visualmente el track del slider con el valor (llamado por JS). */
+.overlay-layer-selector .ls-opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #0078d4;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+.overlay-layer-selector .ls-opacity-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #0078d4;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+.overlay-layer-selector .ls-opacity-slider::-moz-range-track {
+  background: transparent;
+  height: 7px;
 }
 
 .overlay-layer-selector .ls-option-value {
