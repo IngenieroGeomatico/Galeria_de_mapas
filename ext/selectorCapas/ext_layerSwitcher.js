@@ -95,6 +95,10 @@ class miPlugin_layerSwitcher {
                   <input type="range" min="0" max="100" value="${transpPct}" class="ls-opacity-slider" style="background:${sliderFill}" aria-label="Transparencia de ${layerName}" oninput="setLayerOpacity('${index}', this.value, this)">
                   <span class="ls-option-value">${transpPct}%</span>
                 </div>
+                <div class="ls-actions-row">
+                  <button type="button" class="ls-action ls-action-info" data-id="${index}" title="Ver tabla de atributos / estadísticas de la capa" onclick="openLayerInfo('${index}')">📋 <span>Tabla</span></button>
+                  <button type="button" class="ls-action ls-action-delete" data-id="${index}" title="Eliminar la capa del mapa" onclick="deleteLayer('${index}')">🗑 <span>Borrar</span></button>
+                </div>
               </div>
             </li>`;
         }).join('');
@@ -151,6 +155,39 @@ class miPlugin_layerSwitcher {
       renderLayerList();
     };
 
+    // ── Borrar capa ─────────────────────────────────────────────────────
+    // Elimina la capa del mapa y refresca la lista. La referencia se busca
+    // de la misma forma que en el resto de handlers (por idLayer).
+    window.deleteLayer = function (index) {
+      const matches = map.getLayers().filter(layer => {
+        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
+      });
+      const layer = matches[0];
+      if (!layer) return;
+      try {
+        map.removeLayers(layer);
+        closeLayerModal();
+        renderLayerList();
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo borrar la capa', e);
+      }
+    };
+
+    // ── Identificador del tipo de capa ──────────────────────────────────
+    // Devuelve 'vector' si la capa es vectorial (GeoJSON, WFS, Vector...)
+    // y 'raster' en caso contrario. API-IDEE no expone un metodo unico
+    // fiable, asi que se comparan los tipos conocidos por su nombre.
+    window.getLayerKind = function (layer) {
+      let typeName = '';
+      try { typeName = String(layer.type || layer._type || ''); } catch (e) { /* ignorar */ }
+      if (!typeName) {
+        try { typeName = String((layer.getImpl() && layer.getImpl().type) || ''); } catch (e) { /* ignorar */ }
+      }
+      const t = typeName.toLowerCase();
+      const vectorTypes = ['geojson', 'wfs', 'vector', 'geojsonparser', 'feature', 'mvt', 'kml', 'csv', 'datoselevacion', 'mapbox', 'maplibre'];
+      return vectorTypes.includes(t) ? 'vector' : 'raster';
+    };
+
     // ── Slider de transparencia ─────────────────────────────────────────
     // transpPct es 0..100 (0 = opaco, 100 = totalmente transparente). La API
     // usa opacidad 0..1, asi que transladamos: opacity = 1 - transp/100.
@@ -175,6 +212,171 @@ class miPlugin_layerSwitcher {
           const val = sliderEl.parentElement.querySelector('.ls-option-value');
           if (val) val.textContent = pct + '%';
         }
+      }
+    };
+
+    // ── Modal: ver informacion / tabla de atributos de una capa ────────
+    // Overlay centrado con un panel. Sirve tanto para la tabla de atributos
+    // (capas vectoriales) como para las estadisticas (capas raster).
+    const LAYER_MODAL_ID = 'ls-layer-modal';
+
+    let closeLayerModal = function () {
+      const old = document.getElementById(LAYER_MODAL_ID);
+      if (old && old.parentElement) old.parentElement.removeChild(old);
+    };
+    // Expuesto para que deleteLayer pueda cerralo sin depender del orden.
+    window.closeLayerModal = closeLayerModal;
+
+    function openModal(title, bodyHtml, footerHtml) {
+      closeLayerModal();
+      const overlay = document.createElement('div');
+      overlay.id = LAYER_MODAL_ID;
+      overlay.className = 'ls-modal-overlay';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      const panel = document.createElement('div');
+      panel.className = 'ls-modal';
+      panel.innerHTML =
+        `<div class="ls-modal-header">
+           <span class="ls-modal-title"></span>
+           <button type="button" class="ls-modal-close" title="Cerrar" onclick="closeLayerModal()">✕</button>
+         </div>
+         <div class="ls-modal-body"></div>
+         <div class="ls-modal-footer"></div>`;
+      panel.querySelector('.ls-modal-title').textContent = title;
+      panel.querySelector('.ls-modal-body').innerHTML = bodyHtml;
+      if (footerHtml) panel.querySelector('.ls-modal-footer').innerHTML = footerHtml;
+      // Cierra al pulsar el fondo del overlay.
+      overlay.addEventListener('click', function (ev) {
+        if (ev.target === overlay) closeLayerModal();
+      });
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+      return panel;
+    }
+
+    // Escapa texto plano para inyectarlo sin riesgo en el HTML del modal.
+    function esc(v) {
+      if (v === null || v === undefined) return '';
+      return String(v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // ── Tabla de atributos de capa VECTORIAL ───────────────────────────
+    function buildVectorTable(layer) {
+      let features = [];
+      try {
+        if (typeof layer.getFeatures === 'function') features = layer.getFeatures() || [];
+        else if (layer.getImpl() && typeof layer.getImpl().getFeatures === 'function') features = layer.getImpl().getFeatures() || [];
+      } catch (e) { /* sin features */ }
+
+      // Nombre de la capa.
+      const layerName = layer.legend || layer.name || 'Capa';
+      const featCount = features.length;
+      if (!featCount) {
+        return `<p style="padding:8px;color:#555;">La capa <b>${esc(layerName)}</b> no tiene features disponibles en el cliente (los datos pueden cargarse de forma remota).</p>`;
+      }
+
+      // Reunir el conjunto de columnas a partir de los atributos.
+      // Los features de API-IDEE exponen getAttributes() (objeto clave-valor)
+      // y/o getProperties(); se prueba en ese orden y se hace fallback.
+      const columns = [];
+      const rows = features.slice(0, 500).map(f => {
+        let props = {};
+        try {
+          props = (f.getAttributes ? f.getAttributes() : null) ||
+                  (f.getProperties ? f.getProperties() : null) || {};
+        } catch (e) { /* sin atributos */ }
+        if (typeof props !== 'object' || props === null) props = {};
+        const geom = (f.getGeometry ? f.getGeometry() : null);
+        for (const key in props) {
+          if (!columns.includes(key)) columns.push(key);
+        }
+        return { props, geom };
+      });
+
+      // Asegurar columnas utiles aunque no haya propiedades.
+      if (!columns.length) columns.push('(sin atributos)');
+
+      let html = `<table class="ls-attr-table"><thead><tr>`;
+      html += `<th>#</th>`;
+      for (const c of columns) html += `<th>${esc(c)}</th>`;
+      html += `</tr></thead><tbody>`;
+      rows.forEach((row, i) => {
+        html += `<tr><td>${i + 1}</td>`;
+        for (const c of columns) {
+          html += `<td>${esc(row.props[c] === undefined ? (c === '(sin atributos)' && row.props ? '—' : '') : row.props[c])}</td>`;
+        }
+        html += `</tr>`;
+      });
+      html += `</tbody></table>`;
+      const shown = rows.length;
+      const more = featCount > shown ? `<p class="ls-modal-note">Mostrando ${shown} de ${featCount} features.</p>` : `<p class="ls-modal-note">${featCount} features (${columns.length} atributos).</p>`;
+      return `${more}${html}`;
+    }
+
+    // ── Estadisticas de capa RASTER ────────────────────────────────────
+    function buildRasterInfo(layer) {
+      const layerName = layer.legend || layer.name || 'Capa';
+      let transparency = 0;
+      try { transparency = Math.round((1 - (layer.getOpacity ? layer.getOpacity() : 1)) * 100); } catch (e) { /* ignorar */ }
+
+      // Reunir datos del impl / source para metadatos opcionales.
+      let info = null, source = null;
+      try {
+        const impl = layer.getImpl ? layer.getImpl() : null;
+        info = (impl && impl.info) ? impl.info : null;
+        source = (impl && typeof impl.getSource === 'function') ? impl.getSource() : null;
+      } catch (e) { /* sin impl */ }
+
+      // Numero de bandas: solo si el impl.info lo expone directamente
+      // (p.ej. GeoTIFF/MBTiles locales). En servicios WMS/WMTS no hay una
+      // API nativa, asi que no se inventa el valor.
+      let bandsHtml = '<li><span class="ls-stat-label">Bandas</span><span class="ls-stat-value">(no disponible para este servicio)</span></li>';
+      try {
+        if (info && Array.isArray(info.bands) && info.bands.length) {
+          bandsHtml = `<li><span class="ls-stat-label">Bandas</span><span class="ls-stat-value">${info.bands.length}</span></li>`;
+        } else if (source && typeof source.getBandCount === 'function' && source.getBandCount() > 0) {
+          bandsHtml = `<li><span class="ls-stat-label">Bandas</span><span class="ls-stat-value">${source.getBandCount()}</span></li>`;
+        }
+      } catch (e) { /* ignorar */ }
+
+      let sizeHtml = '';
+      try {
+        if (info && Array.isArray(info.size) && info.size.length === 2) {
+          sizeHtml = `<li><span class="ls-stat-label">Tamaño</span><span class="ls-stat-value">${info.size[0]} x ${info.size[1]} px</span></li>`;
+        }
+      } catch (e) { /* ignorar */ }
+
+      // GeoRSS / tipo del impl para mostrarlo como subtitulo.
+      let typeInfo = '';
+      try { typeInfo = String(layer.type || layer._type || (layer.getImpl && layer.getImpl().type) || ''); } catch (e) { /* ignorar */ }
+
+      return `
+        <p class="ls-modal-note" style="margin-top:0;">Estadísticas de la capa ráster.</p>
+        <ul class="ls-stat-list">
+          <li><span class="ls-stat-label">Nombre</span><span class="ls-stat-value">${esc(layerName)}</span></li>
+          <li><span class="ls-stat-label">Tipo</span><span class="ls-stat-value">${esc(typeInfo || 'ráster')}</span></li>
+          <li><span class="ls-stat-label">Transparencia</span><span class="ls-stat-value">${transparency}%</span></li>
+          ${bandsHtml}
+          ${sizeHtml}
+        </ul>`;
+    }
+
+    // ── Abrir informacion de la capa ───────────────────────────────────
+    window.openLayerInfo = function (index) {
+      const matches = map.getLayers().filter(layer => {
+        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
+      });
+      const layer = matches[0];
+      if (!layer) return;
+      const kind = window.getLayerKind(layer);
+      const layerName = layer.legend || layer.name || 'Capa';
+      if (kind === 'vector') {
+        openModal(`Tabla de atributos · ${layerName}`, buildVectorTable(layer));
+      } else {
+        openModal(`Estadísticas · ${layerName}`, buildRasterInfo(layer));
       }
     };
 
