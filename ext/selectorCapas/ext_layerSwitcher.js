@@ -57,27 +57,30 @@ class miPlugin_layerSwitcher {
 
     IDEE.utils.draggabillyPlugin(panelExtra, '#m-herramienta-title-layerSwitcher');
 
+    // Capas seleccionables desde el selector (compartido entre el panel y el
+    // dropdown del sidenav de la tabla de atributos). Se excluyen capas
+    // temporales/auxiliares (p.ej. el resaltado del panel) marcadas con
+    // displayInLayerSwitcher:false, las de terreno, y las capas internas
+    // auto-generadas por Mapea (nombre "layer_<n>").
+    const getSelectableLayers = async () => {
+      const allLayers = await map.getOverlayLayers();
+      return (allLayers || []).filter(l => {
+        try {
+          const direct = l && l.displayInLayerSwitcher;
+          const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
+          const implFlag = impl && impl.displayInLayerSwitcher;
+          if (direct === false || implFlag === false) return false;
+          if (l && (l._type === 'Terrain' || l.type === 'Terrain')) return false;
+          const nm = (l && (l.name || l.legend)) || '';
+          if (/^layer_\d+$/.test(nm)) return false;
+          return true;
+        } catch (e) { return true; }
+      });
+    };
+
     const renderLayerList = async () => {
       try {
-        const allLayers = await map.getOverlayLayers();
-        const visibleLayers = (allLayers || []).filter(l => {
-          try {
-            // Solo se listan capas que se autodescriben visibles en el selector:
-            // se excluyen capas temporales/auxiliares (p.ej. el resaltado del
-            // panel) marcadas con displayInLayerSwitcher:false, las de terreno,
-            // y las capas internas auto-generadas por Mapea (nombre "layer_<n>").
-            const direct = l && l.displayInLayerSwitcher;
-            const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
-            const implFlag = impl && impl.displayInLayerSwitcher;
-            if (direct === false || implFlag === false) return false;
-            if (l && (l._type === 'Terrain' || l.type === 'Terrain')) return false;
-            // Capas internas de Mapea/OL: "layer_<timestamp>" se usa para capas
-            // temporales sin nombre; no deben mostrarse como capas del selector.
-            const nm = (l && (l.name || l.legend)) || '';
-            if (/^layer_\d+$/.test(nm)) return false;
-            return true;
-          } catch (e) { return true; }
-        });
+        const visibleLayers = await getSelectableLayers();
         const htmlList = visibleLayers.map(layer => {
           const layerName = layer.legend || layer.name || 'Sin nombre';
           const index = layer.idLayer;
@@ -261,7 +264,7 @@ class miPlugin_layerSwitcher {
     // Expuesto para que deleteLayer pueda cerrarlo sin depender del orden.
     window.closeSheet = closeSheet;
 
-    function openSheet(title, bodyHtml, vectorTable) {
+    function openSheet(title, bodyHtml, vectorTable, selectableLayers, currentIndex) {
       const overlay = document.createElement('div');
       overlay.id = SHEET_OVERLAY_ID;
       overlay.className = 'ls-sheet-overlay';
@@ -269,10 +272,20 @@ class miPlugin_layerSwitcher {
       overlay.setAttribute('aria-modal', 'true');
       const panel = document.createElement('div');
       panel.className = 'ls-sheet';
+      // Dropdown de capas en el header del sidenav, si se facilita la lista.
+      const hasPicker = Array.isArray(selectableLayers) && selectableLayers.length > 0;
+      const pickerHtml = hasPicker
+        ? `<select class="ls-sheet-layer-picker" aria-label="Capa" onchange="openLayerInfo(this.value, true)">
+             ${selectableLayers.map(L => `<option value="${L.idLayer}" ${String(L.idLayer) === String(currentIndex) ? 'selected' : ''}>${L.legend || L.name || 'Sin nombre'}</option>`).join('')}
+           </select>`
+        : '';
       panel.innerHTML =
         `<div class="ls-sheet__handle" title="Arrastra para cambiar la altura del panel"></div>
          <div class="ls-sheet-header">
-           <span class="ls-sheet-title"></span>
+           <div class="ls-sheet-header-left">
+             ${pickerHtml}
+             <span class="ls-sheet-title"></span>
+           </div>
            <button type="button" class="ls-sheet-close" title="Cerrar" onclick="closeSheet()">✕</button>
          </div>
          <div class="ls-sheet-body"></div>`;
@@ -952,7 +965,10 @@ class miPlugin_layerSwitcher {
     }
 
     // ── Abrir informacion de la capa ───────────────────────────────────
-    window.openLayerInfo = function (index) {
+    // Abre el panel inferior (sidenav) con la tabla de atributos (vectorial) o
+    // las estadisticas (raster). En su header se incluye un dropdown con todas
+    // las capas seleccionables para poder cambiar de capa sin cerrar el panel.
+    window.openLayerInfo = function (index, fromPicker) {
       const matches = map.getLayers().filter(layer => {
         try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
       });
@@ -963,23 +979,33 @@ class miPlugin_layerSwitcher {
       // Cierra cualquier panel previo ANTES de construir el nuevo: el builder
       // (buildVectorTable) puebla sheetCtx y openSheet ya no debe resetearlo.
       closeSheet();
-      if (kind === 'vector') {
-        // Las capas MapLibre (BTN) no tienen una fuente OL enumerable: se abre
-        // el indice de sub-capas (source-layers) del estilo. El builder es
-        // asincrono (espera a que cargue el estilo), asi que se abre el panel
-        // cero y se rellena el cuerpo cuando este listo.
-        if (isMapLibreLayer(layer)) {
-          const panel = openSheet(`Tabla de atributos · ${layerName}`, '<p style="padding:8px;color:#555;">Cargando sub-capas…</p>', false);
-          buildMapLibreTable(layer).then(function (html) {
-            const body = panel && panel.querySelector('.ls-sheet-body');
-            if (body) body.innerHTML = html;
-          });
-          return;
+      // Capas seleccionables para el dropdown del header (asincrono).
+      const finish = (selectableLayers) => {
+        if (kind === 'vector') {
+          // Las capas MapLibre (BTN) no tienen una fuente OL enumerable: se abre
+          // el indice de sub-capas (source-layers) del estilo. El builder es
+          // asincrono (espera a que cargue el estilo), asi que se abre el panel
+          // cero y se rellena el cuerpo cuando este listo.
+          if (isMapLibreLayer(layer)) {
+            const panel = openSheet(`Tabla de atributos · ${layerName}`, '<p style="padding:8px;color:#555;">Cargando sub-capas…</p>', false, selectableLayers, index);
+            buildMapLibreTable(layer).then(function (html) {
+              const body = panel && panel.querySelector('.ls-sheet-body');
+              if (body) body.innerHTML = html;
+            });
+            return;
+          }
+          openSheet(`Tabla de atributos · ${layerName}`, buildVectorTable(layer), true, selectableLayers, index);
+        } else {
+          sheetCtx = null;
+          openSheet(`Estadísticas · ${layerName}`, buildRasterInfo(layer), false, selectableLayers, index);
         }
-        openSheet(`Tabla de atributos · ${layerName}`, buildVectorTable(layer), true);
+      };
+      // Si venimos del dropdown del propio header, las capas ya no han cambiado:
+      // se reutiliza la lista cargada (evita re-consultar en cada cambio).
+      if (fromPicker && window._lsPickerLayers) {
+        finish(window._lsPickerLayers);
       } else {
-        sheetCtx = null;
-        openSheet(`Estadísticas · ${layerName}`, buildRasterInfo(layer), false);
+        getSelectableLayers().then(ls => { window._lsPickerLayers = ls; finish(ls); });
       }
     };
 

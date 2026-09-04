@@ -376,10 +376,43 @@
   flex-shrink: 0;
 }
 
+/* Contenedor izquierdo del header: agrupa el dropdown de capas (sidenav) y
+   el titulo para que el boton de cerrar quede a la derecha. */
+.ls-sheet-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Drop-down de capas en el sidenav de la tabla de atributos: permite cambiar
+   de capa sin cerrar el panel. Mas estrecho y discreto que el titulo. */
+.ls-sheet-layer-picker {
+  flex-shrink: 0;
+  max-width: 45%;
+  padding: 4px 6px;
+  font-size: 0.85em;
+  font-weight: 500;
+  color: #222;
+  background: #fff;
+  border: 1px solid #c9d2e0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ls-sheet-layer-picker:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: -1px;
+  border-color: #0078d4;
+}
+
 .ls-sheet-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .ls-sheet-close {
