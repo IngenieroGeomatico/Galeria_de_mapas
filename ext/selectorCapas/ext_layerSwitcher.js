@@ -535,11 +535,17 @@ class miPlugin_layerSwitcher {
         // la fachada pueblan la fuente OpenLayers que realmente renderiza el
         // mapa (la dejan vacia y el resaltado no se veria). Se inserta el
         // feature cacheado directamente en la fuente OpenLayers cuando existe.
+        // Cada operacion va en su PROPIO try/catch: addFeatures de la fachada
+        // puede lanzar (espera features con .getImpl(), y las de MapLibre —
+        // convertidas desde querySourceFeatures — no lo tienen), y ese fallo no
+        // debe impedir la propagacion a la fuente OpenLayers nativa.
         try {
           if (typeof selLayer.addFeatures === 'function' && item.feature) {
             selLayer.addFeatures([item.feature]);
           }
-          // Propaga el feature a la fuente OpenLayers nativa (la que dibuja).
+        } catch (e) { /* addFeatures de la fachada no critico: seguir */ }
+        // Propaga el feature a la fuente OpenLayers nativa (la que dibuja).
+        try {
           const olLayer = selLayer.getImpl && selLayer.getImpl().olLayer;
           const olSource = olLayer && olLayer.getSource ? olLayer.getSource() : null;
           if (olSource && typeof olSource.addFeature === 'function' && item.feature) {
