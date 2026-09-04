@@ -520,66 +520,30 @@
   outline-offset: -2px;
 }
 
-/* ── Indice de sub-capas de una capa MapLibre (tiles vectoriales) ──────
-   Lista cada "source-layer" del estilo como una sub-capa clicable.
-   Al pulsar una se abre su tabla de atributos (features del viewport). */
-.ls-mapLibre-sublist {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.ls-mapLibre-sublist li {
-  margin: 0.35em 0;
-}
-
-.ls-mapLibre-sublist .ls-ml-sublayer {
-  display: flex;
-  align-items: center;
-  gap: 0.6em;
-  width: 100%;
-  padding: 7px 10px;
-  border: 1px solid #e0e5ee;
-  border-radius: 8px;
-  background: #fbfcfe;
+/* ── Dropdown secundario de sub-capas en el sidenav ─────────────────
+   Aparece junto al dropdown de capas cuando la capa activa expone
+   sub-capas (p.ej. BTN via MapLibre). Se inserta dinámicamente en el
+   header-left antes del título. */
+.ls-sheet-sublayer-picker {
+  flex-shrink: 0;
+  max-width: 35%;
+  padding: 4px 6px;
+  font-size: 0.82em;
+  font-weight: 500;
   color: #222;
-  font-size: 0.85em;
-  text-align: left;
+  background: #fff;
+  border: 1px solid #c9d2e0;
+  border-radius: 6px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
-.ls-mapLibre-sublist .ls-ml-sublayer:hover {
+.ls-sheet-sublayer-picker:focus-visible {
+  outline: 2px solid #0078d4;
+  outline-offset: -1px;
   border-color: #0078d4;
-  background: #eef6fd;
-  box-shadow: 0 1px 4px rgba(0, 120, 212, 0.15);
 }
 
-.ls-mapLibre-sublist .ls-ml-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-.ls-mapLibre-sublist .ls-ml-type {
-  flex-shrink: 0;
-  font-size: 0.72em;
-  font-weight: 600;
-  color: #0078d4;
-  background: #eaf3fc;
-  border-radius: 10px;
-  padding: 2px 8px;
-}
-
-.ls-mapLibre-sublist .ls-ml-count {
-  flex-shrink: 0;
-  font-size: 0.72em;
-  color: #666;
-  background: #f0f2f6;
-  border-radius: 10px;
-  padding: 2px 8px;
-  white-space: nowrap;
+.ls-sheet-sublayer-picker:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
