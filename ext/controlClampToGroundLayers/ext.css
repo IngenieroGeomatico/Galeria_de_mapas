@@ -5,9 +5,9 @@
 
 
 .buttonHerramienta {
-  border: 2px solid #FFF !important;
+  border: 2px solid var(--g-plugin-border-color, #FFF) !important;
   border-radius: 50% !important;
-  background-color: orangered !important;
+  background-color: var(--g-plugin-bg-color, orangered) !important;
 }
 
 .buttonHerramienta:before {
@@ -15,18 +15,17 @@
   content: "🌐";
   font-size: 22px;
   font-family: none;
-  color: #FFF !important;
+  color: var(--g-plugin-icon-color, #FFF) !important;
 }
 
 
 .buttonHerramienta.activated {
-  border: 2px solid #71A7D3 !important;
+  border: 2px solid var(--g-plugin-border-color-active, #71A7D3) !important;
   border-radius: 50% !important;
-  background-color: #ffffff !important;
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
 
 }
 
 .buttonHerramienta.activated:before {
-  background-color: #ffffff !important;
-  color: #71A7D3 !important;
+  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
 }

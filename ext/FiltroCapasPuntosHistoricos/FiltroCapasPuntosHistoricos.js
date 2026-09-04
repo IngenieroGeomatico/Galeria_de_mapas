@@ -26,6 +26,19 @@ class miPlugin_filtroCapas {
     this.options = options || {};
     this.map = null;
     this.panel = null;
+    // Colores configurables. Cada uno puede ser un color (string) o un
+    // objeto {active, deactive}:
+    //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+  }
+
+  // Devuelve {active, deactive} a partir de un color simple o un objeto.
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
   }
 
   getHelp() {
@@ -75,6 +88,22 @@ class miPlugin_filtroCapas {
     this.panel = panelExtra;
 
     map.addPanels(panelExtra);
+
+    // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
+    // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
+    const c1 = this.resolveColor(this.color1);
+    const c2 = this.resolveColor(this.color2);
+    const c3 = this.resolveColor(this.color3);
+    const fcEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta');
+    if (fcEl) {
+      fcEl.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      fcEl.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      fcEl.style.setProperty('--g-plugin-border-color', c2.deactive);
+      fcEl.style.setProperty('--g-plugin-border-color-active', c2.active);
+      fcEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      fcEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
+    }
+
     document.querySelector('.g-herramienta .m-panel-controls').innerHTML = htmlPanel;
     document.querySelector('#m-herramienta-contents-filtroCapas').appendChild(control.getElement());
 
@@ -223,6 +252,19 @@ class miPlugin_leyenda {
     this.options = options || {};
     this.map = null;
     this.panel = null;
+    // Colores configurables. Cada uno puede ser un color (string) o un
+    // objeto {active, deactive}:
+    //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+  }
+
+  // Devuelve {active, deactive} a partir de un color simple o un objeto.
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
   }
 
   getHelp() {
@@ -268,6 +310,22 @@ class miPlugin_leyenda {
 
     panelExtra.addControls(control);
     map.addPanels(panelExtra);
+
+    // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
+    // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
+    const c1 = this.resolveColor(this.color1);
+    const c2 = this.resolveColor(this.color2);
+    const c3 = this.resolveColor(this.color3);
+    const lfEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta_leyenda');
+    if (lfEl) {
+      lfEl.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      lfEl.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      lfEl.style.setProperty('--g-plugin-border-color', c2.deactive);
+      lfEl.style.setProperty('--g-plugin-border-color-active', c2.active);
+      lfEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      lfEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
+    }
+
     document.querySelector('.g-herramienta_leyenda .m-panel-controls').innerHTML = htmlPanel;
     document.querySelector('#m-herramienta-contents_leyenda').appendChild(control.getElement());
 

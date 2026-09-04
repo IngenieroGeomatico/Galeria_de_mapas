@@ -12,9 +12,23 @@
 
 .g-herramienta_selectorCapa .m-tools:before {
   /* Icono de pila de capas (estilo QGIS/Leaflet): tres rombos apilados.
-     Se usa como SVG inline para que se vea nítido e idéntico en todos
-     los sistemas (los emojis de pila de capas no son fiables). */
-  content: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.7' stroke-linejoin='round'><path d='M12 2 L21 7 L12 12 L3 7 Z'/><path d='M3 12 L12 17 L21 12'/><path d='M3 17 L12 22 L21 17'/></svg>");
+     Se usa como MÁSCARA (mask-image) en lugar de content:url() para que
+     el icono herede el color configurable (color2 / --g-plugin-icon-color)
+     mediante background-color. Si fuera un data-uri con stroke fijo no
+     podría cambiar el color. */
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'><path d='M12 2 L21 7 L12 12 L3 7 Z'/><path d='M3 12 L12 17 L21 12'/><path d='M3 17 L12 22 L21 17'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'><path d='M12 2 L21 7 L12 12 L3 7 Z'/><path d='M3 12 L12 17 L21 12'/><path d='M3 17 L12 22 L21 17'/></svg>");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
 
@@ -28,7 +42,8 @@
   position: absolute !important;
   right: -40px !important;
 
-  color: #71a7d3 !important;
+  /* La flechita desplegada coincide con el color del icono activo (color3). */
+  color: var(--g-plugin-icon-color-active, #71a7d3) !important;
   background-color: #fff !important;
 }
 
@@ -41,10 +56,8 @@
 }
 
 
-/* Título */
+/* Título (fondo y color vienen del bloque con variables color1/color2) */
 .m-herramienta-header {
-  background-color: #71a7d3;
-  color: white;
   display: block;
   font-size: 15px;
   height: 40px;
@@ -54,12 +67,22 @@
   width: 100%;
 }
 
-/* Botón del panel y cabecera en naranja (mismo patrón que vueloFotogrametrico).
-   Scopeado al plugin para no afectar al resto de la API. */
+/* Botón del panel y cabecera en el color configurable del constructor.
+   color1 = fondo, color2 = borde, color3 = icono.
+   "active" = panel abierto (opened). */
 .m-areas>div.m-area>div.m-panel.g-herramienta_selectorCapa>button.m-panel-btn,
 .g-herramienta_selectorCapa .m-herramienta-header {
-  background-color: orangered !important;
-  color: #fff !important;
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* Panel abierto (opened) = estado activo: se aplican los colores "-active". */
+.m-areas>div.m-area>div.m-panel.g-herramienta_selectorCapa.opened>button.m-panel-btn,
+.m-areas>div.m-area>div.m-panel.g-herramienta_selectorCapa.opened .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
 

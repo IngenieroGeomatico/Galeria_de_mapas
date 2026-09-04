@@ -3,6 +3,22 @@ class miPlugin_cambioImpl {
     constructor(options = {}) {
         this.name = 'miPlugin_cambioImpl';
         this.options = options || {};
+        // Colores configurables. Cada uno puede ser un color (string) o un
+        // objeto {active, deactive}:
+        //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
+        // Sobrescribibles al instanciar:
+        //   new miPlugin_cambioImpl({color1:'#..', color2:'#..', color3:'#..'})
+        //   new miPlugin_cambioImpl({color1:{active:'#..',deactive:'#..'}, ...})
+        this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+        this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+        this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+    }
+
+    // Devuelve {active, deactive} a partir de un color simple o un objeto.
+    resolveColor(c) {
+        return (typeof c === 'object' && c !== null)
+            ? { active: c.active, deactive: c.deactive }
+            : { active: c, deactive: c };
     }
 
     // `addTo` será invocado por el framework cuando el plugin se añada al mapa
@@ -56,6 +72,39 @@ class miPlugin_cambioImpl {
 
         var btn = document.getElementById('APIIDEE-herramienta-button');
 
+        // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono).
+        // Se inyectan 6 variables CSS (estado normal y ".activated") mediante un
+        // bloque <style> con ámbito al botón del plugin. Un <style> en <head>
+        // sobrevive a los re-renders que IDEE hace del botón / panel (manageActivation
+        // o el swap de cambioImpl), por lo que es el método robusto frente a
+        // intentar ponerlas inline en addTo (no fiable en baseLayer / cambioImpl).
+        var c1 = this.resolveColor(this.color1);
+        var c2 = this.resolveColor(this.color2);
+        var c3 = this.resolveColor(this.color3);
+        var styleId = 'g-plugin-colores-cambioImpl';
+        var styleEl = document.getElementById(styleId);
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = styleId;
+          styleEl.appendChild(document.createTextNode(
+            '.buttonHerramienta_cambImpl,' +
+            '.m-herramienta-container_cambImpl{' +
+            '--g-plugin-bg-color:' + c1.deactive + ';' +
+            '--g-plugin-bg-color-active:' + c1.active + ';' +
+            '--g-plugin-border-color:' + c2.deactive + ';' +
+            '--g-plugin-border-color-active:' + c2.active + ';' +
+            '--g-plugin-icon-color:' + c3.deactive + ';' +
+            '--g-plugin-icon-color-active:' + c3.active + ';}' +
+            '.buttonHerramienta_cambImpl.activated{' +
+            '--g-plugin-bg-color:' + c1.active + ';' +
+            '--g-plugin-bg-color-active:' + c1.active + ';' +
+            '--g-plugin-border-color:' + c2.active + ';' +
+            '--g-plugin-border-color-active:' + c2.active + ';' +
+            '--g-plugin-icon-color:' + c3.active + ';' +
+            '--g-plugin-icon-color-active:' + c3.active + ';}'
+          ));
+          (document.head || document.documentElement).appendChild(styleEl);
+        }
         control_cambImpl.manageActivation(div);
 
         btn.addEventListener('click', (e) => {

@@ -19,6 +19,19 @@ class miPlugin_clampToGround {
     this.name = 'miPlugin_clampToGround';
     this.options = options || {};
     this.map = null;
+    // Colores configurables. Cada uno puede ser un color (string) o un
+    // objeto {active, deactive}:
+    //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+  }
+
+  // Devuelve {active, deactive} a partir de un color simple o un objeto.
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
   }
 
   getHelp() {
@@ -53,6 +66,32 @@ class miPlugin_clampToGround {
               <button id="m-herramienta-button" class="buttonHerramienta" title="Herramienta"></button>
         </div>
       `;
+
+    // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono).
+    // Se ponen también en el PANEL para que sobrevivan a re-renders del botón
+    // dentro del panel (el botón hereda las variables de su ancestro).
+    // Se inyectan 6 variables: estado normal y estado ".activated".
+    var c1 = this.resolveColor(this.color1);
+    var c2 = this.resolveColor(this.color2);
+    var c3 = this.resolveColor(this.color3);
+    var clampPanelEl = panelExtraControlC1.getElement ? panelExtraControlC1.getElement() : document.querySelector('.m-panel.m-herramientaC1');
+    if (clampPanelEl) {
+      clampPanelEl.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      clampPanelEl.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      clampPanelEl.style.setProperty('--g-plugin-border-color', c2.deactive);
+      clampPanelEl.style.setProperty('--g-plugin-border-color-active', c2.active);
+      clampPanelEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      clampPanelEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
+    }
+    var clampBtn = document.getElementById('m-herramienta-button');
+    if (clampBtn) {
+      clampBtn.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      clampBtn.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      clampBtn.style.setProperty('--g-plugin-border-color', c2.deactive);
+      clampBtn.style.setProperty('--g-plugin-border-color-active', c2.active);
+      clampBtn.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      clampBtn.style.setProperty('--g-plugin-icon-color-active', c3.active);
+    }
 
     const controlC1 = new IDEE.Control(new IDEE.impl.Control(), 'ControlPruebaC1');
 

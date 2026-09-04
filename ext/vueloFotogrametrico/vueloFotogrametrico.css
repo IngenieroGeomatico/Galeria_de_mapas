@@ -13,6 +13,7 @@
     /* avión ✈ */
     font-size: 20px;
     font-family: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color: var(--g-plugin-icon-color, #ffffff);
 }
 
 /* Override del fondo que impone la API-IDEE a los paneles (#71a7d3). Sin esto,
@@ -27,10 +28,22 @@
     box-shadow: none;
 }
 
-/* Fondo del botón del panel con el color del resto de plugins (orangered). */
+/* Fondo del botón del panel (color1), borde (color2) e icono (color3).
+   "active" = panel abierto (opened). */
 .m-areas>div.m-area>div.m-panel.g-herramienta_vuelo.no-collapsible>div.m-panel-controls>div.m-control>button,
-.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo>button.m-panel-btn {
-    background-color: orangered !important;
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo>button.m-panel-btn,
+.g-herramienta_vuelo .m-herramienta-header {
+    background-color: var(--g-plugin-bg-color, orangered) !important;
+    color: var(--g-plugin-icon-color, #ffffff) !important;
+    border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* Panel abierto (opened) = estado activo: colores "-active". */
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo.opened>button.m-panel-btn,
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo.opened .m-herramienta-header {
+    background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+    color: var(--g-plugin-icon-color-active, #71A7D3) !important;
+    border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
 /* El atributo [hidden] debe ganar a las reglas display:flex de secciones y
@@ -49,10 +62,9 @@
     color: #1a1a1a;
 }
 
-/* Cabecera / título del panel (arrastrable) */
+/* Cabecera / título del panel (arrastrable) - fondo/color vienen del bloque
+   con variables color1/color2. */
 .g-herramienta_vuelo .m-herramienta-header {
-    background-color: orangered;
-    color: #fff;
     display: block;
     font-size: 15px;
     font-weight: 700;
