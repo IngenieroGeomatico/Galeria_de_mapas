@@ -689,6 +689,220 @@ class miPlugin_layerSwitcher {
       return `${more}${html}`;
     }
 
+    // ── Capas MapLibre / vector-tiles (p.ej. BTN) ─────────────────────
+    // Estas capas NO almacenan sus features en una fuente OpenLayers (como
+    // GeoJSON/WFS): se renderizan desde tiles vectoriales MapLibre y los
+    // features solo estan disponibles (via querySourceFeatures) para las
+    // tiles que caen dentro del viewport actual del mapa. Por eso no se puede
+    // mostrar una "tabla con todos los features" de golpe; en su lugar se
+    // listan las SUB-CAPAS GL del estilo (sus "source-layers") y, al elegir
+    // una, se muestran los atributos de los features presentes en la vista.
+    function getMapLibreMap(layer) {
+      try {
+        const impl = layer.getImpl ? layer.getImpl() : null;
+        const ol = impl && impl.olLayer;
+        if (ol && ol.mapLibreMap) return ol.mapLibreMap;
+      } catch (e) { /* no es MapLibre */ }
+      return null;
+    }
+
+    // Detecta si una capa es de tiles vectoriales MapLibre (dos pasos:
+    // tipo de capa y presencia de una instancia maplibre con estilo).
+    function isMapLibreLayer(layer) {
+      const t = String(layer.type || layer._type || '').toLowerCase();
+      if (!(t === 'maplibre' || t === 'mapbox')) return false;
+      const ml = getMapLibreMap(layer);
+      return !!ml && typeof ml.getStyle === 'function';
+    }
+
+    // Espera (con tope) a que el estilo MapLibre este cargado por completo.
+    // El estilo de BTN es enorme (>300 capas) y tarda en cargarse.
+    function awaitMapLibreStyle(ml, ms) {
+      return new Promise(function (resolve) {
+        const deadline = Date.now() + (ms || 12000);
+        const poll = function () {
+          const ready = (function () {
+            try {
+              const style = ml.getStyle();
+              return !!(style && Array.isArray(style.layers) && style.layers.length && style.sources);
+            } catch (e) { return false; }
+          })();
+          if (ready || Date.now() > deadline) return resolve(ready || false);
+          setTimeout(poll, 400);
+        };
+        poll();
+      });
+    }
+
+    // Etiqueta legible para el tipo geometrico de una sub-capa GL.
+    function mapLibreTypeLabel(types) {
+      const labels = [];
+      if (types.indexOf('symbol') >= 0 || types.indexOf('circle') >= 0) labels.push('Punto');
+      if (types.indexOf('line') >= 0) labels.push('Línea');
+      if (types.indexOf('fill') >= 0 || types.indexOf('fill-extrusion') >= 0) labels.push('Área');
+      if (!labels.length) labels.push('Otro');
+      return labels.join(' / ');
+    }
+
+    // Devuelve un OL Feature (geometrias OL con getExtent/getType) a partir de
+    // un feature GeoJSON devuelto por querySourceFeatures de MapLibre. Asi se
+    // puede resaltar/mostrar con la misma logica que el resto de capas.
+    function geoJsonToOlFeature(gjFeature) {
+      try {
+        const fmt = new (window.ol && window.ol.format && window.ol.format.GeoJSON)();
+        const feat = fmt.readFeature(gjFeature, { featureProjection: 'EPSG:3857' });
+        if (feat && feat.getGeometry && typeof feat.getGeometry === 'function') return feat;
+      } catch (e) { /* convertir fallo */ }
+      return null;
+    }
+
+    // ── Paso 1 de una capa MapLibre: indice de sub-capas GL ───────────
+    // Muestra la lista de "source-layers" de la fuente vectorial del estilo
+    // con su tipo y el numero de features visibles en el viewport actual.
+    async function buildMapLibreTable(layer) {
+      const layerName = layer.legend || layer.name || 'Capa';
+      const ml = getMapLibreMap(layer);
+      if (!ml) {
+        return `<p style="padding:8px;color:#555;">No se pudo acceder al render de la capa <b>${esc(layerName)}</b>.</p>`;
+      }
+      const ready = await awaitMapLibreStyle(ml);
+      if (!ready) {
+        return `<p style="padding:8px;color:#555;">El estilo de la capa <b>${esc(layerName)}</b> aún se está cargando. Vuelve a pulsar «Tabla» en unos segundos.</p>`;
+      }
+
+      let style = null, vectorSources = [], layers = [];
+      try {
+        style = ml.getStyle();
+        layers = style.layers || [];
+        for (const k in (style.sources || {})) {
+          if (style.sources[k] && String(style.sources[k].type) === 'vector') vectorSources.push(k);
+        }
+      } catch (e) { /* estilo ilegible */ }
+      if (!vectorSources.length) {
+        return `<p style="padding:8px;color:#555;">La capa <b>${esc(layerName)}</b> no expone fuentes vectoriales consultables.</p>`;
+      }
+
+      // Agrupar las capas GL por su fuente vectorial y por "source-layer".
+      // Cada source-layer equivale a una sub-capa temática del estilo BTN.
+      const groups = {}; // sourceId -> map(sourceLayer -> {types:Set})
+      for (const L of layers) {
+        if (!L || !L.source) continue;
+        if (vectorSources.indexOf(L.source) < 0) continue;
+        const sl = L['source-layer'] || '(sin source-layer)';
+        if (!groups[L.source]) groups[L.source] = {};
+        if (!groups[L.source][sl]) groups[L.source][sl] = { types: [] };
+        const g = groups[L.source][sl];
+        if (g.types.indexOf(L.type) < 0) g.types.push(L.type);
+      }
+      let anySubLayer = false;
+      for (const s of vectorSources) { if (groups[s] && Object.keys(groups[s]).length) { anySubLayer = true; break; } }
+      if (!anySubLayer) {
+        return `<p style="padding:8px;color:#555;">La capa <b>${esc(layerName)}</b> no expone sub-capas consultables en el estilo.</p>`;
+      }
+
+      // Calcular el numero de features del viewport para cada sub-capa (tolerante).
+      const counts = {};
+      for (const sourceId of vectorSources) {
+        for (const sl in groups[sourceId]) {
+          counts[sourceId + '::' + sl] = 0;
+          try {
+            counts[sourceId + '::' + sl] = ml.querySourceFeatures(sourceId, { sourceLayer: sl }).length;
+          } catch (e) { /* mantener 0 */ }
+        }
+      }
+
+      const layerId = (typeof layer.idLayer !== 'undefined') ? layer.idLayer : '';
+      let html = `<p class="ls-sheet-note" style="margin-top:0;">Sub-capas de <b>${esc(layerName)}</b> (tiles vectoriales · ${esc(style.name || '')}): los features listados son los del <b>viewport actual</b> del mapa.</p>`;
+      for (const sourceId of vectorSources) {
+        const subLayers = Object.keys(groups[sourceId]).sort();
+        if (!subLayers.length) continue;
+        html += `<p class="ls-sheet-note" style="margin:6px 0 2px;font-weight:600;color:#444;">Fuente: ${esc(sourceId)}</p>`;
+        html += `<ul class="ls-mapLibre-sublist">`;
+        for (const sl of subLayers) {
+          const c = counts[sourceId + '::' + sl] || 0;
+          const g = groups[sourceId][sl];
+          html += `<li>
+            <button type="button" class="ls-ml-sublayer" data-id="${esc(layerId)}" data-source="${esc(sourceId)}" data-slayer="${esc(sl)}" onclick="openMapLibreSubLayer('${esc(layerId)}','${esc(sourceId)}','${esc(sl)}')" title="Ver tabla de atributos de '${esc(sl)}'">
+              <span class="ls-ml-name">${esc(sl)}</span>
+              <span class="ls-ml-type">${esc(mapLibreTypeLabel(g.types))}</span>
+              <span class="ls-ml-count" title="Features en el viewport actual">${c} en vista</span>
+            </button>
+          </li>`;
+        }
+        html += `</ul>`;
+      }
+      return html;
+    }
+
+    // ── Paso 2 de una capa MapLibre: tabla de atributos de una sub-capa ──
+    // Consulta los features de un source-layer concreto dentro del viewport
+    // (querySourceFeatures) y construye la tabla de atributos, cacheandolos
+    // como OL features para permitir el resaltado al pulsar una fila.
+    function buildMapLibreFeaturesTable(layer, sourceId, sourceLayer) {
+      const layerName = layer.legend || layer.name || 'Capa';
+      const ml = getMapLibreMap(layer);
+      let gjFeatures = [];
+      try {
+        gjFeatures = ml.querySourceFeatures(sourceId, { sourceLayer: sourceLayer }) || [];
+      } catch (e) { gjFeatures = []; }
+      if (!gjFeatures.length) {
+        return `<p style="padding:8px;color:#555;">No hay features de <b>${esc(sourceLayer)}</b> en el viewport actual del mapa. Acércate (zoom) o desplázate a una zona con datos y vuelve a pulsar la sub-capa.</p>`;
+      }
+
+      // Derivar columnas a partir de las propiedades (GeoJSON).
+      const columns = [];
+      const rows = gjFeatures.slice(0, 500).map(function (gj) {
+        const props = (gj && gj.properties && typeof gj.properties === 'object') ? gj.properties : {};
+        const ol = geoJsonToOlFeature(gj);
+        for (const k in props) { if (!columns.includes(k)) columns.push(k); }
+        return { props: props, feature: ol, geometry: ol && ol.getGeometry ? ol.getGeometry() : null };
+      });
+      if (!columns.length) columns.push('(sin atributos)');
+
+      // Cachear en sheetCtx (misma estructura que buildVectorTable) para que
+      // locateFeatureByIdx resalte el feature convenido al pulsar la fila.
+      const cached = rows.map(function (row, i) {
+        let extent = null;
+        try { extent = row.geometry && row.geometry.getExtent ? row.geometry.getExtent() : null; } catch (e) { extent = null; }
+        let firstProp = null;
+        for (const c of columns) {
+          const v = row.props[c];
+          if (v !== undefined && v !== null && v !== '' && c !== '(sin atributos)') { firstProp = v; break; }
+        }
+        return { feature: row.feature, geometry: row.geometry, extent: extent, firstProp: firstProp, idx: i };
+      });
+      sheetCtx = { layerId: layer.idLayer, features: cached, olLayer: null };
+
+      const layerId = (typeof layer.idLayer !== 'undefined') ? layer.idLayer : '';
+      let html = `<p class="ls-sheet-note" style="margin-top:0;">Sub-capa <b>${esc(sourceLayer)}</b> · ${rows.length} features del viewport.</p>`;
+      html += `<table class="ls-attr-table"><thead><tr><th>#</th>`;
+      for (const c of columns) html += `<th>${esc(c)}</th>`;
+      html += `</tr></thead><tbody>`;
+      rows.forEach(function (row, i) {
+        html += `<tr class="ls-clickable" data-row-idx="${i}" title="Localizar este elemento en el mapa" onclick="locateFeature('${layerId}', '${i}')">`;
+        html += `<td>${i + 1}</td>`;
+        for (const c of columns) {
+          const v = row.props[c];
+          html += `<td>${esc(v === undefined || v === null ? (c === '(sin atributos)' ? '—' : '') : v)}</td>`;
+        }
+        html += `</tr>`;
+      });
+      html += `</tbody></table>`;
+      return html;
+    }
+
+    // Actualiza el contenido del panel con la tabla de una sub-capa MapLibre.
+    window.openMapLibreSubLayer = function (index, sourceId, sourceLayer) {
+      const matches = map.getLayers().filter(layer => {
+        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
+      });
+      const layer = matches[0];
+      if (!layer) return;
+      closeSheet();
+      openSheet(`Tabla de atributos · ${layer.legend || layer.name || 'Capa'} › ${sourceLayer}`,
+        buildMapLibreFeaturesTable(layer, sourceId, sourceLayer), true);
+    };
+
     // ── Estadisticas de capa RASTER ────────────────────────────────────
     function buildRasterInfo(layer) {
       const layerName = layer.legend || layer.name || 'Capa';
@@ -750,6 +964,18 @@ class miPlugin_layerSwitcher {
       // (buildVectorTable) puebla sheetCtx y openSheet ya no debe resetearlo.
       closeSheet();
       if (kind === 'vector') {
+        // Las capas MapLibre (BTN) no tienen una fuente OL enumerable: se abre
+        // el indice de sub-capas (source-layers) del estilo. El builder es
+        // asincrono (espera a que cargue el estilo), asi que se abre el panel
+        // cero y se rellena el cuerpo cuando este listo.
+        if (isMapLibreLayer(layer)) {
+          const panel = openSheet(`Tabla de atributos · ${layerName}`, '<p style="padding:8px;color:#555;">Cargando sub-capas…</p>', false);
+          buildMapLibreTable(layer).then(function (html) {
+            const body = panel && panel.querySelector('.ls-sheet-body');
+            if (body) body.innerHTML = html;
+          });
+          return;
+        }
         openSheet(`Tabla de atributos · ${layerName}`, buildVectorTable(layer), true);
       } else {
         sheetCtx = null;
