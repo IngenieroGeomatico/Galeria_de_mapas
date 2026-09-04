@@ -18,6 +18,11 @@
   box-shadow: none;
 }
 
+/* ── Botón del panel en naranja (mismo patrón que vueloFotogrametrico) ── */
+.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer>button.m-panel-btn {
+  background-color: orangered !important;
+}
+
 /* ── Contenedor del plugin (estructura del framework) ────────────── */
 /* IMPORTANTE: el ancho NO se fija aquí: se adapta automáticamente al
    contenido (el grid de miniaturas). Así, con más capas el panel crece y
@@ -144,7 +149,7 @@
 /* ── Cabecera / título del panel (arrastrable) ──────────────────── */
 /* Mismo patrón que vueloFotogrametrico/estereoscopia. */
 .g-herramienta_baseLayer .m-herramienta-header {
-  background-color: #71a7d3;
+  background-color: orangered;
   color: #fff;
   display: block;
   font-size: 15px;

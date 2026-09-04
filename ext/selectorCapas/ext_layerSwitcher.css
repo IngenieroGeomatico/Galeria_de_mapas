@@ -54,6 +54,14 @@
   width: 100%;
 }
 
+/* Botón del panel y cabecera en naranja (mismo patrón que vueloFotogrametrico).
+   Scopeado al plugin para no afectar al resto de la API. */
+.m-areas>div.m-area>div.m-panel.g-herramienta_selectorCapa>button.m-panel-btn,
+.g-herramienta_selectorCapa .m-herramienta-header {
+  background-color: orangered !important;
+  color: #fff !important;
+}
+
 
 .overlay-layer-selector {
   padding: 0.5em;
