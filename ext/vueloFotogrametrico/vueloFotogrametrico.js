@@ -1566,6 +1566,12 @@
     constructor(options = {}) {
     this.name = "miPlugin_vueloFotogrametrico";
     this.options = options || {};
+    // Colores configurables. Cada uno puede ser un color (string) o un
+    // objeto {active, deactive}:
+    //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
     this.map = null;
     this.panel = null;
 
@@ -1579,6 +1585,13 @@
     window.__vueloSharedData = this.data;
 
     this._layers = { puntos: null, lineas: null, footprints: null };
+  }
+
+  // Devuelve {active, deactive} a partir de un color simple o un objeto.
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
   }
 
   // Ayuda del plugin (protocolo API-IDEE: getHelp devuelve {title, content}).
@@ -1655,6 +1668,21 @@
 
     panelVuelo.addControls(controlVuelo);
     map.addPanels(panelVuelo);
+
+    // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
+    // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
+    const c1 = this.resolveColor(this.color1);
+    const c2 = this.resolveColor(this.color2);
+    const c3 = this.resolveColor(this.color3);
+    const vueloEl = panelVuelo.getElement ? panelVuelo.getElement() : document.querySelector('.m-panel.g-herramienta_vuelo');
+    if (vueloEl) {
+      vueloEl.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      vueloEl.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      vueloEl.style.setProperty('--g-plugin-border-color', c2.deactive);
+      vueloEl.style.setProperty('--g-plugin-border-color-active', c2.active);
+      vueloEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      vueloEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
+    }
 
     document.querySelector('.g-herramienta_vuelo .m-panel-controls').innerHTML = htmlPanel;
     document.querySelector('#m-herramienta-contents-vuelo').appendChild(controlVuelo.getElement());

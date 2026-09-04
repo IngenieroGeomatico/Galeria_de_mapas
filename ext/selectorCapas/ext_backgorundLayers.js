@@ -24,6 +24,19 @@ class miPlugin_baseLayer {
   constructor(options = {}) {
     this.name = 'miPlugin_baseLayer';
     this.options = options || {};
+    // Colores configurables. Cada uno puede ser un color (string) o un
+    // objeto {active, deactive}:
+    //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+  }
+
+  // Devuelve {active, deactive} a partir de un color simple o un objeto.
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
   }
 
   getHelp() {
@@ -80,6 +93,41 @@ class miPlugin_baseLayer {
     control.createView = function () { return document.createElement('div'); };
     panel.addControls(control);
     map.addPanels(panel);
+
+    // ── Aplicar colores configurables (color1=fondo, color2=borde, color3=icono) ──
+    // Se inyectan 6 variables CSS (estado normal y ".opened/active") mediante un
+    // bloque <style> con ámbito al .m-panel del plugin. Un <style> en <head>
+    // sobrevive a los re-renders que IDEE hace del panel (baseLayer / cambioImpl
+    // no son fiables con estilo inline en addTo), por lo que es el método robusto.
+    var c1 = this.resolveColor(this.color1);
+    var c2 = this.resolveColor(this.color2);
+    var c3 = this.resolveColor(this.color3);
+    var styleId = 'g-plugin-colores-baseLayer';
+    var styleEl = document.getElementById(styleId);
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      styleEl.appendChild(document.createTextNode(
+        '.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer,' +
+        '.m-panel.g-herramienta_baseLayer,' +
+        '.g-herramienta_baseLayer .m-herramienta-header,' +
+        '.g-herramienta_baseLayer>button{' +
+        '--g-plugin-bg-color:' + c1.deactive + ';' +
+        '--g-plugin-bg-color-active:' + c1.active + ';' +
+        '--g-plugin-border-color:' + c2.deactive + ';' +
+        '--g-plugin-border-color-active:' + c2.active + ';' +
+        '--g-plugin-icon-color:' + c3.deactive + ';' +
+        '--g-plugin-icon-color-active:' + c3.active + ';}' +
+        '.m-panel.g-herramienta_baseLayer.opened{' +
+        '--g-plugin-bg-color:' + c1.active + ';' +
+        '--g-plugin-bg-color-active:' + c1.active + ';' +
+        '--g-plugin-border-color:' + c2.active + ';' +
+        '--g-plugin-border-color-active:' + c2.active + ';' +
+        '--g-plugin-icon-color:' + c3.active + ';' +
+        '--g-plugin-icon-color-active:' + c3.active + ';}'
+      ));
+      (document.head || document.documentElement).appendChild(styleEl);
+    }
 
     // Inyectar el HTML del panel sobre el contenedor que crea IDEE.
     var panelCtrl = document.querySelector('.g-herramienta_baseLayer .m-panel-controls');

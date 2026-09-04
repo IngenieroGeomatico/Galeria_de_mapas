@@ -3,10 +3,23 @@ class miPlugin_layerSwitcher {
   constructor(options = {}) {
     this.name = 'miPlugin_layerSwitcher';
     this.options = options || {};
+    // Colores configurables. Cada uno puede ser un color (string) o un
+    // objeto {active, deactive}:
+    //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
     // idLayer de la capa cuyo desplegable de opciones (transparencia) está
     // abierto. Se conserva entre re-renders para no cerrarlo al alternar
     // la visibilidad de otra capa.
     this._optionsOpen = null;
+  }
+
+  // Devuelve {active, deactive} a partir de un color simple o un objeto.
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
   }
 
   getHelp() {
@@ -50,6 +63,22 @@ class miPlugin_layerSwitcher {
 
     panelExtra.addControls(control);
     map.addPanels(panelExtra);
+
+    // ── Aplicar colores configurables (color1=fondo, color2=borde, color3=icono) ──
+    // Se inyectan 6 variables CSS en el panel (estado normal y ".opened/active").
+    const c1 = this.resolveColor(this.color1);
+    const c2 = this.resolveColor(this.color2);
+    const c3 = this.resolveColor(this.color3);
+    const panelEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta_selectorCapa');
+    if (panelEl) {
+      panelEl.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      panelEl.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      panelEl.style.setProperty('--g-plugin-border-color', c2.deactive);
+      panelEl.style.setProperty('--g-plugin-border-color-active', c2.active);
+      panelEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      panelEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
+    }
+
     const panelSelector = document.querySelector('.g-herramienta_selectorCapa .m-panel-controls');
     if (panelSelector) panelSelector.innerHTML = htmlPanel;
     const contents = document.querySelector('#m-herramienta-contents-layerSwitcher');

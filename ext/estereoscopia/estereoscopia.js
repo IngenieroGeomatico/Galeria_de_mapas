@@ -174,10 +174,23 @@
     constructor(options = {}) {
     this.name = "miPlugin_estereoscopia";
     this.options = options || {};
+    // Colores configurables. Cada uno puede ser un color (string) o un
+    // objeto {active, deactive}:
+    //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
     this.map = null;
     this.engine = null;
     this.panel = null;         // contenido del control dentro del IDEE.ui.Panel
     this.cursorsInjected = false;
+  }
+
+  // Devuelve {active, deactive} a partir de un color simple o un objeto.
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
   }
 
   // Detecta la implementación activa a partir del mapa nativo. Es lo más
@@ -293,6 +306,21 @@
 
     panelEstereo.addControls(controlEstereo);
     map.addPanels(panelEstereo);
+
+    // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
+    // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
+    var c1 = this.resolveColor(this.color1);
+    var c2 = this.resolveColor(this.color2);
+    var c3 = this.resolveColor(this.color3);
+    var estereoEl = panelEstereo.getElement ? panelEstereo.getElement() : document.querySelector('.m-panel.g-herramienta_estereo');
+    if (estereoEl) {
+      estereoEl.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      estereoEl.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      estereoEl.style.setProperty('--g-plugin-border-color', c2.deactive);
+      estereoEl.style.setProperty('--g-plugin-border-color-active', c2.active);
+      estereoEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      estereoEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
+    }
 
     document.querySelector('.g-herramienta_estereo .m-panel-controls').innerHTML = htmlPanel;
     document.querySelector('#m-herramienta-contents-estereo').appendChild(controlEstereo.getElement());

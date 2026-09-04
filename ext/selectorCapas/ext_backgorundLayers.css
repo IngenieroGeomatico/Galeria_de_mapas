@@ -18,9 +18,32 @@
   box-shadow: none;
 }
 
-/* ── Botón del panel en naranja (mismo patrón que vueloFotogrametrico) ── */
-.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer>button.m-panel-btn {
-  background-color: orangered !important;
+/* ── Botón del panel: fondo y color usan las variables del constructor ── */
+/* color1 = fondo, color2 = borde, color3 = icono/flecha.
+   "active" = panel abierto (opened). */
+.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer>button.m-panel-btn,
+.g-herramienta_baseLayer .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* Panel abierto (opened) = estado activo: se aplican los colores "-active". */
+.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer.opened>button.m-panel-btn,
+.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer.opened .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
+}
+
+/* Icono del botón colapsado (emoji): hereda el color del icono. */
+.g-herramienta_baseLayer .m-tools:before {
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+}
+
+/* Flechita del botón cuando el panel está abierto: usa el icono activo. */
+.m-areas>div.m-area>div.m-panel.g-herramienta_baseLayer.opened>button.m-panel-btn.g-cartografia-flecha-izquierda {
+  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
 }
 
 /* ── Contenedor del plugin (estructura del framework) ────────────── */
@@ -147,10 +170,9 @@
 }
 
 /* ── Cabecera / título del panel (arrastrable) ──────────────────── */
-/* Mismo patrón que vueloFotogrametrico/estereoscopia. */
+/* Mismo patrón que vueloFotogrametrico/estereoscopia. Fondo y color de
+   texto vienen del bloque con variables (color1/color2). */
 .g-herramienta_baseLayer .m-herramienta-header {
-  background-color: orangered;
-  color: #fff;
   display: block;
   font-size: 15px;
   font-weight: 700;
