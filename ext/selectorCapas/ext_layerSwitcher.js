@@ -747,16 +747,6 @@ class miPlugin_layerSwitcher {
       });
     }
 
-    // Etiqueta legible para el tipo geometrico de una sub-capa GL.
-    function mapLibreTypeLabel(types) {
-      const labels = [];
-      if (types.indexOf('symbol') >= 0 || types.indexOf('circle') >= 0) labels.push('Punto');
-      if (types.indexOf('line') >= 0) labels.push('Línea');
-      if (types.indexOf('fill') >= 0 || types.indexOf('fill-extrusion') >= 0) labels.push('Área');
-      if (!labels.length) labels.push('Otro');
-      return labels.join(' / ');
-    }
-
     // Devuelve un OL Feature (geometrias OL con getExtent/getType) a partir de
     // un feature GeoJSON devuelto por querySourceFeatures de MapLibre. Asi se
     // puede resaltar/mostrar con la misma logica que el resto de capas.
@@ -769,35 +759,28 @@ class miPlugin_layerSwitcher {
       return null;
     }
 
-    // ── Paso 1 de una capa MapLibre: indice de sub-capas GL ───────────
-    // Muestra la lista de "source-layers" de la fuente vectorial del estilo
-    // con su tipo y el numero de features visibles en el viewport actual.
-    async function buildMapLibreTable(layer) {
-      const layerName = layer.legend || layer.name || 'Capa';
+    // ── Paso 1 de una capa MapLibre: sub-capas GL ─────────────────────
+    // Recopila las sub-capas (source-layers) de la fuente vectorial del estilo
+    // junto con su tipo y el numero de features visibles en el viewport actual.
+    // Devuelve una estructura plana [{sourceId, sourceLayer, types, count}].
+    async function getMapLibreSubStack(layer) {
       const ml = getMapLibreMap(layer);
-      if (!ml) {
-        return `<p style="padding:8px;color:#555;">No se pudo acceder al render de la capa <b>${esc(layerName)}</b>.</p>`;
-      }
+      if (!ml) return [];
       const ready = await awaitMapLibreStyle(ml);
-      if (!ready) {
-        return `<p style="padding:8px;color:#555;">El estilo de la capa <b>${esc(layerName)}</b> aún se está cargando. Vuelve a pulsar «Tabla» en unos segundos.</p>`;
-      }
+      if (!ready) return [];
 
-      let style = null, vectorSources = [], layers = [];
+      let layers = [], vectorSources = [];
       try {
-        style = ml.getStyle();
+        const style = ml.getStyle();
         layers = style.layers || [];
         for (const k in (style.sources || {})) {
           if (style.sources[k] && String(style.sources[k].type) === 'vector') vectorSources.push(k);
         }
-      } catch (e) { /* estilo ilegible */ }
-      if (!vectorSources.length) {
-        return `<p style="padding:8px;color:#555;">La capa <b>${esc(layerName)}</b> no expone fuentes vectoriales consultables.</p>`;
-      }
+      } catch (e) { return []; }
+      if (!vectorSources.length) return [];
 
       // Agrupar las capas GL por su fuente vectorial y por "source-layer".
-      // Cada source-layer equivale a una sub-capa temática del estilo BTN.
-      const groups = {}; // sourceId -> map(sourceLayer -> {types:Set})
+      const groups = {}; // sourceId -> map(sourceLayer -> {types:[]})
       for (const L of layers) {
         if (!L || !L.source) continue;
         if (vectorSources.indexOf(L.source) < 0) continue;
@@ -807,44 +790,66 @@ class miPlugin_layerSwitcher {
         const g = groups[L.source][sl];
         if (g.types.indexOf(L.type) < 0) g.types.push(L.type);
       }
-      let anySubLayer = false;
-      for (const s of vectorSources) { if (groups[s] && Object.keys(groups[s]).length) { anySubLayer = true; break; } }
-      if (!anySubLayer) {
-        return `<p style="padding:8px;color:#555;">La capa <b>${esc(layerName)}</b> no expone sub-capas consultables en el estilo.</p>`;
-      }
 
-      // Calcular el numero de features del viewport para cada sub-capa (tolerante).
-      const counts = {};
+      const stack = [];
       for (const sourceId of vectorSources) {
-        for (const sl in groups[sourceId]) {
-          counts[sourceId + '::' + sl] = 0;
-          try {
-            counts[sourceId + '::' + sl] = ml.querySourceFeatures(sourceId, { sourceLayer: sl }).length;
-          } catch (e) { /* mantener 0 */ }
-        }
-      }
-
-      const layerId = (typeof layer.idLayer !== 'undefined') ? layer.idLayer : '';
-      let html = `<p class="ls-sheet-note" style="margin-top:0;">Sub-capas de <b>${esc(layerName)}</b> (tiles vectoriales · ${esc(style.name || '')}): los features listados son los del <b>viewport actual</b> del mapa.</p>`;
-      for (const sourceId of vectorSources) {
-        const subLayers = Object.keys(groups[sourceId]).sort();
-        if (!subLayers.length) continue;
-        html += `<p class="ls-sheet-note" style="margin:6px 0 2px;font-weight:600;color:#444;">Fuente: ${esc(sourceId)}</p>`;
-        html += `<ul class="ls-mapLibre-sublist">`;
+        const subLayers = Object.keys(groups[sourceId] || {}).sort();
         for (const sl of subLayers) {
-          const c = counts[sourceId + '::' + sl] || 0;
-          const g = groups[sourceId][sl];
-          html += `<li>
-            <button type="button" class="ls-ml-sublayer" data-id="${esc(layerId)}" data-source="${esc(sourceId)}" data-slayer="${esc(sl)}" onclick="openMapLibreSubLayer('${esc(layerId)}','${esc(sourceId)}','${esc(sl)}')" title="Ver tabla de atributos de '${esc(sl)}'">
-              <span class="ls-ml-name">${esc(sl)}</span>
-              <span class="ls-ml-type">${esc(mapLibreTypeLabel(g.types))}</span>
-              <span class="ls-ml-count" title="Features en el viewport actual">${c} en vista</span>
-            </button>
-          </li>`;
+          let count = 0;
+          try { count = (ml.querySourceFeatures(sourceId, { sourceLayer: sl }) || []).length; } catch (e) { /* mantener 0 */ }
+          stack.push({ sourceId: sourceId, sourceLayer: sl, types: groups[sourceId][sl].types, count: count });
         }
-        html += `</ul>`;
       }
-      return html;
+      return stack;
+    }
+
+    // Instala el dropdown (secundario) de sub-capas en el header del sidenav de
+    // una capa MapLibre y conecta el cambio de seleccion con la tabla del body.
+    // Al elegir una sub-capa se actualiza SOLO el cuerpo, manteniendo abierto el
+    // panel y el primer dropdown de capas.
+    function installMapLibreSubPicker(panel, layer, body) {
+      const headLeft = panel.querySelector('.ls-sheet-header-left');
+      const picker = document.createElement('select');
+      picker.className = 'ls-sheet-sublayer-picker';
+      picker.setAttribute('aria-label', 'Sub-capa');
+      picker.disabled = true;
+      picker.innerHTML = '<option>Cargando sub-capas…</option>';
+      const titleEl = panel.querySelector('.ls-sheet-title');
+      if (headLeft && titleEl) headLeft.insertBefore(picker, titleEl);
+
+      const setBody = (sid, sl) => { body.innerHTML = buildMapLibreFeaturesTable(layer, sid, sl); };
+
+      getMapLibreSubStack(layer).then(function (stack) {
+        if (!stack.length) {
+          picker.remove();
+          body.innerHTML = `<p style="padding:8px;color:#555;">La capa <b>${esc(layer.legend || layer.name || 'Capa')}</b> no expone sub-capas consultables en el estilo.</p>`;
+          return;
+        }
+        picker.disabled = false;
+        picker.innerHTML = '';
+        const ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = '— Selecciona una sub-capa —';
+        picker.appendChild(ph);
+        stack.forEach(function (item) {
+          const o = document.createElement('option');
+          o.value = `${item.sourceId}::${item.sourceLayer}`;
+          o.textContent = item.sourceLayer + (item.count > 0 ? ` (${item.count})` : '');
+          picker.appendChild(o);
+        });
+        picker.onchange = function () {
+          const v = picker.value.split('::');
+          if (v.length === 2) setBody(v[0], v[1]);
+        };
+        // Mostrar automaticamente la primera sub-capa con features en la vista.
+        const withData = stack.filter(function (i) { return i.count > 0; });
+        const first = withData.length ? withData[0] : stack[0];
+        picker.value = `${first.sourceId}::${first.sourceLayer}`;
+        setBody(first.sourceId, first.sourceLayer);
+      }).catch(function () {
+        picker.remove();
+        body.innerHTML = `<p style="padding:8px;color:#555;">No se pudieron cargar las sub-capas de <b>${esc(layer.legend || layer.name || 'Capa')}</b>.</p>`;
+      });
     }
 
     // ── Paso 2 de una capa MapLibre: tabla de atributos de una sub-capa ──
@@ -903,18 +908,6 @@ class miPlugin_layerSwitcher {
       html += `</tbody></table>`;
       return html;
     }
-
-    // Actualiza el contenido del panel con la tabla de una sub-capa MapLibre.
-    window.openMapLibreSubLayer = function (index, sourceId, sourceLayer) {
-      const matches = map.getLayers().filter(layer => {
-        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
-      });
-      const layer = matches[0];
-      if (!layer) return;
-      closeSheet();
-      openSheet(`Tabla de atributos · ${layer.legend || layer.name || 'Capa'} › ${sourceLayer}`,
-        buildMapLibreFeaturesTable(layer, sourceId, sourceLayer), true);
-    };
 
     // ── Estadisticas de capa RASTER ────────────────────────────────────
     function buildRasterInfo(layer) {
@@ -983,15 +976,12 @@ class miPlugin_layerSwitcher {
       const finish = (selectableLayers) => {
         if (kind === 'vector') {
           // Las capas MapLibre (BTN) no tienen una fuente OL enumerable: se abre
-          // el indice de sub-capas (source-layers) del estilo. El builder es
-          // asincrono (espera a que cargue el estilo), asi que se abre el panel
-          // cero y se rellena el cuerpo cuando este listo.
+          // el panel y se instala un dropdown secundario con sus sub-capas. El
+          // builder es asincrono (espera a que cargue el estilo), asi que se
+          // abre el cuerpo vacio y se rellena al cargar.
           if (isMapLibreLayer(layer)) {
-            const panel = openSheet(`Tabla de atributos · ${layerName}`, '<p style="padding:8px;color:#555;">Cargando sub-capas…</p>', false, selectableLayers, index);
-            buildMapLibreTable(layer).then(function (html) {
-              const body = panel && panel.querySelector('.ls-sheet-body');
-              if (body) body.innerHTML = html;
-            });
+            const panel = openSheet(`Tabla de atributos · ${layerName}`, '<p style="padding:8px;color:#555;">Cargando sub-capas…</p>', true, selectableLayers, index);
+            installMapLibreSubPicker(panel, layer, panel.querySelector('.ls-sheet-body'));
             return;
           }
           openSheet(`Tabla de atributos · ${layerName}`, buildVectorTable(layer), true, selectableLayers, index);
