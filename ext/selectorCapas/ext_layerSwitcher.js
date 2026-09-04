@@ -505,9 +505,9 @@ class miPlugin_layerSwitcher {
       clearHighlight();
       try {
         const style = new IDEE.style.Generic({
-          stroke: { color: '#e31a1c', width: 4 },
-          fill: { color: '#e31a1c', opacity: 0.25 },
-          point: { radius: 8, fill: { color: '#e31a1c' }, stroke: { color: '#ffffff', width: 2 } },
+          stroke: { color: '#ffd400', width: 5 },
+          fill: { color: '#ffd400', opacity: 0 },
+          point: { radius: 8, fill: { color: '#ffd400', opacity: 0 }, stroke: { color: '#ffd400', width: 5 } },
         });
         selLayer = new IDEE.layer.Vector(
           {
