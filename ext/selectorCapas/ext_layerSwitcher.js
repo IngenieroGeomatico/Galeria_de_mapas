@@ -161,10 +161,12 @@ class miPlugin_layerSwitcher {
     // Capas seleccionables desde el selector (compartido entre el panel y el
     // dropdown del sidenav de la tabla de atributos). Se excluyen capas
     // temporales/auxiliares (p.ej. el resaltado del panel) marcadas con
-    // displayInLayerSwitcher:false, las de terreno, y las capas internas
-    // auto-generadas por Mapea (nombre "layer_<n>"). Los GRUPOS (LayerGroup)
-    // SI pasan aunque su nombre interno sea "layer_<n>" porque se muestran
-    // como nodos padre del arbol.
+    // displayInLayerSwitcher:false, las de terreno, las capas internas
+    // auto-generadas por Mapea (nombre "layer_<n>"), y las capas BASE:
+    // las capas base se gestionan desde la extension de capas base
+    // (ext_backgorundLayers), no desde este selector de capas superpuestas.
+    // Los GRUPOS (LayerGroup) SI pasan aunque su nombre interno sea
+    // "layer_<n>" porque se muestran como nodos padre del arbol.
     // Se usa map.getLayers() (sincrono) en lugar de map.getOverlayLayers():
     // getLayers() refleja correctamente las eliminaciones con removeLayers(),
     // mientras que getOverlayLayers() de la fachada puede mantener caches
@@ -173,8 +175,11 @@ class miPlugin_layerSwitcher {
       const allLayers = map.getLayers();
       return (allLayers || []).filter(l => {
         try {
-          const direct = l && l.displayInLayerSwitcher;
           const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
+          // Las capas base no se muestran aqui (van en la extension de capas base).
+          if (l && l.isBase === true) return false;
+          if (impl && impl.isBase === true) return false;
+          const direct = l && l.displayInLayerSwitcher;
           const implFlag = impl && impl.displayInLayerSwitcher;
           if (direct === false || implFlag === false) return false;
           if (l && (l._type === 'Terrain' || l.type === 'Terrain')) return false;
