@@ -302,9 +302,6 @@ class miPlugin_layerSwitcher {
       const sliderFill = `linear-gradient(to right, #0078d4 0%, #0078d4 ${fillPct}%, #d7dde7 ${fillPct}%, #d7dde7 100%)`;
       const eyeBtn = `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>`;
       const optsBtn = `<button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>`;
-      // Lapiz para renombrar: siempre visible junto al nombre (no solo dentro
-      // del panel de opciones), visible tanto en capas como en grupos.
-      const renameBtn = `<button type="button" class="ls-action ls-action-rename ls-inline-rename" data-id="${index}" title="Renombrar capa" onclick="startRenameLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>`;
       const optionsPanel = `
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
                 <div class="ls-option-row">
@@ -323,20 +320,24 @@ class miPlugin_layerSwitcher {
       // resto de botones de la fila siguen siendo clicables durante el Drag&Drop).
       const dragHandleHtml = `<span class="ls-drag-handle" title="Arrastra para reordenar" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg></span>`;
 
+      // Nombre clicable: alterna la visibilidad (mismo comportamiento que el
+      // ojito) pero sin duplicar el boton. Publico para que no dependa del
+      // formato del panel de opciones.
+      const nameBtn = `<button type="button" class="ls-nombre ${node.isGroup ? 'ls-group-name' : ''}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${layerName}</button>`;
+
       if (node.isGroup) {
         const collapsed = isGroupCollapsed(layer);
         const chevron = collapsed ? '▸' : '▾';
         const childrenHtml = node.children.map(c => renderLayerNode(c, depth + 1)).join('');
         return `
             <li class="ls-group" data-depth="${depth}" draggable="true" data-drag-id="${index}">
-              <label>
+              <div class="ls-row">
                 ${dragHandleHtml}
                 <button type="button" class="ls-group-chevron" data-id="${index}" title="${collapsed ? 'Expandir grupo' : 'Colapsar grupo'}" onclick="toggleGroup('${index}')">${chevron}</button>
-                <span class="ls-nombre ls-group-name">${layerName}</span>
-                ${renameBtn}
+                ${nameBtn}
                 ${eyeBtn}
                 ${optsBtn}
-              </label>
+              </div>
               ${optionsPanel}
               <ul class="ls-children ${collapsed ? 'ls-collapsed' : ''}">${childrenHtml}</ul>
             </li>`;
@@ -344,13 +345,12 @@ class miPlugin_layerSwitcher {
 
       return `
             <li data-depth="${depth}" draggable="true" data-drag-id="${index}">
-              <label>
+              <div class="ls-row">
                 ${dragHandleHtml}
-                <span class="ls-nombre">${layerName}</span>
-                ${renameBtn}
+                ${nameBtn}
                 ${eyeBtn}
                 ${optsBtn}
-              </label>
+              </div>
               ${optionsPanel}
             </li>`;
     };
@@ -369,6 +369,13 @@ class miPlugin_layerSwitcher {
         // re-render (renderLayerList reemplaza el innerHTML).
         if (!preview.__lsDragBound) {
           preview.__lsDragBound = true;
+          // Arma el flag "el gesto empezó en el asa": el evento dragstart se
+          // dispara con target = el <li> draggable (no el elemento bajo el
+          // cursor), así que el origen real del gesto hay que capturarlo en
+          // pointerdown. Sin esto el drag se cancelaría siempre.
+          preview.addEventListener('pointerdown', (e) => {
+            window.__lsDragHandleArmed = !!(e.target.closest && e.target.closest('.ls-drag-handle'));
+          });
           preview.addEventListener('dragstart', window.handleDragStart);
           preview.addEventListener('dragover', window.handleDragOver);
           preview.addEventListener('drop', window.handleDrop);
@@ -637,23 +644,41 @@ class miPlugin_layerSwitcher {
     window.handleDragStart = function (e) {
       const li = e.target.closest ? e.target.closest('li[data-drag-id]') : null;
       if (!li) return;
-      // Solo se inicia el drag desde el asa (ls-drag-handle).
-      if (!e.target.closest('.ls-drag-handle')) { e.preventDefault(); return; }
+      // Solo se inicia el drag si el gesto empezó en el asa (ls-drag-handle):
+      // el flag lo arma el listener de pointerdown, porque en dragstart el
+      // target es el <li> draggable y no el elemento bajo el cursor.
+      if (!window.__lsDragHandleArmed) { e.preventDefault(); return; }
+      window.__lsDragHandleArmed = false;
+      // El dataTransfer no es legible durante dragover (getData() devuelve ''
+      // por privacidad, salvo en drop), asi que se guarda el id arrastrado en
+      // una variable global para consultarlo en dragover.
+      window.__lsDragId = li.getAttribute('data-drag-id');
       const list = li.closest('.overlay-layer-selector');
       if (list) list.classList.add('ls-dragging-active');
-      e.dataTransfer.setData('text/plain', li.getAttribute('data-drag-id'));
+      e.dataTransfer.setData('text/plain', window.__lsDragId);
       e.dataTransfer.effectAllowed = 'move';
       // Retraso para que el clic del asa no se confunda con el drag.
       li.classList.add('ls-dragging');
     };
 
     window.handleDragOver = function (e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
       const li = e.target.closest ? e.target.closest('li[data-drag-id]') : null;
       if (!li) return;
-      // Marca la fila destino como punto de insercion (linea superior).
-      document.querySelectorAll('.overlay-layer-selector li.ls-drop-above').forEach(el => el.classList.remove('ls-drop-above'));
+      // Si el destino NO convive con la capa arrastrada (raiz vs grupo), se
+      // rechaza el drop: sin preventDefault el navegador muestra el cursor
+      // "no permitido" (mover entre contenedores no esta soportado).
+      const moved = window.__lsDragId ? findLayerById(window.__lsDragId) : null;
+      if (moved) {
+        const targetLayer = findLayerById(li.getAttribute('data-drag-id'));
+        const contMoved = getSiblings(moved).parentGroup;
+        const contTarget = targetLayer ? getSiblings(targetLayer).parentGroup : null;
+        if (contMoved !== contTarget) return;
+      }
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      // Limpia las marcas de inserción anteriores (arriba Y abajo) y marca la
+      // fila destino segun la mitad recorrida.
+      clearDropMarks();
       const rect = li.getBoundingClientRect();
       const after = (e.clientY - rect.top) > rect.height / 2;
       li.classList.add(after ? 'ls-drop-below' : 'ls-drop-above');
@@ -662,7 +687,7 @@ class miPlugin_layerSwitcher {
     window.handleDrop = function (e) {
       e.preventDefault();
       clearDropMarks();
-      const dragId = e.dataTransfer.getData('text/plain');
+      const dragId = window.__lsDragId || e.dataTransfer.getData('text/plain');
       if (!dragId) return;
       const targetLi = e.target.closest ? e.target.closest('li[data-drag-id]') : null;
       if (!targetLi) return;
@@ -709,6 +734,7 @@ class miPlugin_layerSwitcher {
     };
 
     window.handleDragEnd = function () {
+      window.__lsDragId = null;
       clearDropMarks();
       document.querySelectorAll('.overlay-layer-selector li.ls-dragging').forEach(el => el.classList.remove('ls-dragging'));
       const list = document.querySelector('.overlay-layer-selector');

@@ -112,7 +112,7 @@
   margin: 0.5em 0;
 }
 
-.overlay-layer-selector label {
+.overlay-layer-selector .ls-row {
   cursor: default;
   font-size: 1.1em;
   color: #222;
@@ -120,13 +120,29 @@
   align-items: center;
 }
 
-/* Nombre de la capa: ocupa el espacio sobrante, alineado a la izquierda */
+/* Nombre de la capa: ocupa el espacio sobrante, alineado a la izquierda.
+   Es un boton: al hacer clic alterna la visibilidad de la capa (igual que el
+   ojito), asi que se resetean los estilos por defecto de <button> y se marca
+   como clicable. */
 .overlay-layer-selector .ls-nombre {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.overlay-layer-selector .ls-nombre:hover {
+  color: #0078d4;
 }
 
 /* ── Ojito de visibilidad por capa ────────────────────────────────── */
@@ -587,7 +603,7 @@
    Un grupo (IDEE.layer.LayerGroup) se muestra como nodo padre con sus
    capas hijas (y subgrupos) indentadas debajo. Se conserva el estado
    colapsado/expandido entre re-renders. */
-.overlay-layer-selector li.ls-group > label {
+.overlay-layer-selector li.ls-group > .ls-row {
   font-weight: 600;
   color: #1a3a5c;
 }
@@ -631,13 +647,14 @@
 }
 
 /* Las filas hijas se atenuan ligeramente frente al nombre del grupo. */
-.overlay-layer-selector .ls-children li label .ls-nombre {
+.overlay-layer-selector .ls-children li .ls-row .ls-nombre {
   font-weight: 400;
 }
 
 /* ── Botón de renombrar (lápiz) ──────────────────────────────────────
    Edita el nombre de la capa/grupo en linea: al pulsarlo, el nombre deja
-   paso a un input. Enter/blur guarda; Escape cancela. */
+   paso a un input. Enter/blur guarda; Escape cancela. Vive en el panel de
+   opciones (junto a tabla de atributos y borrado), no en la fila. */
 .overlay-layer-selector .ls-action-rename {
   width: 24px;
   height: 26px;
@@ -707,36 +724,6 @@
 .overlay-layer-selector .ls-drag-handle:active {
   cursor: grabbing;
   background: rgba(0, 0, 0, 0.08);
-}
-
-/* ── Botón de renombrar (lápiz) ──────────────────────────────────────
-   Edita el nombre de la capa/grupo en linea: al pulsarlo, el nombre deja
-   paso a un input. Enter/blur guarda; Escape cancela. */
-.overlay-layer-selector .ls-action-rename {
-  width: 24px;
-  height: 26px;
-  margin-left: 0.15em;
-}
-
-.overlay-layer-selector .ls-action-rename:hover,
-.overlay-layer-selector .ls-inline-rename:hover {
-  color: #0078d4;
-  background: #eef6fd;
-}
-
-/* Version en linea (junto al nombre): discretamente visible para no recargar
-   la fila, se resalta al pasar el raton. */
-.overlay-layer-selector .ls-inline-rename {
-  flex-shrink: 0;
-  width: 22px;
-  height: 26px;
-  margin-left: 0.1em;
-  color: #95a5b8;
-  opacity: 0.7;
-}
-
-.overlay-layer-selector li:hover .ls-inline-rename {
-  opacity: 1;
 }
 
 /* Fila que se está arrastrando: atenuada para indicar que "está cogida". */
