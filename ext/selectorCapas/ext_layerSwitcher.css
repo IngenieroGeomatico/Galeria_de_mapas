@@ -300,34 +300,38 @@
 }
 
 .overlay-layer-selector .ls-action {
-  flex: 1 1 0;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.3em;
-  padding: 5px 6px;
-  font-size: 0.78em;
-  font-weight: 600;
+  border: none;
   border-radius: 6px;
-  border: 1px solid #d0d7e2;
-  background: #ffffff;
-  color: #333;
+  background: transparent;
+  color: #555;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-  white-space: nowrap;
+  transition: background 0.2s, color 0.2s, transform 0.1s;
 }
 
 .overlay-layer-selector .ls-action:hover {
-  border-color: #0078d4;
-  color: #0078d4;
+  background: rgba(0,0,0,0.08);
+  color: #1a1a1a;
+}
+
+.overlay-layer-selector .ls-action-info:hover {
   background: #eef6fd;
+  color: #0078d4;
 }
 
 /* Botón de borrar: tono rojo al pasar el ratón para advertir del efecto */
 .overlay-layer-selector .ls-action-delete:hover {
-  border-color: #d9534f;
   color: #d9534f;
   background: #fdf0ef;
+}
+
+.overlay-layer-selector .ls-action:active {
+  transform: scale(0.9);
 }
 
 /* ── Panel inferior (bottom sheet) de informacion / tabla de atributos ──
