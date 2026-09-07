@@ -158,6 +158,21 @@ class miPlugin_layerSwitcher {
       return null;
     };
 
+    // Ordena una lista de capas de MAYOR a MENOR z-index: la capa que se
+    // dibuja encima (z-index mayor) va arriba del todo de la lista. Si alguna
+    // capa no expone getZIndex() se mantiene al final (z-index nulo).
+    const sortLayersByZDesc = (list) => {
+      return (list || []).slice().sort((a, b) => {
+        let za = null, zb = null;
+        try { za = typeof a.getZIndex === 'function' ? a.getZIndex() : null; } catch (e) { za = null; }
+        try { zb = typeof b.getZIndex === 'function' ? b.getZIndex() : null; } catch (e) { zb = null; }
+        if (za == null && zb == null) return 0;
+        if (za == null) return 1;
+        if (zb == null) return -1;
+        return zb - za;
+      });
+    };
+
     // Capas seleccionables desde el selector (compartido entre el panel y el
     // dropdown del sidenav de la tabla de atributos). Se excluyen capas
     // temporales/auxiliares (p.ej. el resaltado del panel) marcadas con
@@ -171,6 +186,8 @@ class miPlugin_layerSwitcher {
     // getLayers() refleja correctamente las eliminaciones con removeLayers(),
     // mientras que getOverlayLayers() de la fachada puede mantener caches
     // que causan capas fantasma tras un borrado.
+    // El resultado se ordena por z-index DESCENDENTE (la capa superior del
+    // mapa va arriba en la lista).
     const getSelectableLayers = async () => {
       const allLayers = map.getLayers() || [];
       // Recoge tambien las capas que viven SOLO dentro de un grupo (añadidas
@@ -187,7 +204,7 @@ class miPlugin_layerSwitcher {
         });
       };
       allLayers.filter(isGroupLayer).forEach(collectGroupChildren);
-      return (allLayers.concat(hijasDeGrupos)).filter(l => {
+      const result = (allLayers.concat(hijasDeGrupos)).filter(l => {
         try {
           const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
           // Las capas base no se muestran aqui (van en la extension de capas base).
@@ -202,6 +219,7 @@ class miPlugin_layerSwitcher {
           return true;
         } catch (e) { return true; }
       });
+      return sortLayersByZDesc(result);
     };
 
     // Construye el arbol de capas del selector: los grupos (LayerGroup) se
@@ -228,7 +246,8 @@ class miPlugin_layerSwitcher {
         if (isGroupLayer(layer)) {
           let hijos = [];
           try { hijos = layer.getLayers ? layer.getLayers() : []; } catch (e) { hijos = []; }
-          return { layer, isGroup: true, children: hijos.map(nodeOf) };
+          // Mismo criterio que la raiz: la hija con mayor z-index va arriba.
+          return { layer, isGroup: true, children: sortLayersByZDesc(hijos).map(nodeOf) };
         }
         return { layer, isGroup: false, children: [] };
       };
