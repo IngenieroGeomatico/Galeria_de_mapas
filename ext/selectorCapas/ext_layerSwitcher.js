@@ -564,24 +564,26 @@ class miPlugin_layerSwitcher {
             const cOl = cImpl && cImpl.olLayer;
             if (cOl && typeof cOl.getZIndex === 'function') techo = cOl.getZIndex() || 0;
           } catch (e) { techo = 0; }
-          const total = others.length;
+          // 'others' llega en orden visual (arriba = primera): la primera
+          // fila recibe el z mas alto del rango (techo-1), la siguiente
+          // techo-2, ... Asi el orden visual coincide con el render.
           others.forEach((l, i) => {
-            // La primera fila (arriba) recibe el z mas alto del rango (el mas
-            // cercano al grupo, es decir el que se dibuja encima de sus hermanas).
-            recordZ(l, (techo - 1) - (total - 1 - i));
+            recordZ(l, (techo - 1) - i);
           });
         } else {
-          // ── Raiz del mapa: z consecutivos en el rango que ya ocupan. ──
-          // Se recoge el maximo z actual de las capas seleccionables de la raiz
-          // (que ya esta por encima de la base y, tipicamente, por debajo de
-          // auxiliares como __draw__). Reasignar por debajo de ese maximo evita
-          // saltarse las capas auxiliares y alterar el intercalado.
-          let maxSel = 0;
-          vis.forEach(l => { const z = getRealZIndex(l); if (z != null && z > maxSel) maxSel = z; });
-          const total = others.length;
-          others.forEach((l, i) => {
+          // ── Raiz del mapa: reindexado greedy conservando el orden visual. ──
+          // Toda la lista (grupos incluidos) recibe z consecutivos hacia abajo
+          // desde el maximo actual de las capas seleccionables: el orden
+          // visual queda exacto y los grupos conservan su arbol bajo su nuevo
+          // techo (reindexGroupTree). Las capas auxiliares (p.ej. __draw__) y
+          // las bases estan fuera de la lista y no se tocan.
+          let next = 0;
+          vis.forEach(l => { const z = getRealZIndex(l); if (z != null && z > next) next = z; });
+          others.forEach((l) => {
             // La primera fila (arriba) toma el maximo actual; las siguientes bajan.
-            recordZ(l, maxSel - i);
+            recordZ(l, Math.max(0, next));
+            next -= 1;
+            if (isGroupLayer(l)) reindexGroupTree(l);
           });
         }
         // Si la capa movida es un GRUPO, sus hijas deben reindexarse al nuevo
@@ -606,7 +608,7 @@ class miPlugin_layerSwitcher {
           // Reordenadas por z actual (arriba = mayor z).
           hijasVis.sort((a, b) => (getRealZIndex(b) || 0) - (getRealZIndex(a) || 0));
           hijasVis.forEach((h, i) => {
-            recordZ(h, (techo - 1) - (nHijas - 1 - i));
+            recordZ(h, (techo - 1) - i);
           });
         }
         window.renderLayerList();
@@ -641,6 +643,143 @@ class miPlugin_layerSwitcher {
       return { parentGroup: null, siblings: map.getLayers() || [] };
     };
 
+    // ¿Aparece la capa en el selector? Mismo criterio que getSelectableLayers:
+    // si no está visible para el usuario no participa en el orden visible.
+    const isVisibleInSelector = (l) => {
+      try {
+        const impl = l.getImpl ? l.getImpl() : null;
+        if (l && l.isBase === true) return false;
+        if (impl && impl.isBase === true) return false;
+        if (l && l.displayInLayerSwitcher === false) return false;
+        if (impl && impl.displayInLayerSwitcher === false) return false;
+        const nm = String(l && (l.name || l.legend) || '');
+        if (/^layer_\d+$/.test(nm) && !isGroupLayer(l)) return false;
+        return true;
+      } catch (e) { return true; }
+    };
+
+    // Capas visibles en el selector de un contenedor (null = la raiz del mapa).
+    const visibleIn = (container) => {
+      let layers = [];
+      try {
+        layers = container ? (container.getLayers ? container.getLayers() : []) : (map.getLayers() || []);
+      } catch (e) { layers = []; }
+      return layers.filter(isVisibleInSelector);
+    };
+
+    // ── Reindexado de contenedores (tras mover capas entre ellos) ───────
+    // Raiz: se renumera TODO el rango de forma greedy conservando el orden
+    // visual (z descendente): cada elemento de la lista recibe el siguiente z
+    // disponible hacia abajo. Los GRUPOS reciben tambien su nuevo techo y su
+    // arbol se cierra bajo el (sus hijas quedan contiguas bajo el techo), de
+    // modo que el orden queda exacto aunque haya varios grupos intercalados.
+    // Las capas auxiliares (p.ej. __draw__) y las bases no estan en la lista
+    // y no se tocan: el tope es el maximo z actual de las visibles.
+    // Grupo: las hijas se reparten contiguas bajo el techo del grupo
+    // (techo-1, techo-2, ...) manteniendo su orden visual (z descendente).
+    const reindexContainer = (container) => {
+      try {
+        const sorted = visibleIn(container).slice().sort((a, b) => (getRealZIndex(b) || 0) - (getRealZIndex(a) || 0));
+        if (!sorted.length) return;
+        if (container) {
+          const techo = getRealZIndex(container) || 0;
+          sorted.forEach((l, i) => recordZ(l, (techo - 1) - i));
+        } else {
+          let next = 0;
+          sorted.forEach(l => { const z = getRealZIndex(l) || 0; if (z > next) next = z; });
+          sorted.forEach(l => {
+            recordZ(l, Math.max(0, next));
+            next -= 1;
+            if (isGroupLayer(l)) reindexGroupTree(l);
+          });
+        }
+      } catch (e) { console.warn('layerSwitcher: error al reindexar contenedor', e); }
+    };
+
+    // Cierra el arbol de un grupo bajo su techo actual: las hijas directas se
+    // reparten contiguas bajo el techo (techo-1, techo-2, ...) y los subgrupos
+    // hacen lo propio recursivamente. Se usa al mover un GRUPO a otro
+    // contenedor, para que sus hijas no queden por encima del nuevo techo.
+    const reindexGroupTree = (group) => {
+      try {
+        const hijos = visibleIn(group).slice().sort((a, b) => (getRealZIndex(b) || 0) - (getRealZIndex(a) || 0));
+        if (!hijos.length) return;
+        const techo = getRealZIndex(group) || 0;
+        hijos.forEach((h, i) => {
+          recordZ(h, (techo - 1) - i);
+          if (isGroupLayer(h)) reindexGroupTree(h);
+        });
+      } catch (e) { /* defensivo */ }
+    };
+
+    // Coloca 'moved' en el contenedor 'container' (null = raiz) justo antes o
+    // despues de 'targetLayer', reindexando el destino. 'container' ya debe
+    // contener a 'moved' (se ha anadido antes de llamar).
+    const placeInContainer = (moved, container, targetLayer, after) => {
+      const destVis = visibleIn(container).slice().sort((a, b) => (getRealZIndex(b) || 0) - (getRealZIndex(a) || 0));
+      const others = destVis.filter(l => l !== moved);
+      let slot = others.indexOf(targetLayer);
+      if (slot < 0) slot = others.length - 1;
+      const pos = Math.max(0, Math.min(after ? slot + 1 : slot, others.length));
+      others.splice(pos, 0, moved);
+
+      if (container) {
+        const techo = getRealZIndex(container) || 0;
+        others.forEach((l, i) => recordZ(l, (techo - 1) - i));
+      } else {
+        // Mismo criterio greedy que reindexContainer: orden visual exacto,
+        // grupos reindexados con su arbol bajo su nuevo techo.
+        let next = 0;
+        destVis.forEach(l => { const z = getRealZIndex(l) || 0; if (z > next) next = z; });
+        others.forEach(l => {
+          recordZ(l, Math.max(0, next));
+          next -= 1;
+          if (isGroupLayer(l)) reindexGroupTree(l);
+        });
+      }
+      // Si la pieza movida es un GRUPO, sus hijas deben reindexarse al nuevo
+      // techo; si no, quedarian en el rango viejo (posiblemente por encima
+      // del nuevo contenedor).
+      if (isGroupLayer(moved)) reindexGroupTree(moved);
+    };
+
+    // Mueve 'moved' al contenedor de 'targetLayer' (raiz o grupo distinto),
+    // insertandolo antes/despues del destino, y cierra el hueco en el origen.
+    const moveLayerBetween = (moved, sourceParent, targetLayer, targetParent, after) => {
+      try {
+        if (sourceParent) sourceParent.removeLayers(moved); else map.removeLayers(moved);
+        if (targetParent) targetParent.addLayers(moved); else map.addLayers(moved);
+        if (sourceParent !== targetParent) reindexContainer(sourceParent);
+        placeInContainer(moved, targetParent, targetLayer, after);
+        window.renderLayerList();
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo mover la capa entre contenedores', e);
+      }
+    };
+
+    // Mueve 'moved' DENTRO de 'group' como primera hija (la que se dibuja
+    // encima de sus hermanas) y expande el grupo para mostrarla. Se produce
+    // al soltar sobre la mitad inferior de la cabecera de un grupo.
+    const moveLayerIntoGroup = (moved, group) => {
+      try {
+        const sourceParent = findParentGroup(moved);
+        if (sourceParent) sourceParent.removeLayers(moved); else map.removeLayers(moved);
+        if (sourceParent !== group) reindexContainer(sourceParent);
+        group.addLayers(moved);
+        const hijos = visibleIn(group).slice().sort((a, b) => (getRealZIndex(b) || 0) - (getRealZIndex(a) || 0));
+        const others = hijos.filter(l => l !== moved);
+        const techo = getRealZIndex(group) || 0;
+        const list = [moved].concat(others);
+        list.forEach((l, i) => recordZ(l, (techo - 1) - i));
+        if (isGroupLayer(moved)) reindexGroupTree(moved);
+        // El grupo destino se expande para que la capa quede a la vista.
+        self._groupCollapsed[String(group.idLayer)] = false;
+        window.renderLayerList();
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo meter la capa en el grupo', e);
+      }
+    };
+
     window.handleDragStart = function (e) {
       const li = e.target.closest ? e.target.closest('li[data-drag-id]') : null;
       if (!li) return;
@@ -664,23 +803,49 @@ class miPlugin_layerSwitcher {
     window.handleDragOver = function (e) {
       const li = e.target.closest ? e.target.closest('li[data-drag-id]') : null;
       if (!li) return;
-      // Si el destino NO convive con la capa arrastrada (raiz vs grupo), se
-      // rechaza el drop: sin preventDefault el navegador muestra el cursor
-      // "no permitido" (mover entre contenedores no esta soportado).
       const moved = window.__lsDragId ? findLayerById(window.__lsDragId) : null;
-      if (moved) {
-        const targetLayer = findLayerById(li.getAttribute('data-drag-id'));
-        const contMoved = getSiblings(moved).parentGroup;
-        const contTarget = targetLayer ? getSiblings(targetLayer).parentGroup : null;
-        if (contMoved !== contTarget) return;
+      if (!moved) return;
+      const targetLayer = findLayerById(li.getAttribute('data-drag-id'));
+      if (!targetLayer || moved === targetLayer) return;
+      const isGroupTarget = li.classList.contains('ls-group');
+      // Para un GRUPO la "mitad" se calcula sobre su cabecera (.ls-row), no
+      // sobre el li completo (que incluye las hijas expandidas): asi la mitad
+      // inferior de la cabecera es la zona "meter dentro" y la superior la de
+      // "insertar antes del grupo". Si el puntero esta bajo la cabecera (en el
+      // area de hijas, sin una hija concreta bajo el cursor) tambien se mete
+      // dentro del grupo.
+      const refRect = isGroupTarget ? (li.querySelector('.ls-row') || li).getBoundingClientRect() : li.getBoundingClientRect();
+      const after = (e.clientY - refRect.top) > refRect.height / 2;
+      const sourceParent = findParentGroup(moved);
+      const intoGroup = isGroupTarget && (e.clientY > refRect.bottom || after);
+
+      // Zona "meter dentro" de un grupo (mitad inferior de su cabecera o area
+      // de hijas sin fila concreta): la capa entrara como hija. Si la capa ya
+      // es hija de ese grupo, soltar sobre su propia cabecera no aporta nada;
+      // y un grupo no puede meterse en si mismo ni en un descendiente propio
+      // (crearia un ciclo).
+      if (intoGroup) {
+        if (sourceParent === targetLayer) return;
+        if (isGroupLayer(moved)) {
+          let g = targetLayer;
+          while (g) { if (g === moved) return; g = findParentGroup(g); }
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        clearDropMarks();
+        li.classList.add('ls-drop-into-group');
+        return;
       }
+
+      // Cualquier otra fila (o mitad superior de la cabecera de un grupo): la
+      // capa se inserta antes o despues del destino DENTRO DE SU CONTENEDOR.
+      // Vale tanto para reordenar en el mismo contenedor como para sacar una
+      // capa de un grupo (destino en la raiz) o meterla en otro grupo
+      // (destino dentro del grupo): el drop se resuelve segun el contenedor
+      // del destino, no el del origen.
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      // Limpia las marcas de inserción anteriores (arriba Y abajo) y marca la
-      // fila destino segun la mitad recorrida.
       clearDropMarks();
-      const rect = li.getBoundingClientRect();
-      const after = (e.clientY - rect.top) > rect.height / 2;
       li.classList.add(after ? 'ls-drop-below' : 'ls-drop-above');
     };
 
@@ -693,43 +858,58 @@ class miPlugin_layerSwitcher {
       if (!targetLi) return;
       const moved = findLayerById(dragId);
       if (!moved) return;
-      // Inserccion: antes o despues de la fila destino segun la mitad recorrida.
-      const rect = targetLi.getBoundingClientRect();
-      const after = (e.clientY - rect.top) > rect.height / 2;
-      const { parentGroup, siblings } = getSiblings(moved);
-      // Capas seleccionables de ESTE contenedor (las que el usuario ve y puede
-      // reordenar): es la lista sobre la que se calcula el hueco de insercion.
-      const isVisibleInSelector2 = (l) => {
-        try {
-          const impl = l.getImpl ? l.getImpl() : null;
-          if (l && l.isBase === true) return false;
-          if (impl && impl.isBase === true) return false;
-          if (l && l.displayInLayerSwitcher === false) return false;
-          if (impl && impl.displayInLayerSwitcher === false) return false;
-          const nm = String(l && (l.name || l.legend) || '');
-          if (/^layer_\d+$/.test(nm) && !isGroupLayer(l)) return false;
-          return true;
-        } catch (e) { return true; }
-      };
-      const vis = siblings.filter(isVisibleInSelector2);
-      const idx = vis.indexOf(moved);
       const targetLayer = findLayerById(targetLi.getAttribute('data-drag-id'));
-      const targetIdx = vis.indexOf(targetLayer);
-      if (idx < 0 || targetIdx < 0) return;
+      if (!targetLayer || moved === targetLayer) return;
+      const isGroupTarget = targetLi.classList.contains('ls-group');
+      // Misma geometria que en handleDragOver: para un GRUPO la zona se calcula
+      // sobre su cabecera (.ls-row), no sobre el li completo (que incluye las
+      // hijas expandidas). Mitad inferior de la cabecera (o area de hijas sin
+      // fila concreta bajo el cursor) = "meter dentro" del grupo.
+      const refRect = isGroupTarget ? (targetLi.querySelector('.ls-row') || targetLi).getBoundingClientRect() : targetLi.getBoundingClientRect();
+      const after = (e.clientY - refRect.top) > refRect.height / 2;
+      const intoGroup = isGroupTarget && (e.clientY > refRect.bottom || after);
+      const sourceParent = findParentGroup(moved);
+      const targetParent = findParentGroup(targetLayer);
 
-      // La lista sin la capa arrastrada (los "huecos" donde puede insertarse).
-      const others = vis.filter(l => l !== moved);
+      // ── Mover DENTRO de un grupo (mitad inferior de su cabecera o area de
+      // hijas sin fila concreta). ──
+      if (intoGroup && sourceParent !== targetLayer) {
+        // Guarda anti-ciclo: un grupo no puede meterse en si mismo ni en un
+        // descendiente propio.
+        if (isGroupLayer(moved)) {
+          let g = targetLayer;
+          while (g) { if (g === moved) return; g = findParentGroup(g); }
+        }
+        moveLayerIntoGroup(moved, targetLayer);
+        e.dataTransfer.clearData();
+        return;
+      }
 
-      // Posicion del destino en esa lista 'others'.
-      let targetSlot = others.indexOf(targetLayer);
-      if (targetSlot < 0) return;
+      // ── Mismo contenedor: reorden interno antes/despues del destino. ──
+      if (sourceParent === targetParent) {
+        // 'vis' debe venir en ORDEN VISUAL (z descendente, arriba = primera):
+        // la coleccion OL del contenedor no garantiza ningun orden (es el de
+        // addLayers), y applyReorder reindexa por posicion en la lista.
+        const vis = getSiblings(moved).siblings.filter(isVisibleInSelector)
+          .sort((a, b) => (getRealZIndex(b) || 0) - (getRealZIndex(a) || 0));
+        const idx = vis.indexOf(moved);
+        const targetIdx = vis.indexOf(targetLayer);
+        if (idx < 0 || targetIdx < 0) return;
+        // La lista sin la capa arrastrada (los "huecos" donde puede insertarse).
+        const others = vis.filter(l => l !== moved);
+        // Posicion del destino en esa lista 'others'.
+        let targetSlot = others.indexOf(targetLayer);
+        if (targetSlot < 0) return;
+        // newIndex = posicion (en 'others') donde se inserta moved:
+        const newIndex = after ? targetSlot + 1 : targetSlot;
+        applyReorder(moved, sourceParent, vis, newIndex);
+        e.dataTransfer.clearData();
+        return;
+      }
 
-      // newIndex = posicion (en 'others') donde se inserta moved:
-      //   - suelta en la mitad superior del destino: en la posicion del destino
-      //   - suelta en la mitad inferior: justo despues del destino
-      const newIndex = after ? targetSlot + 1 : targetSlot;
-
-      applyReorder(moved, parentGroup, vis, newIndex);
+      // ── Contenedores distintos: sacar una capa de un grupo y meterla en el
+      // contenedor del destino (raiz u otro grupo), en la posicion indicada. ──
+      moveLayerBetween(moved, sourceParent, targetLayer, targetParent, after);
       e.dataTransfer.clearData();
     };
 
@@ -742,9 +922,10 @@ class miPlugin_layerSwitcher {
     };
 
     const clearDropMarks = () => {
-      document.querySelectorAll('.ls-drop-above, .ls-drop-below').forEach(el => {
+      document.querySelectorAll('.ls-drop-above, .ls-drop-below, .ls-drop-into-group').forEach(el => {
         el.classList.remove('ls-drop-above');
         el.classList.remove('ls-drop-below');
+        el.classList.remove('ls-drop-into-group');
       });
     };
 

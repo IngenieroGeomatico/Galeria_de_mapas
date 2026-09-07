@@ -748,6 +748,19 @@
   box-shadow: 0 -3px 0 0 #0078d4, 0 3px 0 0 #0078d4;
 }
 
+/* Zona "meter dentro de un grupo": se suelta sobre la mitad inferior de la
+   cabecera del grupo. Se resalta la cabecera y el area de hijos con un fondo
+   azulado y una linea de insercion en el borde superior del bloque, indicando
+   que la capa entrara como hija (arriba del resto de hijas del grupo). */
+.overlay-layer-selector li.ls-group.ls-drop-into-group > .ls-row {
+  background: #eef6fd;
+  box-shadow: inset 3px 0 0 0 #0078d4;
+}
+
+.overlay-layer-selector li.ls-group.ls-drop-into-group > .ls-children {
+  box-shadow: inset 0 3px 0 0 #0078d4;
+}
+
 /* Mientras se arrastra, se desactiva la interaccion con botones. */
 .overlay-layer-selector.ls-dragging-active .ls-eye,
 .overlay-layer-selector.ls-dragging-active .ls-options,
