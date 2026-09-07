@@ -16,6 +16,9 @@ function mapa() {
   // se añade al mapa y luego se le dan las capas hijas con addLayers().
   // El nombre visible se controla con "legend" (el name interno es layer_<n>).
   // "collapsed" indica si empieza plegado en el selector de capas.
+  // IMPORTANTE: cada capa se añade SOLO a su contenedor (el mapa o su grupo),
+  // nunca a ambos: añadirla dos veces duplica el registro OL y el render
+  // (p.ej. dos canvas MapLibre para la misma capa BTN).
   const grupoEjemplo = new IDEE.layer.LayerGroup({
     legend: 'Grupo de capas de ejemplo',
     collapsed: false,
@@ -23,11 +26,12 @@ function mapa() {
   mapajs.addLayers(grupoEjemplo)
 
   // Subgrupo dentro del grupo anterior (demuestra el anidamiento).
+  // Empieza expandido para que BTN sea visible en el selector de capas.
   const subgrupoEjemplo = new IDEE.layer.LayerGroup({
     legend: 'Subgrupo vectorial',
-    collapsed: true,
+    collapsed: false,
   })
-  mapajs.addLayers(subgrupoEjemplo)
+  // El subgrupo vive DENTRO del grupo de ejemplo, no en la raiz del mapa.
 
   try {
     const layer3 = new IDEE.layer.MapLibre({
@@ -36,8 +40,7 @@ function mapa() {
       visibility: true,
       legend: 'BTN',
     })
-    mapajs.addLayers(layer3)
-    // BTN vive dentro del subgrupo.
+    // BTN se anade SOLO al subgrupo.
     subgrupoEjemplo.addLayers(layer3)
   } catch (error) {
     console.log(error)
@@ -51,7 +54,7 @@ function mapa() {
     tiled: false,
     visibility: true,
   }, {})
-  mapajs.addLayers(layer2)
+  // La WMS se anade SOLO al grupo de ejemplo.
   grupoEjemplo.addLayers(layer2)
 
   const layer1 = new IDEE.layer.GeoJSON({
@@ -68,7 +71,7 @@ function mapa() {
     })
   }, {
   });
-  mapajs.addLayers(layer1)
+  // Provincias se anade SOLO al grupo de ejemplo.
   grupoEjemplo.addLayers(layer1)
 
   // El subgrupo (con BTN dentro) se anida en el grupo de ejemplo.

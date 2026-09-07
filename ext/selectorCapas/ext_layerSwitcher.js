@@ -172,8 +172,22 @@ class miPlugin_layerSwitcher {
     // mientras que getOverlayLayers() de la fachada puede mantener caches
     // que causan capas fantasma tras un borrado.
     const getSelectableLayers = async () => {
-      const allLayers = map.getLayers();
-      return (allLayers || []).filter(l => {
+      const allLayers = map.getLayers() || [];
+      // Recoge tambien las capas que viven SOLO dentro de un grupo (añadidas
+      // con grupo.addLayers() pero no con map.addLayers()): la fachada no las
+      // lista en map.getLayers() pero deben aparecer en el selector (bajo su
+      // grupo) y en el dropdown del sidenav. Se aplanan recursivamente.
+      const hijasDeGrupos = [];
+      const collectGroupChildren = (g) => {
+        let hijos = [];
+        try { hijos = g.getLayers ? g.getLayers() : []; } catch (e) { hijos = []; }
+        hijos.forEach(h => {
+          hijasDeGrupos.push(h);
+          if (isGroupLayer(h)) collectGroupChildren(h);
+        });
+      };
+      allLayers.filter(isGroupLayer).forEach(collectGroupChildren);
+      return (allLayers.concat(hijasDeGrupos)).filter(l => {
         try {
           const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
           // Las capas base no se muestran aqui (van en la extension de capas base).
