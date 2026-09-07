@@ -634,3 +634,137 @@
 .overlay-layer-selector .ls-children li label .ls-nombre {
   font-weight: 400;
 }
+
+/* ── Botón de renombrar (lápiz) ──────────────────────────────────────
+   Edita el nombre de la capa/grupo en linea: al pulsarlo, el nombre deja
+   paso a un input. Enter/blur guarda; Escape cancela. */
+.overlay-layer-selector .ls-action-rename {
+  width: 24px;
+  height: 26px;
+  margin-left: 0.15em;
+}
+
+.overlay-layer-selector .ls-action-rename:hover {
+  color: #0078d4;
+  background: #eef6fd;
+}
+
+/* Input de renombrado en linea: ocupa el ancho del nombre y lo sustituye. */
+.overlay-layer-selector .ls-rename-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.95em;
+  color: #1a1a1a;
+  background: #fff;
+  border: 1px solid #0078d4;
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.15);
+}
+
+.overlay-layer-selector .ls-rename-input.error {
+  border-color: #d9534f;
+  box-shadow: 0 0 0 2px rgba(217, 83, 79, 0.2);
+}
+
+/* ── Drag & drop para reordenar capas ────────────────────────────────
+   Las filas arrastrables muestran cursor de "agarrar". Durante el arrastre
+   la fila fuente se atenua y se marca el punto exacto de inserción con una
+   linea (el elemento sobre el que se suelta). */
+.overlay-layer-selector li[draggable='true'] {
+  cursor: grab;
+}
+
+.overlay-layer-selector li[draggable='true']:active {
+  cursor: grabbing;
+}
+
+/* Asa de arrastre: el unico punto desde el que se inicia el drag. Visible
+   al pasar el raton (y siempre en pantallas tactiles) para indicar que la
+   fila se puede reordenar. */
+.overlay-layer-selector .ls-drag-handle {
+  flex-shrink: 0;
+  width: 20px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #b0bdcd;
+  cursor: grab;
+  border-radius: 4px;
+  opacity: 0.45;
+  transition: opacity 0.2s, color 0.2s, background 0.2s;
+  touch-action: none;
+}
+
+.overlay-layer-selector li:hover .ls-drag-handle {
+  opacity: 1;
+  color: #5a6b7e;
+}
+
+.overlay-layer-selector .ls-drag-handle:active {
+  cursor: grabbing;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Botón de renombrar (lápiz) ──────────────────────────────────────
+   Edita el nombre de la capa/grupo en linea: al pulsarlo, el nombre deja
+   paso a un input. Enter/blur guarda; Escape cancela. */
+.overlay-layer-selector .ls-action-rename {
+  width: 24px;
+  height: 26px;
+  margin-left: 0.15em;
+}
+
+.overlay-layer-selector .ls-action-rename:hover,
+.overlay-layer-selector .ls-inline-rename:hover {
+  color: #0078d4;
+  background: #eef6fd;
+}
+
+/* Version en linea (junto al nombre): discretamente visible para no recargar
+   la fila, se resalta al pasar el raton. */
+.overlay-layer-selector .ls-inline-rename {
+  flex-shrink: 0;
+  width: 22px;
+  height: 26px;
+  margin-left: 0.1em;
+  color: #95a5b8;
+  opacity: 0.7;
+}
+
+.overlay-layer-selector li:hover .ls-inline-rename {
+  opacity: 1;
+}
+
+/* Fila que se está arrastrando: atenuada para indicar que "está cogida". */
+.overlay-layer-selector li.ls-dragging {
+  opacity: 0.45;
+  border: 1px dashed #b0c4d8;
+  border-radius: 6px;
+}
+
+/* Zona de inserción: la fila sobre la que se suelta se resalta con una
+   linea azul en la parte superior (la capa soltada quedará por encima) o
+   inferior (quedará por debajo), segun la mitad de la fila recorrida. */
+.overlay-layer-selector li.ls-drop-above {
+  box-shadow: 0 -3px 0 0 #0078d4;
+}
+
+.overlay-layer-selector li.ls-drop-below {
+  box-shadow: 0 3px 0 0 #0078d4;
+}
+
+.overlay-layer-selector li.ls-drop-above.ls-drop-below {
+  box-shadow: 0 -3px 0 0 #0078d4, 0 3px 0 0 #0078d4;
+}
+
+/* Mientras se arrastra, se desactiva la interaccion con botones. */
+.overlay-layer-selector.ls-dragging-active .ls-eye,
+.overlay-layer-selector.ls-dragging-active .ls-options,
+.overlay-layer-selector.ls-dragging-active .ls-action,
+.overlay-layer-selector.ls-dragging-active .ls-group-chevron {
+  pointer-events: none;
+}

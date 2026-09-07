@@ -158,14 +158,33 @@ class miPlugin_layerSwitcher {
       return null;
     };
 
+    // z-index REAL de una capa: el que usa el renderer de OpenLayers
+    // (sortByZIndex) para pintar. Se lee del impl OL (layer.getImpl().olLayer),
+    // que es la fuente de verdad: la fachada puede quedar desincronizada tras
+    // un setZIndex() (no lo refleja). Fallback a la fachada si no hay impl.
+    const getRealZIndex = (l) => {
+      if (!l) return null;
+      try {
+        const impl = typeof l.getImpl === 'function' ? l.getImpl() : null;
+        const ol = impl && impl.olLayer;
+        if (ol && typeof ol.getZIndex === 'function') {
+          const z = ol.getZIndex();
+          if (z != null) return z;
+        }
+      } catch (e) { /* seguir con fachada */ }
+      try {
+        if (typeof l.getZIndex === 'function') return l.getZIndex();
+      } catch (e) { /* sin z */ }
+      return null;
+    };
+
     // Ordena una lista de capas de MAYOR a MENOR z-index: la capa que se
     // dibuja encima (z-index mayor) va arriba del todo de la lista. Si alguna
     // capa no expone getZIndex() se mantiene al final (z-index nulo).
     const sortLayersByZDesc = (list) => {
       return (list || []).slice().sort((a, b) => {
-        let za = null, zb = null;
-        try { za = typeof a.getZIndex === 'function' ? a.getZIndex() : null; } catch (e) { za = null; }
-        try { zb = typeof b.getZIndex === 'function' ? b.getZIndex() : null; } catch (e) { zb = null; }
+        const za = getRealZIndex(a);
+        const zb = getRealZIndex(b);
         if (za == null && zb == null) return 0;
         if (za == null) return 1;
         if (zb == null) return -1;
@@ -283,6 +302,9 @@ class miPlugin_layerSwitcher {
       const sliderFill = `linear-gradient(to right, #0078d4 0%, #0078d4 ${fillPct}%, #d7dde7 ${fillPct}%, #d7dde7 100%)`;
       const eyeBtn = `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>`;
       const optsBtn = `<button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>`;
+      // Lapiz para renombrar: siempre visible junto al nombre (no solo dentro
+      // del panel de opciones), visible tanto en capas como en grupos.
+      const renameBtn = `<button type="button" class="ls-action ls-action-rename ls-inline-rename" data-id="${index}" title="Renombrar capa" onclick="startRenameLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>`;
       const optionsPanel = `
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
                 <div class="ls-option-row">
@@ -291,20 +313,27 @@ class miPlugin_layerSwitcher {
                   <span class="ls-option-value">${transpPct}%</span>
                 </div>
                 <div class="ls-actions-row">
+                  <button type="button" class="ls-action ls-action-rename" data-id="${index}" title="Renombrar capa" onclick="startRenameLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
                   ${tableBtnHtml}
                   <button type="button" class="ls-action ls-action-delete" data-id="${index}" title="Eliminar la capa del mapa" onclick="deleteLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
                 </div>
               </div>`;
+
+      // Asa de arrastre: unico punto desde el que se inicia el drag (así el
+      // resto de botones de la fila siguen siendo clicables durante el Drag&Drop).
+      const dragHandleHtml = `<span class="ls-drag-handle" title="Arrastra para reordenar" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg></span>`;
 
       if (node.isGroup) {
         const collapsed = isGroupCollapsed(layer);
         const chevron = collapsed ? '▸' : '▾';
         const childrenHtml = node.children.map(c => renderLayerNode(c, depth + 1)).join('');
         return `
-            <li class="ls-group" data-depth="${depth}">
+            <li class="ls-group" data-depth="${depth}" draggable="true" data-drag-id="${index}">
               <label>
+                ${dragHandleHtml}
                 <button type="button" class="ls-group-chevron" data-id="${index}" title="${collapsed ? 'Expandir grupo' : 'Colapsar grupo'}" onclick="toggleGroup('${index}')">${chevron}</button>
                 <span class="ls-nombre ls-group-name">${layerName}</span>
+                ${renameBtn}
                 ${eyeBtn}
                 ${optsBtn}
               </label>
@@ -314,9 +343,11 @@ class miPlugin_layerSwitcher {
       }
 
       return `
-            <li data-depth="${depth}">
+            <li data-depth="${depth}" draggable="true" data-drag-id="${index}">
               <label>
+                ${dragHandleHtml}
                 <span class="ls-nombre">${layerName}</span>
+                ${renameBtn}
                 ${eyeBtn}
                 ${optsBtn}
               </label>
@@ -332,6 +363,20 @@ class miPlugin_layerSwitcher {
         control.htmlView = `<ul class="overlay-layer-selector">${htmlList}</ul>`;
         const preview = document.querySelector('#m-herramienta-previews-layerSwitcher');
         if (preview) preview.innerHTML = control.htmlView;
+
+        // Enlaza los eventos de drag & drop UNA sola vez por lista. Se usan
+        // listeners delegados en el <ul> para que sigan funcionando tras cada
+        // re-render (renderLayerList reemplaza el innerHTML).
+        if (!preview.__lsDragBound) {
+          preview.__lsDragBound = true;
+          preview.addEventListener('dragstart', window.handleDragStart);
+          preview.addEventListener('dragover', window.handleDragOver);
+          preview.addEventListener('drop', window.handleDrop);
+          preview.addEventListener('dragend', window.handleDragEnd);
+          preview.addEventListener('dragleave', (e) => {
+            if (!preview.contains(e.relatedTarget)) clearDropMarks();
+          });
+        }
       } catch (e) {
         console.warn('layerSwitcher: error rendering layer list', e);
       }
@@ -399,6 +444,282 @@ class miPlugin_layerSwitcher {
       })();
       self._groupCollapsed[key] = !actual;
       renderLayerList();
+    };
+
+    // ── Renombrar capa / grupo ─────────────────────────────────────────
+    // Edita el nombre en linea: el <span class="ls-nombre"> se sustituye por
+    // un input. Enter o blur guardan; Escape cancela. Se persiste en la
+    // fachada (legend/name/title) y en el impl OL (name/title) para que los
+    // paneles de Mapea (legenda, otros selectores) reflejen el cambio.
+    window.startRenameLayer = function (index) {
+      const layer = findLayerById(index);
+      if (!layer) return;
+      const li = document.querySelector('.g-herramienta_selectorCapa li[data-drag-id="' + index + '"]');
+      if (!li) return;
+      const nombreEl = li.querySelector('.ls-nombre');
+      if (!nombreEl) return;
+      const current = getLayerDisplayName(layer);
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'ls-rename-input';
+      input.value = current;
+      input.maxLength = 80;
+      // Sustituye el span por el input y da el foco con el nombre seleccionado.
+      nombreEl.replaceWith(input);
+      input.focus();
+      input.select();
+
+      const commit = () => {
+        const val = input.value.trim();
+        renameLayerName(layer, val || current);
+        window.renderLayerList();
+      };
+      const cancel = () => {
+        window.renderLayerList();
+      };
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      });
+      // mousedown para no disparar el drag al hacer clic en el input.
+      input.addEventListener('mousedown', (e) => e.stopPropagation());
+      input.addEventListener('blur', commit);
+      input.addEventListener('dblclick', (e) => e.stopPropagation());
+      // Evita que el input desencadene el drag & drop de la fila.
+      input.setAttribute('draggable', 'false');
+    };
+
+    // Guarda el nuevo nombre en la fachada de Mapea y en el impl OL,
+    // manteniendo el orden de prioridad que lee getLayerDisplayName:
+    // legend -> title -> name. Se limpia en el nuevo nombre el patron interno
+    // "layer_<n>" para no confundirlo con los nombres autogenerados.
+    const renameLayerName = (layer, newName) => {
+      try {
+        const clean = String(newName == null ? '' : newName).trim();
+        if (!clean) return;
+        // La prioridad de lectura es legend > title > name: escribimos SIEMPRE
+        // en legend (el primer que se lee) para que prevalezca este nombre.
+        if (layer) layer.legend = clean;
+        if (layer) layer.name = clean;
+        // Impl OL: tambien se actualizan name/title para los componentes Mapea.
+        const impl = (typeof layer.getImpl === 'function') ? layer.getImpl() : null;
+        if (impl) {
+          const ol = impl.olLayer;
+          if (ol && typeof ol.set === 'function') {
+            ol.set('name', clean);
+            ol.set('title', clean);
+          }
+        }
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo renombrar la capa', e);
+      }
+    };
+    // Expuesto para que drag & drop pueda reutilizarlo internamente si hace falta.
+    window._renameLayerName = renameLayerName;
+
+    // ── Drag & drop para reordenar capas ───────────────────────────────
+    // La fila de cada capa/grupo arrastra con el asa (ls-drag-handle). El
+    // reordenado se aplica REASIGNANDO el z-index del impl OL (el renderer de
+    // OpenLayers pinta por zIndex, no por orden de coleccion: se verificó que
+    // la coleccion raiz esta desordenada [1042,45,0,46] y el render es
+    // correcto).
+    //
+    // applyReorder reindexa las capas seleccionables de un contenedor (raiz
+    // del mapa o las hijas directas de un grupo): la capa movida sale de su
+    // posicion y todas las del contenedor reciben z consecutivos en el rango
+    // que les corresponde. Asi SOLO se alteran los z de las capas del
+    // contenedor que intervienen, y las capas NO seleccionables (auxiliares,
+    // capa de dibujo __draw__, base) conservan intactos su z y su intercalado.
+    //
+    //  - Para un GRUPO: las hijas se reparten z consecutivos justo DEBAJO del
+    //    techo del grupo (z_del_grupo - 1, z_del_grupo - 2, ...). La primera de
+    //    la lista recibe el z mas alto del rango (se dibuja encima de sus
+    //    hermanas). Nunca supera el z del grupo (invariante jerarquico).
+    //  - Para la RAÍZ: las capas seleccionables se reparten z consecutivos en
+    //    el rango que ya ocupan (reindexado contiguo por debajo de su maximo
+    //    actual), manteniendo las auxiliares intactas. Si la movida es un
+    //    GRUPO, sus hijas se reindexan tambien al nuevo techo del grupo para
+    //    no desconectarlas de el.
+    const applyReorder = (movedLayer, parentGroup, visibleSiblings, newIndex) => {
+      try {
+        const vis = visibleSiblings.slice();
+        if (vis.indexOf(movedLayer) < 0) return;
+
+        // Nueva ordenacion (arriba = primero).
+        const others = vis.filter(l => l !== movedLayer);
+        others.splice(Math.max(0, Math.min(newIndex, others.length)), 0, movedLayer);
+
+        if (parentGroup) {
+          // ── Hijas de un grupo: rango justo bajo el techo del grupo. ──
+          let techo = 0;
+          try {
+            const cImpl = parentGroup.getImpl ? parentGroup.getImpl() : null;
+            const cOl = cImpl && cImpl.olLayer;
+            if (cOl && typeof cOl.getZIndex === 'function') techo = cOl.getZIndex() || 0;
+          } catch (e) { techo = 0; }
+          const total = others.length;
+          others.forEach((l, i) => {
+            // La primera fila (arriba) recibe el z mas alto del rango (el mas
+            // cercano al grupo, es decir el que se dibuja encima de sus hermanas).
+            recordZ(l, (techo - 1) - (total - 1 - i));
+          });
+        } else {
+          // ── Raiz del mapa: z consecutivos en el rango que ya ocupan. ──
+          // Se recoge el maximo z actual de las capas seleccionables de la raiz
+          // (que ya esta por encima de la base y, tipicamente, por debajo de
+          // auxiliares como __draw__). Reasignar por debajo de ese maximo evita
+          // saltarse las capas auxiliares y alterar el intercalado.
+          let maxSel = 0;
+          vis.forEach(l => { const z = getRealZIndex(l); if (z != null && z > maxSel) maxSel = z; });
+          const total = others.length;
+          others.forEach((l, i) => {
+            // La primera fila (arriba) toma el maximo actual; las siguientes bajan.
+            recordZ(l, maxSel - i);
+          });
+        }
+        // Si la capa movida es un GRUPO, sus hijas deben reindexarse al nuevo
+        // techo del grupo (mantenerlas en el rango viejo las desconectaria del
+        // grupo). Mismo criterio: techo - 1, techo - 2, ... bajo el grupo.
+        if (isGroupLayer(movedLayer)) {
+          let techo = getRealZIndex(movedLayer);
+          if (techo == null) techo = 0;
+          let hijos = [];
+          try { hijos = movedLayer.getLayers ? movedLayer.getLayers() : []; } catch (e) { hijos = []; }
+          const hijasVis = hijos.filter(h => { try {
+            const im = h.getImpl ? h.getImpl() : null;
+            if (h && h.isBase === true) return false;
+            if (im && im.isBase === true) return false;
+            if (h && h.displayInLayerSwitcher === false) return false;
+            if (im && im.displayInLayerSwitcher === false) return false;
+            const nm = String(h && (h.name || h.legend) || '');
+            if (/^layer_\d+$/.test(nm) && !isGroupLayer(h)) return false;
+            return true;
+          } catch (e) { return false; } });
+          const nHijas = hijasVis.length;
+          // Reordenadas por z actual (arriba = mayor z).
+          hijasVis.sort((a, b) => (getRealZIndex(b) || 0) - (getRealZIndex(a) || 0));
+          hijasVis.forEach((h, i) => {
+            recordZ(h, (techo - 1) - (nHijas - 1 - i));
+          });
+        }
+        window.renderLayerList();
+      } catch (e) {
+        console.warn('layerSwitcher: error al reordenar', e);
+      }
+    };
+
+    // Registra el z-index en la fachada y en el impl OL. Mapea puede leer el z
+    // desde la fachada (getZIndex()) que delega al impl, asi que escribimos el
+    // impl (fuente de verdad del render) y, si la fachada expone setter propio,
+    // tambien lo sincronizamos.
+    const recordZ = (layer, z) => {
+      try {
+        const impl = (typeof layer.getImpl === 'function') ? layer.getImpl() : null;
+        const ol = impl && impl.olLayer;
+        if (ol && typeof ol.setZIndex === 'function') ol.setZIndex(z);
+        // Fallback: si no hay impl OL, intenta setZIndex en la propia fachada.
+        if (!ol && typeof layer.setZIndex === 'function') layer.setZIndex(z);
+      } catch (e) { /* defensivo */ }
+    };
+
+    // Obtiene el contenedor (raiz de mapa o grupo) de una capa: devuelve la
+    // lista de capas "hermanas" (mismo nivel) y el grupo padre (null=raiz).
+    const getSiblings = (layer) => {
+      const parentGroup = findParentGroup(layer);
+      if (parentGroup) {
+        let hijos = [];
+        try { hijos = parentGroup.getLayers ? parentGroup.getLayers() : []; } catch (e) { hijos = []; }
+        return { parentGroup, siblings: hijos };
+      }
+      return { parentGroup: null, siblings: map.getLayers() || [] };
+    };
+
+    window.handleDragStart = function (e) {
+      const li = e.target.closest ? e.target.closest('li[data-drag-id]') : null;
+      if (!li) return;
+      // Solo se inicia el drag desde el asa (ls-drag-handle).
+      if (!e.target.closest('.ls-drag-handle')) { e.preventDefault(); return; }
+      const list = li.closest('.overlay-layer-selector');
+      if (list) list.classList.add('ls-dragging-active');
+      e.dataTransfer.setData('text/plain', li.getAttribute('data-drag-id'));
+      e.dataTransfer.effectAllowed = 'move';
+      // Retraso para que el clic del asa no se confunda con el drag.
+      li.classList.add('ls-dragging');
+    };
+
+    window.handleDragOver = function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const li = e.target.closest ? e.target.closest('li[data-drag-id]') : null;
+      if (!li) return;
+      // Marca la fila destino como punto de insercion (linea superior).
+      document.querySelectorAll('.overlay-layer-selector li.ls-drop-above').forEach(el => el.classList.remove('ls-drop-above'));
+      const rect = li.getBoundingClientRect();
+      const after = (e.clientY - rect.top) > rect.height / 2;
+      li.classList.add(after ? 'ls-drop-below' : 'ls-drop-above');
+    };
+
+    window.handleDrop = function (e) {
+      e.preventDefault();
+      clearDropMarks();
+      const dragId = e.dataTransfer.getData('text/plain');
+      if (!dragId) return;
+      const targetLi = e.target.closest ? e.target.closest('li[data-drag-id]') : null;
+      if (!targetLi) return;
+      const moved = findLayerById(dragId);
+      if (!moved) return;
+      // Inserccion: antes o despues de la fila destino segun la mitad recorrida.
+      const rect = targetLi.getBoundingClientRect();
+      const after = (e.clientY - rect.top) > rect.height / 2;
+      const { parentGroup, siblings } = getSiblings(moved);
+      // Capas seleccionables de ESTE contenedor (las que el usuario ve y puede
+      // reordenar): es la lista sobre la que se calcula el hueco de insercion.
+      const isVisibleInSelector2 = (l) => {
+        try {
+          const impl = l.getImpl ? l.getImpl() : null;
+          if (l && l.isBase === true) return false;
+          if (impl && impl.isBase === true) return false;
+          if (l && l.displayInLayerSwitcher === false) return false;
+          if (impl && impl.displayInLayerSwitcher === false) return false;
+          const nm = String(l && (l.name || l.legend) || '');
+          if (/^layer_\d+$/.test(nm) && !isGroupLayer(l)) return false;
+          return true;
+        } catch (e) { return true; }
+      };
+      const vis = siblings.filter(isVisibleInSelector2);
+      const idx = vis.indexOf(moved);
+      const targetLayer = findLayerById(targetLi.getAttribute('data-drag-id'));
+      const targetIdx = vis.indexOf(targetLayer);
+      if (idx < 0 || targetIdx < 0) return;
+
+      // La lista sin la capa arrastrada (los "huecos" donde puede insertarse).
+      const others = vis.filter(l => l !== moved);
+
+      // Posicion del destino en esa lista 'others'.
+      let targetSlot = others.indexOf(targetLayer);
+      if (targetSlot < 0) return;
+
+      // newIndex = posicion (en 'others') donde se inserta moved:
+      //   - suelta en la mitad superior del destino: en la posicion del destino
+      //   - suelta en la mitad inferior: justo despues del destino
+      const newIndex = after ? targetSlot + 1 : targetSlot;
+
+      applyReorder(moved, parentGroup, vis, newIndex);
+      e.dataTransfer.clearData();
+    };
+
+    window.handleDragEnd = function () {
+      clearDropMarks();
+      document.querySelectorAll('.overlay-layer-selector li.ls-dragging').forEach(el => el.classList.remove('ls-dragging'));
+      const list = document.querySelector('.overlay-layer-selector');
+      if (list) list.classList.remove('ls-dragging-active');
+    };
+
+    const clearDropMarks = () => {
+      document.querySelectorAll('.ls-drop-above, .ls-drop-below').forEach(el => {
+        el.classList.remove('ls-drop-above');
+        el.classList.remove('ls-drop-below');
+      });
     };
 
     // ── Borrar capa (o grupo de capas) ─────────────────────────────────
