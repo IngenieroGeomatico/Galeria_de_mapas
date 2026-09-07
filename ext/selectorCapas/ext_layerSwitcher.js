@@ -13,6 +13,10 @@ class miPlugin_layerSwitcher {
     // abierto. Se conserva entre re-renders para no cerrarlo al alternar
     // la visibilidad de otra capa.
     this._optionsOpen = null;
+    // Estado de colapso/expansión de los grupos de capas (idLayer -> bool).
+    // Se conserva entre re-renders; si un grupo no está presente, se usa el
+    // valor "collapsed" con el que se creó (constructorParameters).
+    this._groupCollapsed = {};
   }
 
   // Devuelve {active, deactive} a partir de un color simple o un objeto.
@@ -86,13 +90,87 @@ class miPlugin_layerSwitcher {
 
     IDEE.utils.draggabillyPlugin(panelExtra, '#m-herramienta-title-layerSwitcher');
 
+    // ── Grupos de capas (IDEE.layer.LayerGroup) ────────────────────────
+    // Un grupo agrupa capas (que pueden ser a su vez otros grupos). La API
+    // lo expone como una capa de tipo 'LayerGroup' con getLayers() para las
+    // hijas. Su name/legend por defecto son 'layer_<n>', asi que el nombre
+    // visible se construye con legend o title (constructorParameters).
+    const isGroupLayer = (l) => !!l && (l.type === 'LayerGroup' || l._type === 'LayerGroup');
+
+    const getLayerDisplayName = (l) => {
+      try {
+        if (l.legend && !/^layer_\d+$/.test(String(l.legend))) return l.legend;
+        const up = l.constructorParameters && l.constructorParameters.userParameters;
+        if (up && up.title && !/^layer_\d+$/.test(String(up.title))) return up.title;
+        if (l.name && !/^layer_\d+$/.test(String(l.name))) return l.name;
+        return l.legend || l.name || 'Sin nombre';
+      } catch (e) { return l.legend || l.name || 'Sin nombre'; }
+    };
+
+    // ¿Colapsado? Estado manual conservado en _groupCollapsed, o si no el
+    // valor "collapsed" del constructor del grupo.
+    const isGroupCollapsed = (group) => {
+      const key = String(group.idLayer);
+      if (key in self._groupCollapsed) return self._groupCollapsed[key];
+      try {
+        const up = group.constructorParameters && group.constructorParameters.userParameters;
+        return !!(up && up.collapsed);
+      } catch (e) { return false; }
+    };
+
+    // Busca una capa por idLayer. Primero en el registro del mapa y, si no
+    // esta, recursivamente dentro de los grupos (una capa puede vivir SOLO
+    // dentro de un grupo y no aparecer en map.getLayers()).
+    const findLayerById = (index) => {
+      let found = null;
+      try {
+        found = map.getLayers().find(layer => {
+          try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
+        }) || null;
+      } catch (e) { found = null; }
+      if (found) return found;
+      const stack = [];
+      try { map.getLayers().forEach(l => { if (isGroupLayer(l)) stack.push(l); }); } catch (e) { /* sin grupos */ }
+      while (stack.length) {
+        const g = stack.pop();
+        let hijos = [];
+        try { hijos = g.getLayers ? g.getLayers() : []; } catch (e) { hijos = []; }
+        for (const h of hijos) {
+          if (h && h.idLayer == index) return h;
+          if (isGroupLayer(h)) stack.push(h);
+        }
+      }
+      return null;
+    };
+
+    // Encuentra el grupo padre que contiene directamente a una capa (busca
+    // recursivamente entre los grupos del mapa). Devuelve el grupo o null.
+    const findParentGroup = (target) => {
+      const stack = [];
+      try { map.getLayers().forEach(l => { if (isGroupLayer(l)) stack.push(l); }); } catch (e) { return null; }
+      while (stack.length) {
+        const g = stack.pop();
+        let hijos = [];
+        try { hijos = g.getLayers ? g.getLayers() : []; } catch (e) { hijos = []; }
+        if (hijos.some(h => h === target)) return g;
+        hijos.forEach(h => { if (isGroupLayer(h)) stack.push(h); });
+      }
+      return null;
+    };
+
     // Capas seleccionables desde el selector (compartido entre el panel y el
     // dropdown del sidenav de la tabla de atributos). Se excluyen capas
     // temporales/auxiliares (p.ej. el resaltado del panel) marcadas con
     // displayInLayerSwitcher:false, las de terreno, y las capas internas
-    // auto-generadas por Mapea (nombre "layer_<n>").
+    // auto-generadas por Mapea (nombre "layer_<n>"). Los GRUPOS (LayerGroup)
+    // SI pasan aunque su nombre interno sea "layer_<n>" porque se muestran
+    // como nodos padre del arbol.
+    // Se usa map.getLayers() (sincrono) en lugar de map.getOverlayLayers():
+    // getLayers() refleja correctamente las eliminaciones con removeLayers(),
+    // mientras que getOverlayLayers() de la fachada puede mantener caches
+    // que causan capas fantasma tras un borrado.
     const getSelectableLayers = async () => {
-      const allLayers = await map.getOverlayLayers();
+      const allLayers = map.getLayers();
       return (allLayers || []).filter(l => {
         try {
           const direct = l && l.displayInLayerSwitcher;
@@ -101,39 +179,73 @@ class miPlugin_layerSwitcher {
           if (direct === false || implFlag === false) return false;
           if (l && (l._type === 'Terrain' || l.type === 'Terrain')) return false;
           const nm = (l && (l.name || l.legend)) || '';
-          if (/^layer_\d+$/.test(nm)) return false;
+          if (/^layer_\d+$/.test(nm) && !isGroupLayer(l)) return false;
           return true;
         } catch (e) { return true; }
       });
     };
 
-    const renderLayerList = async () => {
-      try {
-        const visibleLayers = await getSelectableLayers();
-        const htmlList = visibleLayers.map(layer => {
-          const layerName = layer.legend || layer.name || 'Sin nombre';
-          const index = layer.idLayer;
-          const visible = layer.isVisible ? layer.isVisible() : true;
-          // icono de ojo: abierto = capa visible, tachado/cerrado = oculta
-          const eyeIcon = visible ? '👁' : '🚫';
-          // Transparencia actual en % (100 = totalmente transparente).
-          // La API usa opacidad 0..1, asi que transparencia = (1 - opacity).
-          let opacity = 1;
-          try { if (layer.getOpacity !== undefined) opacity = layer.getOpacity() || 0; } catch (e) { /* ignorar */ }
-          const transpPct = Math.round((1 - opacity) * 100);
-          const optionsOpen = this._optionsOpen === index;
-          // Gradiente del track del slider: representa la OPACIDAD (lo que
-          // queda visible). 0% de transparencia (opaco) => relleno hasta la
-          // derecha (100%); 100% de transparencia => riel vacio (0%).
-          const fillPct = 100 - transpPct;
-          const sliderFill = `linear-gradient(to right, #0078d4 0%, #0078d4 ${fillPct}%, #d7dde7 ${fillPct}%, #d7dde7 100%)`;
-          return `
-            <li>
-              <label>
-                <span class="ls-nombre">${layerName}</span>
-                <button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>
-                <button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>
-              </label>
+    // Construye el arbol de capas del selector: los grupos (LayerGroup) se
+    // convierten en nodos padre con sus hijas (recursivo, con soporte de
+    // subgrupos). Las capas que viven DENTRO de un grupo se eliminan del
+    // nivel raiz para no duplicarlas.
+    const buildLayerTree = async () => {
+      const allLayers = await getSelectableLayers();
+      const grupos = allLayers.filter(isGroupLayer);
+      // idLayer de TODAS las capas que estan dentro de algun grupo (directa
+      // o indirectamente): se muestran bajo su grupo, no en la raiz.
+      const hijasEnGrupo = new Set();
+      const collectChildren = (g) => {
+        let hijos = [];
+        try { hijos = g.getLayers ? g.getLayers() : []; } catch (e) { hijos = []; }
+        hijos.forEach(h => {
+          hijasEnGrupo.add(String(h.idLayer));
+          if (isGroupLayer(h)) collectChildren(h);
+        });
+      };
+      grupos.forEach(collectChildren);
+
+      const nodeOf = (layer) => {
+        if (isGroupLayer(layer)) {
+          let hijos = [];
+          try { hijos = layer.getLayers ? layer.getLayers() : []; } catch (e) { hijos = []; }
+          return { layer, isGroup: true, children: hijos.map(nodeOf) };
+        }
+        return { layer, isGroup: false, children: [] };
+      };
+
+      return allLayers
+        .filter(l => !hijasEnGrupo.has(String(l.idLayer)))
+        .map(nodeOf);
+    };
+
+    const renderLayerNode = (node, depth) => {
+      const layer = node.layer;
+      const layerName = getLayerDisplayName(layer);
+      const index = layer.idLayer;
+      const visible = layer.isVisible ? layer.isVisible() : true;
+      // icono de ojo: abierto = capa visible, tachado/cerrado = oculta
+      const eyeIcon = visible ? '👁' : '🚫';
+      // Transparencia actual en % (100 = totalmente transparente).
+      // La API usa opacidad 0..1, asi que transparencia = (1 - opacity).
+      let opacity = 1;
+      try { if (layer.getOpacity !== undefined) opacity = layer.getOpacity() || 0; } catch (e) { /* ignorar */ }
+      const transpPct = Math.round((1 - opacity) * 100);
+      const optionsOpen = self._optionsOpen === index;
+      // Solo las capas VECTORIALES tienen tabla de atributos: las raster
+      // (y los grupos) no aportan nada, asi que se omite el boton de tabla.
+      const layerKind = window.getLayerKind(layer);
+      const tableBtnHtml = layerKind === 'vector'
+        ? `<button type="button" class="ls-action ls-action-info" data-id="${index}" title="Ver tabla de atributos / estadísticas de la capa" onclick="openLayerInfo('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg></button>`
+        : '';
+      // Gradiente del track del slider: representa la OPACIDAD (lo que
+      // queda visible). 0% de transparencia (opaco) => relleno hasta la
+      // derecha (100%); 100% de transparencia => riel vacio (0%).
+      const fillPct = 100 - transpPct;
+      const sliderFill = `linear-gradient(to right, #0078d4 0%, #0078d4 ${fillPct}%, #d7dde7 ${fillPct}%, #d7dde7 100%)`;
+      const eyeBtn = `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>`;
+      const optsBtn = `<button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>`;
+      const optionsPanel = `
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
                 <div class="ls-option-row">
                   <span class="ls-option-label" title="Transparencia de la capa">Transparencia</span>
@@ -141,12 +253,43 @@ class miPlugin_layerSwitcher {
                   <span class="ls-option-value">${transpPct}%</span>
                 </div>
                 <div class="ls-actions-row">
-                  <button type="button" class="ls-action ls-action-info" data-id="${index}" title="Ver tabla de atributos / estadísticas de la capa" onclick="openLayerInfo('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg></button>
+                  ${tableBtnHtml}
                   <button type="button" class="ls-action ls-action-delete" data-id="${index}" title="Eliminar la capa del mapa" onclick="deleteLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
                 </div>
-              </div>
+              </div>`;
+
+      if (node.isGroup) {
+        const collapsed = isGroupCollapsed(layer);
+        const chevron = collapsed ? '▸' : '▾';
+        const childrenHtml = node.children.map(c => renderLayerNode(c, depth + 1)).join('');
+        return `
+            <li class="ls-group" data-depth="${depth}">
+              <label>
+                <button type="button" class="ls-group-chevron" data-id="${index}" title="${collapsed ? 'Expandir grupo' : 'Colapsar grupo'}" onclick="toggleGroup('${index}')">${chevron}</button>
+                <span class="ls-nombre ls-group-name">${layerName}</span>
+                ${eyeBtn}
+                ${optsBtn}
+              </label>
+              ${optionsPanel}
+              <ul class="ls-children ${collapsed ? 'ls-collapsed' : ''}">${childrenHtml}</ul>
             </li>`;
-        }).join('');
+      }
+
+      return `
+            <li data-depth="${depth}">
+              <label>
+                <span class="ls-nombre">${layerName}</span>
+                ${eyeBtn}
+                ${optsBtn}
+              </label>
+              ${optionsPanel}
+            </li>`;
+    };
+
+    const renderLayerList = async () => {
+      try {
+        const tree = await buildLayerTree();
+        const htmlList = tree.map(node => renderLayerNode(node, 0)).join('');
 
         control.htmlView = `<ul class="overlay-layer-selector">${htmlList}</ul>`;
         const preview = document.querySelector('#m-herramienta-previews-layerSwitcher');
@@ -167,14 +310,13 @@ class miPlugin_layerSwitcher {
     control.deactivate = () => { };
 
     window.toggleLayerVisibility = function (index) {
-      const matches = map.getLayers().filter(layer => {
-        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
-      });
-      const layer = matches[0];
+      const layer = findLayerById(index);
       if (!layer || typeof layer.setVisible !== 'function') return;
 
       // El ojito es el unico control de visibilidad: alterna la capa de forma
-      // independiente (varias capas pueden estar visibles a la vez).
+      // independiente (varias capas pueden estar visibles a la vez). En un
+      // grupo, alterna la visibilidad del grupo COMPLETO (OpenLayers oculta
+      // el render de todas sus hijas sin tocar su estado individual).
       layer.setVisible(!layer.isVisible());
       // Actualiza el ojito (estado visible/oculto) tras el cambio.
       if (window.renderLayerList && typeof window.renderLayerList === 'function') {
@@ -200,16 +342,53 @@ class miPlugin_layerSwitcher {
       renderLayerList();
     };
 
-    // ── Borrar capa ─────────────────────────────────────────────────────
-    // Elimina la capa del mapa y refresca la lista. La referencia se busca
-    // de la misma forma que en el resto de handlers (por idLayer).
+    // ── Colapsar / expandir un grupo de capas ──────────────────────────
+    // Alterna el estado y lo conserva en self._groupCollapsed (idLayer -> bool)
+    // para que el re-render no lo pierda. Si es la primera vez, parte del
+    // valor "collapsed" con el que se creó el grupo en el constructor.
+    window.toggleGroup = function (index) {
+      const key = String(index);
+      const actual = (key in self._groupCollapsed) ? self._groupCollapsed[key] : (() => {
+        let def = false;
+        try {
+          const up = findLayerById(index);
+          if (up && up.constructorParameters) {
+            const upar = up.constructorParameters.userParameters;
+            def = !!(upar && upar.collapsed);
+          }
+        } catch (e) { def = false; }
+        return def;
+      })();
+      self._groupCollapsed[key] = !actual;
+      renderLayerList();
+    };
+
+    // ── Borrar capa (o grupo de capas) ─────────────────────────────────
+    // Elimina la capa del mapa y refresca la lista. Para un grupo se eliminan
+    // tambien sus hijas (recursivo, incluidos subgrupos): borrar el contenedor
+    // sin su contenido dejaria capas huerfanas en el mapa. Para capas hijas
+    // de un grupo, se quitan tanto del grupo como del mapa.
     window.deleteLayer = function (index) {
-      const matches = map.getLayers().filter(layer => {
-        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
-      });
-      const layer = matches[0];
+      const layer = findLayerById(index);
       if (!layer) return;
       try {
+        const removeDeep = (g) => {
+          let hijos = [];
+          try { hijos = g.getLayers ? g.getLayers() : []; } catch (e) { hijos = []; }
+          hijos.slice().forEach(h => {
+            if (isGroupLayer(h)) removeDeep(h);
+            try { g.removeLayers(h); } catch (e) { /* el grupo puede no soportar quitar esta capa */ }
+            try { map.removeLayers(h); } catch (e) { /* la hija puede no estar registrada en el mapa nivel raíz */ }
+          });
+        };
+        if (isGroupLayer(layer)) {
+          removeDeep(layer);
+        } else {
+          const parentGroup = findParentGroup(layer);
+          if (parentGroup) {
+            try { parentGroup.removeLayers(layer); } catch (e) { /* defensivo */ }
+          }
+        }
         map.removeLayers(layer);
         closeSheet();
         renderLayerList();
@@ -237,10 +416,7 @@ class miPlugin_layerSwitcher {
     // transpPct es 0..100 (0 = opaco, 100 = totalmente transparente). La API
     // usa opacidad 0..1, asi que transladamos: opacity = 1 - transp/100.
     window.setLayerOpacity = function (index, transpPct, sliderEl) {
-      const matches = map.getLayers().filter(layer => {
-        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
-      });
-      const layer = matches[0];
+      const layer = findLayerById(index);
       const pct = Math.max(0, Math.min(100, Number(transpPct) || 0));
       if (layer && layer.setOpacity) {
         layer.setOpacity(1 - pct / 100);
@@ -603,10 +779,7 @@ class miPlugin_layerSwitcher {
         return;
       }
       // Fallback: recuperar features de la capa al vuelo.
-      const matches = map.getLayers().filter(layer => {
-        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
-      });
-      const layer = matches[0];
+      const layer = findLayerById(index);
       if (!layer) return;
       let features = [];
       try {
@@ -997,10 +1170,7 @@ class miPlugin_layerSwitcher {
     // las estadisticas (raster). En su header se incluye un dropdown con todas
     // las capas seleccionables para poder cambiar de capa sin cerrar el panel.
     window.openLayerInfo = function (index, fromPicker) {
-      const matches = map.getLayers().filter(layer => {
-        try { return layer.getImpl().isBase === false && layer.getImpl().displayInLayerSwitcher === true && layer.idLayer == index; } catch (e) { return false; }
-      });
-      const layer = matches[0];
+      const layer = findLayerById(index);
       if (!layer) return;
       const kind = window.getLayerKind(layer);
       const layerName = layer.legend || layer.name || 'Capa';
@@ -1030,7 +1200,13 @@ class miPlugin_layerSwitcher {
       if (fromPicker && window._lsPickerLayers) {
         finish(window._lsPickerLayers);
       } else {
-        getSelectableLayers().then(ls => { window._lsPickerLayers = ls; finish(ls); });
+        // El dropdown del sidenav SOLO lista capas vectoriales: las raster no
+        // tienen tabla de atributos y no aportan nada en el selector.
+        getSelectableLayers().then(ls => {
+          const vectorLayers = (ls || []).filter(l => window.getLayerKind(l) === 'vector');
+          window._lsPickerLayers = vectorLayers;
+          finish(vectorLayers);
+        });
       }
     };
 

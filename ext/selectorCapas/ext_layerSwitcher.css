@@ -582,3 +582,55 @@
   opacity: 0.6;
   cursor: default;
 }
+
+/* ── Grupos de capas (arbol) ─────────────────────────────────────────
+   Un grupo (IDEE.layer.LayerGroup) se muestra como nodo padre con sus
+   capas hijas (y subgrupos) indentadas debajo. Se conserva el estado
+   colapsado/expandido entre re-renders. */
+.overlay-layer-selector li.ls-group > label {
+  font-weight: 600;
+  color: #1a3a5c;
+}
+
+/* Boton chevron: colapsa/expande el grupo. Misma linea de base que el
+   ojito, sin fondo. */
+.overlay-layer-selector .ls-group-chevron {
+  flex-shrink: 0;
+  margin-right: 0.15em;
+  width: 24px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+  color: #1a3a5c;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.overlay-layer-selector .ls-group-chevron:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Lista de hijas de un grupo: indentada respecto a la fila del padre. */
+.overlay-layer-selector .ls-children {
+  list-style: none;
+  padding: 0;
+  margin: 0.25em 0 0 0.9em;
+  border-left: 2px solid #dfe6ee;
+  padding-left: 0.7em;
+}
+
+/* Estado colapsado: los hijos quedan ocultos hasta expandir el grupo. */
+.overlay-layer-selector .ls-collapsed {
+  display: none;
+}
+
+/* Las filas hijas se atenuan ligeramente frente al nombre del grupo. */
+.overlay-layer-selector .ls-children li label .ls-nombre {
+  font-weight: 400;
+}

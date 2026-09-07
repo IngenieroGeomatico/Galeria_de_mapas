@@ -11,6 +11,24 @@ function mapa() {
     container: "mapaDIV"
   });
 
+  // ── Grupo de capas de ejemplo (IDEE.layer.LayerGroup) ──────────────
+  // Un grupo agrupa capas y puede contener a su vez otros grupos. Se crea,
+  // se añade al mapa y luego se le dan las capas hijas con addLayers().
+  // El nombre visible se controla con "legend" (el name interno es layer_<n>).
+  // "collapsed" indica si empieza plegado en el selector de capas.
+  const grupoEjemplo = new IDEE.layer.LayerGroup({
+    legend: 'Grupo de capas de ejemplo',
+    collapsed: false,
+  })
+  mapajs.addLayers(grupoEjemplo)
+
+  // Subgrupo dentro del grupo anterior (demuestra el anidamiento).
+  const subgrupoEjemplo = new IDEE.layer.LayerGroup({
+    legend: 'Subgrupo vectorial',
+    collapsed: true,
+  })
+  mapajs.addLayers(subgrupoEjemplo)
+
   try {
     const layer3 = new IDEE.layer.MapLibre({
       url: 'https://vt-btn.idee.es/files/styles/BTN_Completa.json',
@@ -19,6 +37,8 @@ function mapa() {
       legend: 'BTN',
     })
     mapajs.addLayers(layer3)
+    // BTN vive dentro del subgrupo.
+    subgrupoEjemplo.addLayers(layer3)
   } catch (error) {
     console.log(error)
   }
@@ -32,6 +52,7 @@ function mapa() {
     visibility: true,
   }, {})
   mapajs.addLayers(layer2)
+  grupoEjemplo.addLayers(layer2)
 
   const layer1 = new IDEE.layer.GeoJSON({
     name: "Provincias",
@@ -48,6 +69,10 @@ function mapa() {
   }, {
   });
   mapajs.addLayers(layer1)
+  grupoEjemplo.addLayers(layer1)
+
+  // El subgrupo (con BTN dentro) se anida en el grupo de ejemplo.
+  grupoEjemplo.addLayers(subgrupoEjemplo)
 
 
   var js_Nuevacapaborrador = document.createElement("script");
