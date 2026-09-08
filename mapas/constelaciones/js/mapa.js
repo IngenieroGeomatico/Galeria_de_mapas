@@ -114,59 +114,68 @@ function directionICRFtoLLHWithMatrix(dirICRF, R_icrf2ecef, shellAltMeters) {
 
 
 
-const mapajs = IDEE.map({
+function mapa() {
+
+mapajs = IDEE.map({
   container: "mapa", //id del contenedor del mapa
   center: { x: -5.401192785534927, y: 38.76089860530802 },
   zoom: 0
 });
 
-const mapaCesium = mapajs.getMapImpl();
+mapaCesium = mapajs.getMapImpl();
 
-// --- 🔆 Añadir el efecto de lente solar (Lens Flare) ---
-const lensFlare = mapaCesium.scene.postProcessStages.add(
-  Cesium.PostProcessStageLibrary.createLensFlareStage()
-);
+// 🔆 La lente solar, atmósfera y color de fondo son exclusivos de la
+// implementación Cesium. Tras "cambiar impl" (OL) la escena 3D no existe:
+// se omite este bloque para no romper el mapa.
+if (mapaCesium.scene) {
 
-
-// Skybox y ocultar Tierra/atmósfera
-(function setupSky() {
-  // mapaCesium.scene.skyBox = new Cesium.SkyBox({
-  //   sources: {
-  //     negativeX: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_mx.jpg",
-  //     negativeY: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_my.jpg",
-  //     negativeZ: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_mz.jpg",
-  //     positiveX: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_px.jpg",
-  //     positiveY: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_py.jpg",
-  //     positiveZ: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_pz.jpg",
-  //   }
-  // });
-  // mapaCesium.scene.globe.show = true;
-  mapaCesium.scene.backgroundColor = Cesium.Color.BLACK;
-  mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
-
-  // mapaCesium.scene.sun = new Cesium.Sun();
-  // mapaCesium.scene.sun.show = true; // Muestra el sol
-  mapaCesium.scene.skyAtmosphere.show = true; // Muestra la atmósfera
-  // mapaCesium.scene.globe.enableLighting = true;
+  // --- 🔆 Añadir el efecto de lente solar (Lens Flare) ---
+  const lensFlare = mapaCesium.scene.postProcessStages.add(
+    Cesium.PostProcessStageLibrary.createLensFlareStage()
+  );
 
 
-  // Configura los parámetros del efecto
-  lensFlare.enabled = true;
-  lensFlare.uniforms.intensity = 0.15;      // Brillo general del efecto
-  lensFlare.uniforms.distortion = 1;     // Distorsión de la lente
-  lensFlare.uniforms.ghostDispersal = 0.5; // Separación de los reflejos
-  lensFlare.uniforms.haloWidth = 10;      // Anchura del halo
-  lensFlare.uniforms.dirtAmount = 10;     // Simula suciedad en la lente
-  lensFlare.uniforms.earthRadius = Cesium.Ellipsoid.WGS84.maximumRadius;
+  // Skybox y ocultar Tierra/atmósfera
+  (function setupSky() {
+    // mapaCesium.scene.skyBox = new Cesium.SkyBox({
+    //   sources: {
+    //     negativeX: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_mx.jpg",
+    //     negativeY: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_my.jpg",
+    //     negativeZ: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_mz.jpg",
+    //     positiveX: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_px.jpg",
+    //     positiveY: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_py.jpg",
+    //     positiveZ: "https://sandcastle.cesium.com/CesiumUnminified/Assets/Textures/SkyBox/tycho2t3_80_pz.jpg",
+    //   }
+    // });
+    // mapaCesium.scene.globe.show = true;
+    mapaCesium.scene.backgroundColor = Cesium.Color.BLACK;
+    mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
 
-})();
+    // mapaCesium.scene.sun = new Cesium.Sun();
+    // mapaCesium.scene.sun.show = true; // Muestra el sol
+    mapaCesium.scene.skyAtmosphere.show = true; // Muestra la atmósfera
+    // mapaCesium.scene.globe.enableLighting = true;
+
+
+    // Configura los parámetros del efecto
+    lensFlare.enabled = true;
+    lensFlare.uniforms.intensity = 0.15;      // Brillo general del efecto
+    lensFlare.uniforms.distortion = 1;     // Distorsión de la lente
+    lensFlare.uniforms.ghostDispersal = 0.5; // Separación de los reflejos
+    lensFlare.uniforms.haloWidth = 10;      // Anchura del halo
+    lensFlare.uniforms.dirtAmount = 10;     // Simula suciedad en la lente
+    lensFlare.uniforms.earthRadius = Cesium.Ellipsoid.WGS84.maximumRadius;
+
+  })();
+
+}
 
 
 
 /**************************************************************************
  * CAPAS GEOJSON (lon, lat, altura)
  **************************************************************************/
-const layerConstelaciones = new IDEE.layer.GeoJSON({
+layerConstelaciones = new IDEE.layer.GeoJSON({
   name: "layerConstelaciones",
   legend: "Constelaciones",
   source: {}
@@ -193,7 +202,7 @@ let estilo_layerConstelaciones = new IDEE.style.Generic({
 });
 layerConstelaciones.setStyle(estilo_layerConstelaciones)
 
-const layerEstrellas = new IDEE.layer.GeoJSON({
+layerEstrellas = new IDEE.layer.GeoJSON({
   name: "layerEstrellas",
   legend: "Estrellas (mag ≤ 6)",
   source: {}
@@ -227,7 +236,7 @@ let estilo_layerEstrellas = new IDEE.style.Generic({
 layerEstrellas.setStyle(estilo_layerEstrellas)
 
 
-const layerEcuador = new IDEE.layer.GeoJSON({
+layerEcuador = new IDEE.layer.GeoJSON({
   name: "layerEcuador",
   legend: "Ecuador",
   source: {}
@@ -257,7 +266,7 @@ let estilo_layerEcuador = new IDEE.style.Generic({
 layerEcuador.setStyle(estilo_layerEcuador);
 
 
-const layerPlanetas = new IDEE.layer.GeoJSON({
+layerPlanetas = new IDEE.layer.GeoJSON({
   name: "layerPlanetas",
   legend: "Planetas",
   source: {}
@@ -330,7 +339,7 @@ layerPlanetas.setStyle(estilo_layerPlanetas)
 
 
 // --- Capa para Sol y Luna ---
-const layerSolLuna = new IDEE.layer.GeoJSON({
+layerSolLuna = new IDEE.layer.GeoJSON({
   name: "layerSolLuna",
   legend: "Sol y Luna",
   source: {}
@@ -364,6 +373,20 @@ pluglinCambioCapaBase = new miPlugin_baseLayer({ rows: 1 })
 mapajs.addPlugin(pluglinCambioCapaBase)
 pluginCapasSuperpuestas = new miPlugin_layerSwitcher()
 mapajs.addPlugin(pluginCapasSuperpuestas)
+
+mapajs.addPlugin(new miPlugin_cambioImpl({
+  buttonTitle: 'cambiar impl :)',
+  mapsFunction: mapa,
+  sameMap: true,
+  shareView: true,
+  shareLayers: true
+}));
+
+return mapajs;
+
+}
+
+mapajs_0 = mapa();
 
 
 
@@ -696,7 +719,8 @@ function actualizarCielo(fechaJulian = null) {
 
   if (icrfPollId === null) {
     icrfPollId = setInterval(() => {
-      const t2 = fechaJulian || mapaCesium.clock.currentTime;
+      // En OL no hay reloj Cesium: se usa la fecha juliana actual
+      const t2 = fechaJulian || (mapaCesium && mapaCesium.clock ? mapaCesium.clock.currentTime : Cesium.JulianDate.now());
       const R2 = Cesium.Transforms.computeIcrfToFixedMatrix(t2);
       if (!Cesium.defined(R2)) return;
 
@@ -742,7 +766,9 @@ function actualizarCielo(fechaJulian = null) {
   //   }, 
   //   i * 20 * 1000); // <-- Multiplica por i para escalonar las ejecuciones
   // }
-  mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+  if (mapaCesium.scene) {
+    mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+  }
   actualizarCielo();
   setInterval(actualizarCielo, 5 * 60 * 1000);
 })();
