@@ -103,12 +103,21 @@ ISSPosition = function (centerMap = false, onlyPosition = false) {
       }]
     };
 
-    if (!onlyPosition) {
+    // En OL la capa no tiene entidades 3D que mover (solo-posición Cesium):
+    // el punto ISS se refresca siempre vía setSource.
+    if (!onlyPosition || !(mapaCesium && mapaCesium.scene)) {
       layerISS.setSource(ISS);
     }
 
 
     let checkVar = setInterval(() => {
+
+      // El seguimiento del modelo 3D de la ISS solo aplica en la implementación
+      // Cesium; en OL la capa GeoJSON ya dibuja el punto con su estilo.
+      if (!(mapaCesium && mapaCesium.scene)) {
+        clearInterval(checkVar);
+        return;
+      }
 
       layerISS_Cesium = layerISS.getImpl().getLayer()
       if (typeof layerISS_Cesium !== 'undefined' && layerISS_Cesium !== null && layerISS_Cesium.entities.values.length > 0) {
@@ -378,15 +387,20 @@ GalileoPositionByTime = function (Orbit = false) {
 
 }
 
-const mapajs = IDEE.map({
+function mapa() {
+
+mapajs = IDEE.map({
   container: "mapa", //id del contenedor del mapa
   center: { x: -5.401192785534927, y: 38.76089860530802 },
   zoom: 7,
 });
 
 
-var mapaCesium = mapajs.getMapImpl();
-mapaCesium.scene.globe.depthTestAgainstTerrain = true;
+mapaCesium = mapajs.getMapImpl();
+// Solo la implementación Cesium dispone de escena 3D (globo)
+if (mapaCesium.scene) {
+  mapaCesium.scene.globe.depthTestAgainstTerrain = true;
+}
 
 layerISS = new IDEE.layer.GeoJSON({
   name: "layerISS",
@@ -510,8 +524,24 @@ mapajs.addPlugin(pluglinCambioCapaBase)
 pluginCapasSuperpuestas = new miPlugin_layerSwitcher()
 mapajs.addPlugin(pluginCapasSuperpuestas)
 
+mapajs.addPlugin(new miPlugin_cambioImpl({
+  buttonTitle: 'cambiar impl :)',
+  mapsFunction: mapa,
+  sameMap: true,
+  shareView: true,
+  shareLayers: true
+}));
 
-mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+
+if (mapaCesium.scene) {
+  mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+}
+
+return mapajs;
+
+}
+
+mapajs_0 = mapa();
 
 // Carga satellite.js bajo demanda y arranca los cálculos orbitales cuando esté
 // disponible (propagación de la ISS y Galileo).
