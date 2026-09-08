@@ -116,6 +116,14 @@ class miPlugin_cambioImpl {
             }
         })
 
+        // Si el visor arranca ya en la implementación Cesium (p. ej.
+        // constelaciones o satelites), el botón debe empezar "activado":
+        // así el primer click conmuta directamente a OL sin duplicar la
+        // inicialización en Cesium.
+        if (IDEE.impl && IDEE.impl.cesium) {
+            btn.classList.add('activated');
+        }
+
         async function reiniciarMapa(tipo) {
             M = IDEE
             /* ===============================
