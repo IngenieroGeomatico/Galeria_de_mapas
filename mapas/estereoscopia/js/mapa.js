@@ -49,11 +49,13 @@ function updateConfigBaseLayer() {
     {
       "id": "mapa",
       "title": "Callejero",
+      "imgPreview": "../MapaBase/img/IGNBase.png",
       "layers": ["QUICK*Base_IGNBaseTodo_TMS_2"]
     },
     {
       "id": "imagen",
       "title": "Imagen",
+      "imgPreview": "../MapaBase/img/imagen.png",
       "layers": ["QUICK*BASE_PNOA_MA_TMS"]
     }
   ];
@@ -85,6 +87,9 @@ function mapa() {
 
   // Plugin de cambio de implementación (OL <-> Cesium).
   mapajs.addPlugin(pluginCambioImplFunc());
+  // Plugins de selección de capas (base + overlay).
+  mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
+  mapajs.addPlugin(new miPlugin_layerSwitcher());
   // Plugin de estereoscopía (detecta OL y activa su motor).
   mapajs.addPlugin(pluginEstereoscopiaFunc());
 

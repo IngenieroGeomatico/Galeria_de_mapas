@@ -116,6 +116,16 @@ function iniciar(config) {
   supra.addItem(comparador);
   mapajs.addPlugin(supra);
 
+  mapajs.addPlugin(new miPlugin_cambioImpl({
+    buttonTitle: 'cambiar impl :)',
+    mapsFunction: iniciar,
+    sameMap: true,
+    shareView: true,
+    shareLayers: true
+  }));
+  mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
+  mapajs.addPlugin(new miPlugin_layerSwitcher());
+
   SVGCarga.hidden = true;
   return mapajs;
 }

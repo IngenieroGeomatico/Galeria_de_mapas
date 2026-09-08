@@ -62,6 +62,15 @@ function mapa() {
   var layerSwitcherPlugin = new miPlugin_layerSwitcher();
   mapajs.addPlugin(layerSwitcherPlugin);
 
+  // ── Plugin cambio de implementación (OL <-> Cesium) ───────────────
+  mapajs.addPlugin(new miPlugin_cambioImpl({
+    buttonTitle: 'cambiar impl :)',
+    mapsFunction: mapa,
+    sameMap: true,
+    shareView: true,
+    shareLayers: true
+  }));
+
   SVGCarga.hidden = true;
   return mapajs;
 }

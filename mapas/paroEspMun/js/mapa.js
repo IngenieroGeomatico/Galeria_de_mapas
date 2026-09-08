@@ -4,18 +4,83 @@ const SVGCarga = document.getElementById("cargaSVG")
 // };
 
 
-mapajs = IDEE.map({
-  container: "mapa",
-  center: { x: -512140.0194987538, y: 4552625.8998558065 },
-  controls:["attributions"],
-  zoom: 5
-});
+function mapa() {
 
-mapajs.addAttribution({
-  name: "Autor:",
-  description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
-})
+  updateConfigBaseLayer()
 
+  mapajs = IDEE.map({
+    container: "mapa",
+    center: { x: -512140.0194987538, y: 4552625.8998558065 },
+    controls:["attributions"],
+    zoom: 5
+  });
+
+  mapajs.addAttribution({
+    name: "Autor:",
+    description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
+  })
+
+  mapajs.addPlugin(new miPlugin_cambioImpl({
+    buttonTitle: 'cambiar impl :)',
+    mapsFunction: mapa,
+    sameMap: true,
+    shareView: true,
+    shareLayers: true
+  }));
+  mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
+  mapajs.addPlugin(new miPlugin_layerSwitcher());
+
+  return mapajs
+}
+
+function updateConfigBaseLayer() {
+  Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
+    url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
+    legend: 'IGNBaseTodo_2',
+    visible: true,
+    isBase: true,
+    tileGridMaxZoom: 17,
+    name: 'IGNBaseTodo_2',
+    attribution: '<p><b>Mapa base</b>: <a style="color: #0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
+  }, {
+    crossOrigin: 'anonymous',
+    displayInLayerSwitcher: false,
+  })
+
+  IDEE.addQuickLayers({
+    Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2
+  })
+
+  tms_2 = {
+    "base": "QUICK*Base_IGNBaseTodo_TMS_2"
+  }
+
+  IDEE.config("tms", tms_2)
+  IDEE.config.backgroundlayers = [
+    {
+      "id": "mapa",
+      "title": "Callejero",
+      "imgPreview": "img/IGNBase.png",
+      "layers": [
+        "QUICK*Base_IGNBaseTodo_TMS_2"
+      ]
+    },
+    {
+      "id": "imagen",
+      "title": "Imagen",
+      "imgPreview": "img/imagen.png",
+      "layers": [
+        "QUICK*BASE_PNOA_MA_TMS"
+      ]
+    }
+  ]
+
+  IDEE.proxy(false);
+
+  return
+}
+
+mapa()
 
 const capaMVT_Municipios = new IDEE.layer.MVT({
   url: "https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf",
