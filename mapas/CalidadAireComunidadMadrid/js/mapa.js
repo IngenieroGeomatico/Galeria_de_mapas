@@ -6,6 +6,8 @@ const SVGCarga = document.getElementById("cargaSVG")
 // };
 
 
+function mapa() {
+
 Base_IGNBaseTodo_TMS_2 = new M.layer.TMS({
   url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
   legend: 'IGNBaseTodo_2',
@@ -29,6 +31,25 @@ tms_2= {
 
 M.config("tms",tms_2) 
 
+IDEE.config.backgroundlayers = [
+  {
+    "id": "mapa",
+    "title": "Callejero",
+    "imgPreview": "img/IGNBase.png",
+    "layers": [
+      "QUICK*Base_IGNBaseTodo_TMS_2"
+    ]
+  },
+  {
+    "id": "imagen",
+    "title": "Imagen",
+    "imgPreview": "img/imagen.png",
+    "layers": [
+      "QUICK*BASE_PNOA_MA_TMS"
+    ]
+  }
+]
+
 M.proxy(false)
 
 mapajs = M.map({
@@ -43,8 +64,6 @@ mapajs.addAttribution({
   name: "Autor:",
   description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
 })
-
-mapajs.addQuickLayers('Base_IGNBaseTodo_TMS_2')
 
 
 geojsonJoin = myFunction_JoinData_CM()
@@ -1316,22 +1335,6 @@ const ext_Modal = new M.plugin.Modal({
 
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
-
-const ext_LayerSwitcher = new M.plugin.Layerswitcher({
-  collapsed: true,
-  position: 'TR',
-  collapsible: true,
-  isDraggable: true,
-  modeSelectLayers: 'eyes',
-  tools: ['transparency', 'zoom', 'information', 'delete'],
-  isMoveLayers: true,
-  https: true,
-  http: true,
-  showCatalog: false,
-  displayLabel: false,
-});
-
-mapajs.addPlugin(ext_LayerSwitcher);
 M.proxy(false)
 
 mapajs.addPlugin(new miPlugin_calidadAire({
@@ -1342,3 +1345,19 @@ mapajs.addPlugin(new miPlugin_calidadAire({
 }))
 
 mapajs.addPlugin(new miPlugin_leyenda())
+
+mapajs.addPlugin(new miPlugin_cambioImpl({
+  buttonTitle: 'cambiar impl :)',
+  mapsFunction: mapa,
+  sameMap: true,
+  shareView: true,
+  shareLayers: true
+}));
+mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
+mapajs.addPlugin(new miPlugin_layerSwitcher());
+
+return mapajs
+
+}
+
+mapa()
