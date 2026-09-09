@@ -47,16 +47,16 @@
   width: 100%;
 }
 
-/* Botón del panel y cabecera: fondo (color1), borde (color2), icono/flecha (color3). */
-.m-areas>div.m-area>div.m-panel.g-herramienta>button.m-panel-btn,
+/* Cabecera del panel: fondo (color1), borde (color2), icono/flecha (color3).
+   El BOTÓN del panel lo estilan las reglas genéricas (ver abajo). */
 .g-herramienta .m-herramienta-header {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #fff) !important;
   border-color: var(--g-plugin-border-color, #fff) !important;
 }
 
-/* Panel abierto (opened) = estado activo: colores "-active". */
-.m-areas>div.m-area>div.m-panel.g-herramienta.opened>button.m-panel-btn,
+/* Panel abierto (opened) = estado activo: colores "-active".
+   El BOTÓN lo estiliza la regla genérica de botón (ver abajo). */
 .m-areas>div.m-area>div.m-panel.g-herramienta.opened .m-herramienta-header {
   background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
   color: var(--g-plugin-icon-color-active, #71A7D3) !important;
@@ -101,6 +101,27 @@
 #m-herramienta-contents{
   margin: 0px 10px;
 
+}
+
+/* BOTÓN del panel — GENÉRICO para todos los plugins.
+   Base (cerrado):
+     - fondo  = color1.deactive (--g-plugin-bg-color)
+     - texto  = color3.deactive (--g-plugin-icon-color)
+     - borde  = color2.deactive (--g-plugin-border-color)
+   Abierto (opened) — mayor especificidad gana sobre base:
+     - fondo  = color1.active  (--g-plugin-bg-color-active)
+     - texto  = color2.active  (--g-plugin-border-color-active)
+     - borde  = color2.active  (--g-plugin-border-color-active) */
+.m-areas>div.m-area>div.m-panel>button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #fff) !important;
+  border-color: var(--g-plugin-border-color, #fff) !important;
+}
+
+.m-areas>div.m-area>div.m-panel.opened>button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-border-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
 
