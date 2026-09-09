@@ -50,7 +50,12 @@
 
 /* Contenedor del plugin */
 .m-control.m-container.m-herramienta {
-  width: 250px;
+  /* Ancho dinámico: el panel se ajusta al mayor texto de sus filas en lugar
+     de quedar fijo en 250px. max-content deja crecer el panel hasta el ancho
+     del texto más largo; max-width impide que desborde la pantalla (los
+     nombres largos entonces se recortan con elipsis en .ls-nombre). */
+  width: max-content;
+  max-width: min(420px, 90vw);
   display: flex !important;
   flex-direction: column;
 }
@@ -65,6 +70,17 @@
   padding: 0 5px;
   text-align: center;
   width: 100%;
+}
+
+/* Zona de la lista de capas: cuando hay muchas capas, el panel no debe crecer
+   indefinidamente hacia abajo. Se define una altura máxima y un scroll
+   vertical interno, de modo que la cabecera y el botón del panel quedan fijos
+   y solo la lista de capas se desplaza si se desborda. */
+.m-herramienta-previews.layerSwitcher,
+.m-herramienta-previews {
+  max-height: 50vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Botón del panel y cabecera en el color configurable del constructor.
@@ -109,6 +125,10 @@
 }
 
 .overlay-layer-selector li {
+  /* Elimina cualquier viñeta/marcador heredado (list-style) que Mapea o los
+     estilos del navegador puedan inyectar a la izquierda de cada fila. */
+  list-style: none;
+  list-style-type: none;
   margin: 0.5em 0;
 }
 
@@ -156,6 +176,8 @@
   border: none;
   border-radius: 6px;
   background: transparent;
+  /* Color del trazo del SVG del ojo (stroke=currentColor). */
+  color: #444;
   font-size: 18px;
   line-height: 1;
   cursor: pointer;

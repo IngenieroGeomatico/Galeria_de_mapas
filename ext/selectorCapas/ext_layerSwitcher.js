@@ -3,6 +3,11 @@ class miPlugin_layerSwitcher {
   constructor(options = {}) {
     this.name = 'miPlugin_layerSwitcher';
     this.options = options || {};
+    // Posición (índice, empezando en 0) del botón del plugin dentro del div
+    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
+    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
+    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
+    this.order = (options.order !== undefined) ? Number(options.order) : null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
@@ -67,6 +72,54 @@ class miPlugin_layerSwitcher {
 
     panelExtra.addControls(control);
     map.addPanels(panelExtra);
+
+    // ── Posicionar el botón del plugin (opción `order`) ────────────────
+    // Reordena el panel del plugin dentro del div donde Mapea coloca los
+    // botones de los paneles (el m-area que contiene los .m-panel). El
+    // `order` (opcional) es el índice 0-based del botón dentro de esa lista:
+    // - order:0  => primer botón del área;
+    // - order:2  => tercer botón del área;
+    // - omitido  => el botón queda donde lo colocó map.addPanels.
+    // Se ejecuta DESPUÉS de addPanels para disponer del panel en el DOM.
+    if (this.order !== null && !Number.isNaN(this.order)) {
+      const panelEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta_selectorCapa');
+      if (panelEl && panelEl.parentElement) {
+        // El div que contiene los botones/paneles (el m-area del panel).
+        const area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
+          ? panelEl.parentElement
+          : panelEl.closest('.m-area');
+        if (area) {
+          // Paneles (botones) hermanos en el orden actual del DOM.
+          const siblings = Array.from(area.children).filter(el =>
+            el.classList && el.classList.contains('m-panel')
+          );
+          if (siblings.length > 1) {
+            // Posición objetivo (clamp a rango válido).
+            const target = Math.max(0, Math.min(this.order, siblings.length - 1));
+            const current = siblings.indexOf(panelEl);
+            if (current !== target) {
+              const ref = (target >= siblings.length)
+                ? null
+                : siblings[target];
+              if (ref && ref !== panelEl) {
+                // Si movemos hacia delante y nos apoyamos en un hermano que
+                // está antes del propio panel, hay que insertar en el
+                // siguiente para no quedarnos pendientes. Se recalcula según
+                // la posición relativa.
+                if (target > current) {
+                  const next = siblings[target + 1] || null;
+                  area.insertBefore(panelEl, next);
+                } else {
+                  area.insertBefore(panelEl, ref);
+                }
+              } else if (ref === null) {
+                area.appendChild(panelEl);
+              }
+            }
+          }
+        }
+      }
+    }
 
     // ── Aplicar colores configurables (color1=fondo, color2=borde, color3=icono) ──
     // Se inyectan 6 variables CSS en el panel (estado normal y ".opened/active").
@@ -281,8 +334,14 @@ class miPlugin_layerSwitcher {
       const layerName = getLayerDisplayName(layer);
       const index = layer.idLayer;
       const visible = layer.isVisible ? layer.isVisible() : true;
-      // icono de ojo: abierto = capa visible, tachado/cerrado = oculta
-      const eyeIcon = visible ? '👁' : '🚫';
+      // icono de ojo: abierto = capa visible, tachado/cerrado = oculta.
+      // Se usan SVGs inline (como el resto de iconos del plugin) en lugar de
+      // emojis: los emojis 👁/🚫 dependen de la fuente del sistema y en algunos
+      // navegadores/visualizadores no se renderizan (aparecen como un punto o
+      // un cuadro). El SVG es fiable y consistente en todos los visualizadores.
+      const eyeIcon = visible
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
       // Transparencia actual en % (100 = totalmente transparente).
       // La API usa opacidad 0..1, asi que transparencia = (1 - opacity).
       let opacity = 1;
@@ -415,7 +474,10 @@ class miPlugin_layerSwitcher {
         const eye = document.querySelector('.g-herramienta_selectorCapa .ls-eye[data-id="' + index + '"]');
         const visible = layer.isVisible();
         if (eye) {
-          eye.textContent = visible ? '👁' : '🚫';
+          // Mismo SVG que en el render principal (ver eyeIcon en renderLayerNode).
+          eye.innerHTML = visible
+            ? `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
+            : `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
           eye.classList.toggle('ls-eye-on', visible);
           eye.classList.toggle('ls-eye-off', !visible);
           eye.title = visible ? 'Ocultar capa' : 'Mostrar capa';
