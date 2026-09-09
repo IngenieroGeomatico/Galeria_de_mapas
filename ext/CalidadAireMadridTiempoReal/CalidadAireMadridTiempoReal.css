@@ -1,9 +1,24 @@
 
+/* Icono del botón del plugin (interpolar/extrapolar por kriging): anillos
+   concéntricos a modo de isopletas/curvas de nivel, igual que los demás
+   plugins de ext/. Se usa como MÁSCARA (mask-image) en lugar de content:url()
+   para que el icono herede el color configurable (color3 / --g-plugin-icon-color)
+   mediante background-color. Si fuera un emoji o data-uri con stroke fijo no
+   podría cambiar el color. */
 .g-herramienta .m-tools:before {
-  content: "\1F5A9";
-  font-size: 22px;
-  font-family: none;
-  color: var(--g-plugin-icon-color, #fff);
+  content: '';
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.6'><circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1.4'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.6'><circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1.4'/></svg>");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
 
@@ -46,17 +61,17 @@
   width: 100%;
 }
 
-/* Botón del panel y cabecera: fondo (color1), borde (color2), icono/flecha (color3).
-   "active" = panel abierto (opened). */
-.m-areas>div.m-area>div.m-panel.g-herramienta>button.m-panel-btn,
+/* Cabecera del panel: fondo (color1), borde (color2), icono/flecha (color3).
+   El BOTÓN del panel lo estilan las reglas genéricas (ver abajo). */
 .g-herramienta .m-herramienta-header {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #fff) !important;
   border-color: var(--g-plugin-border-color, #fff) !important;
 }
 
-/* Panel abierto (opened) = estado activo: colores "-active". */
-.m-areas>div.m-area>div.m-panel.g-herramienta.opened>button.m-panel-btn,
+/* Panel abierto (opened) = estado activo: colores "-active".
+   NOTA: el BOTÓN del panel ya no se estiliza aquí; lo hace la regla genérica de
+   botón (ver abajo) que aplica el mismo patrón a todos los plugins. */
 .m-areas>div.m-area>div.m-panel.g-herramienta.opened .m-herramienta-header {
   background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
   color: var(--g-plugin-icon-color-active, #71A7D3) !important;
@@ -122,16 +137,16 @@
   order: -1;
 }
 
-/* Botón del panel y cabecera de la leyenda: fondo (color1), borde (color2), icono (color3). */
-.m-areas>div.m-area>div.m-panel.g-herramienta_leyenda>button.m-panel-btn,
+/* Cabecera de la leyenda: fondo (color1), borde (color2), icono (color3).
+   El BOTÓN del panel lo estilan las reglas genéricas (ver abajo). */
 .g-herramienta_leyenda .m-herramienta-header {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #fff) !important;
   border-color: var(--g-plugin-border-color, #fff) !important;
 }
 
-/* Panel abierto (opened) = estado activo: colores "-active". */
-.m-areas>div.m-area>div.m-panel.g-herramienta_leyenda.opened>button.m-panel-btn,
+/* Panel abierto (opened) = estado activo: colores "-active".
+   El BOTÓN lo estiliza la regla genérica de botón (ver abajo). */
 .m-areas>div.m-area>div.m-panel.g-herramienta_leyenda.opened .m-herramienta-header {
   background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
   color: var(--g-plugin-icon-color-active, #71A7D3) !important;
@@ -141,6 +156,37 @@
 .g-herramienta_leyenda .m-tools:before{
   content: "\1F56E";
   color: var(--g-plugin-icon-color, #fff);
+}
+
+
+/* =====================================================================
+   BOTÓN del panel — GENÉRICO para todos los plugins.
+   ---------------------------------------------------------------------
+   Las dos reglas siguientes gobiernan el botón que pliega/despliega cada
+   panel, de forma uniforme para todos los plugins. Cada panel de plugin
+   inyecta sus variables CSS en su propio elemento .m-panel, así que cada
+   botón resuelve sus propios colores.
+
+   Base (cerrado):
+     - fondo  = color1.deactive (--g-plugin-bg-color)
+     - texto  = color3.deactive (--g-plugin-icon-color)
+     - borde  = color2.deactive (--g-plugin-border-color)
+
+   Abierto (opened) — mayor especificidad (clase .opened) gana sobre base:
+     - fondo  = color1.active  (--g-plugin-bg-color-active)
+     - texto  = color2.active  (--g-plugin-border-color-active)
+     - borde  = color2.active  (--g-plugin-border-color-active)
+   --------------------------------------------------------------------- */
+.m-areas>div.m-area>div.m-panel>button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #fff) !important;
+  border-color: var(--g-plugin-border-color, #fff) !important;
+}
+
+.m-areas>div.m-area>div.m-panel.opened>button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-border-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
 

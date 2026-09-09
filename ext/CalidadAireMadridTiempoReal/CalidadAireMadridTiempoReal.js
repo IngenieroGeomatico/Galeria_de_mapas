@@ -114,6 +114,155 @@ class miPlugin_calidadAire {
     };
   }
 
+  // Detecta la implementación activa (OL o Cesium). Misma lógica que
+  // estereoscopia.detectImpl() — robusto y ajeno al timing de carga.
+  detectImpl() {
+    var impl = null;
+    try { impl = this.map.getMapImpl(); } catch (e) { impl = null; }
+    if (!impl) return null;
+    if (typeof impl.getView === 'function') return 'ol';
+    if (impl.scene && impl.camera) return 'cesium';
+    return null;
+  }
+
+  // Lee la leyenda de una capa: primero la del impl (comportamiento original)
+  // y, si no existe (p. ej. impl Cesium), la del propio objeto capa.
+  _capaLegend(capa) {
+    let legend = null;
+    try { legend = capa.getImpl ? capa.getImpl().legend : null; } catch (e) { legend = null; }
+    if (legend === null || legend === undefined) legend = capa.legend || null;
+    return legend;
+  }
+
+  // Rellena el <select> de capas con las leyendas de las capas filtradas.
+  // Es RE-LLAMABLE: si el mapa aún no tenía capas en el primer intento
+  // (carga asíncrona), se vuelve a llamar cuando el número de capas se
+  // estabiliza (ver _ensureControls / _repopulateWhenStable).
+  _populateSelector() {
+    const self = this;
+    const map = this.map;
+    const selector = self.panel.getTemplatePanel().querySelector('#seleccionCapasID');
+    if (!selector) return;
+    selector.innerHTML = '';
+
+    const legends = map.getLayers()
+      .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false && capa.filterLayer)
+      .map(capa => self._capaLegend(capa))
+      .filter(legend => legend != null && legend !== undefined && legend !== '')
+      .reverse();
+
+    let option = document.createElement('option');
+    option.text = valueOri_calidadAire;
+    option.value = valueOri_calidadAire;
+    selector.add(option);
+    legends.forEach((element) => {
+      if (element == 'Municipio Madrid' || element == 'Estaciones calidad del aire') {
+        // pass
+      } else {
+        const opt = document.createElement('option');
+        opt.text = element;
+        opt.value = element;
+        selector.add(opt);
+      }
+    });
+
+    // Solo se considera poblado si hay leyendas reales (excluidas las dos
+    // capas que se ignoran): así el sondeo de respaldo reintenta hasta que
+    // las capas estén cargadas de verdad.
+    if (legends.some(l => l !== 'Municipio Madrid' && l !== 'Estaciones calidad del aire')) {
+      this._selectorPopulated = true;
+    }
+  }
+
+  // Espera a que el número de capas del mapa se estabilice (deje de aumentar
+  // entre comprobaciones), señal de que terminaron de cargarse, y entonces
+  // repuebla el selector. Guard _populating: solo un sondeo a la vez.
+  _repopulateWhenStable() {
+    const self = this;
+    const map = this.map;
+    if (this._populating) return;
+    this._populating = true;
+    let previousValue = -99;
+    let probes = 0;
+    (function probe() {
+      // Tope de seguridad (~20 s): fuerza la repoblación con lo que haya.
+      if (++probes > 200) {
+        self._populating = false;
+        self._populateSelector();
+        return;
+      }
+      const currentValue = map.getLayers().length;
+      if (currentValue > previousValue) {
+        // El número de capas sigue creciendo → esperar a que se estabilice.
+        previousValue = currentValue;
+        setTimeout(probe, 100);
+      } else {
+        // Estable → repoblar el selector.
+        self._populating = false;
+        self._populateSelector();
+      }
+    })();
+  }
+
+  // Inyecta el selector de capas + botón "Calcular" en el panel y engancha
+  // el listener del botón. Solo se ejecuta una vez (_controlsReady guard).
+  _injectControls() {
+    if (this._controlsReady) return;
+
+    const self = this;
+    const htmlControl = `
+        <h4> Selector de capa: </h4>
+        <div id="selectorWrapperID">
+        <select class="seleccionCapasClass" id="seleccionCapasID" name="seleccionCapas">
+            <option value="1">----</option>
+            <option value="2">....</option>
+        </select>
+        </div>
+         <button id="botonCalcular" type="button">Calcular</button>
+    `;
+    const container = document.querySelector('#m-herramienta-previews-calidadAire');
+    if (!container) return;
+    container.innerHTML = htmlControl;
+    const boton = document.getElementById('botonCalcular');
+    if (boton) boton.addEventListener('click', () => self.myFunctionInterpolateExtrapolate());
+    this._populateSelector();
+    // Solo se marca como listo si la inyección terminó correctamente.
+    this._controlsReady = true;
+  }
+
+  // Asegura que los controles se inyecten cuando las capas estén listas.
+  // Sigue el mismo patrón robusto de estereoscopia.js:
+  //   1. Intento inmediato (HTML del selector+botón, sin esperar capas).
+  //   2. Listener COMPLETED (se dispara cuando el mapa termina de cargar).
+  //   3. Polling como fallback (por si COMPLETED ya se disparó antes del
+  //      registro del listener — el race condition de Cesium): reintenta
+  //      poblar el selector hasta que aparecen leyendas (máx. 25 s).
+  _ensureControls() {
+    const self = this;
+    const map = this.map;
+    const IDEE = api_calidadAire();
+
+    // Inyectar el HTML del selector+botón cuanto antes (no depende de capas).
+    this._injectControls();
+
+    // Listener COMPLETED (funciona en OL y Cesium).
+    map.on(IDEE.evt.COMPLETED, function () {
+      self._injectControls();
+      self._repopulateWhenStable();
+    });
+
+    // Polling de respaldo: si COMPLETED ya se disparó antes del registro, el
+    // listener no se activa. Este sondeo espera a que las capas se estabilicen
+    // y repuebla el selector (máx. 100 intentos × 250ms = 25 s).
+    (function poll(tries) {
+      if (self._selectorPopulated) return;
+      self._injectControls();
+      self._repopulateWhenStable();
+      if (self._selectorPopulated || tries <= 0) return;
+      setTimeout(function () { poll(tries - 1); }, 250);
+    })(100);
+  }
+
   addTo(map) {
     this.map = map;
     const IDEE = api_calidadAire();
@@ -206,57 +355,10 @@ class miPlugin_calidadAire {
     control.activate = () => { };
     control.deactivate = () => { };
 
-    const htmlControl = `
-        <h4> Selector de capa: </h4>
-        <div id="selectorWrapperID">
-        <select class="seleccionCapasClass" id="seleccionCapasID" name="seleccionCapas">
-            <option value="1">----</option>
-            <option value="2">....</option>
-        </select>
-        </div>
-         <button id="botonCalcular" type="button">Calcular</button>
-    `;
-
-    map.on(IDEE.evt.COMPLETED, () => {
-      (async function checkForIncrease() {
-        let flag = true;
-        let previousValue = -99;
-        while (flag) {
-          const currentValue = map.getLayers().length;
-          if (currentValue > previousValue) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          } else {
-            flag = false;
-          }
-          previousValue = currentValue;
-        }
-
-        const legends = map.getLayers()
-          .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false && capa.filterLayer)
-          .map(capa => capa.getImpl().legend).reverse();
-        const selector = self.panel.getTemplatePanel().querySelector("#seleccionCapasID");
-        selector.innerHTML = "";
-
-        let option = document.createElement("option");
-        option.text = valueOri_calidadAire;
-        option.value = valueOri_calidadAire;
-        selector.add(option);
-        legends.forEach((element) => {
-          if (element == "Municipio Madrid" || element == "Estaciones calidad del aire") {
-            // pass
-          } else {
-            const opt = document.createElement("option");
-            opt.text = element;
-            opt.value = element;
-            selector.add(opt);
-          }
-        });
-      })();
-
-      document.querySelector('#m-herramienta-previews-calidadAire').innerHTML = htmlControl;
-      const boton = document.getElementById('botonCalcular');
-      if (boton) boton.addEventListener('click', () => self.myFunctionInterpolateExtrapolate());
-    });
+    // ── Inyectar controles (selector + botón) de forma robusta ──────
+    // Usa el patrón COMPLETED + polling de estereoscopia.js para evitar
+    // el race condition en Cesium (COMPLETED se dispara antes del listener).
+    this._ensureControls();
   }
 
   async myFunctionInterpolateExtrapolate() {
@@ -311,6 +413,12 @@ class miPlugin_calidadAire {
     var x = [ /* X-axis coordinates */];
     var y = [ /* Y-axis coordinates */];
     let gjsonCapaSeleccionada = capaSeleccionada.toGeoJSON();
+    // toGeoJSON() devuelve el CRS como "urn:ogc:def:crs:OGC:1.3:CRS84", que la
+    // implementación Cesium no resuelve a una proyección (oProj null) y crashea
+    // al releer el source en setSource(). Los datos están en EPSG:4326 (lon/lat
+    // WGS84), así que se fuerza ese CRS explícito (el mismo que usa el source de
+    // la capa original y que Cesium sí interpreta).
+    gjsonCapaSeleccionada.crs = { type: 'name', properties: { name: 'EPSG:4326' } };
 
     let atributoMagnitud, atributoH_0, atributoV_0, atributoH_1, atributoV_1, atributoH, valorMagnitud;
     try {
@@ -449,8 +557,29 @@ class miPlugin_calidadAire {
     });
 
     gjsonCapaSeleccionada.features.push.apply(gjsonCapaSeleccionada.features, isoband.features);
+    // Descarta features con geometría degenerada (MultiPolygon vacío, sin
+    // coordenadas). Las produce el recorte (turf.intersect) cuando una isobanda
+    // no corta el municipio. En el impl Cesium esa geometría rompe la
+    // conversión a entidades (readFeatureFromObject devuelve vacío -> id null)
+    // y aborta TODO el lote; en OL se ignoran. Filtrarlas es inocuo en ambos.
+    gjsonCapaSeleccionada.features = gjsonCapaSeleccionada.features.filter(feature => {
+      const geometry = feature.geometry;
+      if (!geometry || !geometry.coordinates) return false;
+      if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
+        return geometry.coordinates.length > 0;
+      }
+      if (geometry.type === 'Point') return geometry.coordinates.length > 0;
+      return true;
+    });
     capaSeleccionada.clear();
-    capaSeleccionada.getImpl().loadFeaturesPromise_ = null;
+    // loadFeaturesPromise_ es un detalle interno de la implementación OL usado
+    // para forzar la recarga del source. En Cesium no existe (capa.getImpl()
+    // devuelve el impl Cesium) y setSource() ya refresca la capa; asignar una
+    // propiedad nueva sería un no-op sin efecto. Solo se resetea en OL.
+    const implCapa = capaSeleccionada.getImpl ? capaSeleccionada.getImpl() : null;
+    if (implCapa && 'loadFeaturesPromise_' in implCapa) {
+      implCapa.loadFeaturesPromise_ = null;
+    }
     capaSeleccionada.setSource(gjsonCapaSeleccionada);
     map.getLayers()
       .filter(objeto => objeto.isBase === false)
@@ -459,6 +588,14 @@ class miPlugin_calidadAire {
     if (typeof SVGCarga !== 'undefined' && SVGCarga) SVGCarga.hidden = true;
     await new Promise(resolve => setTimeout(resolve, 100));
     capaSeleccionada.setVisible(true);
+
+    // Centra la vista en el municipio de Madrid a partir de la extensión de la
+    // capa de límite administrativo del municipio (el mismo BBox_Gjson recortado
+    // con el que se han calculado las isobandas), para que el resultado de la
+    // interpolación quede encuadrado y centrado en el mapa.
+    if (typeof map.setBbox === 'function') {
+      map.setBbox(bbox);
+    }
   }
 }
 
