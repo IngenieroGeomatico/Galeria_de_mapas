@@ -174,6 +174,11 @@
     constructor(options = {}) {
     this.name = "miPlugin_estereoscopia";
     this.options = options || {};
+    // Posición (índice, empezando en 0) del botón del plugin dentro del div
+    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
+    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
+    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
+    this.order = (options.order !== undefined) ? Number(options.order) : null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
@@ -306,6 +311,40 @@
 
     panelEstereo.addControls(controlEstereo);
     map.addPanels(panelEstereo);
+
+    // ── Posicionar el botón del plugin (opción `order`) ────────────────
+    if (this.order !== null && !Number.isNaN(this.order)) {
+      var panelEl = panelEstereo.getElement ? panelEstereo.getElement() : document.querySelector('.m-panel.g-herramienta_estereo');
+      if (panelEl && panelEl.parentElement) {
+        var area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
+          ? panelEl.parentElement
+          : panelEl.closest('.m-area');
+        if (area) {
+          var siblings = Array.from(area.children).filter(el =>
+            el.classList && el.classList.contains('m-panel')
+          );
+          if (siblings.length > 1) {
+            var target = Math.max(0, Math.min(this.order, siblings.length - 1));
+            var current = siblings.indexOf(panelEl);
+            if (current !== target) {
+              var ref = (target >= siblings.length)
+                ? null
+                : siblings[target];
+              if (ref && ref !== panelEl) {
+                if (target > current) {
+                  var next = siblings[target + 1] || null;
+                  area.insertBefore(panelEl, next);
+                } else {
+                  area.insertBefore(panelEl, ref);
+                }
+              } else if (ref === null) {
+                area.appendChild(panelEl);
+              }
+            }
+          }
+        }
+      }
+    }
 
     // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
     // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
