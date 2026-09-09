@@ -1275,9 +1275,41 @@ geojsonJoin.then(() => {
 
   // y la añadimos al mapa
   mapajs.addLayers(arrayLayers.reverse());
+
+  // Arranque en 3D (Cesium): el center/zoom inicial de M.map() no se respeta
+  // y la cámara va a la Antártida. Forzamos la vista con setBbox() usando la
+  // extensión de la capa de municipio (EPSG:4326, la misma que BBox_Gjson
+  // del plugin de interpolación). Inocuo en 2D (OpenLayers).
+  const bboxArranque = bboxFromGjson(geojsonJoin.municipio);
+  if (typeof mapajs.setBbox === 'function' && bboxArranque && isFinite(bboxArranque[0])) {
+    mapajs.setBbox(bboxArranque);
+  }
+
   SVGCarga.hidden = true
 })
 
+
+// Calcula la extensión [minX, minY, maxX, maxY] de un GeoJSON en EPSG:4326
+// recorriendo recursivamente las coordenadas de sus geometrías (Point,
+// Polygon, MultiPolygon, etc.). No depende de turf para poder usarse en el
+// arranque del mapa.
+function bboxFromGjson(gjson) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  gjson.features.forEach((feature) => {
+    const walk = (coords) => {
+      if (typeof coords[0] === 'number') {
+        minX = Math.min(minX, coords[0]);
+        maxX = Math.max(maxX, coords[0]);
+        minY = Math.min(minY, coords[1]);
+        maxY = Math.max(maxY, coords[1]);
+      } else {
+        coords.forEach(walk);
+      }
+    };
+    walk(feature.geometry.coordinates);
+  });
+  return [minX, minY, maxX, maxY];
+}
 
 // Funciones necesarias para el visualizador
 async function myFunction_JoinData() {
