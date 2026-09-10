@@ -982,7 +982,8 @@ geojsonJoin.then(() => {
           description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
         }
       },{
-        style:estiloEstacion
+        style:estiloEstacion,
+        clampToGround: true
   })
 
   const capaMunicipio = new M.layer.GeoJSON({
@@ -995,7 +996,8 @@ geojsonJoin.then(() => {
           description: " <a style='color: #0000FF' href='https://api-features.ign.es//collections/administrativeunit/items?limit=1&nameunit=Madrid&nationallevelname=Municipio' target='_blank'>IGN</a> "
         }
       },{
-        style: estiloMuncipio
+        style: estiloMuncipio,
+        clampToGround: true
   })
 
   
@@ -1011,7 +1013,8 @@ geojsonJoin.then(() => {
     // }
   },{
     visibility:false,
-    style: estiloEstacionesMedidas_1
+    style: estiloEstacionesMedidas_1,
+    clampToGround: true
   })
   capaEstacionesMedidas_1.filterLayer = true
 
@@ -1025,7 +1028,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style: estiloEstacionesMedidas_6})
+  },{visibility:false, style: estiloEstacionesMedidas_6, clampToGround: true})
   capaEstacionesMedidas_6.filterLayer = true
 
 
@@ -1039,7 +1042,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style:estiloEstacionesMedidas_7})
+  },{visibility:false, style:estiloEstacionesMedidas_7, clampToGround: true})
   capaEstacionesMedidas_7.filterLayer = true
 
 
@@ -1053,7 +1056,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style:estiloEstacionesMedidas_8})
+  },{visibility:false, style:estiloEstacionesMedidas_8, clampToGround: true})
   capaEstacionesMedidas_8.filterLayer = true
 
 
@@ -1068,7 +1071,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style:estiloEstacionesMedidas_9})
+  },{visibility:false, style:estiloEstacionesMedidas_9, clampToGround: true})
   capaEstacionesMedidas_9.filterLayer = true
 
 
@@ -1082,7 +1085,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style:estiloEstacionesMedidas_10})
+  },{visibility:false, style:estiloEstacionesMedidas_10, clampToGround: true})
   capaEstacionesMedidas_10.filterLayer = true
 
 
@@ -1096,7 +1099,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style:estiloEstacionesMedidas_12})
+  },{visibility:false, style:estiloEstacionesMedidas_12, clampToGround: true})
   capaEstacionesMedidas_12.filterLayer = true
 
 
@@ -1110,7 +1113,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-    },{visibility:false, style:estiloEstacionesMedidas_14})
+    },{visibility:false, style:estiloEstacionesMedidas_14, clampToGround: true})
     capaEstacionesMedidas_14.filterLayer = true
 
 
@@ -1124,7 +1127,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style:estiloEstacionesMedidas_20})
+  },{visibility:false, style:estiloEstacionesMedidas_20, clampToGround: true})
   capaEstacionesMedidas_20.filterLayer = true
 
 
@@ -1138,7 +1141,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style:estiloEstacionesMedidas_30})
+  },{visibility:false, style:estiloEstacionesMedidas_30, clampToGround: true})
   capaEstacionesMedidas_30.filterLayer = true
 
 
@@ -1153,7 +1156,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false, style:estiloEstacionesMedidas_35})
+  },{visibility:false, style:estiloEstacionesMedidas_35, clampToGround: true})
   capaEstacionesMedidas_35.filterLayer = true
 
 
@@ -1168,7 +1171,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false})
+  },{visibility:false, clampToGround: true})
   capaEstacionesMedidas_37.filterLayer = true
 
 
@@ -1183,7 +1186,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false})
+  },{visibility:false, clampToGround: true})
   capaEstacionesMedidas_38.filterLayer = true
 
 
@@ -1197,7 +1200,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false})
+  },{visibility:false, clampToGround: true})
   capaEstacionesMedidas_39.filterLayer = true
 
 
@@ -1212,7 +1215,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false})
+  },{visibility:false, clampToGround: true})
   capaEstacionesMedidas_42.filterLayer = true
 
 
@@ -1226,7 +1229,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false})
+  },{visibility:false, clampToGround: true})
   capaEstacionesMedidas_43.filterLayer = true
 
 
@@ -1240,7 +1243,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false})
+  },{visibility:false, clampToGround: true})
   capaEstacionesMedidas_44.filterLayer = true
 
 
@@ -1254,7 +1257,7 @@ geojsonJoin.then(() => {
     //   name: "Estaciones:",
     //   description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     // }
-  },{visibility:false})
+  },{visibility:false, clampToGround: true})
   capaEstacionesMedidas_431.filterLayer = true
 
 
@@ -1279,9 +1282,12 @@ geojsonJoin.then(() => {
   // Arranque en 3D (Cesium): el center/zoom inicial de M.map() no se respeta
   // y la cámara va a la Antártida. Forzamos la vista con setBbox() usando la
   // extensión de la capa de municipio (EPSG:4326, la misma que BBox_Gjson
-  // del plugin de interpolación). Inocuo en 2D (OpenLayers).
+  // del plugin de interpolación). Solo se aplica en 3D (Cesium); en 2D
+  // (OpenLayers) se respeta el center/zoom inicial de M.map().
+  const mapImpl = mapajs.getMapImpl();
   const bboxArranque = bboxFromGjson(geojsonJoin.municipio);
-  if (typeof mapajs.setBbox === 'function' && bboxArranque && isFinite(bboxArranque[0])) {
+  if (mapImpl && mapImpl.scene && mapImpl.scene.camera &&
+      typeof mapajs.setBbox === 'function' && bboxArranque && isFinite(bboxArranque[0])) {
     mapajs.setBbox(bboxArranque);
   }
 
@@ -1424,7 +1430,7 @@ mapajs.addPlugin(new miPlugin_cambioImpl({
 mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
 mapajs.addPlugin(new miPlugin_layerSwitcher());
 
-return mapajs
+return geojsonJoin.then(() => mapajs)
 
 }
 

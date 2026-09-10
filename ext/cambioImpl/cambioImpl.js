@@ -225,7 +225,8 @@ class miPlugin_cambioImpl {
                 } else {
                     var existe = await newMap.getLayers().some(layer =>
                         JSON.stringify(layer.constructorParameters?.parameters) ===
-                        JSON.stringify(Overlaylayers[i].constructorParameters?.parameters)
+                        JSON.stringify(Overlaylayers[i].constructorParameters?.parameters) ||
+                        (layer.name === Overlaylayers[i].name && layer.type === Overlaylayers[i].type)
                     );
                     if (!existe) {
                         try {
