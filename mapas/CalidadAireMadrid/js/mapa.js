@@ -56,15 +56,9 @@ mapajs = M.map({
   container: "mapa",
   zoom: 11,
   center: { x: -409357.1616789646, y: 4929016.309020255 },
-  controls: ['attributions'],
+  controls: [],
   layers: []
 });
-
-
-mapajs.addAttribution({
-  name: "Autor:",
-  description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
-})
 
 
 // //M.proxy(true)
@@ -1401,14 +1395,30 @@ async function myFunction_JoinData() {
 
 // Extensiones
 M.proxy(false)
-const ext_Modal = new M.plugin.Modal({
+const ext_Modal = new miPlugin_modal({
   position: 'BL',
+  contentSelector: '#modal-popup-madrid',
   helpLink: {
     es: '../../html/modal_CalidadAireMadridTiempoReal.html'
   }
 });
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
+M.proxy(false)
+const ext_Attribution = new miPlugin_attribution({
+  position: 'BR',
+  // Modo de presentación de los créditos:
+  //   'full' => panel colapsable de la API-IDEE con cabecera arrastrable (por defecto)
+  //   'lite' => botón estándar m-tools en el rail + barra de atribuciones a lo
+  //             largo de la base del visualizador
+  mode: 'lite',
+  attributions: [{
+    name: 'Autor:',
+    description: " <a style='color: #0B57D0' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
+  }]
+});
+M.proxy(false)
+mapajs.addPlugin(ext_Attribution);
 M.proxy(false)
 
 mapajs.addPlugin(new miPlugin_calidadAire({
