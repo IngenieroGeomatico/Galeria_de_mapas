@@ -1,0 +1,306 @@
+/* Estilos del plugin de atribución local para API-IDEE (2D y 3D).
+   Patrón "g-herramienta": misma estructura que el resto de plugins del
+   visualizador (vuelo, selectorCapas): botón © colapsado + panel con
+   cabecera arrastrable. El botón nativo m-panel-btn actúa como toggle
+   de abrir/cerrar (NO se secuestra con pseudo-elementos ni position). */
+
+/* Icono © en el botón colapsado (m-tools): máscara SVG que hereda el
+
+/* Icono © en el botón colapsado (m-tools): máscara SVG que hereda el
+   color del icono definido en el visualizador (blanco sobre orangered) */
+.g-herramienta_attribution .m-tools:before {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 20px;
+  margin: 0 auto;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' fill='black' d='M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2c4.418 0 8 3.582 8 8s-3.582 8-8 8-8-3.582-8-8 3.582-8 8-8zm.5 4.25a3.75 3.75 0 0 0-3.75 3.75 3.75 3.75 0 0 0 3.75 3.75c1.2 0 2.24-.57 2.89-1.45l-1.39-.93a2.08 2.08 0 0 1-1.5.71 2.08 2.08 0 0 1-2.08-2.08 2.08 2.08 0 0 1 2.08-2.08c.6 0 1.14.26 1.5.68l1.4-.93a3.73 3.73 0 0 0-2.9-1.42z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' fill='black' d='M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2c4.418 0 8 3.582 8 8s-3.582 8-8 8-8-3.582-8-8 3.582-8 8-8zm.5 4.25a3.75 3.75 0 0 0-3.75 3.75 3.75 3.75 0 0 0 3.75 3.75c1.2 0 2.24-.57 2.89-1.45l-1.39-.93a2.08 2.08 0 0 1-1.5.71 2.08 2.08 0 0 1-2.08-2.08 2.08 2.08 0 0 1 2.08-2.08c.6 0 1.14.26 1.5.68l1.4-.93a3.73 3.73 0 0 0-2.9-1.42z'/%3E%3C/svg%3E");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* Botón del panel: colores del visualizador (orangered por defecto) */
+.m-areas > div.m-area > div.m-panel.g-herramienta_attribution > button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* Panel abierto: fondo transparente (la caja la pintan cabecera + contenido) */
+.m-areas > div.m-area > div.m-panel.g-herramienta_attribution.opened {
+  background-color: transparent !important;
+}
+
+/* Sin sombra (igual que el resto de plugins) */
+.m-areas > div.m-area > div.m-panel.g-herramienta_attribution,
+.m-panel.g-herramienta_attribution > button {
+  box-shadow: none;
+}
+
+/* Botón cuando el panel está abierto (flecha nativa de la API): blanco + azul.
+   Pulsarlo vuelve a colapsar el panel (toggle nativo, sin hacks) */
+.m-areas > div.m-area > div.m-panel.g-herramienta_attribution.opened > button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-border-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
+}
+
+/* Cabecera del panel: fondo orangered + texto blanco */
+.m-areas > div.m-area > div.m-panel.g-herramienta_attribution > div.m-panel-controls .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* Cabecera con el panel abierto: inversa (blanco + azul) */
+.m-areas > div.m-area > div.m-panel.g-herramienta_attribution.opened > div.m-panel-controls .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
+}
+
+/* Contenedor del plugin */
+.g-herramienta_attribution .m-control.m-container.m-herramienta {
+  width: 300px;
+  max-width: calc(100vw - 30px);
+  display: flex !important;
+  flex-direction: column;
+}
+
+/* Cabecera: barra de 40px, centrada, cursor de arrastre */
+.g-herramienta_attribution .m-herramienta-header {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  height: 40px;
+  line-height: 40px;
+  padding: 0 5px;
+  text-align: center;
+  width: 100%;
+  cursor: move;
+}
+
+/* Contenido dinámico (atribuciones) */
+.g-herramienta_attribution #m-herramienta-contents-attribution {
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  background-color: #f9f9f9;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+}
+
+/* Contenedor interno del control de atribución */
+.g-herramienta_attribution #m-herramienta-contents-attribution .m-attribution {
+  box-sizing: border-box;
+  padding: 10px 12px;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #202124;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* Filas de atribuciones */
+.g-herramienta_attribution .m-attribution p {
+  margin: 0;
+  padding: 5px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #3c4043;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  word-break: break-word;
+}
+
+.g-herramienta_attribution .m-attribution p:last-child {
+  border-bottom: none;
+}
+
+.g-herramienta_attribution .m-attribution-name {
+  font-weight: 700;
+  color: #202124;
+}
+
+.g-herramienta_attribution .m-attribution-desc {
+  font-weight: 400;
+}
+
+/* Enlaces normalizados */
+.g-herramienta_attribution .m-attribution a {
+  color: #0B57D0 !important;
+  text-decoration: none;
+}
+
+.g-herramienta_attribution .m-attribution a:hover,
+.g-herramienta_attribution .m-attribution a:focus {
+  text-decoration: underline;
+}
+
+/* Estado vacío */
+.g-herramienta_attribution .m-attribution-empty {
+  font-style: italic;
+  color: #70757a;
+  border-bottom: none !important;
+}
+
+/* Adaptación responsive para pantallas estrechas / móviles */
+@media (max-width: 768px) {
+  .g-herramienta_attribution .m-control.m-container.m-herramienta,
+  .m-areas > div.m-area > div.m-panel.g-herramienta_attribution.opened {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 80px) !important;
+  }
+  .g-herramienta_attribution #m-herramienta-contents-attribution {
+    max-height: calc(100vh - 120px);
+  }
+}
+
+/* =====================================================================
+   Modo 'lite': botón estándar en el rail + barra de atribuciones inferior
+   ---------------------------------------------------------------------
+   El botón del panel (m-panel-btn m-tools) se comporta igual que el resto
+   de plugins del visualizador y, al pulsarlo (estado .opened), la barra de
+   atribuciones se despliega a lo largo de la base del viewport del mapa.
+   La caja nativa del panel (.m-panel-controls) se oculta: sólo se usa el
+   botón como toggle y el estado .opened para mostrar/ocultar la barra.
+   ===================================================================== */
+
+/* Ocultar la caja del panel en modo lite (sólo se usa el botón del rail) */
+.m-areas > div.m-area > div.m-panel.m-attribution-lite > div.m-panel-controls {
+  display: none !important;
+}
+
+/* Barra: franja anclada a la base del viewport. Se inicia en left: 58px para
+   dejar libre el rail de botones de la izquierda (x=10..50) y no solapar otros plugins */
+.m-attribution-bar {
+  position: absolute;
+  left: 58px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 5px 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #3c4043;
+  max-width: calc(100% - 16px);
+  box-sizing: border-box;
+}
+
+.m-attribution-bar[hidden] {
+  display: none;
+}
+
+/* Etiqueta "Créditos" de la barra */
+.m-attribution-bar-title {
+  font-weight: 700;
+  color: var(--g-plugin-bg-color, orangered);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Botón de cierre ("flechita") dentro de la barra de créditos */
+.m-attribution-bar-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.m-attribution-bar-close:before {
+  content: '';
+  display: block;
+  width: 14px;
+  height: 14px;
+  background-color: #5f6368;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  transition: background-color 0.2s ease;
+}
+
+.m-attribution-bar-close:hover:before,
+.m-attribution-bar-close:focus:before {
+  background-color: var(--g-plugin-bg-color, orangered);
+}
+
+.m-attribution-bar-close:focus-visible {
+  outline: 2px solid #0B57D0;
+  outline-offset: 1px;
+}
+
+/* Contenido: filas de atribuciones en disposición horizontal */
+.m-attribution-bar-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+  overflow: hidden;
+}
+
+.m-attribution-bar-content p {
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #3c4043;
+  border: none !important;
+  white-space: nowrap;
+}
+
+.m-attribution-bar-content .m-attribution {
+  border: none !important;
+  background: transparent !important;
+}
+
+.m-attribution-bar-content .m-attribution-name {
+  font-weight: 700;
+  color: #202124;
+}
+
+.m-attribution-bar-content .m-attribution-desc {
+  font-weight: 400;
+}
+
+.m-attribution-bar-content a {
+  color: #0B57D0 !important;
+  text-decoration: none;
+}
+
+.m-attribution-bar-content a:hover,
+.m-attribution-bar-content a:focus {
+  text-decoration: underline;
+}
+
+/* Estado vacío */
+.m-attribution-bar-content .m-attribution-empty {
+  font-style: italic;
+  color: #70757a;
+}
