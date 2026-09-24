@@ -177,11 +177,12 @@
   display: none !important;
 }
 
-/* Barra: franja anclada a la base del viewport. Se inicia en left: 58px para
-   dejar libre el rail de botones de la izquierda (x=10..50) y no solapar otros plugins */
+/* Barra: franja anclada a la base del viewport, a TODO el ancho (left: 8px).
+   El rail de botones de la API (arriba/abajo, izquierda/derecha) se pinta por
+   ENCIMA de la barra desplegada (regla .ol-overlaycontainer-stopevent más abajo). */
 .m-attribution-bar {
   position: absolute;
-  left: 58px;
+  left: 8px;
   right: 8px;
   bottom: 8px;
   z-index: 900;
@@ -203,6 +204,33 @@
 
 .m-attribution-bar[hidden] {
   display: none;
+}
+
+/* El rail de botones de la API se pinta POR ENCIMA de la barra desplegada:
+   .ol-overlaycontainer-stopevent crea un contexto de apilamiento con z-index 0
+   (inline, lo fija la API) que "atrapa" el z-index 999 de los paneles del rail;
+   elevamos ese contexto por encima del z-index 900 de la barra. Se aplica sólo
+   cuando existe la barra lite (modo lite), dejando el apilamiento nativo de la
+   API intacto en modo full. */
+.m-api-idee-container:has(.m-attribution-bar) .ol-overlaycontainer-stopevent {
+  z-index: 1000 !important;
+}
+
+/* En modo lite, al desplegar la barra se oculta el botón del rail del plugin
+   (la API lo deja visible como flecha-izquierda "residual" al fondo de la pila).
+   Se usa visibility:hidden (NO display:none) para que el botón conserve su hueco
+   en el layout. Además, la API colapsa el panel abierto a altura 0, lo que
+   encoge el área del rail y hunde los botones vecinos (leyenda, modal) hacia la
+   barra; forzamos que el panel mantenga su caja 40x40 en el flujo para que el
+   resto del rail no se reordene ni se superponga a la barra. Al colapsar, la
+   clase .opened desaparece y el botón vuelve a mostrarse para abrir de nuevo. */
+.m-panel.m-attribution-lite.opened {
+  width: 40px !important;
+  height: 40px !important;
+}
+
+.m-attribution-lite.opened > button.m-panel-btn {
+  visibility: hidden !important;
 }
 
 /* Etiqueta "Créditos" de la barra */
