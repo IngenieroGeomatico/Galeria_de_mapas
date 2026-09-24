@@ -1,0 +1,167 @@
+/* Estilos del plugin modal local para API-IDEE (2D y 3D) */
+/* Reemplaza modal.ol.min.css de la CDN sin dependencias externas ni fuentes base64 pesadas */
+
+.m-panel-modal.collapsed {
+  height: 40px;
+  width: 40px;
+}
+
+.m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn {
+  background-color: #71a7d3;
+  color: #fff;
+}
+
+.m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn:disabled {
+  background-color: #acacac !important;
+}
+
+/* Icono de ventana modal SVG integrado en data-URI para el botón colapsado:
+   marco blanco redondeado, barra de título "recortada" (deja ver el color del
+   botón, como una ventana de diálogo real) y dos líneas de contenido. */
+.m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn.icon-help,
+.m-panel-modal.collapsed > button.m-panel-btn.icon-help,
+.m-panel-modal.collapsed button.icon-help {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' fill='%23ffffff' d='M2.5 3.5h19a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5h-19A1.5 1.5 0 0 1 1 19V5a1.5 1.5 0 0 1 1.5-1.5zM3.5 5.5v2.5h17V5.5z'/%3E%3Cpath d='M6 12h12M6 14.5h8' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 55%;
+  color: transparent;
+}
+
+.m-panel-modal .icon-help:before {
+  content: none !important;
+}
+
+/* Panel abierto: centrado fijo en pantalla */
+.m-areas > div.m-area > div.m-panel-modal.opened,
+div.m-areas > div.m-area > div.m-panel-modal.opened,
+.m-panel-modal.opened {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  background-color: #fff;
+  border: 1px solid #d3d3d3;
+  border-radius: 5px;
+  height: auto !important;
+  z-index: 999999;
+  display: flex;
+}
+
+/* Botón de cierre (X) en el panel abierto */
+.m-areas > div.m-area > div.m-panel.m-panel-modal.opened > button.m-panel-btn,
+div.m-areas > div.m-area > div.m-panel.m-panel-modal.opened > button.m-panel-btn {
+  position: absolute !important;
+  right: 0 !important;
+  top: 0 !important;
+  left: auto !important;
+  box-shadow: none;
+  color: #71a7d3;
+  z-index: 9999;
+  cursor: pointer;
+  float: none;
+  background: transparent;
+}
+
+.m-areas > div.m-area > div.m-panel.m-panel-modal.opened > button.m-panel-btn:before,
+div.m-areas > div.m-area > div.m-panel.m-panel-modal.opened > button.m-panel-btn:before {
+  content: "\2716";
+  font-family: Arial, sans-serif;
+  font-size: 1rem;
+  font-weight: bolder;
+}
+
+/* Contenido del modal */
+.m-areas > div.m-area > div.m-panel-modal.collapsed > .m-panel-controls > .m-modal {
+  display: block;
+}
+
+.m-modal {
+  border: 0 !important;
+}
+
+.m-modal:after,
+.m-modal:before {
+  content: none;
+}
+
+.m-areas > div.m-area > div.m-panel-modal.opened div#popup-box,
+.m-panel-modal.opened div#popup-box {
+  background-color: #fff;
+  border-radius: 5px;
+  margin: 30px 0 20px;
+  max-height: 460px;
+  overflow-y: auto;
+  padding: 0 20px;
+  width: 460px;
+}
+
+div#popup-box {
+  max-height: calc(100vh - 175px) !important;
+}
+
+.m-panel-modal.opened #popup-box > div > p.popup-title {
+  background-color: #71a7d3;
+  border-radius: 5px;
+  color: #fff;
+  font-weight: 700;
+  padding: 7px 10px 5px;
+}
+
+.m-panel-modal.opened #popup-box > div > a {
+  background-color: #b5b6b8;
+  border-radius: 5px;
+  color: #fff;
+  display: block;
+  font-weight: 700;
+  margin: auto;
+  padding: 10px;
+  text-align: center;
+  text-decoration: none;
+  width: 60px;
+}
+
+.m-areas > div.m-area > div.m-panel-modal.opened > div.m-panel-controls > div {
+  height: auto;
+  width: auto;
+}
+
+/* Adaptación responsive para pantallas estrechas / móviles */
+@media (max-width: 600px) {
+  .m-areas > div.m-area > div.m-panel-modal.opened,
+  div.m-areas > div.m-area > div.m-panel-modal.opened,
+  .m-panel-modal.opened {
+    z-index: 999999999999;
+  }
+
+  .m-areas > div.m-area > div.m-panel.m-panel-modal.opened div#popup-box,
+  .m-areas > div.m-area > div.m-panel-modal.opened div#popup-box,
+  div#popup-box {
+    background-color: #fff;
+    border-radius: 5px;
+    height: calc(100vh - 40px) !important;
+    max-height: calc(100vh - 40px) !important;
+    left: 0 !important;
+    margin: 30px 0 20px !important;
+    overflow-y: auto;
+    padding: 0 20px;
+    position: relative !important;
+    top: 0 !important;
+    width: calc(100vw - 40px) !important;
+  }
+
+  .m-areas > div.m-area > div.m-panel.m-panel-modal.opened div#popup-box > div.popup-section img,
+  .m-areas > div.m-area > div.m-panel-modal.opened div#popup-box > div.popup-section img {
+    height: auto !important;
+    width: -webkit-fill-available !important;
+    width: -moz-available !important;
+    width: stretch !important;
+  }
+
+  div.m-areas > div.m-area > div.m-panel.m-panel-modal.opened > button.m-panel-btn {
+    left: auto !important;
+    right: 0 !important;
+    top: 0 !important;
+    z-index: 9999;
+  }
+}
