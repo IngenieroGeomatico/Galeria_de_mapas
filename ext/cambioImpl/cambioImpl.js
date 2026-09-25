@@ -260,6 +260,68 @@ class miPlugin_cambioImpl {
         }
 
         /**
+         * Reaplica a newMap el orden relativo (z) que las capas overlay tenian
+         * en el mapa original (OL). Al reiniciar el mapa con sameMap, todas las
+         * capas se recrean en el orden de creacion original, perdiendo el
+         * reorden realizado en el selector de capas. Se asigna a cada capa una
+         * posicion normalizada (1..N, mayor arriba) segun su z de origen.
+         */
+        async function reapplyOverlayOrder(newMap, Overlaylayers) {
+            try {
+                let layersNew = newMap.getLayers();
+                if (layersNew && typeof layersNew.then === 'function') layersNew = await layersNew;
+                const list = (layersNew || []).slice();
+                if (!list.length) return;
+
+                const paired = [];
+                for (const orig of Overlaylayers) {
+                    if (!orig) continue;
+                    let zOrig = null;
+                    try {
+                        const implO = (typeof orig.getImpl === 'function') ? orig.getImpl() : null;
+                        const ol = implO && implO.olLayer;
+                        if (ol && typeof ol.getZIndex === 'function') {
+                            const z = ol.getZIndex();
+                            if (typeof z === 'number' && isFinite(z)) zOrig = z;
+                        }
+                        if (zOrig === null && typeof orig.getZIndex === 'function') {
+                            const z = orig.getZIndex();
+                            if (typeof z === 'number' && isFinite(z)) zOrig = z;
+                        }
+                    } catch (e) { zOrig = null; }
+                    if (zOrig === null) continue;
+
+                    const match = list.find(l =>
+                        (l.name === orig.name && l.type === orig.type) ||
+                        (orig.constructorParameters && l.constructorParameters &&
+                            JSON.stringify(l.constructorParameters.parameters) ===
+                            JSON.stringify(orig.constructorParameters.parameters))
+                    );
+                    if (match && match !== orig) paired.push({ layer: match, zOrig });
+                }
+                if (!paired.length) return;
+
+                paired.sort((a, b) => (b.zOrig ?? 0) - (a.zOrig ?? 0)); // mayor z = arriba
+                const N = paired.length;
+                for (let i = 0; i < N; i++) {
+                    const target = N - i; // 1..N, el top recibe N
+                    const layer = paired[i].layer;
+                    const impl = (typeof layer.getImpl === 'function') ? layer.getImpl() : null;
+                    const ol = impl && impl.olLayer;
+                    try {
+                        if (ol && typeof ol.setZIndex === 'function') ol.setZIndex(target);
+                        else if (impl && typeof impl.setZIndex === 'function') impl.setZIndex(target);
+                        else if (typeof layer.setZIndex === 'function') layer.setZIndex(target);
+                    } catch (e) {
+                        console.warn('reapplyOverlayOrder setZIndex fallo', e);
+                    }
+                }
+            } catch (e) {
+                console.warn('reapplyOverlayOrder fallo', e);
+            }
+        }
+
+        /**
          * Captura el estado necesario para `shareView` antes del reinicio.
          * mode: 'activate' (a Cesium) | 'deactivate' (a OL)
          */
@@ -353,6 +415,10 @@ class miPlugin_cambioImpl {
                 var mapaCesium = newMap.getMapImpl()
                 mapaCesium.scene.globe.depthTestAgainstTerrain = true;
                 await transferOverlayLayers(newMap, Overlaylayers, { addExtrusion: true });
+                // Reaplicar el orden que tenian las capas en OL (el reinicio con
+                // sameMap las recrea en orden de creacion original y pierde el
+                // reorden realizado en el selector de capas).
+                await reapplyOverlayOrder(newMap, Overlaylayers);
             }
         }
 
