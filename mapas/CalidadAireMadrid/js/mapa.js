@@ -78,7 +78,11 @@ geojsonJoin.then(() => {
   let estiloEstacion = new M.style.Generic({
       point: {
         icon: {
-          src: '../../img/iconos/house_wifi.svg',
+          // PNG en vez de SVG: Cesium no rasteriza el SVG como textura de
+          // billboard (se ve un cuadrado blanco). El PNG es el SVG recortado
+          // al dibujo y con el mismo ancho natural (794 px) para que la escala
+          // 0.06 se vea idéntica en 2D (OpenLayers) y en 3D (Cesium).
+          src: '../../img/iconos/house_wifi.png',
           scale: 0.06,
         },
 
@@ -1278,7 +1282,10 @@ geojsonJoin.then(() => {
   // opción clampToGround de la capa GeoJSON a los polígonos). En OpenLayers
   // (2D) no es necesario y la función no hace nada.
   mapajs.getLayers().forEach((capa) => {
-    aplicaClampGroundSiCesium(capa);
+    // El municipio se extruye 150 m (≥1) porque su relleno es transparente: el
+    // clampToGround crearía un GroundPrimitive que ignora el borde. Las demás
+    // capas (medidas con relleno opaco) mantienen el clampToGround.
+    aplicaClampGroundSiCesium(capa, capa.name === 'Municipio Madrid' ? 150 : 0);
   });
 
   // Arranque en 3D (Cesium): el center/zoom inicial de M.map() no se respeta
@@ -1325,7 +1332,13 @@ function bboxFromGjson(gjson) {
 // undefined), por lo que la geometría se dibuja a altitud 0 y queda enterrada
 // bajo el terreno. Se fuerza a nivel de entidad solo si la implementación
 // activa es Cesium; en OpenLayers (2D) no es necesario.
-function aplicaClampGroundSiCesium(capa) {
+// Si se pasa alturaExtrusionMetros (>0), los polígonos NO se clampan: se
+// extruyen esa altura con heightReference RELATIVE_TO_GROUND, el mismo patrón
+// del visualizador de añoNuevo. Hace falta porque el GroundPrimitive del
+// clampToGround ignora el outline y, con un relleno casi transparente (caso
+// del municipio), el polígono desaparece en 3D: la extrusión genera geometría
+// 3D real en la que el borde sí se dibuja.
+function aplicaClampGroundSiCesium(capa, alturaExtrusionMetros) {
   const nombreCapa = (capa && capa.name) || null;
 
   // Busca la dataSource Cesium real de la capa. Los dataSources con
@@ -1355,12 +1368,36 @@ function aplicaClampGroundSiCesium(capa) {
         ? Cesium.HeightReference.CLAMP_TO_GROUND
         : 1
     );
+    // Altura de extrusión (m) para que el borde del polígono se vea en 3D.
+    // El clampToGround de Cesium crea un GroundPrimitive que ignora el
+    // outline: con un relleno transparente (municipio) el cierre desaparece.
+    // La extrusión fuerza geometría 3D real donde el outline sí se dibuja
+    // (mismo patrón que el visualizador de añoNuevo).
+    const alturaExtrusion = (typeof alturaExtrusionMetros === 'number' &&
+      alturaExtrusionMetros > 0)
+      ? new Cesium.ConstantProperty(alturaExtrusionMetros)
+      : null;
+    const alturaRelativa = new Cesium.ConstantProperty(
+      (Cesium.HeightReference && Cesium.HeightReference.RELATIVE_TO_GROUND !== undefined)
+        ? Cesium.HeightReference.RELATIVE_TO_GROUND
+        : 2
+    );
     const entidades = ds.entities.values;
     for (let i = 0; i < entidades.length; i++) {
       const ent = entidades[i];
       if (ent.polygon) {
-        ent.polygon.clampToGround = constanteTrue;
-        ent.polygon.perPositionHeight = constanteFalse;
+        if (alturaExtrusion) {
+          // Extrusión relativa al terreno: la geometría se dibuja sobre el
+          // suelo (con altura 0 relativa y elevación de la extrusión), de
+          // modo que el outline del polígono queda visible como una pared.
+          ent.polygon.clampToGround = constanteFalse;
+          ent.polygon.perPositionHeight = constanteFalse;
+          ent.polygon.heightReference = alturaRelativa;
+          ent.polygon.extrudedHeight = alturaExtrusion;
+        } else {
+          ent.polygon.clampToGround = constanteTrue;
+          ent.polygon.perPositionHeight = constanteFalse;
+        }
       }
       if (ent.polyline) {
         ent.polyline.clampToGround = constanteTrue;
