@@ -1273,6 +1273,14 @@ geojsonJoin.then(() => {
   // y la añadimos al mapa
   mapajs.addLayers(arrayLayers.reverse());
 
+  // Condicional por implementación: si el mapa es Cesium (3D) se fuerza
+  // clampToGround en las entidades de las capas (la impl Cesium no propaga la
+  // opción clampToGround de la capa GeoJSON a los polígonos). En OpenLayers
+  // (2D) no es necesario y la función no hace nada.
+  mapajs.getLayers().forEach((capa) => {
+    aplicaClampGroundSiCesium(capa);
+  });
+
   // Arranque en 3D (Cesium): el center/zoom inicial de M.map() no se respeta
   // y la cámara va a la Antártida. Forzamos la vista con setBbox() usando la
   // extensión de la capa de municipio (EPSG:4326, la misma que BBox_Gjson
@@ -1309,6 +1317,107 @@ function bboxFromGjson(gjson) {
     walk(feature.geometry.coordinates);
   });
   return [minX, minY, maxX, maxY];
+}
+
+// Aplica clampToGround a las entidades de una capa cuando el mapa se ejecuta
+// en Cesium (3D). La implementación Cesium de la API no propaga la opción
+// clampToGround de la capa GeoJSON a los polígonos (la propiedad queda
+// undefined), por lo que la geometría se dibuja a altitud 0 y queda enterrada
+// bajo el terreno. Se fuerza a nivel de entidad solo si la implementación
+// activa es Cesium; en OpenLayers (2D) no es necesario.
+function aplicaClampGroundSiCesium(capa) {
+  const nombreCapa = (capa && capa.name) || null;
+
+  // Busca la dataSource Cesium real de la capa. Los dataSources con
+  // entidades están en mapImpl.dataSources (registrados por nombre al
+  // añadir la capa); capa.getImpl().getLayer() devuelve un contenedor
+  // vacío, así que no sirve.
+  const buscarDS = (mapImpl, capa) => {
+    const nombre = (capa && capa.name) || nombreCapa;
+    if (mapImpl.dataSources && mapImpl.dataSources._dataSources) {
+      const encontrado = mapImpl.dataSources._dataSources.find(
+        (d) => d.name === nombre
+      );
+      if (encontrado) return encontrado;
+    }
+    try {
+      const dsCapa = capa.getImpl().getLayer();
+      if (dsCapa && dsCapa.entities) return dsCapa;
+    } catch (e) { /* no hacer nada */ }
+    return null;
+  };
+
+  const aplicar = (ds) => {
+    const constanteTrue = new Cesium.ConstantProperty(true);
+    const constanteFalse = new Cesium.ConstantProperty(false);
+    const alturaClamp = new Cesium.ConstantProperty(
+      (Cesium.HeightReference && Cesium.HeightReference.CLAMP_TO_GROUND !== undefined)
+        ? Cesium.HeightReference.CLAMP_TO_GROUND
+        : 1
+    );
+    const entidades = ds.entities.values;
+    for (let i = 0; i < entidades.length; i++) {
+      const ent = entidades[i];
+      if (ent.polygon) {
+        ent.polygon.clampToGround = constanteTrue;
+        ent.polygon.perPositionHeight = constanteFalse;
+      }
+      if (ent.polyline) {
+        ent.polyline.clampToGround = constanteTrue;
+      }
+      if (ent.point) {
+        ent.point.heightReference = alturaClamp;
+      }
+      if (ent.billboard) {
+        ent.billboard.heightReference = alturaClamp;
+      }
+    }
+    if (ds.changedEvent && ds.changedEvent.raiseEvent) {
+      ds.changedEvent.raiseEvent();
+    }
+  };
+
+  // La dataSource Cesium y sus entidades se crean de forma asíncrona tras
+  // añadir la capa (al cambiar de implementación el mapa se reconstruye y la
+  // carga de entidades puede tardar más de 15 s, observado hasta ~45 s). Se
+  // sondea para cubrir la carga completa con margen: si la dataSource no
+  // existe a los 30 s (capas de base, terreno o dibujo, que no generan
+  // dataSource vectorial) se abandona; si existe, se espera a que lleguen
+  // las entidades hasta un máximo de 120 s.
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const mapImpl = (typeof mapajs !== 'undefined' && mapajs.getMapImpl)
+      ? mapajs.getMapImpl()
+      : null;
+    const esCesium = !!mapImpl && !!mapImpl.scene && !!mapImpl.scene.camera &&
+      typeof Cesium !== 'undefined';
+    if (!esCesium) {
+      // Sin Cesium: margen corto por si el impl está cambiando y luego se rinde.
+      if (Date.now() - t0 > 5000) {
+        clearInterval(iv);
+      }
+      return;
+    }
+    const ds = buscarDS(mapImpl, capa);
+    if (Date.now() - t0 > 120000) {
+      // Fin del margen de espera: se aplica el clamp con lo que haya
+      // llegado y se deja de sondear.
+      clearInterval(iv);
+      if (ds && ds.entities && ds.entities.values.length > 0) aplicar(ds);
+      return;
+    }
+    if (!ds) {
+      // Capas sin dataSource vectorial (base, terreno, dibujo): 30 s bastan.
+      if (Date.now() - t0 > 30000) {
+        clearInterval(iv);
+      }
+      return;
+    }
+    if (ds.entities.values.length > 0) {
+      clearInterval(iv);
+      aplicar(ds);
+    }
+  }, 500);
 }
 
 // Funciones necesarias para el visualizador
