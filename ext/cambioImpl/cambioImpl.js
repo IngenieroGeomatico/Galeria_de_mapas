@@ -419,6 +419,13 @@ class miPlugin_cambioImpl {
                 // sameMap las recrea en orden de creacion original y pierde el
                 // reorden realizado en el selector de capas).
                 await reapplyOverlayOrder(newMap, Overlaylayers);
+                // El panel del selector de capas quedo renderizado en el orden
+                // de creacion (el reapplyOrder solo mueve dataSources, no el
+                // DOM de la lista), asi que se fuerza su re-render para que
+                // muestre el orden por z ya corregido sin necesidad de togglear.
+                if (window.renderLayerList && typeof window.renderLayerList === 'function') {
+                    await window.renderLayerList();
+                }
             }
         }
 
