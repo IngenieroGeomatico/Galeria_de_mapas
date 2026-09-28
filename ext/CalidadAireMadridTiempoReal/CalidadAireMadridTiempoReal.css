@@ -88,15 +88,16 @@
     margin:5px;
 }
 
-/* Botones controles */
+/* Botones controles: fondo (color1) e icono/texto (color3) configurables,
+   igual que el resto del plugin. */
 .g-herramienta .m-panel-controls button {
   font-family: 'Times New Roman', Times, serif !important;
   font-size: 16px;  
   font-weight: 700 !important;
   -webkit-font-smoothing: antialiased;
   cursor: pointer;
-  background-color: #71a7d3;
-  color:whitesmoke;
+  background-color: var(--g-plugin-bg-color, #71a7d3);
+  color: var(--g-plugin-icon-color, whitesmoke);
 }
 
 
