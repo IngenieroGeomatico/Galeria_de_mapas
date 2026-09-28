@@ -7,8 +7,8 @@
 /* ---------- Estado colapsado del panel ---------- */
 .m-panel.m-plugin-storymap.collapsed {
   height: 40px;
-  color: #fff !important;
-  background-color: #2c5f8a !important;
+  color: var(--g-plugin-icon-color, #fff) !important;
+  background-color: var(--g-plugin-bg-color, #2c5f8a) !important;
 }
 
 .m-panel.m-plugin-storymap.collapsed {
@@ -20,13 +20,20 @@
 }
 
 /* ---------- Botón del panel (abrir/cerrar) ---------- */
+.m-areas>div.m-area>div.m-plugin-storymap.m-panel>button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color, #2c5f8a) !important;
+  color: var(--g-plugin-icon-color, #fff) !important;
+  border-color: var(--g-plugin-border-color, #fff) !important;
+}
+
 .m-areas>div.m-area>div.m-plugin-storymap.m-panel.opened>button.m-panel-btn {
   float: none;
   position: absolute;
   z-index: 999;
   transition: none;
-  background-color: #fff !important;
-  color: #2c5f8a !important;
+  background-color: var(--g-plugin-bg-color-active, #fff) !important;
+  color: var(--g-plugin-border-color-active, #2c5f8a) !important;
+  border-color: var(--g-plugin-border-color-active, #2c5f8a) !important;
 }
 
 .m-areas>div.m-area.m-right>div.m-plugin-storymap.m-panel.opened>button.m-panel-btn {
@@ -38,7 +45,9 @@
 }
 
 .m-areas div.m-plugin-storymap.m-panel.opened>button.m-panel-btn {
-  background-color: #2c5f8a !important;
+  background-color: var(--g-plugin-bg-color-active, #fff) !important;
+  color: var(--g-plugin-border-color-active, #2c5f8a) !important;
+  border-color: var(--g-plugin-border-color-active, #2c5f8a) !important;
 }
 
 .m-plugin-storymap.opened>.g-cartografia-flecha-derecha {
@@ -64,14 +73,22 @@
 }
 
 /* ---------- Cabecera del panel ---------- */
+.m-plugin-storymap .m-storymap-header,
 .m-storymap-header {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  background: linear-gradient(135deg, #1e3a5f 0%, #2c5f8a 60%, #71a7d3 100%);
-  color: #fff;
+  height: 40px;
+  background-color: var(--g-plugin-bg-color, #2c5f8a) !important;
+  color: var(--g-plugin-icon-color, #fff) !important;
+  border-color: var(--g-plugin-border-color, #fff) !important;
+}
+
+.m-areas>div.m-area>div.m-panel.m-plugin-storymap.opened .m-storymap-header {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
 .m-storymap-header-title {
@@ -174,11 +191,13 @@
   color: #2c2c2c;
 }
 
-/* Espaciado final interno: garantiza scroll suave al final de cada paso */
+/* Aire final: el paso termina con un espaciador que deja la última palabra
+   a media altura del panel al llegar al tope del scroll (la geometría exige
+   restar el padding-bottom de .step: 50% - 26px ≈ semi-altura utilizable). */
 .step::after {
   content: '';
   display: block;
-  height: 40px;
+  height: calc(50% - 26px);
 }
 
 /* Scrollbar sutil (mejora de usabilidad frente al original que la ocultaba) */

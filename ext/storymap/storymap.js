@@ -51,6 +51,9 @@ class miPlugin_storymap {
    * @param {Object} [options.indexInContent=false] Tarjeta de índice inicial { title, subtitle, js }
    * @param {boolean} [options.isDraggable=false] Permite arrastrar el panel
    * @param {number} [options.order] Posición/orden dentro del área de botones
+   * @param {Object|string} [options.color1={active:'#ffffff',deactive:'orangered'}] Color de fondo ({ active, deactive } o string)
+   * @param {Object|string} [options.color2={active:'#71A7D3',deactive:'#ffffff'}] Color de borde ({ active, deactive } o string)
+   * @param {Object|string} [options.color3={active:'#71A7D3',deactive:'#ffffff'}] Color de icono/texto ({ active, deactive } o string)
    */
   constructor(options = {}) {
     this.name = 'miPlugin_storymap';
@@ -66,6 +69,13 @@ class miPlugin_storymap {
     this.isDraggable_ = (options.isDraggable !== undefined) ? options.isDraggable : false;
     this.order = (options.order !== undefined && options.order >= -1) ? options.order : null;
 
+    // Colores configurables. Cada uno puede ser un color (string) o un
+    // objeto {active, deactive}:
+    //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
+    this.color1_ = options.color1 || { active: '#ffffff', deactive: 'orangered' };
+    this.color2_ = options.color2 || { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3_ = options.color3 || { active: '#71A7D3', deactive: '#ffffff' };
+
     this.controls_ = [];
     this.control_ = null;
     this.control = null;
@@ -73,6 +83,13 @@ class miPlugin_storymap {
     this.panel = null;
     this.map_ = null;
     this.map = null;
+  }
+
+  // Devuelve {active, deactive} a partir de un color simple o un objeto.
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
   }
 
   /**
@@ -1020,6 +1037,23 @@ class miPlugin_storymap {
 
     panel.addControls([control]);
     map.addPanels(panel);
+
+    // ── Aplicar colores configurables (color1=fondo, color2=borde, color3=icono) ──
+    // Se inyectan 6 variables CSS en el panel (estado normal y ".opened/active").
+    const c1 = this.resolveColor(this.color1_);
+    const c2 = this.resolveColor(this.color2_);
+    const c3 = this.resolveColor(this.color3_);
+    const panelEl = (panel && typeof panel.getElement === 'function')
+      ? panel.getElement()
+      : document.querySelector('.m-plugin-storymap');
+    if (panelEl) {
+      panelEl.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      panelEl.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      panelEl.style.setProperty('--g-plugin-border-color', c2.deactive);
+      panelEl.style.setProperty('--g-plugin-border-color-active', c2.active);
+      panelEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      panelEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
+    }
 
     // Cabecera arrastrable (patrón opcional isDraggable)
     if (this.isDraggable_ && IDEE.utils && typeof IDEE.utils.draggabillyPlugin === 'function') {
