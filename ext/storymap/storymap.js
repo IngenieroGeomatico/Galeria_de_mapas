@@ -146,7 +146,7 @@ class miPlugin_storymap {
           title: indexInContent.title || '',
           subtitle: indexInContent.subtitle || '',
           steps: [{
-            html: `${this.createIndex()}<br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br><br>`,
+            html: `${this.createIndex()}<br><br><br><br><br><br><br><br>`,
             js: indexInContent.js || '',
           }],
         };
@@ -166,7 +166,7 @@ class miPlugin_storymap {
         contentHtml += `<div id=cap${i} style="display: ${(i === 0) ? 'block' : 'none'};" class="chapters">`;
         (steps || []).forEach(({ html }, j) => {
           const visible = (i === 0 && j === 0);
-          contentHtml += `<div id="step${j}" class="step" style="display: ${visible ? 'block' : 'none'};"><br><br>${html}<br><br></div>`;
+          contentHtml += `<div id="step${j}" class="step" style="display: ${visible ? 'block' : 'none'};">${html}</div>`;
         });
         contentHtml += '</div>';
       });
@@ -404,7 +404,7 @@ class miPlugin_storymap {
 
             // ***** Delante *****
             // Evitar que ejecute esto cuando es el último capítulo y el último paso
-            if (Math.abs(target.scrollHeight - target.clientHeight - target.scrollTop) < 1
+            if (Math.abs(target.scrollHeight - target.clientHeight - target.scrollTop) < 5
               && !(navContent[navContent.length - 1].id === cap.id && `step${cap.childElementCount - 1}` === target.id)) {
               if (typeof target.scroll === 'function') {
                 target.scroll({ top: 10, behavior: 'auto' });

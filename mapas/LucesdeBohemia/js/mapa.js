@@ -177,13 +177,8 @@ estilo2_2 = new M.style.Generic({
 
 
 gjsonVectorialGJSON_Libro = {
-  "type": "FeatureCollection",
-  "crs": {
-    "type": "name",
-    "properties": {
-      "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
-    }
-  },
+"type": "FeatureCollection",
+  "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
   "features": [
     {
       "type": "Feature",
@@ -1043,7 +1038,8 @@ window.layerVectorialGJSON_Libro = layerVectorialGJSON_Libro;
 mapajs.addLayers(layerVectorialGJSON_Libro);
 
 gjsonVectorialGJSON_Madrid = { 
-  "type": "FeatureCollection", 
+  "type": "FeatureCollection",
+    "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
   "features": [
     {
       "type": "Feature",
