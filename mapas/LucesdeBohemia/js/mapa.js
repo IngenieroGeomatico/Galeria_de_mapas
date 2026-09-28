@@ -56,14 +56,8 @@ mapajs = M.map({
   container: "mapa",
   zoom: 12,
   center: { x: -413064.3575507956, y: 4927841.089710372 },
-  controls: ['attributions'],
   layers: []
 });
-
-mapajs.addAttribution({
-  name: "Autor:",
-  description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
-})
 
 
 
@@ -1327,6 +1321,22 @@ const ext_Modal = new IDEE.plugin.miPlugin_modal({
 });
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
+M.proxy(false)
+const ext_Attribution = new IDEE.plugin.miPlugin_attribution({
+  position: 'BR',
+  // Modo de presentación de los créditos:
+  //   'full' => panel colapsable de la API-IDEE con cabecera arrastrable (por defecto)
+  //   'lite' => botón estándar m-tools en el rail + barra de atribuciones a lo
+  //             largo de la base del visualizador
+  mode: 'lite',
+  attributions: [{
+    name: 'Autor:',
+    description: " <a style='color: #0B57D0' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
+  }]
+});
+M.proxy(false)
+mapajs.addPlugin(ext_Attribution);
+M.proxy(false)
 
 mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
   buttonTitle: 'cambiar impl :)',
