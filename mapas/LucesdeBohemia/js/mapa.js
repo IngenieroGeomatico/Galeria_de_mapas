@@ -1289,6 +1289,19 @@ layerVectorialGJSON.setZIndex(100)
 // Expuesta en window para los scripts de los pasos del storymap (contrato global)
 window.layerVectorialGJSON = layerVectorialGJSON;
 
+// En 3D los marcadores puntuales se suben ALTURA_PUNTOS_SOBRE_TERRENO metros
+// sobre el terreno: la conversión de la API los deja con heightReference
+// CLAMP_TO_GROUND y sin altura, es decir justo sobre la superficie, y como el
+// marcador se dibuja centrado en esa posición la mitad queda enterrada (solo se
+// ve la mitad del punto). Se relanza en cada LOAD porque el storymap cambia la
+// fuente de la capa en cada paso, con entidades nuevas que también hay que subir.
+[layerVectorialGJSON, layerVectorialGJSON_Madrid, layerVectorialGJSON_Libro].forEach((capa) => {
+  capa.on(M.evt.LOAD, () => {
+    aplicaAlturaSobreTerrenoSiCesium(capa, ALTURA_PUNTOS_SOBRE_TERRENO);
+  });
+  aplicaAlturaSobreTerrenoSiCesium(capa, ALTURA_PUNTOS_SOBRE_TERRENO);
+});
+
 
 
 
@@ -1350,6 +1363,123 @@ mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
 return mapajs
 
+}
+
+// Altura (m) a la que se elevan los marcadores puntuales sobre el terreno en 3D.
+const ALTURA_PUNTOS_SOBRE_TERRENO = 2;
+
+// Grosor (px) de las polilíneas en 3D. El estilo 2D del recorrido usa width 4
+// y en 3D las polilíneas llegan sin grosor (1 px por defecto en Cesium).
+const GROSOR_LINEAS_3D = 4;
+
+// Sube los marcadores puntuales de una capa una altura dada sobre el terreno y
+// los dibuja por encima de él cuando el mapa se ejecuta en Cesium (3D).
+//
+// La conversión de la API deja los marcadores con heightReference CLAMP_TO_GROUND
+// y sin altura: el punto se dibuja centrado justo en la superficie, así que con
+// el depth test activo contra el terreno (por defecto en 3D) el marcador se
+// recorta contra la silueta del terreno en vistas oblicuas — solo se ve media
+// bola. Con heightReference RELATIVE_TO_GROUND, height = metros y
+// disableDepthTestDistance = Infinity el marcador se dibuja entero, elevado y
+// sin recortes, "flotando" sobre el terreno.
+//
+// Las polilíneas y los polígonos no se tocan: el recorrido de Bohemia ya llega
+// con clampToGround true y debe seguir pegado al suelo, que es lo que se busca en
+// una línea de recorrido. En OpenLayers (2D) la función no hace nada.
+function aplicaAlturaSobreTerrenoSiCesium(capa, metros) {
+  const altura = (typeof metros === 'number' && metros > 0) ? metros : 2;
+  const nombreCapa = (capa && capa.name) || null;
+  if (!nombreCapa) return;
+
+  // La dataSource Cesium real de la capa está en mapImpl.dataSources (registrada
+  // por nombre al añadir la capa); capa.getImpl().getLayer() devuelve un
+  // contenedor vacío, así que no sirve.
+  const buscarDataSource = () => {
+    const mapImpl = (typeof mapajs !== 'undefined' && mapajs.getMapImpl)
+      ? mapajs.getMapImpl()
+      : null;
+    if (!mapImpl || !mapImpl.scene || !mapImpl.scene.camera || typeof Cesium === 'undefined') {
+      return null;
+    }
+    if (mapImpl.dataSources && mapImpl.dataSources._dataSources) {
+      const encontrada = mapImpl.dataSources._dataSources.find(
+        (d) => d.name === nombreCapa
+      );
+      if (encontrada) return encontrada;
+    }
+    try {
+      const dsCapa = capa.getImpl().getLayer();
+      if (dsCapa && dsCapa.entities) return dsCapa;
+    } catch (e) { /* la capa aún no tiene dataSource */ }
+    return null;
+  };
+
+  const aplicar = (ds) => {
+    const alturaRelativa = new Cesium.ConstantProperty(
+      (Cesium.HeightReference && Cesium.HeightReference.RELATIVE_TO_GROUND !== undefined)
+        ? Cesium.HeightReference.RELATIVE_TO_GROUND
+        : 2
+    );
+    const alturaProp = new Cesium.ConstantProperty(altura);
+    // Con el depth test activo contra el terreno (activado por defecto en 3D),
+    // el marcador se recorta contra la silueta del terreno en vistas oblicuas y
+    // solo se ve media bola. disableDepthTestDistance = Infinity lo desactiva
+    // para estos marcadores: se dibujan siempre por encima del terreno y se ven
+    // enteros, "flotando" sobre él. La elevación (altura) se mantiene porque es
+    // la que los separa físicamente de la superficie.
+    const sinDepthTest = new Cesium.ConstantProperty(Number.POSITIVE_INFINITY);
+    const entidades = (ds.entities && ds.entities.values) ? ds.entities.values : [];
+    let aplicadas = 0;
+    for (let i = 0; i < entidades.length; i++) {
+      const ent = entidades[i];
+      if (ent.point) {
+        ent.point.heightReference = alturaRelativa;
+        ent.point.height = alturaProp;
+        ent.point.disableDepthTestDistance = sinDepthTest;
+        aplicadas += 1;
+      }
+      if (ent.billboard) {
+        ent.billboard.heightReference = alturaRelativa;
+        ent.billboard.height = alturaProp;
+        ent.billboard.disableDepthTestDistance = sinDepthTest;
+        aplicadas += 1;
+      }
+      if (ent.polyline) {
+        // En 3D las polilíneas llegan sin grosor (Cesium las dibuja a 1 px),
+        // muy finas frente a las del estilo 2D (width 4). Se iguala el grosor.
+        ent.polyline.width = new Cesium.ConstantProperty(GROSOR_LINEAS_3D);
+        aplicadas += 1;
+      }
+    }
+    if (aplicadas > 0 && ds.changedEvent && ds.changedEvent.raiseEvent) {
+      ds.changedEvent.raiseEvent();
+    }
+    return aplicadas;
+  };
+
+  // La dataSource y sus entidades se crean de forma asíncrona después de añadir
+  // la capa, así que se sondea hasta que llegan. Se abandona a los 60 s para no
+  // dejar el sondeo vivo si la capa no genera dataSource vectorial, y a los 5 s
+  // si no hay Cesium (por si la implementación está cambiando).
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const mapImpl = (typeof mapajs !== 'undefined' && mapajs.getMapImpl)
+      ? mapajs.getMapImpl()
+      : null;
+    const esCesium = !!(mapImpl && mapImpl.scene && mapImpl.scene.camera) &&
+      typeof Cesium !== 'undefined';
+    if (!esCesium) {
+      if (Date.now() - t0 > 5000) clearInterval(iv);
+      return;
+    }
+    const ds = buscarDataSource();
+    if (ds && ds.entities && ds.entities.values.length > 0) {
+      clearInterval(iv);
+      aplicar(ds);
+      return;
+    }
+    if (Date.now() - t0 > 60000) clearInterval(iv);
+  }, 500);
 }
 
 mapa()
