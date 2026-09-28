@@ -1277,6 +1277,26 @@ geojsonJoin.then(() => {
   // y la añadimos al mapa
   mapajs.addLayers(arrayLayers.reverse());
 
+  // Modelo 3D (GLB) que sustituye al icono 2D de las estaciones en 3D. El
+  // billboard de Cesium daba problemas: el icono no aparecía hasta forzar un
+  // redibujado de la capa y la conversión de la API dejaba además un point
+  // negro (pixelSize 5 con relleno y contorno negros) que se veía como un
+  // punto suelto en mitad del icono. El modelo evita ambas cosas: es geometría
+  // real, no una textura que cargar, y no arrastra el point. Es el mismo patrón
+  // que usa la ISS en mapas/satelites/js/mapa.js (sustituir billboard y point
+  // por entity.model). Solo afecta a la implementación Cesium: en 2D
+  // OpenLayers la capa sigue pintando el icono con su estilo.
+  // El GLB (mástil meteorológico de 3,1 m a escala real, colores de vértice sin
+  // texturas) se escala x1.6 para que lea mejor como elemento del mapa, y
+  // minimumPixelSize mantiene el mástil visible al alejar la cámara, donde 3 m
+  // serían invisibles: con 60 px de ancho mínimo las estaciones se distinguen
+  // incluso en la vista regional de toda la Comunidad de Madrid.
+  const MODELO_ESTACION_3D = {
+    uri: './img/estacion_3d.glb',
+    scale: 1.6,
+    minimumPixelSize: 60
+  };
+
   // Condicional por implementación: si el mapa es Cesium (3D) se fuerza
   // clampToGround en las entidades de las capas (la impl Cesium no propaga la
   // opción clampToGround de la capa GeoJSON a los polígonos). En OpenLayers
@@ -1285,7 +1305,9 @@ geojsonJoin.then(() => {
     // El municipio se extruye 150 m (≥1) porque su relleno es transparente: el
     // clampToGround crearía un GroundPrimitive que ignora el borde. Las demás
     // capas (medidas con relleno opaco) mantienen el clampToGround.
-    aplicaClampGroundSiCesium(capa, capa.name === 'Municipio Madrid' ? 150 : 0);
+    const esEstaciones = capa.name === 'Estaciones calidad del aire';
+    aplicaClampGroundSiCesium(capa, capa.name === 'Municipio Madrid' ? 150 : 0,
+      esEstaciones ? MODELO_ESTACION_3D : null);
   });
 
   // Arranque en 3D (Cesium): el center/zoom inicial de M.map() no se respeta
@@ -1338,7 +1360,10 @@ function bboxFromGjson(gjson) {
 // clampToGround ignora el outline y, con un relleno casi transparente (caso
 // del municipio), el polígono desaparece en 3D: la extrusión genera geometría
 // 3D real en la que el borde sí se dibuja.
-function aplicaClampGroundSiCesium(capa, alturaExtrusionMetros) {
+// Si se pasa modelo3D (objeto {uri, scale, minimumPixelSize}), las entidades
+// puntuales sustituyen su point y su billboard por entity.model, de forma que
+// en 3D se dibuja geometría real en lugar de una textura 2D.
+function aplicaClampGroundSiCesium(capa, alturaExtrusionMetros, modelo3D) {
   const nombreCapa = (capa && capa.name) || null;
 
   // Busca la dataSource Cesium real de la capa. Los dataSources con
@@ -1407,6 +1432,21 @@ function aplicaClampGroundSiCesium(capa, alturaExtrusionMetros) {
       }
       if (ent.billboard) {
         ent.billboard.heightReference = alturaClamp;
+      }
+      // Sustitución del icono 2D por el modelo 3D: se quitan point y billboard
+      // (el point que añade la conversión de la API es un punto negro que se
+      // ve a través de las zonas transparentes del icono) y se crea el model.
+      // La base del GLB está en Y=0, así que con CLAMP_TO_GROUND apoya en el
+      // terreno. minimumPixelSize impide que desaparezca al alejar la cámara.
+      if (modelo3D && ent.point && !ent.polygon && !ent.polyline) {
+        ent.point = undefined;
+        ent.billboard = undefined;
+        ent.model = {
+          uri: modelo3D.uri,
+          scale: modelo3D.scale,
+          minimumPixelSize: modelo3D.minimumPixelSize,
+          heightReference: alturaClamp
+        };
       }
     }
     if (ds.changedEvent && ds.changedEvent.raiseEvent) {
