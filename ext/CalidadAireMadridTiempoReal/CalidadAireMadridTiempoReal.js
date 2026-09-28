@@ -395,6 +395,13 @@ class miPlugin_calidadAire {
     await new Promise(resolve => setTimeout(resolve, 100));
     capaSeleccionada.setVisible(true);
 
+    // Refresca los ojitos del selector de capas: el plugin cambia la visibilidad
+    // de las capas por código y el switcher solo re-renderiza si se invoca
+    // window.renderLayerList() (el mismo mecanismo que usa su propio
+    // toggleLayerVisibility). Sin esto, los ojitos quedan congelados en el estado
+    // previo a la operación (p. ej. una capa oculta con ojito abierto).
+    if (typeof window.renderLayerList === 'function') await window.renderLayerList();
+
     if (capaSeleccionada.interpolate) {
       IDEE.toast.warning('Ya se ha realizado la interpolación de esta capa', null, 2000);
       if (typeof SVGCarga !== 'undefined' && SVGCarga) SVGCarga.hidden = true;
@@ -588,6 +595,10 @@ class miPlugin_calidadAire {
     if (typeof SVGCarga !== 'undefined' && SVGCarga) SVGCarga.hidden = true;
     await new Promise(resolve => setTimeout(resolve, 100));
     capaSeleccionada.setVisible(true);
+
+    // Refresca los ojitos del selector de capas tras re-ocultar las demás capas
+    // y volver a mostrar la seleccionada (mismo mecanismo que el bloque anterior).
+    if (typeof window.renderLayerList === 'function') await window.renderLayerList();
 
     // Centra la vista en el municipio de Madrid a partir de la extensión de la
     // capa de límite administrativo del municipio (el mismo BBox_Gjson recortado
