@@ -35,3 +35,13 @@ body {
 .m-areas>div.m-area>div.m-panel.m-panel-modal.collapsed>button.m-panel-btn {
     background-color: orangered !important;
 }
+
+/* La barra de créditos del plugin de atribución (modo lite) se pinta por encima
+   del panel del storymap, que ocupa todo el alto a la derecha y la tapaba
+   (incluido su botón de cerrar). El panel del storymap vive en
+   .ol-overlaycontainer-stopevent, que attribution.css eleva a z-index 1000
+   cuando existe la barra, así que hay que superarlo. No afecta al rail: solo
+   el botón de atribución (y 776-816) comparte banda vertical con la barra. */
+.m-attribution-bar {
+    z-index: 1100 !important;
+}
