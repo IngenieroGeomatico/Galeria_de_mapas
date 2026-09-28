@@ -30,8 +30,9 @@ function api_storymap() {
 }
 
 // Iconos SVG (tabler) usados en el panel
-const STORYMAP_SVG_PLAY = '<svg id="play" height="23" width="23" xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-player-play" viewBox="0 0 24 24" stroke-width="1.5" stroke="#65a3d4" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M7 4v16l13 -8z" /></svg>';
-const STORYMAP_SVG_PAUSE = '<svg id="pause" style="display: none;" height="23" width="23" xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-player-pause" viewBox="0 0 24 24" stroke-width="1.5" stroke="#65a3d4" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>';
+const STORYMAP_SVG_PLAY = '<svg height="24" width="24" xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-player-play" viewBox="0 0 24 24" stroke-width="1.5" stroke="#2c5f8a" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M7 4v16l13 -8z" /></svg>';
+const STORYMAP_SVG_PAUSE = '<svg height="24" width="24" xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-player-pause" viewBox="0 0 24 24" stroke-width="1.5" stroke="#2c5f8a" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>';
+const STORYMAP_SVG_SPEED = '<svg height="18" width="18" xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-gauge" viewBox="0 0 24 24" stroke-width="1.5" stroke="#2c5f8a" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><circle cx="12" cy="12" r="9" /><path d="M12 12l3 -2" /><path d="M12 7v1" /><path d="M7 12h1" /><path d="M17 12h1" /></svg>';
 const STORYMAP_SVG_ARROW = '<svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-arrow-big-down" viewBox="0 0 24 24" stroke-width="1.5" stroke="#71a7d3" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M15 4v8h3.586a1 1 0 0 1 .707 1.707l-6.586 6.586a1 1 0 0 1 -1.414 0l-6.586 -6.586a1 1 0 0 1 .707 -1.707h3.586v-8a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1z" /></svg>';
 
 /**
@@ -119,8 +120,11 @@ class miPlugin_storymap {
     control.indexInContent = this.indexInContent;
     control.isDraggable_ = this.isDraggable_;
     control.cap_ = null;
-    control.allIntervalId = [];
     control.idTimeCap = 0;
+    control.isAutoPlaying = false;
+    control.autoplayToken = 0;
+    control.autoplayTimers = [];
+    control.autoplayRaf = null;
     control.svgArrowScroll = true;
     control.arrowScrollEffect_contador = 1;
     control.panelHTML_ = null;
@@ -299,8 +303,8 @@ class miPlugin_storymap {
       };
 
       const pointers = html.querySelectorAll('#navPointer > svg');
-      pointers.forEach((pointer, i) => {
-        if (i === 0 || i === 1) return; // los dos primeros svg son play y pause, se omiten
+      pointers.forEach((pointer) => {
+        if (!pointer.hasAttribute('index')) return; // se omiten elementos sin índice
         if (pointer.addEventListener) {
           pointer.addEventListener('click', ({ target }) => clickHandler(target));
           const circle = pointer.querySelector('circle');
@@ -359,21 +363,20 @@ class miPlugin_storymap {
       const play = html.querySelector('#play');
       const pause = html.querySelector('#pause');
       this.idTimeCap = 0;
-      this.allIntervalId = [];
+      this.autoplayToken = 0;
+      this.autoplayTimers = [];
+      this.autoplayRaf = null;
 
       play.addEventListener('click', () => {
         play.style.display = 'none';
         pause.style.display = 'block';
         this.idTimeCap = this.timeCap();
-        this.allIntervalId.push(this.idTimeCap);
       });
 
       pause.addEventListener('click', () => {
-        pause.style.display = 'none';
+        this.stopAutoplay();
         play.style.display = 'block';
-        this.allIntervalId.forEach((id) => {
-          clearInterval(id);
-        });
+        pause.style.display = 'none';
       });
 
       return html;
@@ -399,79 +402,69 @@ class miPlugin_storymap {
 
       navContent.forEach((cap) => {
         cap.querySelectorAll('.step').forEach((step) => {
+          // Contador de gestos de rueda para cambiar de paso con TRES movimientos
+          // (se resetea al cambiar de sentido o al hacer scroll dentro del paso).
+          let gestosRueda = 0;
+          let ultimoSentido = 0;
+
+          // Scroll nativo del paso: al llegar al final (o al principio) avanza o
+          // retrocede. Durante el autoplay el avance lo controla el motor de play.
           step.addEventListener('scroll', ({ target }) => {
+            if (this.isAutoPlaying) return;
             if (this.svgArrowScroll) this.arrowScrollEffect();
 
-            // ***** Delante *****
-            // Evitar que ejecute esto cuando es el último capítulo y el último paso
-            if (Math.abs(target.scrollHeight - target.clientHeight - target.scrollTop) < 5
-              && !(navContent[navContent.length - 1].id === cap.id && `step${cap.childElementCount - 1}` === target.id)) {
-              if (typeof target.scroll === 'function') {
-                target.scroll({ top: 10, behavior: 'auto' });
-              }
-              target.style = 'display: none';
-              const idStep = Number(step.id.replace('step', '')) + 1;
-
-              if (cap.querySelectorAll('.step').length - 1 < idStep) {
-                const idCap = Number(cap.id.replace('cap', '')) + 1;
-                const nextCap = document.querySelector(`#cap${idCap}`);
-                if (!nextCap) return;
-                nextCap.style = 'display: block';
-                const siguienteStep = nextCap.querySelector('#step0');
-                if (siguienteStep) siguienteStep.style = 'display: block';
-
-                document.querySelector(`#${cap.id}`).style = 'display: none';
-                this.addJSCap(idCap, 0);
-                this.effectPointer(idCap, '#pointerNav', 'navPointer');
-                this.createPointerSteps(idCap);
-                this.effectPointer(0, '#pointStep', 'navStep');
-                this.changeTitleSubtitle(idCap);
-              } else {
-                const siguienteStep = document.querySelector(`#${cap.id}`).querySelector(`#step${idStep}`);
-                if (!siguienteStep) return;
-                const idCap = Number(cap.id.replace('cap', ''));
-                siguienteStep.style = 'display: block';
-                siguienteStep.scrollTop = 1;
-                this.addJSCap(idCap, idStep);
-                this.effectPointer(idStep, '#pointStep', 'navStep');
-              }
-              // ***** Atrás *****
-            } else if (target.scrollTop === 0 && !(cap.id === 'cap0' && target.id === 'step0')) {
-              const idStep = Number(step.id.replace('step', '')) - 1;
-              if (typeof target.scroll === 'function') {
-                target.scroll({ top: 10, behavior: 'auto' });
-              }
-              target.style = 'display: none';
-
-              if (idStep < 0) {
-                const idCap = Number(cap.id.replace('cap', '')) - 1;
-                const capNext = document.querySelector(`#cap${idCap}`);
-                if (!capNext) return;
-                capNext.style = 'display: block';
-
-                const siguienteStep = capNext.querySelector(`#step${capNext.childElementCount - 1}`);
-                if (siguienteStep) {
-                  siguienteStep.style = 'display: block';
-                  siguienteStep.scrollTop = 10;
-                }
-
-                document.querySelector(`#${cap.id}`).style = 'display: none';
-                this.addJSCap(idCap, capNext.childElementCount - 1);
-                this.effectPointer(idCap, '#pointerNav', 'navPointer');
-                this.createPointerSteps(idCap);
-                this.changeTitleSubtitle(idCap);
-                this.effectPointer(capNext.childElementCount - 1, '#pointStep', 'navStep');
-              } else {
-                const idCap = Number(cap.id.replace('cap', ''));
-                const siguienteStep = document.querySelector(`#${cap.id}`).querySelector(`#step${idStep}`);
-                if (!siguienteStep) return;
-                siguienteStep.style = 'display: block';
-                siguienteStep.scrollTop = 10;
-                this.addJSCap(idCap, idStep);
-                this.effectPointer(idStep, '#pointStep', 'navStep');
-              }
+            if (Math.abs(target.scrollHeight - target.clientHeight - target.scrollTop) < 5) {
+              this.avanzarPaso();
+            } else if (target.scrollTop <= 1) {
+              // Tolerancia al subpíxel: el navegador puede dejar scrollTop en
+              // fracciones (p. ej. 0.8 al fijar 1), por lo que === 0 dejaba el
+              // retroceso con rueda muerto en pasos con overflow.
+              this.retrocederPaso();
             }
           });
+
+          // Gesto de rueda: cubre los pasos cuyo texto no genera scroll (sin
+          // overflow el evento 'scroll' no se dispara y antes nunca avanzaban).
+          // OJO: se usa el 'step' del closure (el div con overflow), NO evt.target,
+          // que es el hijo bajo el cursor (li/p/...) y no es scrollable.
+          // Se exigen TRES movimientos consecutivos del mismo sentido para cambiar
+          // de paso; el primer gesto en el borde solo se cuenta y se cancela la
+          // propagación para no desplazar el contenedor/mapa. Si el paso admite
+          // scroll nativo en medio del texto, se deja que el navegador desplace.
+          step.addEventListener('wheel', (evt) => {
+            if (this.isAutoPlaying) return;
+            if (this.svgArrowScroll) this.arrowScrollEffect();
+
+            // Sin margen de scroll por debajo: incluye pasos sin overflow
+            // (scrollHeight <= clientHeight) y pasos ya al final.
+            const alFinal = !(step.scrollHeight - step.clientHeight - step.scrollTop > 5);
+            // Sin margen de scroll por arriba: incluye pasos sin overflow.
+            // <= 1 tolera el subpíxel que deja el navegador (p. ej. 0.8 al
+            // fijar 1): con === 0 la rueda hacia arriba nunca retrocedía.
+            const alPrincipio = step.scrollTop <= 1;
+            const sentido = Math.sign(evt.deltaY);
+
+            let cambiado = false;
+            if ((sentido > 0 && alFinal) || (sentido < 0 && alPrincipio)) {
+              evt.preventDefault();
+              if (sentido === ultimoSentido) {
+                gestosRueda += 1;
+              } else {
+                ultimoSentido = sentido;
+                gestosRueda = 1;
+              }
+              if (gestosRueda >= 3) {
+                gestosRueda = 0;
+                ultimoSentido = 0;
+                cambiado = (sentido > 0) ? this.avanzarPaso() : this.retrocederPaso();
+              }
+            } else {
+              // Scroll interno o fuera del borde: se reinicia la cuenta.
+              gestosRueda = 0;
+              ultimoSentido = 0;
+            }
+            if (cambiado) evt.preventDefault();
+          }, { passive: false });
         });
       });
 
@@ -507,32 +500,232 @@ class miPlugin_storymap {
     };
 
     /**
-     * Temporizador del autoplay: hace scroll al final del paso activo cada
-     * (speed * 1000) ms hasta alcanzar el último paso del último capítulo.
-     * @returns {number} Identificador del intervalo
+     * Cuenta los bloques de texto (strings) de un paso para dimensionar el
+     * tiempo de reproducción: a más strings, más tiempo de scroll. Si no hay
+     * etiquetas de bloque, se estima por número de palabras (15 por string).
+     * @param {HTMLElement} step Paso del storymap
+     * @returns {number} Número de strings del paso (mínimo 1)
+     */
+    control.countStrings = function(step) {
+      if (!step) return 1;
+      const bloques = step.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th');
+      if (bloques.length > 0) return bloques.length;
+      const palabras = (step.textContent || '').trim().split(/\s+/).filter(Boolean).length;
+      return Math.max(1, Math.ceil(palabras / 15));
+    };
+
+    /**
+     * Detiene el autoplay (play) de forma limpia: invalida el token de
+     * reproducción, cancela la animación (rAF) en curso y los temporizadores
+     * pendientes.
+     */
+    control.stopAutoplay = function() {
+      this.autoplayToken += 1;
+      this.isAutoPlaying = false;
+      if (this.autoplayRaf) {
+        cancelAnimationFrame(this.autoplayRaf);
+        this.autoplayRaf = null;
+      }
+      (this.autoplayTimers || []).forEach((t) => clearTimeout(t));
+      this.autoplayTimers = [];
+    };
+
+    /**
+     * Avanza al paso siguiente (o capítulo siguiente). Opera sobre el paso
+     * activo (el único visible). No ejecuta nada si es el último paso del
+     * último capítulo. Devuelve true si cambió de paso.
+     * @returns {boolean} true si cambió de paso
+     */
+    control.avanzarPaso = function() {
+      const idCap = this.capIndex('#contentStoryMap', '.chapters');
+      const idStep = this.capIndex(`#cap${idCap}`, '.step');
+      const cap = document.querySelector(`#cap${idCap}`);
+      if (idCap === false || idStep === false || !cap) return false;
+      const step = cap.querySelector(`#step${idStep}`);
+      if (!step) return false;
+
+      // Último paso del último capítulo: no hay avance.
+      const lenghtCap = this.cap_.length - 1;
+      const lengthStep = this.cap_[lenghtCap].steps.length - 1;
+      if (idCap === lenghtCap && idStep === lengthStep) return false;
+
+      if (typeof step.scroll === 'function') step.scroll({ top: 10, behavior: 'auto' });
+      step.style = 'display: none';
+      const nextIdStep = Number(idStep) + 1;
+
+      if (cap.querySelectorAll('.step').length - 1 < nextIdStep) {
+        const nextIdCap = Number(idCap) + 1;
+        const nextCap = document.querySelector(`#cap${nextIdCap}`);
+        if (!nextCap) return false;
+        nextCap.style = 'display: block';
+        const siguienteStep = nextCap.querySelector('#step0');
+        if (siguienteStep) siguienteStep.style = 'display: block';
+
+        cap.style = 'display: none';
+        this.addJSCap(nextIdCap, 0);
+        this.effectPointer(nextIdCap, '#pointerNav', 'navPointer');
+        this.createPointerSteps(nextIdCap);
+        this.effectPointer(0, '#pointStep', 'navStep');
+        this.changeTitleSubtitle(nextIdCap);
+      } else {
+        const siguienteStep = cap.querySelector(`#step${nextIdStep}`);
+        if (!siguienteStep) return false;
+        siguienteStep.style = 'display: block';
+        siguienteStep.scrollTop = 0;
+        this.addJSCap(idCap, nextIdStep);
+        this.effectPointer(nextIdStep, '#pointStep', 'navStep');
+      }
+      return true;
+    };
+
+    /**
+     * Retrocede al paso anterior (o capítulo anterior). Opera sobre el paso
+     * activo (el único visible). No ejecuta nada si es el primer paso del
+     * primer capítulo. Devuelve true si cambió de paso.
+     * @returns {boolean} true si cambió de paso
+     */
+    control.retrocederPaso = function() {
+      const idCap = this.capIndex('#contentStoryMap', '.chapters');
+      const idStep = this.capIndex(`#cap${idCap}`, '.step');
+      const cap = document.querySelector(`#cap${idCap}`);
+      if (idCap === false || idStep === false || !cap) return false;
+      const step = cap.querySelector(`#step${idStep}`);
+      if (!step) return false;
+
+      // Primer paso del primer capítulo: no hay retroceso.
+      if (idCap === 0 && idStep === 0) return false;
+
+      const prevIdStep = Number(idStep) - 1;
+      if (typeof step.scroll === 'function') step.scroll({ top: 10, behavior: 'auto' });
+      step.style = 'display: none';
+
+      if (prevIdStep < 0) {
+        const prevIdCap = Number(idCap) - 1;
+        const capNext = document.querySelector(`#cap${prevIdCap}`);
+        if (!capNext) return false;
+        capNext.style = 'display: block';
+
+        const lastStepIndex = capNext.childElementCount - 1;
+        const siguienteStep = capNext.querySelector(`#step${lastStepIndex}`);
+        if (siguienteStep) {
+          siguienteStep.style = 'display: block';
+          siguienteStep.scrollTop = 10;
+        }
+
+        cap.style = 'display: none';
+        this.addJSCap(prevIdCap, lastStepIndex);
+        this.effectPointer(prevIdCap, '#pointerNav', 'navPointer');
+        this.createPointerSteps(prevIdCap);
+        this.changeTitleSubtitle(prevIdCap);
+        this.effectPointer(lastStepIndex, '#pointStep', 'navStep');
+      } else {
+        const siguienteStep = cap.querySelector(`#step${prevIdStep}`);
+        if (!siguienteStep) return false;
+        siguienteStep.style = 'display: block';
+        siguienteStep.scrollTop = 10;
+        this.addJSCap(idCap, prevIdStep);
+        this.effectPointer(prevIdStep, '#pointStep', 'navStep');
+      }
+      return true;
+    };
+
+    /**
+     * Motor del autoplay: reproduce la historia paso a paso. Por cada paso
+     * espera un instante al principio, hace scroll lento hasta el final
+     * (duración proporcional al número de strings y dividida por el
+     * multiplicador de velocidad) y espera un instante al final antes de
+     * pasar al siguiente paso. El avance lo hace el propio motor porque el
+     * scroll/wheel manual están bloqueados durante el autoplay.
+     * @returns {number} Token de reproducción (generación, para stopAutoplay)
      */
     control.timeCap = function() {
       const speedEl = document.querySelector('#buttonDelay');
       const speed = speedEl ? Number(speedEl.getAttribute('speed')) : (this.delay / 1000);
-      const id = setInterval(() => {
+      const multiplicador = Math.max(0.05, (this.delay / 1000) / speed);
+
+      const token = ++this.autoplayToken;
+      this.isAutoPlaying = true;
+
+      const cancelado = () => this.autoplayToken !== token;
+
+      const esperar = (ms, siguiente) => {
+        this.autoplayTimers.push(setTimeout(() => {
+          if (cancelado()) return;
+          siguiente();
+        }, ms));
+      };
+
+      const animarScroll = (el, desde, hasta, duracionMs, alTerminar) => {
+        const inicio = performance.now();
+        const paso = (t) => {
+          if (cancelado()) return;
+          const p = Math.min(1, (t - inicio) / duracionMs);
+          // Suavizado easeInOutQuad
+          const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+          el.scrollTop = desde + (hasta - desde) * ease;
+          if (p < 1 && !cancelado()) {
+            this.autoplayRaf = requestAnimationFrame(paso);
+          } else {
+            this.autoplayRaf = null;
+            alTerminar();
+          }
+        };
+        this.autoplayRaf = requestAnimationFrame(paso);
+      };
+
+      const finAutoplay = () => {
+        if (cancelado()) return;
+        this.isAutoPlaying = false;
+        const play = document.querySelector('#play');
+        const pause = document.querySelector('#pause');
+        if (play) play.style.display = 'block';
+        if (pause) pause.style.display = 'none';
+      };
+
+      const ciclo = () => {
+        if (cancelado()) return;
         const idCap = this.capIndex('#contentStoryMap', '.chapters');
         const idStep = this.capIndex(`#cap${idCap}`, '.step');
-        const div = document.querySelector(`#cap${idCap}`);
-        if (!div) return;
-        const step = div.querySelector(`#step${idStep}`);
-        if (!step) return;
-        const lenghtCap = this.cap_.length - 1;
-        const lengthStep = this.cap_[this.cap_.length - 1].steps.length - 1;
-        if (idCap !== lenghtCap || idStep !== lengthStep) {
-          if (typeof step.scroll === 'function') {
-            step.scroll({ top: step.scrollHeight + 10, behavior: 'smooth' });
-          } else {
-            step.scrollTop = step.scrollHeight + 10;
-          }
-        }
-      }, speed * 1000);
+        const cap = document.querySelector(`#cap${idCap}`);
+        const step = cap ? cap.querySelector(`#step${idStep}`) : null;
+        if (idCap === false || idStep === false || !step) return finAutoplay();
 
-      return id;
+        // Tiempo del paso proporcional al número de strings; pausas fijas
+        // cortas al principio y al final ("esperando un poco"); todo se
+        // divide por el multiplicador de velocidad elegido.
+        const strings = this.countStrings(step);
+        const pausaInicio = 1000 / multiplicador;
+        const duracionScroll = Math.max(800, strings * 1200) / multiplicador;
+        const pausaFin = 1500 / multiplicador;
+
+        const lenghtCap = this.cap_.length - 1;
+        const lengthStep = this.cap_[lenghtCap].steps.length - 1;
+        const esUltimo = idCap === lenghtCap && idStep === lengthStep;
+
+        const maxScroll = Math.max(0, step.scrollHeight - step.clientHeight);
+
+        // "Esperando al principio del texto": empezar desde arriba del todo.
+        step.scrollTop = 0;
+
+        esperar(pausaInicio, () => {
+          if (cancelado()) return;
+          if (!step.isConnected) return finAutoplay();
+
+          animarScroll(step, 0, maxScroll, duracionScroll, () => {
+            if (cancelado()) return;
+            esperar(pausaFin, () => {
+              if (cancelado()) return;
+              if (esUltimo) return finAutoplay();
+              if (!this.avanzarPaso()) return finAutoplay();
+              // Margen para que el nuevo paso se muestre/ejecute su script.
+              esperar(200, ciclo);
+            });
+          });
+        });
+      };
+
+      ciclo();
+      return token;
     };
 
     /**
@@ -619,66 +812,95 @@ class miPlugin_storymap {
     };
 
     /**
-     * Botón de velocidad del autoplay (0.5x, 1x, 2x, 3x, 5x).
+     * Botón de velocidad del autoplay (0.5x, 1x, 2x, 3x, 5x) y popover de opciones.
      * @param {HTMLElement} html Raíz del panel
      * @returns {HTMLElement} Panel con el botón de velocidad configurado
      */
     control.buttonDelay = function(html) {
-      const speedOptions = [
-        { text: '0.5x', value: 0.5 },
-        { text: '1x', value: 1 },
-        { text: '2x', value: 2 },
-        { text: '3x', value: 3 },
-        { text: '5x', value: 5 },
-      ];
-      let position = 1; // empieza en 1x (coherente con el HTML inicial '1x')
-
       const button = html.querySelector('#buttonDelay');
+      const menu = html.querySelector('#speedMenu');
+      if (!button || !menu) return html;
 
-      button.addEventListener('click', ({ target }) => {
-        this.allIntervalId.forEach((id) => {
-          clearInterval(id);
+      const speedLabel = button.querySelector('.speed-label');
+      const speedOptions = menu.querySelectorAll('.speed-option');
+
+      const openMenu = () => {
+        menu.removeAttribute('hidden');
+        menu.classList.add('is-open');
+        button.setAttribute('aria-expanded', 'true');
+      };
+
+      const closeMenu = () => {
+        menu.setAttribute('hidden', '');
+        menu.classList.remove('is-open');
+        button.setAttribute('aria-expanded', 'false');
+      };
+
+      const toggleMenu = () => {
+        const isExpanded = button.getAttribute('aria-expanded') === 'true';
+        if (isExpanded) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      };
+
+      button.addEventListener('click', (evt) => {
+        evt.stopPropagation();
+        toggleMenu();
+      });
+
+      speedOptions.forEach((option) => {
+        option.addEventListener('click', (evt) => {
+          evt.stopPropagation();
+          const val = parseFloat(option.getAttribute('data-value'));
+          if (Number.isNaN(val) || val <= 0) return;
+
+          // 1. Cerrar menú
+          closeMenu();
+
+          // 2. Marcar opción activa
+          speedOptions.forEach((opt) => {
+            opt.classList.remove('speed-option--active');
+            opt.setAttribute('aria-selected', 'false');
+          });
+          option.classList.add('speed-option--active');
+          option.setAttribute('aria-selected', 'true');
+
+          // 3. Actualizar etiqueta del botón
+          const text = option.textContent.trim();
+          if (speedLabel) {
+            speedLabel.textContent = text;
+          }
+
+          // 4. Actualizar speed attribute: (delay/1000)/value
+          button.setAttribute('speed', (this.delay / 1000) / val);
+
+          // 5. SOLO si this.isAutoPlaying es true reiniciar con stopAutoplay() + timeCap()
+          if (this.isAutoPlaying) {
+            this.stopAutoplay();
+            this.idTimeCap = this.timeCap();
+          }
         });
+      });
 
-        position = (position >= speedOptions.length - 1) ? 0 : position + 1;
-        const option = speedOptions[position];
-        target.setAttribute('speed', (this.delay / 1000) / option.value);
-        target.innerHTML = option.text;
-
-        const play = html.querySelector('#play');
-        const pause = html.querySelector('#pause');
-
-        if (play) play.style.display = 'none';
-        if (pause) pause.style.display = 'block';
-
-        const id = setInterval(() => {
-          const lastCap = document.querySelector(`#cap${this.cap_.length - 1}`);
-          const displayLast = lastCap ? lastCap.lastChild.style.display : 'block';
-
-          const idCap = this.capIndex('#contentStoryMap', '.chapters');
-          const idStep = this.capIndex(`#cap${idCap}`, '.step');
-          const div = document.querySelector(`#cap${idCap}`);
-          if (!div) return;
-          const step = div.querySelector(`#step${idStep}`);
-          if (!step) return;
-          const lenghtCap = this.cap_.length - 1;
-          const lengthStep = this.cap_[this.cap_.length - 1].steps.length - 1;
-          if (idCap !== lenghtCap || idStep !== lengthStep) {
-            if (typeof step.scroll === 'function') {
-              step.scroll({ top: step.scrollHeight + 10, behavior: 'smooth' });
-            } else {
-              step.scrollTop = step.scrollHeight + 10;
-            }
+      // Clic fuera para cerrar
+      document.addEventListener('click', (evt) => {
+        if (!button.contains(evt.target) && !menu.contains(evt.target)) {
+          if (button.getAttribute('aria-expanded') === 'true') {
+            closeMenu();
           }
+        }
+      });
 
-          if (displayLast === 'block') {
-            if (play) play.style.display = 'block';
-            if (pause) pause.style.display = 'none';
-            clearInterval(id);
+      // Tecla Escape para cerrar
+      document.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Escape' || evt.key === 'Esc') {
+          if (button.getAttribute('aria-expanded') === 'true') {
+            closeMenu();
+            button.focus();
           }
-        }, target.getAttribute('speed') * 1000);
-
-        this.allIntervalId.push(id);
+        }
       });
 
       return html;
@@ -705,13 +927,10 @@ class miPlugin_storymap {
     };
 
     /**
-     * Limpia los temporizadores del autoplay.
+     * Limpia los temporizadores y la animación del autoplay.
      */
     control.clearTimers = function() {
-      (this.allIntervalId || []).forEach((id) => {
-        clearInterval(id);
-      });
-      this.allIntervalId = [];
+      this.stopAutoplay();
     };
 
     /**
@@ -735,8 +954,22 @@ class miPlugin_storymap {
         '</header>' +
         '<main class="mainStoryMap">' +
         '<div class="navPointer" id="navPointer">' +
-        `<button speed="${speed}" id="buttonDelay" class="buttonDelay" title="Velocidad de reproducción">1x</button>` +
-        STORYMAP_SVG_PLAY + STORYMAP_SVG_PAUSE +
+        '<div class="storymap-player" role="region" aria-label="Controles de reproducción">' +
+        `<button type="button" id="play" class="player-btn player-btn--play" aria-label="Reproducir" title="Reproducir">${STORYMAP_SVG_PLAY}</button>` +
+        `<button type="button" id="pause" class="player-btn player-btn--pause" aria-label="Pausar" title="Pausar" style="display: none;">${STORYMAP_SVG_PAUSE}</button>` +
+        '<div class="storymap-player-divider" aria-hidden="true"></div>' +
+        `<button type="button" speed="${speed}" id="buttonDelay" class="buttonDelay player-btn player-btn--speed" aria-label="Velocidad de reproducción" title="Velocidad de reproducción" aria-haspopup="listbox" aria-expanded="false">` +
+        STORYMAP_SVG_SPEED +
+        '<span class="speed-label">1x</span>' +
+        '</button>' +
+        '<div id="speedMenu" class="speed-menu" role="listbox" aria-label="Opciones de velocidad" hidden>' +
+        '<button type="button" role="option" class="speed-option" data-value="0.5" aria-selected="false">0.5x</button>' +
+        '<button type="button" role="option" class="speed-option speed-option--active" data-value="1" aria-selected="true">1x</button>' +
+        '<button type="button" role="option" class="speed-option" data-value="2" aria-selected="false">2x</button>' +
+        '<button type="button" role="option" class="speed-option" data-value="3" aria-selected="false">3x</button>' +
+        '<button type="button" role="option" class="speed-option" data-value="5" aria-selected="false">5x</button>' +
+        '</div>' +
+        '</div>' +
         '</div>' +
         '<div class="navStep" id="navStep"></div>' +
         '<div class="navContent">' +
