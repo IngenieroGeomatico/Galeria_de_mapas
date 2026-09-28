@@ -355,12 +355,16 @@
     }
   }
 
-  // Exponer en el namespace IDEE.plugin.* Y como global directo (este último es
-  // el que sobrevive al swap de cambioImpl).
+  // Exponer en los namespaces IDEE.plugin.* y M.plugin.* (los dos estilos de
+  // invocación de la API) Y como global directo (este último es el que
+  // sobrevive al swap de cambioImpl, que reinicializa IDEE.plugin).
   if (typeof window !== "undefined") {
     window.IDEE = window.IDEE || {};
     window.IDEE.plugin = window.IDEE.plugin || {};
     window.IDEE.plugin.miPlugin_supraplugin = miPlugin_supraplugin;
+    window.M = window.M || {};
+    window.M.plugin = window.M.plugin || {};
+    window.M.plugin.miPlugin_supraplugin = miPlugin_supraplugin;
     window.miPlugin_supraplugin = miPlugin_supraplugin;
   }
 })();

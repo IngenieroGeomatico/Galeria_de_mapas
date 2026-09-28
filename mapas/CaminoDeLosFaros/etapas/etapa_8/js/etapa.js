@@ -206,15 +206,15 @@ ruta.on(IDEE.evt.LOAD, (features) => {
 
 
 // Configuración de los plugins
-  mapjs.addPlugin(new miPlugin_cambioImpl({
+  mapjs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     mapsFunction: mapa,
     sameMap: true,
     shareView: true,
     shareLayers: true
   }));
-  mapjs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
-  mapjs.addPlugin(new miPlugin_layerSwitcher());
+  mapjs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
+  mapjs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
   return mapjs
 

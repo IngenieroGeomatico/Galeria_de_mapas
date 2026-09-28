@@ -1581,7 +1581,7 @@ async function myFunction_JoinData() {
 
 // Extensiones
 M.proxy(false)
-const ext_Modal = new miPlugin_modal({
+const ext_Modal = new IDEE.plugin.miPlugin_modal({
   position: 'BL',
   contentSelector: '#modal-popup-madrid',
   helpLink: {
@@ -1591,7 +1591,7 @@ const ext_Modal = new miPlugin_modal({
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
 M.proxy(false)
-const ext_Attribution = new miPlugin_attribution({
+const ext_Attribution = new IDEE.plugin.miPlugin_attribution({
   position: 'BR',
   // Modo de presentación de los créditos:
   //   'full' => panel colapsable de la API-IDEE con cabecera arrastrable (por defecto)
@@ -1607,24 +1607,24 @@ M.proxy(false)
 mapajs.addPlugin(ext_Attribution);
 M.proxy(false)
 
-mapajs.addPlugin(new miPlugin_calidadAire({
+mapajs.addPlugin(new IDEE.plugin.miPlugin_calidadAire({
   BBox_Gjson: "geojsonJoin.municipio",
   gridValue: 0.3,
   alpha: 100,
   sigma2: 0,
 }))
 
-mapajs.addPlugin(new miPlugin_leyenda())
+mapajs.addPlugin(new IDEE.plugin.miPlugin_leyenda())
 
-mapajs.addPlugin(new miPlugin_cambioImpl({
+mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
   buttonTitle: 'cambiar impl :)',
   mapsFunction: mapa,
   sameMap: true,
   shareView: true,
   shareLayers: true
 }));
-mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
-mapajs.addPlugin(new miPlugin_layerSwitcher());
+mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
+mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
 return geojsonJoin.then(() => mapajs)
 

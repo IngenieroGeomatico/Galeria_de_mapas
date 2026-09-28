@@ -1854,8 +1854,12 @@ class miPlugin_layerSwitcher {
 }
 
 if (typeof window !== 'undefined') {
+  window.miPlugin_layerSwitcher = miPlugin_layerSwitcher;
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_layerSwitcher = miPlugin_layerSwitcher;
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_layerSwitcher = miPlugin_layerSwitcher;
 }
 

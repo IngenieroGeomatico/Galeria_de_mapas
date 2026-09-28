@@ -152,7 +152,7 @@ mapajs_0 = mapa()
 
 // # Definición de funciones de extensiones
 function pluginCamioImplFunc() {
-  return new miPlugin_cambioImpl({
+  return new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     // Pasar la referencia a la función sin paréntesis para evitar su ejecución inmediata
     mapsFunction: { same: mapa, ol: mapa, Cesium: mapa2 },
@@ -165,12 +165,12 @@ function pluginCamioImplFunc() {
 }
 
 function pluginCapasBaseFunc() {
-  return new miPlugin_baseLayer({ rows: 1 })
+  return new IDEE.plugin.miPlugin_baseLayer({ rows: 1 })
 }
 
 
 function pluginCapasSuperpuestasFunc() {
-  return new miPlugin_layerSwitcher()
+  return new IDEE.plugin.miPlugin_layerSwitcher()
 }
 
 function updateConfigBaseLayer() {

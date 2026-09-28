@@ -747,7 +747,7 @@ class miPlugin_leyenda {
   }
 }
 
-// Exponer las clases en el namespace IDEE.plugin (y global directo).
+// Exponer las clases en los namespaces IDEE.plugin y M.plugin (y global directo).
 if (typeof window !== 'undefined') {
   window.miPlugin_calidadAire = miPlugin_calidadAire;
   window.miPlugin_leyenda = miPlugin_leyenda;
@@ -755,4 +755,8 @@ if (typeof window !== 'undefined') {
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_calidadAire = miPlugin_calidadAire;
   window.IDEE.plugin.miPlugin_leyenda = miPlugin_leyenda;
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_calidadAire = miPlugin_calidadAire;
+  window.M.plugin.miPlugin_leyenda = miPlugin_leyenda;
 }

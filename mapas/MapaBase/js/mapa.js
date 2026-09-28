@@ -46,7 +46,7 @@ function mapa() {
   });
 
   // ── Plugin selector de capas base (grid de imágenes) ──────────────
-  var baseLayerPlugin = new miPlugin_baseLayer({
+  var baseLayerPlugin = new IDEE.plugin.miPlugin_baseLayer({
     // Una única fila (todas las capas base en línea). Parametrizable:
     // aumentar rows agrupa las miniaturas en columnas más anchas.
     rows: 1,
@@ -59,11 +59,11 @@ function mapa() {
   mapajs.addPlugin(baseLayerPlugin);
 
   // ── Plugin selector de capas overlay (checkboxes) ─────────────────
-  var layerSwitcherPlugin = new miPlugin_layerSwitcher();
+  var layerSwitcherPlugin = new IDEE.plugin.miPlugin_layerSwitcher();
   mapajs.addPlugin(layerSwitcherPlugin);
 
   // ── Plugin cambio de implementación (OL <-> Cesium) ───────────────
-  mapajs.addPlugin(new miPlugin_cambioImpl({
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     mapsFunction: mapa,
     sameMap: true,

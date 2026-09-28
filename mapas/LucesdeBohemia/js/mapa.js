@@ -1299,7 +1299,7 @@ window.layerVectorialGJSON = layerVectorialGJSON;
 
 
 
-const mp_StoryMap = new miPlugin_storymap({
+const mp_StoryMap = new IDEE.plugin.miPlugin_storymap({
   collapsed: false,
   collapsible: true,
   position: 'TR',
@@ -1319,7 +1319,7 @@ mapajs.addPlugin(mp_StoryMap);
 
 // Extensiones
 M.proxy(false)
-const ext_Modal = new M.plugin.Modal({
+const ext_Modal = new IDEE.plugin.miPlugin_modal({
   position: 'BL',
   helpLink: {
     es: '../../html/modal_LucesdeBohemia.html'
@@ -1328,15 +1328,15 @@ const ext_Modal = new M.plugin.Modal({
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
 
-mapajs.addPlugin(new miPlugin_cambioImpl({
+mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
   buttonTitle: 'cambiar impl :)',
   mapsFunction: mapa,
   sameMap: true,
   shareView: true,
   shareLayers: true
 }));
-mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
-mapajs.addPlugin(new miPlugin_layerSwitcher());
+mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
+mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
 return mapajs
 

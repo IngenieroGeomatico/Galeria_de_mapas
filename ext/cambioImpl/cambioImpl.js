@@ -532,6 +532,11 @@ class miPlugin_cambioImpl {
 
             }
 
+            // Tras recargar el bundle, window.IDEE es un objeto nuevo con
+            // IDEE.plugin vacio; repoblar los namespaces desde los globales
+            // miPlugin_* (los unicos registros que sobreviven al swap).
+            reRegistrarPluginsTrasSwap();
+
 
             /* ===============================
                2️⃣ RECARGA DE CSS
@@ -551,9 +556,37 @@ class miPlugin_cambioImpl {
     }
 }
 
-// Exponer la clase en el namespace `IDEE.plugin.miPlugin_cambioImpl`
+// Exponer la clase en los namespaces IDEE.plugin y M.plugin (y global directo).
+// El global directo (window.miPlugin_cambioImpl) es el que sobrevive al
+// reinicio de window.IDEE que este mismo plugin hace al alternar 2D/3D, y es
+// la fuente que usa reRegistrarPlugins() para repoblar los namespaces nuevos.
 if (typeof window !== 'undefined') {
+    window.miPlugin_cambioImpl = miPlugin_cambioImpl;
     window.IDEE = window.IDEE || {};
     window.IDEE.plugin = window.IDEE.plugin || {};
     window.IDEE.plugin.miPlugin_cambioImpl = miPlugin_cambioImpl;
+    window.M = window.M || {};
+    window.M.plugin = window.M.plugin || {};
+    window.M.plugin.miPlugin_cambioImpl = miPlugin_cambioImpl;
+}
+
+// Repuebla los namespaces IDEE.plugin y M.plugin con las clases expuestas como
+// globals directos (window.miPlugin_*). Se invoca tras recargar el bundle de
+// la API al alternar 2D/3D, porque cada build recrea window.IDEE (y window.M)
+// desde cero y pierde los registros hechos al cargar la pagina. Los globals
+// directos NO dependen del objeto IDEE, asi que sobreviven al swap y son la
+// fuente fiable para volver a registrarlos en la build nueva.
+function reRegistrarPluginsTrasSwap() {
+    const apiIDEE = window.IDEE || window.M;
+    if (!apiIDEE) return;
+    apiIDEE.plugin = apiIDEE.plugin || {};
+    // Recorre los globals que empiezan por "miPlugin_" y son clases (function).
+    Object.keys(window).forEach((k) => {
+        if (k.indexOf('miPlugin_') === 0 && typeof window[k] === 'function') {
+            apiIDEE.plugin[k] = window[k];
+            if (window.M && window.M.plugin) {
+                window.M.plugin[k] = window[k];
+            }
+        }
+    });
 }

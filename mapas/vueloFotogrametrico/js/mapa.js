@@ -82,8 +82,8 @@ function mapa() {
   // Plugin de cambio de implementación (OL <-> Cesium).
   mapajs.addPlugin(pluginCambioImplFunc());
   // Plugins de selección de capas (base + overlay).
-  mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
-  mapajs.addPlugin(new miPlugin_layerSwitcher());
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
   // Plugin de vuelo fotogramétrico (detecta OL y activa su motor).
   mapajs.addPlugin(pluginVueloFotogrametricoFunc());
 
@@ -140,7 +140,7 @@ function mapa2() {
 
 // Definición de funciones de extensiones
 function pluginCambioImplFunc() {
-  return new miPlugin_cambioImpl({
+  return new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'Cambiar implementación (2D/3D)',
     mapsFunction: { same: mapa, ol: mapa, Cesium: mapa2 },
     sameMap: false,
@@ -154,7 +154,7 @@ function pluginVueloFotogrametricoFunc() {
   // cambioImpl recarga el bundle de la API al cambiar de implementación y
   // reinicializa IDEE.plugin, borrando el registro dentro del namespace. El
   // global directo persiste.
-  return new miPlugin_vueloFotogrametrico();
+  return new IDEE.plugin.miPlugin_vueloFotogrametrico();
 }
 
 // Arranque: implementación OpenLayers.

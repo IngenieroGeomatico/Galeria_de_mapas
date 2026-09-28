@@ -419,7 +419,7 @@ class miPlugin_leyenda {
   }
 }
 
-// Exponer las clases en el namespace IDEE.plugin (y global directo).
+// Exponer las clases en los namespaces IDEE.plugin y M.plugin (y global directo).
 if (typeof window !== 'undefined') {
   window.miPlugin_filtroCapas = miPlugin_filtroCapas;
   window.miPlugin_leyenda = miPlugin_leyenda;
@@ -427,4 +427,8 @@ if (typeof window !== 'undefined') {
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_filtroCapas = miPlugin_filtroCapas;
   window.IDEE.plugin.miPlugin_leyenda = miPlugin_leyenda;
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_filtroCapas = miPlugin_filtroCapas;
+  window.M.plugin.miPlugin_leyenda = miPlugin_leyenda;
 }

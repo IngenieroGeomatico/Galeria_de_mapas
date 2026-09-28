@@ -1550,7 +1550,7 @@ async function myFunction_JoinData_CM() {
 
 // Extensiones
 M.proxy(false)
-const ext_Modal = new M.plugin.Modal({
+const ext_Modal = new IDEE.plugin.miPlugin_modal({
   position: 'BL',
   helpLink: {
     es: '../../html/modal_CalidadAireComunidadMadridTiempoReal.html'
@@ -1561,24 +1561,24 @@ M.proxy(false)
 mapajs.addPlugin(ext_Modal);
 M.proxy(false)
 
-mapajs.addPlugin(new miPlugin_calidadAire({
+mapajs.addPlugin(new IDEE.plugin.miPlugin_calidadAire({
   BBox_Gjson: "geojsonJoin_CM.ComunidadAutonoma",
   gridValue: 0.3,
   alpha: 100,
   sigma2: 0.02,
 }))
 
-mapajs.addPlugin(new miPlugin_leyenda())
+mapajs.addPlugin(new IDEE.plugin.miPlugin_leyenda())
 
-mapajs.addPlugin(new miPlugin_cambioImpl({
+mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
   buttonTitle: 'cambiar impl :)',
   mapsFunction: mapa,
   sameMap: true,
   shareView: true,
   shareLayers: true
 }));
-mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
-mapajs.addPlugin(new miPlugin_layerSwitcher());
+mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
+mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
 return geojsonJoin.then(() => mapajs)
 

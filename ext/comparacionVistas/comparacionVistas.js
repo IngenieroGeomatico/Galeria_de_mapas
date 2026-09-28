@@ -4566,6 +4566,9 @@
     window.IDEE = window.IDEE || {};
     window.IDEE.plugin = window.IDEE.plugin || {};
     window.IDEE.plugin.miPlugin_comparacionVistas = miPlugin_comparacionVistas;
+    window.M = window.M || {};
+    window.M.plugin = window.M.plugin || {};
+    window.M.plugin.miPlugin_comparacionVistas = miPlugin_comparacionVistas;
     window.miPlugin_comparacionVistas = miPlugin_comparacionVistas;
   }
 })();

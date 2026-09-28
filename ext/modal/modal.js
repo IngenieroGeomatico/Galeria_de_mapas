@@ -310,10 +310,15 @@ class miPlugin_modal {
   }
 }
 
-// Exponer la clase en el namespace IDEE.plugin (y global directo).
+// Exponer la clase en los namespaces IDEE.plugin y M.plugin (y global directo).
+// El global directo (window.miPlugin_modal) es el que sobrevive al reinicio de
+// window.IDEE que hace cambioImpl al alternar 2D/3D.
 if (typeof window !== 'undefined') {
   window.miPlugin_modal = miPlugin_modal;
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_modal = miPlugin_modal;
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_modal = miPlugin_modal;
 }

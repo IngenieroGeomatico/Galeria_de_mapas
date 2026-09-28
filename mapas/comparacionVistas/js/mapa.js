@@ -106,25 +106,25 @@ function iniciar(config) {
   mapajs = IDEE.map({ container: "mapaDIV" });
 
   // Supraplugin (barra) con el comparador de vistas dentro.
-  const supra = new miPlugin_supraplugin({
+  const supra = new IDEE.plugin.miPlugin_supraplugin({
     id: 'supra-comparacion',
     position: 'top',
     title: 'Comparación de vistas',
   });
 
-  const comparador = new miPlugin_comparacionVistas(config);
+  const comparador = new IDEE.plugin.miPlugin_comparacionVistas(config);
   supra.addItem(comparador);
   mapajs.addPlugin(supra);
 
-  mapajs.addPlugin(new miPlugin_cambioImpl({
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     mapsFunction: iniciar,
     sameMap: true,
     shareView: true,
     shareLayers: true
   }));
-  mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
-  mapajs.addPlugin(new miPlugin_layerSwitcher());
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
   SVGCarga.hidden = true;
   return mapajs;

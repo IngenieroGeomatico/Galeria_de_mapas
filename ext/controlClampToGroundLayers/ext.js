@@ -265,10 +265,13 @@ class miPlugin_clampToGround {
   }
 }
 
-// Exponer la clase en el namespace IDEE.plugin (y global directo).
+// Exponer la clase en los namespaces IDEE.plugin y M.plugin (y global directo).
 if (typeof window !== 'undefined') {
   window.miPlugin_clampToGround = miPlugin_clampToGround;
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_clampToGround = miPlugin_clampToGround;
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_clampToGround = miPlugin_clampToGround;
 }

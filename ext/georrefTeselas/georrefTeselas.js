@@ -313,10 +313,13 @@ class miPlugin_georrefTeselas {
   }
 }
 
-// Exponer la clase en el namespace IDEE.plugin (y global directo).
+// Exponer la clase en los namespaces IDEE.plugin y M.plugin (y global directo).
 if (typeof window !== 'undefined') {
   window.miPlugin_georrefTeselas = miPlugin_georrefTeselas;
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_georrefTeselas = miPlugin_georrefTeselas;
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_georrefTeselas = miPlugin_georrefTeselas;
 }

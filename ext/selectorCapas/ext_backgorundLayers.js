@@ -281,9 +281,13 @@ class miPlugin_baseLayer {
   }
 }
 
-// Exponer la clase en el namespace IDEE.plugin
+// Exponer la clase en los namespaces IDEE.plugin y M.plugin (y global directo).
 if (typeof window !== 'undefined') {
+  window.miPlugin_baseLayer = miPlugin_baseLayer;
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_baseLayer = miPlugin_baseLayer;
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_baseLayer = miPlugin_baseLayer;
 }

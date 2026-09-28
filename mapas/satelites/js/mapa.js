@@ -519,12 +519,12 @@ mapajs.addLayers(layerOrbit);
 mapajs.addLayers(layerGalileo);
 mapajs.addLayers(layerGalileoOrbit);
 
-pluglinCambioCapaBase = new miPlugin_baseLayer({ rows: 1 })
+pluglinCambioCapaBase = new IDEE.plugin.miPlugin_baseLayer({ rows: 1 })
 mapajs.addPlugin(pluglinCambioCapaBase)
-pluginCapasSuperpuestas = new miPlugin_layerSwitcher()
+pluginCapasSuperpuestas = new IDEE.plugin.miPlugin_layerSwitcher()
 mapajs.addPlugin(pluginCapasSuperpuestas)
 
-mapajs.addPlugin(new miPlugin_cambioImpl({
+mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
   buttonTitle: 'cambiar impl :)',
   mapsFunction: mapa,
   sameMap: true,

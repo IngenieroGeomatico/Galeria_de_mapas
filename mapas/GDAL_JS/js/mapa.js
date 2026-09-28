@@ -8,15 +8,15 @@ function mapa() {
     zoom: 2,
   });
 
-  mapajs.addPlugin(new miPlugin_cambioImpl({
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     mapsFunction: mapa,
     sameMap: true,
     shareView: true,
     shareLayers: true
   }));
-  mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
-  mapajs.addPlugin(new miPlugin_layerSwitcher());
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
   return mapajs
 }
