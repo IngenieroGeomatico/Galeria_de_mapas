@@ -73,7 +73,7 @@ geojsonJoin.then(()=>{
   let estiloEstacion = new M.style.Generic({
     point: {
       icon: {
-        src: '../../img/iconos/house_wifi.svg',
+        src: '../../img/iconos/house_wifi.png',
         scale: 0.06,
       },
 
@@ -1051,7 +1051,8 @@ geojsonJoin.then(()=>{
         description: "<a style='color: #0000FF' href='https://www.comunidad.madrid/gobierno/datos-abiertos' target='_blank'>Comunidad de Madrid</a>"
       }
     },{
-      style:estiloEstacion
+      style:estiloEstacion,
+      clampToGround: true
   })
 
   const capaCM = new M.layer.GeoJSON({
@@ -1064,7 +1065,8 @@ geojsonJoin.then(()=>{
       description: "<a style='color: #0000FF' href='https://api-features.ign.es/collections/administrativeunit/items?limit=1&nameunit=Comunidad%20de%20Madrid&nationallevelname=Comunidad autónoma' target='_blank'>IGN</a>"
     }
   },{
-    style: estiloComunidadAutonoma
+    style: estiloComunidadAutonoma,
+    clampToGround: true
   })
 
   const capaEstacionesMedidas_1 = new M.layer.GeoJSON({
@@ -1075,7 +1077,8 @@ geojsonJoin.then(()=>{
     visibility:false,
   },{
     visibility:false,
-    style: estiloEstacionesMedidas_1
+    style: estiloEstacionesMedidas_1,
+    clampToGround: true
   })
   capaEstacionesMedidas_1.filterLayer = true
 
@@ -1086,7 +1089,7 @@ geojsonJoin.then(()=>{
     extract: true,
     legend: "Monóxido de Carbono ",
     visibility:false,
-  },{visibility:false, style: estiloEstacionesMedidas_6})
+  },{visibility:false, style: estiloEstacionesMedidas_6, clampToGround: true})
   capaEstacionesMedidas_6.filterLayer = true
 
 
@@ -1096,7 +1099,7 @@ geojsonJoin.then(()=>{
     extract: true,
     legend: "Monóxido de Nitrógeno",
     visibility:false,
-  },{visibility:false, style:estiloEstacionesMedidas_7})
+  },{visibility:false, style:estiloEstacionesMedidas_7, clampToGround: true})
   capaEstacionesMedidas_7.filterLayer = true
 
 
@@ -1106,7 +1109,7 @@ geojsonJoin.then(()=>{
     extract: true,
     legend: "Dióxido de Nitrógeno",
     visibility:false,
-  },{visibility:false, style:estiloEstacionesMedidas_8})
+  },{visibility:false, style:estiloEstacionesMedidas_8, clampToGround: true})
   capaEstacionesMedidas_8.filterLayer = true
 
 
@@ -1116,7 +1119,7 @@ geojsonJoin.then(()=>{
     extract: true,
     legend: "Partículas < 2.5 μm ",
     visibility:false,
-  },{visibility:false, style:estiloEstacionesMedidas_9})
+  },{visibility:false, style:estiloEstacionesMedidas_9, clampToGround: true})
   capaEstacionesMedidas_9.filterLayer = true
 
 
@@ -1126,7 +1129,7 @@ geojsonJoin.then(()=>{
     extract: true,
     legend: "Partículas < 10 μm",
     visibility:false,
-  },{visibility:false, style:estiloEstacionesMedidas_10})
+  },{visibility:false, style:estiloEstacionesMedidas_10, clampToGround: true})
   capaEstacionesMedidas_10.filterLayer = true
 
 
@@ -1136,7 +1139,7 @@ geojsonJoin.then(()=>{
     extract: true,
     legend: "Óxidos de Nitrógeno",
     visibility:false,
-  },{visibility:false, style:estiloEstacionesMedidas_12})
+  },{visibility:false, style:estiloEstacionesMedidas_12, clampToGround: true})
   capaEstacionesMedidas_12.filterLayer = true
 
   const capaEstacionesMedidas_14 = new M.layer.GeoJSON({
@@ -1145,7 +1148,7 @@ geojsonJoin.then(()=>{
     extract: true,
     legend: "Ozono",
     visibility:false,
-    },{visibility:false, style:estiloEstacionesMedidas_14})
+    },{visibility:false, style:estiloEstacionesMedidas_14, clampToGround: true})
     capaEstacionesMedidas_14.filterLayer = true
 
 
@@ -1155,7 +1158,7 @@ geojsonJoin.then(()=>{
       extract: true,
       legend: "Tolueno",
       visibility:false,
-    },{visibility:false, style:estiloEstacionesMedidas_20})
+    },{visibility:false, style:estiloEstacionesMedidas_20, clampToGround: true})
     capaEstacionesMedidas_20.filterLayer = true
 
 
@@ -1193,7 +1196,8 @@ geojsonJoin.then(()=>{
       visibility:false,
     },{
       visibility:false, 
-      style:estiloEstacionesMedidas_42
+      style:estiloEstacionesMedidas_42,
+      clampToGround: true
     })
     capaEstacionesMedidas_42.filterLayer = true
 
@@ -1205,7 +1209,8 @@ geojsonJoin.then(()=>{
       visibility:false,
     },{
       visibility:false, 
-      style:estiloEstacionesMedidas_44
+      style:estiloEstacionesMedidas_44,
+      clampToGround: true
     })
     capaEstacionesMedidas_44.filterLayer = true
 
@@ -1217,7 +1222,8 @@ geojsonJoin.then(()=>{
       visibility:false,
     },{
       visibility:false, 
-      style:estiloEstacionesMedidas_431
+      style:estiloEstacionesMedidas_431,
+      clampToGround: true
     })
     capaEstacionesMedidas_431.filterLayer = true
 
@@ -1235,9 +1241,227 @@ geojsonJoin.then(()=>{
 
   // y la añadimos al mapa
   mapajs.addLayers(arrayLayers.reverse());
+
+  // Modelo 3D (GLB) que sustituye al icono 2D de las estaciones en 3D. El
+  // billboard de Cesium daba problemas: el icono no aparecía hasta forzar un
+  // redibujado de la capa y la conversión de la API dejaba además un point
+  // negro (pixelSize 5 con relleno y contorno negros) que se veía como un
+  // punto suelto en mitad del icono. El modelo evita ambas cosas: es geometría
+  // real, no una textura que cargar, y no arrastra el point. Es el mismo patrón
+  // que usa la ISS en mapas/satelites/js/mapa.js (sustituir billboard y point
+  // por entity.model). Solo afecta a la implementación Cesium: en 2D
+  // OpenLayers la capa sigue pintando el icono con su estilo.
+  // El GLB (mástil meteorológico de 3,1 m a escala real, colores de vértice sin
+  // texturas) se escala x1.6 para que lea mejor como elemento del mapa, y
+  // minimumPixelSize mantiene el mástil visible al alejar la cámara, donde 3 m
+  // serían invisibles: con 60 px de ancho mínimo las estaciones se distinguen
+  // incluso en la vista regional de toda la Comunidad de Madrid.
+  const MODELO_ESTACION_3D = {
+    uri: './img/estacion_3d.glb',
+    scale: 1.6,
+    minimumPixelSize: 60
+  };
+
+  // Condicional por implementación: si el mapa es Cesium (3D) se fuerza
+  // clampToGround en las entidades de las capas (la impl Cesium no propaga la
+  // opción clampToGround de la capa GeoJSON a los polígonos). En OpenLayers
+  // (2D) no es necesario y la función no hace nada.
+  mapajs.getLayers().forEach((capa) => {
+    // La Comunidad de Madrid se extruye 2000 m (≥1) porque su relleno es
+    // transparente: el clampToGround crearía un GroundPrimitive que ignora el
+    // borde. Las demás capas (medidas con relleno opaco) mantienen el
+    // clampToGround.
+    const esEstaciones = capa.name === 'Estaciones calidad del aire';
+    aplicaClampGroundSiCesium(capa, capa.name === 'Comunidad de Madrid' ? 2000 : 0,
+      esEstaciones ? MODELO_ESTACION_3D : null);
+  });
+
+  // Arranque en 3D (Cesium): el center/zoom inicial de M.map() no se respeta
+  // y la cámara va a la Antártida. Forzamos la vista con setBbox() usando la
+  // extensión de la capa de Comunidad de Madrid (EPSG:4326, la misma que
+  // BBox_Gjson del plugin de interpolación). Solo se aplica en 3D (Cesium);
+  // en 2D (OpenLayers) se respeta el center/zoom inicial de M.map().
+  const mapImpl = mapajs.getMapImpl();
+  const bboxArranque = bboxFromGjson(geojsonJoin_CM.ComunidadAutonoma);
+  if (mapImpl && mapImpl.scene && mapImpl.scene.camera &&
+      typeof mapajs.setBbox === 'function' && bboxArranque && isFinite(bboxArranque[0])) {
+    mapajs.setBbox(bboxArranque);
+  }
+
   SVGCarga.hidden = true
 })
 
+
+// Calcula la extensión [minX, minY, maxX, maxY] de un GeoJSON en EPSG:4326
+// recorriendo recursivamente las coordenadas de sus geometrías (Point,
+// Polygon, MultiPolygon, etc.). No depende de turf para poder usarse en el
+// arranque del mapa.
+function bboxFromGjson(gjson) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  gjson.features.forEach((feature) => {
+    const walk = (coords) => {
+      if (typeof coords[0] === 'number') {
+        minX = Math.min(minX, coords[0]);
+        maxX = Math.max(maxX, coords[0]);
+        minY = Math.min(minY, coords[1]);
+        maxY = Math.max(maxY, coords[1]);
+      } else {
+        coords.forEach(walk);
+      }
+    };
+    walk(feature.geometry.coordinates);
+  });
+  return [minX, minY, maxX, maxY];
+}
+
+// Aplica clampToGround a las entidades de una capa cuando el mapa se ejecuta
+// en Cesium (3D). La implementación Cesium de la API no propaga la opción
+// clampToGround de la capa GeoJSON a los polígonos (la propiedad queda
+// undefined), por lo que la geometría se dibuja a altitud 0 y queda enterrada
+// bajo el terreno. Se fuerza a nivel de entidad solo si la implementación
+// activa es Cesium; en OpenLayers (2D) no es necesario.
+// Si se pasa alturaExtrusionMetros (>0), los polígonos NO se clampan: se
+// extruyen esa altura con heightReference RELATIVE_TO_GROUND, el mismo patrón
+// del visualizador de añoNuevo. Hace falta porque el GroundPrimitive del
+// clampToGround ignora el outline y, con un relleno casi transparente (caso
+// de la Comunidad de Madrid), el polígono desaparece en 3D: la extrusión
+// genera geometría 3D real en la que el borde sí se dibuja.
+// Si se pasa modelo3D (objeto {uri, scale, minimumPixelSize}), las entidades
+// puntuales sustituyen su point y su billboard por entity.model, de forma que
+// en 3D se dibuja geometría real en lugar de una textura 2D.
+function aplicaClampGroundSiCesium(capa, alturaExtrusionMetros, modelo3D) {
+  const nombreCapa = (capa && capa.name) || null;
+
+  // Busca la dataSource Cesium real de la capa. Los dataSources con
+  // entidades están en mapImpl.dataSources (registrados por nombre al
+  // añadir la capa); capa.getImpl().getLayer() devuelve un contenedor
+  // vacío, así que no sirve.
+  const buscarDS = (mapImpl, capa) => {
+    const nombre = (capa && capa.name) || nombreCapa;
+    if (mapImpl.dataSources && mapImpl.dataSources._dataSources) {
+      const encontrado = mapImpl.dataSources._dataSources.find(
+        (d) => d.name === nombre
+      );
+      if (encontrado) return encontrado;
+    }
+    try {
+      const dsCapa = capa.getImpl().getLayer();
+      if (dsCapa && dsCapa.entities) return dsCapa;
+    } catch (e) { /* no hacer nada */ }
+    return null;
+  };
+
+  const aplicar = (ds) => {
+    const constanteTrue = new Cesium.ConstantProperty(true);
+    const constanteFalse = new Cesium.ConstantProperty(false);
+    const alturaClamp = new Cesium.ConstantProperty(
+      (Cesium.HeightReference && Cesium.HeightReference.CLAMP_TO_GROUND !== undefined)
+        ? Cesium.HeightReference.CLAMP_TO_GROUND
+        : 1
+    );
+    // Altura de extrusión (m) para que el borde del polígono se vea en 3D.
+    // El clampToGround de Cesium crea un GroundPrimitive que ignora el
+    // outline: con un relleno transparente (Comunidad de Madrid) el cierre
+    // desaparece. La extrusión fuerza geometría 3D real donde el outline sí
+    // se dibuja (mismo patrón que el visualizador de añoNuevo).
+    const alturaExtrusion = (typeof alturaExtrusionMetros === 'number' &&
+      alturaExtrusionMetros > 0)
+      ? new Cesium.ConstantProperty(alturaExtrusionMetros)
+      : null;
+    const alturaRelativa = new Cesium.ConstantProperty(
+      (Cesium.HeightReference && Cesium.HeightReference.RELATIVE_TO_GROUND !== undefined)
+        ? Cesium.HeightReference.RELATIVE_TO_GROUND
+        : 2
+    );
+    const entidades = ds.entities.values;
+    for (let i = 0; i < entidades.length; i++) {
+      const ent = entidades[i];
+      if (ent.polygon) {
+        if (alturaExtrusion) {
+          // Extrusión relativa al terreno: la geometría se dibuja sobre el
+          // suelo (con altura 0 relativa y elevación de la extrusión), de
+          // modo que el outline del polígono queda visible como una pared.
+          ent.polygon.clampToGround = constanteFalse;
+          ent.polygon.perPositionHeight = constanteFalse;
+          ent.polygon.heightReference = alturaRelativa;
+          ent.polygon.extrudedHeight = alturaExtrusion;
+        } else {
+          ent.polygon.clampToGround = constanteTrue;
+          ent.polygon.perPositionHeight = constanteFalse;
+        }
+      }
+      if (ent.polyline) {
+        ent.polyline.clampToGround = constanteTrue;
+      }
+      if (ent.point) {
+        ent.point.heightReference = alturaClamp;
+      }
+      if (ent.billboard) {
+        ent.billboard.heightReference = alturaClamp;
+      }
+      // Sustitución del icono 2D por el modelo 3D: se quitan point y billboard
+      // (el point que añade la conversión de la API es un punto negro que se
+      // ve a través de las zonas transparentes del icono) y se crea el model.
+      // La base del GLB está en Y=0, así que con CLAMP_TO_GROUND apoya en el
+      // terreno. minimumPixelSize impide que desaparezca al alejar la cámara.
+      if (modelo3D && ent.point && !ent.polygon && !ent.polyline) {
+        ent.point = undefined;
+        ent.billboard = undefined;
+        ent.model = {
+          uri: modelo3D.uri,
+          scale: modelo3D.scale,
+          minimumPixelSize: modelo3D.minimumPixelSize,
+          heightReference: alturaClamp
+        };
+      }
+    }
+    if (ds.changedEvent && ds.changedEvent.raiseEvent) {
+      ds.changedEvent.raiseEvent();
+    }
+  };
+
+  // La dataSource Cesium y sus entidades se crean de forma asíncrona tras
+  // añadir la capa (al cambiar de implementación el mapa se reconstruye y la
+  // carga de entidades puede tardar más de 15 s, observado hasta ~45 s). Se
+  // sondea para cubrir la carga completa con margen: si la dataSource no
+  // existe a los 30 s (capas de base, terreno o dibujo, que no generan
+  // dataSource vectorial) se abandona; si existe, se espera a que lleguen
+  // las entidades hasta un máximo de 120 s.
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const mapImpl = (typeof mapajs !== 'undefined' && mapajs.getMapImpl)
+      ? mapajs.getMapImpl()
+      : null;
+    const esCesium = !!mapImpl && !!mapImpl.scene && !!mapImpl.scene.camera &&
+      typeof Cesium !== 'undefined';
+    if (!esCesium) {
+      // Sin Cesium: margen corto por si el impl está cambiando y luego se rinde.
+      if (Date.now() - t0 > 5000) {
+        clearInterval(iv);
+      }
+      return;
+    }
+    const ds = buscarDS(mapImpl, capa);
+    if (Date.now() - t0 > 120000) {
+      // Fin del margen de espera: se aplica el clamp con lo que haya
+      // llegado y se deja de sondear.
+      clearInterval(iv);
+      if (ds && ds.entities && ds.entities.values.length > 0) aplicar(ds);
+      return;
+    }
+    if (!ds) {
+      // Capas sin dataSource vectorial (base, terreno, dibujo): 30 s bastan.
+      if (Date.now() - t0 > 30000) {
+        clearInterval(iv);
+      }
+      return;
+    }
+    if (ds.entities.values.length > 0) {
+      clearInterval(iv);
+      aplicar(ds);
+    }
+  }, 500);
+}
 
 // Funciones necesarias para el visualizador
 async function myFunction_JoinData_CM() {
@@ -1356,7 +1580,7 @@ mapajs.addPlugin(new miPlugin_cambioImpl({
 mapajs.addPlugin(new miPlugin_baseLayer({ rows: 1 }));
 mapajs.addPlugin(new miPlugin_layerSwitcher());
 
-return mapajs
+return geojsonJoin.then(() => mapajs)
 
 }
 
