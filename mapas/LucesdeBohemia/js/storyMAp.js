@@ -96,7 +96,6 @@ var StoryMapJSON = {
                     "js": `
                             gjson = {
                                     "type": "FeatureCollection",
-                                      "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
                                     "features": [
                                         {
                                         "type": "Feature",
@@ -199,7 +198,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -255,7 +253,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -311,7 +308,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -385,7 +381,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -448,7 +443,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -530,7 +524,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -579,7 +572,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -638,7 +630,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -721,7 +712,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -784,7 +774,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -847,7 +836,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -930,7 +918,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -1159,7 +1146,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -1251,7 +1237,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -1315,7 +1300,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -1371,7 +1355,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -1449,7 +1432,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -1581,7 +1563,6 @@ var StoryMapJSON = {
 
                             gjsonn = {
 "type": "FeatureCollection",
-                                "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
                                 "features": [
                                 {
                                     "type": "Feature",
@@ -1852,7 +1833,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -2022,7 +2002,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -2087,7 +2066,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 
@@ -2132,7 +2110,6 @@ var StoryMapJSON = {
 
                             const filteredGeoJSON = {
                                 type: 'FeatureCollection',
-                                crs: { type: 'name', properties: { name: 'EPSG:4326' } },
                                 features: filteredFeatures
                             };
 

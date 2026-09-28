@@ -178,7 +178,6 @@ estilo2_2 = new M.style.Generic({
 
 gjsonVectorialGJSON_Libro = {
 "type": "FeatureCollection",
-  "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
   "features": [
     {
       "type": "Feature",
@@ -1039,7 +1038,6 @@ mapajs.addLayers(layerVectorialGJSON_Libro);
 
 gjsonVectorialGJSON_Madrid = { 
   "type": "FeatureCollection",
-    "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
   "features": [
     {
       "type": "Feature",
