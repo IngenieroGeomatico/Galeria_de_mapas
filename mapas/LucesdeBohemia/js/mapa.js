@@ -1038,6 +1038,8 @@ const layerVectorialGJSON_Libro = new M.layer.GeoJSON(
 }
 );
 layerVectorialGJSON_Libro.setStyle(estilo1_1)
+// Expuesta en window para los scripts de los pasos del storymap (contrato global)
+window.layerVectorialGJSON_Libro = layerVectorialGJSON_Libro;
 mapajs.addLayers(layerVectorialGJSON_Libro);
 
 gjsonVectorialGJSON_Madrid = { 
@@ -1196,6 +1198,8 @@ const layerVectorialGJSON_Madrid = new M.layer.GeoJSON(
 }
 );
 layerVectorialGJSON_Madrid.setStyle(estilo2_2)
+// Expuesta en window para los scripts de los pasos del storymap (contrato global)
+window.layerVectorialGJSON_Madrid = layerVectorialGJSON_Madrid;
 
 mapajs.addLayers(layerVectorialGJSON_Madrid);
 
@@ -1294,12 +1298,14 @@ const layerVectorialGJSON = new M.layer.GeoJSON(
 );
 mapajs.addLayers(layerVectorialGJSON);
 layerVectorialGJSON.setZIndex(100)
+// Expuesta en window para los scripts de los pasos del storymap (contrato global)
+window.layerVectorialGJSON = layerVectorialGJSON;
 
 
 
 
 
-const mp_StoryMap = new M.plugin.StoryMap({
+const mp_StoryMap = new miPlugin_storymap({
   collapsed: false,
   collapsible: true,
   position: 'TR',
@@ -1315,20 +1321,6 @@ const mp_StoryMap = new M.plugin.StoryMap({
 });
 
 mapajs.addPlugin(mp_StoryMap);
-mp_StoryMap.control.capIndex = function(idContainer, idElement) {
-  const container = document.querySelector(idContainer);
-  const divElement = container.querySelectorAll(idElement);
-  // eslint-disable-next-line guard-for-in, no-restricted-syntax
-  for (const key in divElement) {
-    if (divElement[key].style.display === 'block' && !Number.isNaN(key)) {
-      const id = divElement[key].id;
-      console.log(id)
-      console.log(Number.parseInt(id.match(/\d+/)[0], 10))
-      return Number.parseInt(id.match(/\d+/)[0], 10);
-    }
-  }
-  return false;
-}
 
 
 // Extensiones
