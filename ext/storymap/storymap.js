@@ -1085,6 +1085,231 @@ class miPlugin_storymap {
   }
 
   /**
+   * Captura el estado actual del plugin para permitir su preservación
+   * a través del swap de implementaciones (OL <-> Cesium) en cambioImpl.
+   * Método puro y sin efectos secundarios.
+   * @returns {Object|null} Objeto serializable con el estado del plugin
+   */
+  getState() {
+    const control = this.control_ || this.control;
+    if (!control) return null;
+
+    let capIndex = 0;
+    let stepIndex = 0;
+    if (typeof control.capIndex === 'function') {
+      const cIdx = control.capIndex('#contentStoryMap', '.chapters');
+      if (cIdx !== false && !Number.isNaN(cIdx)) {
+        capIndex = Number(cIdx);
+      }
+      const sIdx = control.capIndex(`#cap${capIndex}`, '.step');
+      if (sIdx !== false && !Number.isNaN(sIdx)) {
+        stepIndex = Number(sIdx);
+      }
+    }
+
+    const isAutoPlaying = Boolean(control.isAutoPlaying);
+
+    let speed = 1;
+    const activeSpeedOption = document.querySelector('#speedMenu .speed-option--active');
+    if (activeSpeedOption) {
+      const val = parseFloat(activeSpeedOption.getAttribute('data-value'));
+      if (!Number.isNaN(val) && val > 0) {
+        speed = val;
+      }
+    } else {
+      const buttonDelay = document.querySelector('#buttonDelay');
+      if (buttonDelay && buttonDelay.hasAttribute('speed')) {
+        const speedAttr = parseFloat(buttonDelay.getAttribute('speed'));
+        const delaySec = ((control && control.delay) || this.delay || 2000) / 1000;
+        if (!Number.isNaN(speedAttr) && speedAttr > 0) {
+          speed = delaySec / speedAttr;
+        }
+      }
+    }
+
+    let collapsed = Boolean(this.collapsed_);
+    if (this.panel_ && typeof this.panel_.isCollapsed === 'function') {
+      collapsed = Boolean(this.panel_.isCollapsed());
+    } else {
+      const panelEl = (this.panel_ && typeof this.panel_.getElement === 'function')
+        ? this.panel_.getElement()
+        : document.querySelector('.m-plugin-storymap');
+      if (panelEl) {
+        if (panelEl.classList.contains('collapsed')) {
+          collapsed = true;
+        } else if (panelEl.classList.contains('opened')) {
+          collapsed = false;
+        }
+      }
+    }
+
+    let scrollTop = 0;
+    const activeStepEl = document.querySelector(`#cap${capIndex} #step${stepIndex}`);
+    if (activeStepEl && typeof activeStepEl.scrollTop === 'number') {
+      scrollTop = activeStepEl.scrollTop;
+    }
+
+    return {
+      capIndex,
+      stepIndex,
+      isAutoPlaying,
+      speed,
+      collapsed,
+      scrollTop,
+    };
+  }
+
+  /**
+   * Rehidrata la instancia del plugin a partir de un estado previamente capturado por getState.
+   * Invocado por el coordinador cambioImpl tras recrear el mapa durante un cambio de implementación (OL <-> Cesium).
+   * @param {Object} state Estado capturado { capIndex, stepIndex, isAutoPlaying, speed, collapsed, scrollTop }
+   * @param {Object} [map] Nueva instancia del mapa (IDEE.Map / M.Map)
+   */
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    const control = this.control_ || this.control;
+    if (!control) return;
+
+    if (map) {
+      this.map = map;
+      this.map_ = map;
+      if (typeof window !== 'undefined') {
+        window.map = map;
+        window.mapjs = map;
+      }
+    }
+
+    const totalCaps = (control.cap_ && control.cap_.length) ? control.cap_.length : 0;
+    if (totalCaps === 0) return;
+
+    // 1. Validar y acotar índices de capítulo y paso
+    const rawCap = (state.capIndex !== undefined && state.capIndex !== null)
+      ? Number(state.capIndex)
+      : 0;
+    const targetCap = Math.max(0, Math.min(Number.isNaN(rawCap) ? 0 : rawCap, totalCaps - 1));
+
+    const capObj = control.cap_[targetCap];
+    const totalSteps = (capObj && capObj.steps && capObj.steps.length) ? capObj.steps.length : 1;
+    const rawStep = (state.stepIndex !== undefined && state.stepIndex !== null)
+      ? Number(state.stepIndex)
+      : 0;
+    const targetStep = Math.max(0, Math.min(Number.isNaN(rawStep) ? 0 : rawStep, totalSteps - 1));
+
+    // 2. Navegar al capítulo y paso indicados en el DOM
+    const capsContainer = document.querySelector('#contentStoryMap');
+    if (capsContainer) {
+      const caps = capsContainer.querySelectorAll('.chapters');
+      caps.forEach((c, idx) => {
+        c.style.display = (idx === targetCap) ? 'block' : 'none';
+      });
+    }
+
+    const targetCapEl = document.querySelector(`#cap${targetCap}`);
+    if (targetCapEl) {
+      const steps = targetCapEl.querySelectorAll('.step');
+      steps.forEach((s, idx) => {
+        s.style.display = (idx === targetStep) ? 'block' : 'none';
+      });
+    }
+
+    // 3. Crear los puntos de navegación de pasos correspondientes al capítulo activo
+    if (typeof control.createPointerSteps === 'function') {
+      control.createPointerSteps(targetCap);
+    }
+
+    // 4. Actualizar efectos visuales de los punteros (capítulo y paso activo)
+    if (typeof control.effectPointer === 'function') {
+      control.effectPointer(targetCap, '#pointerNav', 'navPointer');
+      control.effectPointer(targetStep, '#pointStep', 'navStep');
+    }
+
+    // 5. Actualizar título y subtítulo del encabezado
+    if (typeof control.changeTitleSubtitle === 'function') {
+      control.changeTitleSubtitle(targetCap);
+    }
+
+    // 6. Restaurar scroll del paso activo
+    const activeStepEl = document.querySelector(`#cap${targetCap} #step${targetStep}`);
+    if (activeStepEl && typeof state.scrollTop === 'number' && !Number.isNaN(state.scrollTop)) {
+      activeStepEl.scrollTop = state.scrollTop;
+    }
+
+    // 7. Ejecutar el script JS del paso restaurado sobre el nuevo mapa
+    if (typeof control.addJSCap === 'function') {
+      control.addJSCap(targetCap, targetStep);
+    }
+
+    // 8. Restaurar velocidad de reproducción
+    if (state.speed !== undefined && state.speed !== null) {
+      const speedVal = parseFloat(state.speed);
+      if (!Number.isNaN(speedVal) && speedVal > 0) {
+        const buttonDelay = document.querySelector('#buttonDelay');
+        const speedMenu = document.querySelector('#speedMenu');
+        if (buttonDelay && speedMenu) {
+          const delay = control.delay || this.delay || 2000;
+          buttonDelay.setAttribute('speed', (delay / 1000) / speedVal);
+          const speedLabel = buttonDelay.querySelector('.speed-label');
+          if (speedLabel) speedLabel.textContent = `${speedVal}x`;
+
+          const options = speedMenu.querySelectorAll('.speed-option');
+          options.forEach((opt) => {
+            const optVal = parseFloat(opt.getAttribute('data-value'));
+            if (optVal === speedVal) {
+              opt.classList.add('speed-option--active');
+              opt.setAttribute('aria-selected', 'true');
+              if (speedLabel) speedLabel.textContent = opt.textContent.trim();
+            } else {
+              opt.classList.remove('speed-option--active');
+              opt.setAttribute('aria-selected', 'false');
+            }
+          });
+        }
+      }
+    }
+
+    // 9. Restaurar estado de colapso del panel
+    if (state.collapsed !== undefined) {
+      const shouldCollapse = Boolean(state.collapsed);
+      this.collapsed_ = shouldCollapse;
+      if (this.panel_) {
+        const isCollapsedNow = (typeof this.panel_.isCollapsed === 'function')
+          ? this.panel_.isCollapsed()
+          : false;
+        if (shouldCollapse && !isCollapsedNow && typeof this.panel_.collapse === 'function') {
+          this.panel_.collapse();
+        } else if (!shouldCollapse && isCollapsedNow && typeof this.panel_.open === 'function') {
+          this.panel_.open();
+        }
+      }
+      const panelEl = (this.panel_ && typeof this.panel_.getElement === 'function')
+        ? this.panel_.getElement()
+        : document.querySelector('.m-plugin-storymap');
+      if (panelEl) {
+        const isOpened = panelEl.classList.contains('opened');
+        if (shouldCollapse && isOpened) {
+          const btn = panelEl.querySelector('.m-panel-btn');
+          if (btn) btn.click();
+        } else if (!shouldCollapse && !isOpened) {
+          const btn = panelEl.querySelector('.m-panel-btn');
+          if (btn) btn.click();
+        }
+      }
+    }
+
+    // 10. Gestión de autoplay:
+    // Decisión deliberada: no reiniciar automáticamente la reproducción tras el swap de implementación
+    // para evitar conflictos y carreras con la carga asíncrona de capas y teselas de terreno en Cesium/OL.
+    // Se restaura el paso y su posición exacta, dejando el autoplay pausado y el botón de Play listo para el usuario.
+    if (typeof control.stopAutoplay === 'function') {
+      control.stopAutoplay();
+    }
+    const playBtn = document.querySelector('#play');
+    const pauseBtn = document.querySelector('#pause');
+    if (playBtn) playBtn.style.display = 'block';
+    if (pauseBtn) pauseBtn.style.display = 'none';
+  }
+
+  /**
    * Limpia controles, temporizadores y referencias asociadas al mapa.
    */
   destroy() {

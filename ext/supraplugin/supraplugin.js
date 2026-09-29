@@ -130,6 +130,28 @@
       };
     }
 
+    /**
+     * Captura el estado serializable del supraplugin para preservarlo entre cambios 2D/3D.
+     * @returns {{ collapsed: boolean }} Estado actual de plegado
+     */
+    getState() {
+      return {
+        collapsed: Boolean(this._collapsed)
+      };
+    }
+
+    /**
+     * Restaura el estado del supraplugin tras un cambio 2D/3D.
+     * @param {Object} state Estado previamente capturado con getState()
+     * @param {Object} [map] Instancia del nuevo mapa
+     */
+    setState(state, map) {
+      if (!state || typeof state !== "object") return;
+      if (typeof state.collapsed === "boolean" && state.collapsed !== this._collapsed) {
+        this.toggleCollapsed(state.collapsed);
+      }
+    }
+
     // --- Construcción de la barra ------------------------------------------
     // La barra se inserta como HERMANA del contenedor raíz del visualizador,
     // no dentro del viewport del mapa: así es transversal y sobrevive al mapa.

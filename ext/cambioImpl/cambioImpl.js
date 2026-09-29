@@ -396,6 +396,9 @@ class miPlugin_cambioImpl {
 
             var tipo = "Cesium"
 
+            // Capturar el estado de los plugins ANTES de destruir el mapa.
+            const estadoPlugins = (window.EstadoPlugins) ? window.EstadoPlugins.capturarTodo(map) : {};
+
             const shareStateBefore = captureShareViewState('activate');
 
             if (shareLayers) {
@@ -427,6 +430,12 @@ class miPlugin_cambioImpl {
                     await window.renderLayerList();
                 }
             }
+
+            // Restaurar el estado de los plugins sobre el mapa nuevo (despues
+            // de transferir capas para que el selector de capas las encuentre).
+            if (window.EstadoPlugins && Object.keys(estadoPlugins).length) {
+                window.EstadoPlugins.restaurarTodo(newMap, estadoPlugins, true);
+            }
         }
 
 
@@ -435,6 +444,9 @@ class miPlugin_cambioImpl {
 
             // console.log('Desactivado');
             var tipo = "OL"
+
+            // Capturar el estado de los plugins ANTES de destruir el mapa.
+            const estadoPlugins = (window.EstadoPlugins) ? window.EstadoPlugins.capturarTodo(map) : {};
 
             const shareStateBefore = captureShareViewState('deactivate');
 
@@ -459,6 +471,11 @@ class miPlugin_cambioImpl {
 
             if (shareLayers) {
                 await transferOverlayLayers(newMap, Overlaylayers, { addExtrusion: false });
+            }
+
+            // Restaurar el estado de los plugins sobre el mapa nuevo.
+            if (window.EstadoPlugins && Object.keys(estadoPlugins).length) {
+                window.EstadoPlugins.restaurarTodo(newMap, estadoPlugins, true);
             }
         }
 
@@ -589,4 +606,138 @@ function reRegistrarPluginsTrasSwap() {
             }
         }
     });
+}
+
+/* =====================================================================
+   5️⃣ COORDINADOR DE ESTADO DE PLUGINS ENTRE IMPLEMENTACIONES (OL <-> Cesium)
+   =====================================================================
+   Problema transversal: al alternar 2D/3D, este plugin recarga el bundle de
+   la API y re-ejecuta mapa(), que recrea el mapa y re-instancia todos los
+   plugins desde cero. Cada plugin pierde así su estado actual (paso activo
+   del storymap, panel colapsado, grupos del selector de capas, modo de
+   estereoscopia, gas seleccionado, etc.).
+
+   Solución: un contrato uniforme y opcional por plugin, que cada extensión
+   implementa si quiere conservar su estado:
+     plugin.getState()            -> objeto serializable con el estado actual
+     plugin.setState(state, map)  -> rehidrata la instancia nueva con ese
+                                      estado (map es el mapa recién creado)
+
+   Este coordinador es el ÚNICO punto que ve el mapa viejo (al capturar,
+   antes del swap) y el mapa nuevo (al restaurar, tras reiniciar). Además
+   admite un registro externo (adapters) para plugins que no se puedan
+   tocar o que prefieran declarar su captura/restauración fuera de la clase.
+
+   Los plugins que NO implementen el contrato se ignoran sin error
+   (migración incremental): la ausencia de getState/setState simplemente
+   se salta. El propio cambioImpl se excluye siempre de la captura.
+
+   window.EstadoPlugins se guarda en window para que sobreviva al swap
+   (el objeto window NO se recrea; solo se recarga el bundle de la API).
+   ===================================================================== */
+if (typeof window !== 'undefined' && !window.EstadoPlugins) {
+    const estadoAdaptadores = {}; // nombrePlugin -> { capturar(plugin) -> state, restaurar(plugin, state, map) }
+
+    window.EstadoPlugins = {
+        /**
+         * Registra un adaptador de estado para un plugin que no implemente
+         * el contrato getState/setState directamente.
+         * @param {string} nombre Nombre del plugin (p. ej. 'miPlugin_storymap')
+         * @param {Object} adapter { capturar(plugin) -> state, restaurar(plugin, state, map) }
+         */
+        registrar(nombre, adapter) {
+            if (!nombre || !adapter) return;
+            estadoAdaptadores[nombre] = adapter;
+        },
+
+        /**
+         * Captura el estado de todos los plugins del mapa viejo.
+         * Prueba primero plugin.getState(); si no existe, busca en el registro.
+         * @param {Object} mapViejo Mapa antes del swap (instancia IDEE.Map)
+         * @returns {Object} Mapa nombrePlugin -> estado capturado
+         */
+        capturarTodo(mapViejo) {
+            const estados = {};
+            let plugins = [];
+            try {
+                plugins = (mapViejo && typeof mapViejo.getPlugins === 'function')
+                    ? mapViejo.getPlugins()
+                    : [];
+            } catch (e) {
+                plugins = [];
+            }
+            (plugins || []).forEach((plugin) => {
+                if (!plugin || !plugin.name) return;
+                // El propio cambioImpl no se captura.
+                if (plugin.name === 'miPlugin_cambioImpl' || plugin.name === 'cambioImpl') return;
+                const nombre = plugin.name;
+                try {
+                    if (typeof plugin.getState === 'function') {
+                        const st = plugin.getState();
+                        if (st !== undefined && st !== null) estados[nombre] = st;
+                    } else if (estadoAdaptadores[nombre] && typeof estadoAdaptadores[nombre].capturar === 'function') {
+                        const st = estadoAdaptadores[nombre].capturar(plugin);
+                        if (st !== undefined && st !== null) estados[nombre] = st;
+                    }
+                } catch (e) {
+                    console.warn(`EstadoPlugins: no se pudo capturar estado de ${nombre}`, e);
+                }
+            });
+            return estados;
+        },
+
+        /**
+         * Restaura el estado capturado en los plugins del mapa nuevo.
+         * @param {Object} mapNuevo Mapa tras el swap (instancia IDEE.Map)
+         * @param {Object} estados Mapa nombrePlugin -> estado (de capturarTodo)
+         * @param {boolean} [diferido=false] Si true, la restauración se ejecuta
+         *   cuando el mapa nuevo esté completamente cargado (events COMPLETED)
+         */
+        restaurarTodo(mapNuevo, estados, diferido) {
+            if (!estados || !mapNuevo) return;
+            const accion = () => {
+                let plugins = [];
+                try {
+                    plugins = (mapNuevo && typeof mapNuevo.getPlugins === 'function')
+                        ? mapNuevo.getPlugins()
+                        : [];
+                } catch (e) {
+                    plugins = [];
+                }
+                (plugins || []).forEach((plugin) => {
+                    if (!plugin || !plugin.name) return;
+                    const nombre = plugin.name;
+                    if (!(nombre in estados)) return;
+                    try {
+                        if (typeof plugin.setState === 'function') {
+                            plugin.setState(estados[nombre], mapNuevo);
+                        } else if (estadoAdaptadores[nombre] && typeof estadoAdaptadores[nombre].restaurar === 'function') {
+                            estadoAdaptadores[nombre].restaurar(plugin, estados[nombre], mapNuevo);
+                        }
+                    } catch (e) {
+                        console.warn(`EstadoPlugins: no se pudo restaurar estado de ${nombre}`, e);
+                    }
+                });
+            };
+            if (diferido) {
+                // Restaura cuando el mapa nuevo emita COMPLETED (y reintento tardío
+                // por si el evento ya se disparó o nunca llega).
+                let ejecutada = false;
+                const disparar = () => {
+                    if (ejecutada) return;
+                    ejecutada = true;
+                    accion();
+                };
+                try {
+                    const evt = (window.IDEE || window.M)?.evt;
+                    if (evt && evt.COMPLETED && typeof mapNuevo.on === 'function') {
+                        mapNuevo.on(evt.COMPLETED, disparar);
+                    }
+                } catch (e) { /* si falla, se usa el reintento */ }
+                setTimeout(disparar, 1200);
+            } else {
+                accion();
+            }
+        }
+    };
 }

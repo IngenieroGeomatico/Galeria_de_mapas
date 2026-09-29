@@ -42,10 +42,181 @@ class miPlugin_layerSwitcher {
     };
   }
 
+  // ── Coordinación de estado (swap 2D/3D con cambioImpl) ───────────────
+  // Captura el estado serializable propio de la UI del selector de capas
+  // (_optionsOpen y _groupCollapsed). El estado de las capas (visibilidad,
+  // opacidad, orden z, renombrado) reside en las propias capas y es
+  // transferido directamente por cambioImpl.
+  getState() {
+    const groupCollapsedCopy = {};
+    if (this._groupCollapsed && typeof this._groupCollapsed === 'object') {
+      for (const key of Object.keys(this._groupCollapsed)) {
+        if (typeof this._groupCollapsed[key] === 'boolean') {
+          groupCollapsedCopy[key] = this._groupCollapsed[key];
+        }
+      }
+    }
+    // El idLayer se regenera en cada reinicio de mapa (mapa() crea las capas
+    // de nuevo con prefijos temporales), asi que ademas del idLayer actual se
+    // captura la legend/name (identificadores estables) para poder reencontrar
+    // la capa en la instancia nueva aunque cambie su idLayer.
+    const idAtOpen = (this._optionsOpen !== undefined && this._optionsOpen !== null) ? this._optionsOpen : null;
+    let legendAtOpen = null;
+    if (idAtOpen !== null && this._map && typeof this._map.getLayers === 'function') {
+      const capa = this._findLayerByIdInMap(this._map, idAtOpen);
+      if (capa) {
+        legendAtOpen = (capa.legend && String(capa.legend) !== String(capa.idLayer)) ? capa.legend : (capa.name || null);
+      }
+    }
+    const groupCollapsedLegends = {};
+    if (this._groupCollapsed && typeof this._groupCollapsed === 'object' && this._map && typeof this._map.getLayers === 'function') {
+      for (const key of Object.keys(this._groupCollapsed)) {
+        if (typeof this._groupCollapsed[key] !== 'boolean') continue;
+        const capa = this._findLayerByIdInMap(this._map, key);
+        if (capa) {
+          const leg = (capa.legend && String(capa.legend) !== String(capa.idLayer)) ? capa.legend : (capa.name || null);
+          if (leg) groupCollapsedLegends[leg] = this._groupCollapsed[key];
+        }
+      }
+    }
+    return {
+      optionsOpen: idAtOpen,
+      optionsOpenLegend: legendAtOpen,
+      groupCollapsed: groupCollapsedCopy,
+      groupCollapsedLegends,
+    };
+  }
+
+  // Busca una capa por idLayer dentro del mapa (incluidos grupos anidados).
+  _findLayerByIdInMap(mapRef, id) {
+    if (!mapRef || typeof mapRef.getLayers !== 'function') return null;
+    try {
+      const isGroup = (l) => !!l && (l.type === 'LayerGroup' || l._type === 'LayerGroup' || typeof l.getLayers === 'function');
+      const allLayers = mapRef.getLayers() || [];
+      const stack = [];
+      for (const l of allLayers) {
+        if (l && String(l.idLayer) === String(id)) return l;
+        if (isGroup(l)) stack.push(l);
+      }
+      while (stack.length) {
+        const g = stack.pop();
+        let hijos = [];
+        try { hijos = (typeof g.getLayers === 'function') ? g.getLayers() : []; } catch (e) { hijos = []; }
+        for (const h of hijos) {
+          if (h && String(h.idLayer) === String(id)) return h;
+          if (isGroup(h)) stack.push(h);
+        }
+      }
+    } catch (e) { /* sin coincidencia */ }
+    return null;
+  }
+
+  // Busca la capa del mapa cuyo legend (o name) coincida con el identificador
+  // estable capturado. Devuelve la capa o null.
+  _findLayerByLegendInMap(mapRef, ident) {
+    if (!mapRef || typeof mapRef.getLayers !== 'function' || !ident) return null;
+    try {
+      const isGroup = (l) => !!l && (l.type === 'LayerGroup' || l._type === 'LayerGroup' || typeof l.getLayers === 'function');
+      const coincide = (c) => !!c && (
+        (c.legend && String(c.legend) === String(ident)) ||
+        (c.name && String(c.name) === String(ident))
+      );
+      const allLayers = mapRef.getLayers() || [];
+      const stack = [];
+      for (const l of allLayers) {
+        if (coincide(l)) return l;
+        if (isGroup(l)) stack.push(l);
+      }
+      while (stack.length) {
+        const g = stack.pop();
+        let hijos = [];
+        try { hijos = (typeof g.getLayers === 'function') ? g.getLayers() : []; } catch (e) { hijos = []; }
+        for (const h of hijos) {
+          if (coincide(h)) return h;
+          if (isGroup(h)) stack.push(h);
+        }
+      }
+    } catch (e) { /* sin coincidencia */ }
+    return null;
+  }
+
+  // Restaura el estado de la UI en la nueva instancia tras el reinicio del mapa.
+  // Filtra defensivamente identificadores que ya no existan en el nuevo mapa.
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    const mapRef = map || this._map;
+
+    const layerExists = (id) => {
+      if (!mapRef || typeof mapRef.getLayers !== 'function') return true;
+      try {
+        const isGroup = (l) => !!l && (l.type === 'LayerGroup' || l._type === 'LayerGroup' || typeof l.getLayers === 'function');
+        const allLayers = mapRef.getLayers() || [];
+        const stack = [];
+        for (const l of allLayers) {
+          if (l && String(l.idLayer) === String(id)) return true;
+          if (isGroup(l)) stack.push(l);
+        }
+        while (stack.length) {
+          const g = stack.pop();
+          let hijos = [];
+          try { hijos = (typeof g.getLayers === 'function') ? g.getLayers() : []; } catch (e) { hijos = []; }
+          for (const h of hijos) {
+            if (h && String(h.idLayer) === String(id)) return true;
+            if (isGroup(h)) stack.push(h);
+          }
+        }
+        return false;
+      } catch (e) {
+        return true;
+      }
+    };
+
+    // Restaurar panel de opciones abierto. Se resuelve primero por idLayer y,
+    // si la capa se recreo con otro id (mapa() regenera los ids), por legend.
+    let optionsId = null;
+    if (state.optionsOpen !== undefined && state.optionsOpen !== null) {
+      if (layerExists(state.optionsOpen)) {
+        optionsId = state.optionsOpen;
+      } else if (state.optionsOpenLegend) {
+        const capa = this._findLayerByLegendInMap(mapRef, state.optionsOpenLegend);
+        optionsId = capa ? capa.idLayer : null;
+      }
+    }
+    this._optionsOpen = optionsId;
+
+    // Restaurar estado de colapso de grupos (idLayer -> bool), resolviendo
+    // tambien por legend si el grupo se recreo con otro idLayer.
+    this._groupCollapsed = {};
+    if (state.groupCollapsed && typeof state.groupCollapsed === 'object') {
+      for (const key of Object.keys(state.groupCollapsed)) {
+        if (typeof state.groupCollapsed[key] === 'boolean' && layerExists(key)) {
+          this._groupCollapsed[String(key)] = state.groupCollapsed[key];
+        }
+      }
+    }
+    if (state.groupCollapsedLegends && typeof state.groupCollapsedLegends === 'object') {
+      for (const leg of Object.keys(state.groupCollapsedLegends)) {
+        if (typeof state.groupCollapsedLegends[leg] !== 'boolean') continue;
+        const capa = this._findLayerByLegendInMap(mapRef, leg);
+        if (capa) {
+          this._groupCollapsed[String(capa.idLayer)] = state.groupCollapsedLegends[leg];
+        }
+      }
+    }
+
+    // Forzar re-render de la lista para reflejar los chevrons y paneles restaurados
+    if (typeof this._renderLayerList === 'function') {
+      try { this._renderLayerList(); } catch (e) {}
+    } else if (typeof window !== 'undefined' && typeof window.renderLayerList === 'function') {
+      try { window.renderLayerList(); } catch (e) {}
+    }
+  }
+
   addTo(map) {
     // Referencia a la instancia para los handlers globales que necesitan
     // acceder a this._optionsOpen.
     const self = this;
+    this._map = map;
     const panelExtra = new IDEE.ui.Panel('toolsExtra_layerSwitcher', {
       collapsible: true,
       className: 'g-herramienta_selectorCapa',
@@ -450,6 +621,7 @@ class miPlugin_layerSwitcher {
 
     // Expone el re-render para que los controles (ojito) refresquen
     // la lista y el estado de visibilidad tras cada cambio.
+    self._renderLayerList = renderLayerList;
     window.renderLayerList = async () => { await renderLayerList(); };
 
     control.activate = async () => {

@@ -141,8 +141,9 @@ class miPlugin_calidadAire {
   _populateSelector() {
     const self = this;
     const map = this.map;
-    const selector = self.panel.getTemplatePanel().querySelector('#seleccionCapasID');
+    const selector = (self.panel && typeof self.panel.getTemplatePanel === 'function' ? self.panel.getTemplatePanel().querySelector('#seleccionCapasID') : null) || document.querySelector('#seleccionCapasID');
     if (!selector) return;
+    const currentVal = this._restoredGas || (selector.value !== valueOri_calidadAire ? selector.value : null);
     selector.innerHTML = '';
 
     const legends = map.getLayers()
@@ -171,6 +172,10 @@ class miPlugin_calidadAire {
     // las capas estén cargadas de verdad.
     if (legends.some(l => l !== 'Municipio Madrid' && l !== 'Estaciones calidad del aire')) {
       this._selectorPopulated = true;
+    }
+
+    if (currentVal && Array.from(selector.options).some(opt => opt.value === currentVal)) {
+      selector.value = currentVal;
     }
   }
 
@@ -608,6 +613,79 @@ class miPlugin_calidadAire {
       map.setBbox(bbox);
     }
   }
+
+  // ===================================================================
+  //  Contrato de preservación de estado (getState / setState)
+  //  Permite conservar el gas seleccionado y el estado del panel entre
+  //  intercambios de implementación (OL <-> Cesium).
+  //  Decisión sobre interpolación: kriging es un cálculo pesado y asíncrono
+  //  que modifica la geometría del source; en el reinicio del mapa
+  //  restauramos el gas seleccionado en el desplegable sin re-ejecutar
+  //  automáticamente el kriging para evitar renderizados duplicados,
+  //  bloqueos de CPU o condiciones de carrera durante la carga de capas.
+  // ===================================================================
+  getState() {
+    let selectedGas = null;
+    const selector = (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector('#seleccionCapasID') : null) || document.querySelector('#seleccionCapasID');
+    if (selector && selector.value && selector.value !== valueOri_calidadAire) {
+      selectedGas = selector.value;
+    } else if (this._restoredGas && this._restoredGas !== valueOri_calidadAire) {
+      selectedGas = this._restoredGas;
+    }
+
+    let collapsed = false;
+    if (this.panel) {
+      if (this.panel._collapsed !== undefined) {
+        collapsed = !!this.panel._collapsed;
+      } else if (typeof this.panel.getElement === 'function') {
+        const el = this.panel.getElement();
+        collapsed = el ? el.classList.contains('collapsed') : false;
+      }
+    }
+
+    let interpolate = false;
+    if (this.map && typeof this.map.getLayers === 'function') {
+      try {
+        const layers = this.map.getLayers();
+        interpolate = Array.isArray(layers) && layers.some(l => l && l.interpolate === true);
+      } catch (e) {
+        interpolate = false;
+      }
+    }
+
+    return {
+      selectedGas,
+      collapsed,
+      interpolate
+    };
+  }
+
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    if (map) this.map = map;
+
+    // Restaurar gas seleccionado en el desplegable
+    if (state.selectedGas) {
+      this._restoredGas = state.selectedGas;
+      const selector = (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector('#seleccionCapasID') : null) || document.querySelector('#seleccionCapasID');
+      if (selector) {
+        const optExists = Array.from(selector.options || []).some(opt => opt.value === state.selectedGas);
+        if (optExists) {
+          selector.value = state.selectedGas;
+          try { selector.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+        }
+      }
+    }
+
+    // Restaurar estado de colapso del panel
+    if (state.collapsed !== undefined && this.panel) {
+      if (state.collapsed && typeof this.panel.collapse === 'function') {
+        this.panel.collapse();
+      } else if (!state.collapsed && typeof this.panel.open === 'function') {
+        this.panel.open();
+      }
+    }
+  }
 }
 
 // ===================================================================
@@ -744,6 +822,34 @@ class miPlugin_leyenda {
          <img src="../../img/mapas/leyendaCalidadAire.svg" height="300px">
     `;
     document.querySelector('#m-herramienta-htmlPanel_leyenda_preview').innerHTML = htmlControl;
+  }
+
+  // ===================================================================
+  //  Contrato de preservación de estado (getState / setState)
+  // ===================================================================
+  getState() {
+    let collapsed = true;
+    if (this.panel) {
+      if (this.panel._collapsed !== undefined) {
+        collapsed = !!this.panel._collapsed;
+      } else if (typeof this.panel.getElement === 'function') {
+        const el = this.panel.getElement();
+        collapsed = el ? el.classList.contains('collapsed') : true;
+      }
+    }
+    return { collapsed };
+  }
+
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    if (map) this.map = map;
+    if (state.collapsed !== undefined && this.panel) {
+      if (state.collapsed && typeof this.panel.collapse === 'function') {
+        this.panel.collapse();
+      } else if (!state.collapsed && typeof this.panel.open === 'function') {
+        this.panel.open();
+      }
+    }
   }
 }
 

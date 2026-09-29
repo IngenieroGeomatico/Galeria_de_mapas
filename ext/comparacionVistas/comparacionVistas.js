@@ -2402,32 +2402,105 @@
       tryHello();
     }
 
+    // =====================================================================
+    //  Contrato de preservación de estado (EstadoPlugins / cambioImpl)
+    // =====================================================================
+    /**
+     * Captura el estado serializable del comparador para preservarlo
+     * entre cambios 2D/3D (contrato EstadoPlugins de cambioImpl).
+     * @returns {Object|null} Estado puro (JSON-serializable)
+     */
+    getState() {
+      try {
+        return this._snapshot();
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Restaura el estado previamente capturado tras un cambio 2D/3D.
+     * Recrea vistas, re-aplica el modo de comparación, divisores y sincronización
+     * de forma asíncrona/no bloqueante (fire-and-forget por postMessage).
+     * @param {Object} state Estado devuelto por getState()
+     * @param {Object} [map] Instancia del mapa anfitrión (opcional)
+     */
+    setState(state, map) {
+      if (!state || typeof state !== "object") return;
+      try {
+        this._applySnapshot(state);
+      } catch (e) {
+        // Fallback defensivo: no interrumpir el flujo de restauración
+      }
+    }
+
     // Snapshot completo y serializable del estado de la sesión.
     _snapshot() {
+      var self = this;
       return {
         v: 1,
-        views: this.views.map(function (v) {
+        views: (this.views || []).map(function (v) {
           return {
-            id: v.id, name: v.name, impl: v.impl, isPrimary: !!v.isPrimary,
-            lastView: v.lastView || null,
-            config: v.config || null,
+            id: v.id,
+            name: v.name,
+            impl: v.impl,
+            isPrimary: !!v.isPrimary,
+            lastView: v.lastView ? {
+              lon: v.lastView.lon,
+              lat: v.lastView.lat,
+              zoom: v.lastView.zoom,
+              resolution: v.lastView.resolution,
+              rotation: v.lastView.rotation,
+              heading: v.lastView.heading,
+              pitch: v.lastView.pitch,
+              roll: v.lastView.roll,
+              extent: v.lastView.extent ? {
+                west: v.lastView.extent.west,
+                south: v.lastView.extent.south,
+                east: v.lastView.extent.east,
+                north: v.lastView.extent.north,
+              } : undefined,
+            } : null,
+            config: v.config ? self._cloneConfig(v.config) : null,
           };
         }),
-        mode: this.mode,
+        mode: this.mode || "single",
         activeViewId: this.activeViewId,
-        sync: this.sync, syncMode: this.syncMode,
-        showControls: this.showControls,
-        swipe: { layout: this.swipe.layout, slots: (this.swipe.slots || []).slice() },
-        grid: this.grid.map(function (row) { return row.slice(); }),
-        layoutType: this.layoutType,
+        sync: Boolean(this.sync),
+        syncMode: this.syncMode === "center" ? "center" : "extent",
+        showControls: Boolean(this.showControls),
+        swipe: {
+          layout: (this.swipe && this.swipe.layout) ? this.swipe.layout : "1x1",
+          slots: (this.swipe && Array.isArray(this.swipe.slots)) ? this.swipe.slots.slice() : [],
+          posV: (this.swipe && typeof this.swipe.posV === "number") ? this.swipe.posV : 0.5,
+          posHL: (this.swipe && typeof this.swipe.posHL === "number") ? this.swipe.posHL : 0.5,
+          posHR: (this.swipe && typeof this.swipe.posHR === "number") ? this.swipe.posHR : 0.5,
+        },
+        grid: (this.grid || []).map(function (row) { return Array.isArray(row) ? row.slice() : []; }),
+        layoutType: this.layoutType === "custom" ? "custom" : "grid",
+        customSpec: Array.isArray(this.customSpec) ? this.customSpec.slice() : [1, 2],
+        divStyle: this._divStyle ? Object.assign({}, this._divStyle) : null,
         mold: {
           baseId: this.moldBaseId,
           selId: this.moldSelId,
-          seq: this._moldSeq,
-          molds: this.molds.map(function (m) {
-            return { id: m.id, shape: m.shape, topId: m.topId, cx: m.cx, cy: m.cy, radius: m.radius, angle: m.angle, followPointer: !!m.followPointer, zoom: m.zoom || 1 };
+          seq: this._moldSeq || 0,
+          molds: (this.molds || []).map(function (m) {
+            return {
+              id: m.id,
+              shape: m.shape || "circle",
+              topId: m.topId || null,
+              cx: typeof m.cx === "number" ? m.cx : 50,
+              cy: typeof m.cy === "number" ? m.cy : 50,
+              radius: typeof m.radius === "number" ? m.radius : 25,
+              angle: typeof m.angle === "number" ? m.angle : 0,
+              followPointer: !!m.followPointer,
+              zoom: typeof m.zoom === "number" ? m.zoom : 1,
+            };
           }),
         },
+        syncWinKind: this.syncWinKind === "popup" ? "popup" : "tab",
+        syncViewId: this.syncViewId || null,
+        syncSid: this.syncSid || null,
       };
     }
 
@@ -2510,10 +2583,15 @@
       this._applyingRemote = true;
       var self = this;
       try {
+        if (!this._workArea || !this._workArea.parentNode) {
+          this._resolveWorkArea();
+        }
+
         // 1) Reconciliar vistas: crea las que faltan, cambia impl si procede,
-        //    elimina las sobrantes, actualiza nombre/encuadre.
+        //    elimina las sobrantes, actualiza nombre/encuadre/config.
         var ids = {};
         (s.views || []).forEach(function (sv) {
+          if (!sv || !sv.id) return;
           ids[sv.id] = true;
           // Mantiene el contador de ids por encima de los remotos: el child
           // arranca su contador en 0 y así no colisiona al crear vistas.
@@ -2533,8 +2611,9 @@
             if (sv.lastView) lv.lastView = sv.lastView;
           } else {
             if (sv.name) lv.name = sv.name;
-            if (sv.isPrimary && !lv.isPrimary) lv.isPrimary = true;
+            if (typeof sv.isPrimary === "boolean") lv.isPrimary = sv.isPrimary;
             if (sv.lastView) lv.lastView = sv.lastView;
+            if (sv.config) lv.config = sv.config;
             var want = sv.impl === "cesium" ? "cesium" : "ol";
             if (want !== lv.impl) {
               lv.impl = want;
@@ -2545,52 +2624,117 @@
           }
         });
         this.views.slice().forEach(function (v) {
-          if (!ids[v.id] && !v.isPrimary) self.eliminarVista(v.id);
+          if (!ids[v.id]) {
+            v.isPrimary = false;
+            self.eliminarVista(v.id);
+          }
         });
 
-        // 2) Estado global.
+        // 2) Estado global y sincronización.
         if (typeof s.sync === "boolean") this.sync = s.sync;
         if (s.syncMode === "center" || s.syncMode === "extent") this.syncMode = s.syncMode;
-        if (typeof s.activeViewId === "string") this.activeViewId = s.activeViewId;
-        // Refleja el estado en los controles del panel.
-        var syncChk = this.ui && this.ui.querySelector('[data-role="sync"]');
-        if (syncChk) syncChk.checked = !!this.sync;
-        var syncModeSel = this.ui && this.ui.querySelector('[data-role="sync-mode"]');
-        if (syncModeSel && (this.syncMode === "center" || this.syncMode === "extent")) {
-          syncModeSel.value = this.syncMode;
+        if (typeof s.showControls === "boolean") this.showControls = s.showControls;
+        if (typeof s.activeViewId === "string" && this.getView(s.activeViewId)) {
+          this.activeViewId = s.activeViewId;
+        } else if (!this.getView(this.activeViewId) && this.views[0]) {
+          this.activeViewId = this.views[0].id;
+        }
+
+        // Refleja el estado en los controles del panel si la UI existe.
+        if (this.ui) {
+          var syncChk = this.ui.querySelector('[data-role="sync"]');
+          if (syncChk) syncChk.checked = !!this.sync;
+          var syncModeField = this.ui.querySelector('[data-role="sync-mode-field"]');
+          if (syncModeField) syncModeField.style.display = this.sync ? "" : "none";
+          var syncModeSel = this.ui.querySelector('[data-role="sync-mode"]');
+          if (syncModeSel && (this.syncMode === "center" || this.syncMode === "extent")) {
+            syncModeSel.value = this.syncMode;
+          }
+          var ctrlChk = this.ui.querySelector('[data-role="controls"]');
+          if (ctrlChk) ctrlChk.checked = this.showControls;
         }
 
         // 3) Estructuras de los modos.
-        if (s.swipe && typeof s.swipe.layout === "string") this.swipe.layout = s.swipe.layout;
-        if (Array.isArray(s.swipe && s.swipe.slots)) {
-          this.swipe.slots = s.swipe.slots.filter(function (id) { return self.getView(id); });
+        // Cortinilla
+        if (s.swipe && typeof s.swipe === "object") {
+          if (typeof s.swipe.layout === "string") this.swipe.layout = s.swipe.layout;
+          if (typeof s.swipe.posV === "number") this.swipe.posV = s.swipe.posV;
+          if (typeof s.swipe.posHL === "number") this.swipe.posHL = s.swipe.posHL;
+          if (typeof s.swipe.posHR === "number") this.swipe.posHR = s.swipe.posHR;
+          if (Array.isArray(s.swipe.slots)) {
+            this.swipe.slots = s.swipe.slots.filter(function (id) { return self.getView(id); });
+          }
+          var swipeLayoutSel = this.ui && this.ui.querySelector('[data-role="swipe-layout"]');
+          if (swipeLayoutSel && this.swipe.layout) swipeLayoutSel.value = this.swipe.layout;
         }
+
+        // Espejo
         if (Array.isArray(s.grid)) {
           this.grid = s.grid
             .filter(function (row) { return Array.isArray(row); })
             .map(function (row) { return row.filter(function (id) { return self.getView(id); }); });
         }
         if (typeof s.layoutType === "string") this.layoutType = s.layoutType;
-        if (s.mold) {
+        if (Array.isArray(s.customSpec)) this.customSpec = s.customSpec.slice();
+        if (this.ui) {
+          var typeSel = this.ui.querySelector('[data-role="layout-type"]');
+          if (typeSel && this.layoutType) typeSel.value = this.layoutType;
+          if (typeof this._syncTypeUI === "function") this._syncTypeUI();
+        }
+
+        // Estilo de divisores
+        if (s.divStyle && typeof s.divStyle === "object") {
+          Object.assign(this._divStyle, s.divStyle);
+          if (this.ui) {
+            var divVis = this.ui.querySelector('[data-role="div-visible"]');
+            if (divVis && typeof this._divStyle.visible === "boolean") divVis.checked = this._divStyle.visible;
+            var divCol = this.ui.querySelector('[data-role="div-color"]');
+            if (divCol && this._divStyle.color) divCol.value = this._divStyle.color;
+            var divW = this.ui.querySelector('[data-role="div-width"]');
+            var divWVal = this.ui.querySelector('[data-role="div-width-val"]');
+            if (divW && typeof this._divStyle.width === "number") {
+              divW.value = this._divStyle.width;
+              if (divWVal) divWVal.textContent = String(this._divStyle.width);
+            }
+            var hCol = this.ui.querySelector('[data-role="handle-color"]');
+            if (hCol && this._divStyle.handleColor) hCol.value = this._divStyle.handleColor;
+            var hSize = this.ui.querySelector('[data-role="handle-size"]');
+            var hSizeVal = this.ui.querySelector('[data-role="handle-size-val"]');
+            if (hSize && typeof this._divStyle.handleSize === "number") {
+              hSize.value = this._divStyle.handleSize;
+              if (hSizeVal) hSizeVal.textContent = String(this._divStyle.handleSize);
+            }
+          }
+        }
+
+        // Moldes
+        if (s.mold && typeof s.mold === "object") {
           if (typeof s.mold.seq === "number") this._moldSeq = s.mold.seq;
-          this.molds = (s.mold.molds || []).map(function (m) {
-            return {
-              id: m.id || ("m" + (self._moldSeq + 1)),
-              shape: m.shape || "circle",
-              topId: m.topId || null,
-              cx: (typeof m.cx === "number") ? m.cx : 50,
-              cy: (typeof m.cy === "number") ? m.cy : 50,
-              radius: (typeof m.radius === "number") ? m.radius : 25,
-              angle: (typeof m.angle === "number") ? m.angle : 0,
-              followPointer: !!m.followPointer,
-              zoom: (typeof m.zoom === "number" && m.zoom >= 1) ? m.zoom : 1,
-            };
-          });
-          if (this.getView(s.mold.baseId)) this.moldBaseId = s.mold.baseId;
+          if (Array.isArray(s.mold.molds)) {
+            this.molds = s.mold.molds.map(function (m) {
+              return {
+                id: m.id || ("m" + (self._moldSeq + 1)),
+                shape: m.shape || "circle",
+                topId: m.topId || null,
+                cx: (typeof m.cx === "number") ? m.cx : 50,
+                cy: (typeof m.cy === "number") ? m.cy : 50,
+                radius: (typeof m.radius === "number") ? m.radius : 25,
+                angle: (typeof m.angle === "number") ? m.angle : 0,
+                followPointer: !!m.followPointer,
+                zoom: (typeof m.zoom === "number" && m.zoom >= 1) ? m.zoom : 1,
+              };
+            });
+          }
+          if (s.mold.baseId && this.getView(s.mold.baseId)) this.moldBaseId = s.mold.baseId;
           if (this.molds.length && this.molds.some(function (m) { return m.id === s.mold.selId; })) {
             this.moldSelId = s.mold.selId;
           }
         }
+
+        // Ventana sincronizada
+        if (typeof s.syncWinKind === "string") this.syncWinKind = s.syncWinKind;
+        if (typeof s.syncViewId === "string") this.syncViewId = s.syncViewId;
+        if (typeof s.syncSid === "string") this.syncSid = s.syncSid;
 
         // 4) Aplica el modo (relayout + refreshUI) y sincroniza encuadres.
         if (typeof s.mode === "string" && ["single", "swipe", "mirror", "molde"].indexOf(s.mode) !== -1) {
@@ -2599,6 +2743,7 @@
           this._relayout();
           this._refreshUI();
         }
+        this._broadcastControls();
         this._resyncFromActive();
       } finally {
         this._applyingRemote = false;

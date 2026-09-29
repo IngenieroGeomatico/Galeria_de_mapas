@@ -24,6 +24,8 @@ class miPlugin_clampToGround {
     // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
     this.order = (options.order !== undefined) ? Number(options.order) : null;
     this.map = null;
+    this.control = null;
+    this._activeState = null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
@@ -133,6 +135,7 @@ class miPlugin_clampToGround {
     }
 
     const controlC1 = new IDEE.Control(new IDEE.impl.Control(), 'ControlPruebaC1');
+    this.control = controlC1;
 
     // Compartimos la variable con window (compatibilidad con el resto del visor).
     window.controlC1 = controlC1;
@@ -262,6 +265,62 @@ class miPlugin_clampToGround {
         });
       }
     });
+  }
+
+  // ── Contrato de preservación de estado (cambioImpl OL <-> Cesium) ──
+  getState() {
+    try {
+      const btn = document.querySelector('.m-herramientaC1 .buttonHerramienta') || document.querySelector('.buttonHerramienta');
+      const active = btn ? btn.classList.contains('activated') : Boolean(this._activeState);
+      return { active };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  setState(state, map) {
+    if (!state || typeof state.active !== 'boolean') return;
+    this._activeState = state.active;
+
+    const m = map || this.map;
+    let isCesium = false;
+    try {
+      const impl = m && typeof m.getMapImpl === 'function' ? m.getMapImpl() : null;
+      if (impl && impl.scene && impl.camera) isCesium = true;
+    } catch (e) {
+      isCesium = false;
+    }
+
+    // Este plugin es específico para Cesium 3D (proyección de geometrías en constelaciones).
+    // Si el mapa actual es OpenLayers (2D), no se aplica la activación para evitar errores
+    // pero se conserva el valor de `_activeState` por si se vuelve a alternar a Cesium.
+    if (!isCesium) {
+      return;
+    }
+
+    const ctrl = this.control || window.controlC1;
+    const btn = document.querySelector('.m-herramientaC1 .buttonHerramienta') || document.querySelector('.buttonHerramienta');
+    const isCurrentlyActive = btn ? btn.classList.contains('activated') : false;
+
+    if (state.active && !isCurrentlyActive) {
+      if (ctrl && typeof ctrl.activate === 'function') {
+        try {
+          const res = ctrl.activate();
+          if (res && typeof res.catch === 'function') res.catch(() => {});
+        } catch (e) {
+          console.warn('[clampToGround] Error al restaurar activación:', e);
+        }
+      }
+    } else if (!state.active && isCurrentlyActive) {
+      if (ctrl && typeof ctrl.deactivate === 'function') {
+        try {
+          const res = ctrl.deactivate();
+          if (res && typeof res.catch === 'function') res.catch(() => {});
+        } catch (e) {
+          console.warn('[clampToGround] Error al restaurar desactivación:', e);
+        }
+      }
+    }
   }
 }
 

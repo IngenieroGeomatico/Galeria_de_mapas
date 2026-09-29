@@ -89,6 +89,66 @@ class miPlugin_attribution {
   }
 
   /**
+   * Captura el estado serializable del plugin de atribución para preservarlo entre cambios 2D/3D.
+   * @returns {{ collapsed: boolean, opened: boolean }} Estado actual
+   */
+  getState() {
+    let collapsed = (this.collapsed_ !== undefined) ? this.collapsed_ : true;
+    let opened = !collapsed;
+
+    const selector = (this.mode_ === 'lite')
+      ? '.m-panel.m-attribution-lite'
+      : '.m-panel.g-herramienta_attribution';
+
+    const panelEl = (this.panel && typeof this.panel.getElement === 'function')
+      ? this.panel.getElement()
+      : (typeof document !== 'undefined' ? document.querySelector(selector) : null);
+
+    if (panelEl) {
+      opened = panelEl.classList.contains('opened');
+      collapsed = panelEl.classList.contains('collapsed') || !opened;
+    }
+
+    return {
+      collapsed: Boolean(collapsed),
+      opened: Boolean(opened)
+    };
+  }
+
+  /**
+   * Restaura el estado del panel de atribución tras un cambio 2D/3D.
+   * Rehidrata el estado colapsado/abierto del panel o barra inferior.
+   * @param {Object} state Estado previamente capturado con getState()
+   * @param {Object} [map] Instancia del nuevo mapa
+   */
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    if (typeof state.collapsed === 'boolean') {
+      this.collapsed_ = state.collapsed;
+    }
+
+    const selector = (this.mode_ === 'lite')
+      ? '.m-panel.m-attribution-lite'
+      : '.m-panel.g-herramienta_attribution';
+
+    const panelEl = (this.panel && typeof this.panel.getElement === 'function')
+      ? this.panel.getElement()
+      : (typeof document !== 'undefined' ? document.querySelector(selector) : null);
+
+    if (panelEl) {
+      const isCurrentlyOpened = panelEl.classList.contains('opened');
+      const shouldBeOpened = (state.opened === true) || (state.collapsed === false);
+      if (shouldBeOpened && !isCurrentlyOpened) {
+        const btn = panelEl.querySelector('button.m-panel-btn');
+        if (btn) btn.click();
+      } else if (!shouldBeOpened && isCurrentlyOpened) {
+        const btn = panelEl.querySelector('button.m-panel-btn');
+        if (btn) btn.click();
+      }
+    }
+  }
+
+  /**
    * Genera el HTML de las atribuciones recopilando las estáticas del plugin
    * y las dinámicas asociadas a las capas del mapa.
    * @param {Object} [mapInstance] Instancia del mapa

@@ -35,6 +35,7 @@ class miPlugin_baseLayer {
     this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
     this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
     this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+    this._activeLayerId = null;
   }
 
   // Devuelve {active, deactive} a partir de un color simple o un objeto.
@@ -55,7 +56,85 @@ class miPlugin_baseLayer {
     };
   }
 
+  // ── Coordinación de estado (swap 2D/3D con cambioImpl) ───────────────
+  // Captura el identificador de la capa base actualmente seleccionada.
+  getState() {
+    let activeId = this._activeLayerId;
+    if (!activeId && typeof document !== 'undefined') {
+      try {
+        const checked = document.querySelector('#m-herramienta-baseLayer .bl-radio:checked');
+        if (checked && checked.value) {
+          activeId = checked.value;
+        }
+      } catch (e) {}
+    }
+    if (!activeId && typeof localStorage !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('baseLayer_ID');
+        if (saved) activeId = saved;
+      } catch (e) {}
+    }
+    if (!activeId) return null;
+    return {
+      activeLayerId: activeId,
+    };
+  }
+
+  // Restaura la capa base seleccionada en la nueva instancia tras el reinicio del mapa.
+  // Selecciona el radio button en la UI y aplica la capa base mediante changeBase.
+  setState(state, map) {
+    if (!state || typeof state !== 'object' || !state.activeLayerId) return;
+    const targetId = String(state.activeLayerId);
+    this._activeLayerId = targetId;
+    if (this.options) {
+      this.options.initActiveLayer = targetId;
+    }
+    const mapRef = map || this._map;
+
+    // Si la UI ya está renderizada en el DOM, marcar el radio y disparar su evento
+    if (typeof document !== 'undefined') {
+      const section = document.querySelector('#m-herramienta-baseLayer');
+      if (section) {
+        const radio = section.querySelector('.bl-radio[value="' + targetId + '"]');
+        if (radio) {
+          radio.checked = true;
+          radio.dispatchEvent(new Event('change'));
+          return;
+        }
+      }
+    }
+
+    // Fallback: invocar _changeBase si está disponible
+    if (typeof this._changeBase === 'function') {
+      try {
+        this._changeBase(targetId);
+        return;
+      } catch (e) {}
+    }
+
+    // Fallback defensivo: aplicar directamente al mapa si la UI aún no se ha montado
+    if (mapRef && Array.isArray(this._items)) {
+      try {
+        const currentBase = (typeof mapRef.getBaseLayers === 'function') ? mapRef.getBaseLayers() : null;
+        if (currentBase && currentBase.length) {
+          currentBase.forEach(function (l) { try { mapRef.removeLayers(l); } catch (e) {} });
+        }
+        if (targetId !== '__none__') {
+          const selected = this._items.find(function (l) { return l.id === targetId; });
+          if (selected && selected.layers && typeof mapRef.addLayers === 'function') {
+            mapRef.addLayers(selected.layers);
+          }
+        }
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('baseLayer_ID', targetId);
+        }
+      } catch (e) {}
+    }
+  }
+
   addTo(map) {
+    var self = this;
+    this._map = map;
     var opts = this.options;
     var panelTitle = opts.title || 'Capas base';
     var rows = (typeof opts.rows === 'number' && opts.rows >= 1) ? opts.rows : 1;
@@ -212,6 +291,7 @@ class miPlugin_baseLayer {
 
     // ── Función de cambio de capa base ─────────────────────────────────
     var changeBase = function (layerId) {
+      self._activeLayerId = layerId;
       // Quitar la capa base actual.
       var currentBase = map.getBaseLayers();
       if (currentBase && currentBase.length) {
@@ -226,6 +306,8 @@ class miPlugin_baseLayer {
       map.addLayers(selected.layers);
       localStorage.setItem('baseLayer_ID', layerId);
     };
+    this._changeBase = changeBase;
+    this._items = items;
 
     // ── Activar ───────────────────────────────────────────────────────
     control.activate = function () {

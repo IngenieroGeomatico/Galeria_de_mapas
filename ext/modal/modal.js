@@ -166,6 +166,58 @@ class miPlugin_modal {
   }
 
   /**
+   * Captura el estado serializable del modal para preservarlo entre cambios 2D/3D.
+   * @returns {{ collapsed: boolean, popupOpen: boolean }} Estado actual
+   */
+  getState() {
+    let collapsed = (this.collapsed_ !== undefined) ? this.collapsed_ : true;
+    let popupOpen = !collapsed;
+
+    const panelEl = (this.panel && typeof this.panel.getElement === 'function')
+      ? this.panel.getElement()
+      : (typeof document !== 'undefined' ? document.querySelector('.m-panel.m-panel-modal') : null);
+
+    if (panelEl) {
+      popupOpen = panelEl.classList.contains('opened');
+      collapsed = panelEl.classList.contains('collapsed') || !popupOpen;
+    }
+
+    return {
+      collapsed: Boolean(collapsed),
+      popupOpen: Boolean(popupOpen)
+    };
+  }
+
+  /**
+   * Restaura el estado del modal tras un cambio 2D/3D.
+   * Rehidrata el colapso del panel y reabre el popup si estaba abierto.
+   * @param {Object} state Estado previamente capturado con getState()
+   * @param {Object} [map] Instancia del nuevo mapa
+   */
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    if (typeof state.collapsed === 'boolean') {
+      this.collapsed_ = state.collapsed;
+    }
+
+    const panelEl = (this.panel && typeof this.panel.getElement === 'function')
+      ? this.panel.getElement()
+      : (typeof document !== 'undefined' ? document.querySelector('.m-panel.m-panel-modal') : null);
+
+    if (panelEl) {
+      const isCurrentlyOpened = panelEl.classList.contains('opened');
+      const shouldBeOpened = (state.popupOpen === true) || (state.collapsed === false);
+      if (shouldBeOpened && !isCurrentlyOpened) {
+        const btn = panelEl.querySelector('button.m-panel-btn');
+        if (btn) btn.click();
+      } else if (!shouldBeOpened && isCurrentlyOpened) {
+        const btn = panelEl.querySelector('button.m-panel-btn');
+        if (btn) btn.click();
+      }
+    }
+  }
+
+  /**
    * Método de enganche al mapa invocado por mapajs.addPlugin().
    * @param {Object} map Instancia del mapa (IDEE.Map / M.Map)
    */

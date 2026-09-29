@@ -46,6 +46,14 @@ class miPlugin_filtroCapas {
       : { active: c, deactive: c };
   }
 
+  // Lee la leyenda de una capa: primero la del impl y, si no existe, la del objeto capa.
+  _capaLegend(capa) {
+    let legend = null;
+    try { legend = capa.getImpl ? capa.getImpl().legend : null; } catch (e) { legend = null; }
+    if (legend === null || legend === undefined) legend = capa.legend || null;
+    return legend;
+  }
+
   getHelp() {
     const IDEE = api_filtroCapas();
     return {
@@ -180,8 +188,12 @@ class miPlugin_filtroCapas {
 
         const legends = map.getLayers()
           .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false && capa.filterID)
-          .map(capa => capa.getImpl().legend).reverse();
-        const selector = self.panel.getTemplatePanel().querySelector("#seleccionCapasID");
+          .map(capa => self._capaLegend(capa))
+          .filter(legend => legend != null && legend !== undefined && legend !== '')
+          .reverse();
+        const selector = (self.panel && typeof self.panel.getTemplatePanel === 'function' ? self.panel.getTemplatePanel().querySelector("#seleccionCapasID") : null) || document.querySelector("#seleccionCapasID");
+        if (!selector) return;
+        const currentVal = self._restoredLayer || (selector.value !== valueOri_filtroCapas ? selector.value : null);
         selector.innerHTML = "";
 
         let option = document.createElement("option");
@@ -198,6 +210,28 @@ class miPlugin_filtroCapas {
             selector.add(opt);
           }
         });
+
+        // Rehidratar formulario si existía un estado restaurado
+        if (self._restoredState) {
+          const st = self._restoredState;
+          const inputSearch = document.getElementById("nameSearch") || (self.panel && typeof self.panel.getTemplatePanel === 'function' ? self.panel.getTemplatePanel().querySelector("#nameSearch") : null);
+          if (inputSearch && st.searchTerm !== undefined && st.searchTerm !== null && !inputSearch.value) {
+            inputSearch.value = st.searchTerm;
+          }
+          if (st.selectedLayer && Array.from(selector.options).some(opt => opt.value === st.selectedLayer)) {
+            selector.value = st.selectedLayer;
+          }
+          if (st.applied && st.selectedLayer && st.searchTerm && self.map && typeof self.map.getLayers === 'function') {
+            const filteredName = st.selectedLayer + ' - ' + st.searchTerm;
+            const layers = self.map.getLayers() || [];
+            const alreadyExists = layers.some(l => l && (l.legend === filteredName || l.name === filteredName));
+            if (!alreadyExists && selector.value === st.selectedLayer) {
+              self.myFunctionFilterLayer();
+            }
+          }
+        } else if (currentVal && Array.from(selector.options).some(opt => opt.value === currentVal)) {
+          selector.value = currentVal;
+        }
       })();
 
       document.querySelector('#m-herramienta-previews-filtroCapas').innerHTML = htmlControl;
@@ -214,17 +248,29 @@ class miPlugin_filtroCapas {
     IDEE.toast.warning('Filtrando capa . . .', null, 2000);
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const selector = this.panel.getTemplatePanel().querySelector("#seleccionCapasID");
-    const value = selector.value;
+    const selector = (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector("#seleccionCapasID") : null) || document.querySelector("#seleccionCapasID");
+    const value = selector ? selector.value : valueOri_filtroCapas;
     if (value == valueOri_filtroCapas) {
       IDEE.toast.warning('Seleccione una capa para realizar un filtro', null, 2000);
       if (typeof SVGCarga !== 'undefined' && SVGCarga) SVGCarga.hidden = true;
       return;
     }
-    const capaSeleccionada = map.getLayers().filter(capa => capa.getImpl().legend == value)[0];
+    const capaSeleccionada = map.getLayers().filter(capa => this._capaLegend(capa) == value)[0];
+    if (!capaSeleccionada) {
+      if (typeof SVGCarga !== 'undefined' && SVGCarga) SVGCarga.hidden = true;
+      return;
+    }
 
     // se crea un filtro personalizado
-    const textoaBuscar = document.getElementById("nameSearch").value;
+    const inputSearch = document.getElementById("nameSearch") || (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector("#nameSearch") : null);
+    const textoaBuscar = inputSearch ? inputSearch.value : "";
+    if (!textoaBuscar) {
+      IDEE.toast.warning('Introduzca un texto para filtrar', null, 2000);
+      if (typeof SVGCarga !== 'undefined' && SVGCarga) SVGCarga.hidden = true;
+      return;
+    }
+
+    this._filterApplied = true;
 
     let filter = new IDEE.filter.Function(feature => {
       if (capaSeleccionada.filterID == "Placas Stolpersteine") {
@@ -238,11 +284,11 @@ class miPlugin_filtroCapas {
 
     let Filtrados = filter.execute(capaSeleccionada.getFeatures());
     const capaVectorial = new IDEE.layer.Vector({
-      name: capaSeleccionada.legend + ' - ' + textoaBuscar,
-      legend: capaSeleccionada.legend + ' - ' + textoaBuscar,
+      name: (capaSeleccionada.legend || value) + ' - ' + textoaBuscar,
+      legend: (capaSeleccionada.legend || value) + ' - ' + textoaBuscar,
       extract: true,
       attribution: {
-        name: capaSeleccionada.legend + " :",
+        name: (capaSeleccionada.legend || value) + " :",
         description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
       }
     });
@@ -277,6 +323,80 @@ class miPlugin_filtroCapas {
         document.querySelector(`[value="Vector-${capaVectorial.legend}"]`).click();
       } catch (error) {
         console.error(error);
+      }
+    }
+  }
+
+  // ===================================================================
+  //  Contrato de preservación de estado (getState / setState)
+  //  Permite conservar los criterios de filtrado seleccionados, el texto
+  //  de búsqueda y el estado del panel entre intercambios OL <-> Cesium.
+  // ===================================================================
+  getState() {
+    const selector = (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector('#seleccionCapasID') : null) || document.querySelector('#seleccionCapasID');
+    const selectedLayer = selector && selector.value && selector.value !== valueOri_filtroCapas ? selector.value : null;
+
+    const inputSearch = document.getElementById('nameSearch') || (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector('#nameSearch') : null);
+    const searchTerm = inputSearch && inputSearch.value ? inputSearch.value : '';
+
+    let collapsed = false;
+    if (this.panel) {
+      if (this.panel._collapsed !== undefined) {
+        collapsed = !!this.panel._collapsed;
+      } else if (typeof this.panel.getElement === 'function') {
+        const el = this.panel.getElement();
+        collapsed = el ? el.classList.contains('collapsed') : false;
+      }
+    }
+
+    const applied = !!this._filterApplied || (Boolean(selectedLayer) && Boolean(searchTerm));
+
+    return {
+      selectedLayer: selectedLayer || (this._restoredState ? this._restoredState.selectedLayer : null),
+      searchTerm: searchTerm || (this._restoredState ? this._restoredState.searchTerm : ''),
+      collapsed,
+      applied
+    };
+  }
+
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    if (map) this.map = map;
+    this._restoredState = state;
+    if (state.selectedLayer) this._restoredLayer = state.selectedLayer;
+
+    // Restaurar estado de colapso del panel
+    if (state.collapsed !== undefined && this.panel) {
+      if (state.collapsed && typeof this.panel.collapse === 'function') {
+        this.panel.collapse();
+      } else if (!state.collapsed && typeof this.panel.open === 'function') {
+        this.panel.open();
+      }
+    }
+
+    // Restaurar input de búsqueda de texto
+    const inputSearch = document.getElementById('nameSearch') || (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector('#nameSearch') : null);
+    if (inputSearch && state.searchTerm !== undefined && state.searchTerm !== null) {
+      inputSearch.value = state.searchTerm;
+    }
+
+    // Restaurar selector de capa
+    const selector = (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector('#seleccionCapasID') : null) || document.querySelector('#seleccionCapasID');
+    if (selector && state.selectedLayer) {
+      const optExists = Array.from(selector.options || []).some(opt => opt.value === state.selectedLayer);
+      if (optExists) {
+        selector.value = state.selectedLayer;
+        try { selector.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+      }
+    }
+
+    // Si el filtro estaba aplicado, re-aplicarlo defensivamente comprobando que no exista ya la capa
+    if (state.applied && state.selectedLayer && state.searchTerm && this.map && typeof this.map.getLayers === 'function') {
+      const filteredName = state.selectedLayer + ' - ' + state.searchTerm;
+      const layers = this.map.getLayers() || [];
+      const alreadyExists = layers.some(l => l && (l.legend === filteredName || l.name === filteredName));
+      if (!alreadyExists && selector && selector.value === state.selectedLayer) {
+        this.myFunctionFilterLayer();
       }
     }
   }
@@ -416,6 +536,34 @@ class miPlugin_leyenda {
          <img src="../../img/mapas/leyendaCalidadAire.svg" height="300px">
     `;
     document.querySelector('#m-herramienta-htmlPanel_leyenda_preview').innerHTML = htmlControl;
+  }
+
+  // ===================================================================
+  //  Contrato de preservación de estado (getState / setState)
+  // ===================================================================
+  getState() {
+    let collapsed = true;
+    if (this.panel) {
+      if (this.panel._collapsed !== undefined) {
+        collapsed = !!this.panel._collapsed;
+      } else if (typeof this.panel.getElement === 'function') {
+        const el = this.panel.getElement();
+        collapsed = el ? el.classList.contains('collapsed') : true;
+      }
+    }
+    return { collapsed };
+  }
+
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    if (map) this.map = map;
+    if (state.collapsed !== undefined && this.panel) {
+      if (state.collapsed && typeof this.panel.collapse === 'function') {
+        this.panel.collapse();
+      } else if (!state.collapsed && typeof this.panel.open === 'function') {
+        this.panel.open();
+      }
+    }
   }
 }
 

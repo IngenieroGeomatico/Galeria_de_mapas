@@ -4607,7 +4607,54 @@
       : "Datos limpiados. Carga un nuevo archivo.");
   };
 
-  // ---- Ciclo de vida ------------------------------------------------------
+  // ---- Ciclo de vida y preservación de estado ----------------------------
+  /**
+   * Captura el estado serializable del plugin para preservarlo entre cambios 2D/3D
+   * conforme al contrato estándar de plugins (EstadoPlugins).
+   * Devuelve una copia superficial de this.data manteniendo compatibilidad con
+   * window.__vueloSharedData sin clonado profundo innecesario.
+   * @returns {Object} Copia superficial del estado actual
+   */
+  getState() {
+    return this.data ? { ...this.data } : FlightState.getInitialState();
+  }
+
+  /**
+   * Restaura el estado previamente capturado por getState tras un cambio de
+   * implementación 2D/3D (EstadoPlugins.restaurarTodo) o rehidratación externa.
+   * Es idempotente frente a la rehidratación automática de addTo desde window.__vueloSharedData
+   * y evita dobles renderizados.
+   * @param {Object} state Estado capturado
+   * @param {Object} [map] Nueva instancia del mapa (IDEE.Map / M.Map)
+   */
+  setState(state, map) {
+    if (!state || typeof state !== "object") return;
+
+    if (map) {
+      this.map = map;
+    }
+
+    // Unifica el estado recibido con this.data y window.__vueloSharedData
+    if (this.data && this.data !== state) {
+      Object.assign(this.data, state);
+    } else if (!this.data) {
+      this.data = state;
+    }
+    window.__vueloSharedData = this.data;
+
+    // Sincroniza la UI si el panel ya ha sido construido
+    if (this.panel) {
+      this.syncUIFromData();
+    }
+
+    // Si hay datos cargados (filas), verifica si ya se han renderizado capas en el mapa.
+    // Si aún no se han creado las capas y no hay una descarga de MDT en curso, renderiza.
+    var hayCapas = this._layers && (this._layers.puntos || this._layers.lineas || this._layers.footprints);
+    if (this.data.rows && !hayCapas && !this._fetchingMDT && this.map) {
+      this.render();
+    }
+  }
+
   // cleanup: se llama cuando cambioImpl recrea el mapa. Quitamos las capas y el
   // panel del mapa antiguo (el nuevo mapa/instancia los re-crea), pero
   // conservamos los DATOS en memoria (this.data / window.__vueloSharedData),

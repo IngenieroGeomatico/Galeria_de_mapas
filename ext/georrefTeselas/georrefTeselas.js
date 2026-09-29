@@ -60,6 +60,7 @@ class miPlugin_georrefTeselas {
     // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
     this.order = (options.order !== undefined) ? Number(options.order) : null;
     this.map = null;
+    this._pendingState = null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
@@ -200,6 +201,9 @@ class miPlugin_georrefTeselas {
       if (selectorOld) {
         selectedValue = selectorOld.value;
       }
+      if (this._pendingState && this._pendingState.gridType) {
+        selectedValue = this._pendingState.gridType;
+      }
 
       document.querySelector('#m-herramienta-contents-georrefTeselas').innerHTML = htmlControl;
 
@@ -234,6 +238,11 @@ class miPlugin_georrefTeselas {
         });
         // Trigger para valor inicial (con la selección restaurada)
         selector.dispatchEvent(new Event('change'));
+
+        if (this._pendingState) {
+          this._applyState(this._pendingState);
+          this._pendingState = null;
+        }
       }
 
       document.getElementById('botonCalcular').addEventListener('click', () => this.myFunctionGetGrid());
@@ -310,6 +319,60 @@ class miPlugin_georrefTeselas {
     });
 
     return;
+  }
+
+  // ── Contrato de preservación de estado (cambioImpl OL <-> Cesium) ──
+  getState() {
+    try {
+      const selector = document.getElementById('seleccionCapasID') || document.querySelector('.seleccionCapasClass');
+      const gridType = selector ? selector.value : (this._pendingState && this._pendingState.gridType ? this._pendingState.gridType : 'TMS');
+      const inputs = {};
+      const ids = ['TMS_z', 'TMS_x', 'TMS_y', 'XYZ_z', 'XYZ_x', 'XYZ_y', 'H3_id'];
+      ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && el.value !== '') {
+          inputs[id] = el.value;
+        }
+      });
+      if (!Object.keys(inputs).length && this._pendingState && this._pendingState.inputs) {
+        Object.assign(inputs, this._pendingState.inputs);
+      }
+      return {
+        gridType: gridType || 'TMS',
+        inputs
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  _applyState(state) {
+    if (!state || typeof state !== 'object') return false;
+    const selector = document.getElementById('seleccionCapasID') || document.querySelector('.seleccionCapasClass');
+    if (!selector) return false;
+
+    if (state.gridType && selector.value !== state.gridType) {
+      selector.value = state.gridType;
+      selector.dispatchEvent(new Event('change'));
+    }
+
+    if (state.inputs && typeof state.inputs === 'object') {
+      Object.keys(state.inputs).forEach((id) => {
+        const inputEl = document.getElementById(id);
+        if (inputEl && state.inputs[id] !== undefined) {
+          inputEl.value = state.inputs[id];
+          inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+          inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    }
+    return true;
+  }
+
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    this._pendingState = state;
+    this._applyState(state);
   }
 }
 

@@ -189,6 +189,7 @@
     this.engine = null;
     this.panel = null;         // contenido del control dentro del IDEE.ui.Panel
     this.cursorsInjected = false;
+    this._pendingState = null;
   }
 
   // Devuelve {active, deactive} a partir de un color simple o un objeto.
@@ -275,6 +276,10 @@
     this.bindPanelEvents();
     this.applyConfigToUI();
     this.engine.activate();
+    if (this._pendingState) {
+      this._applyState(this._pendingState);
+      this._pendingState = null;
+    }
     console.log("[estereoscopia] Plugin activo. Implementación:", impl);
   };
 
@@ -499,6 +504,112 @@
   destroy() {
     this.cleanup();
     if (window.__estereoActivePlugin === this) window.__estereoActivePlugin = null;
+  }
+
+  // ── Contrato de preservación de estado (cambioImpl OL <-> Cesium) ──
+  getState() {
+    try {
+      var mode = (this.engine && typeof this.engine.currentMode !== "undefined")
+        ? this.engine.currentMode
+        : (this._pendingState && this._pendingState.mode !== undefined ? this._pendingState.mode : null);
+      var range = this.panel ? this.panel.querySelector("#exag-range") : null;
+      var exagValue = range ? parseFloat(range.value) : (this._pendingState && this._pendingState.exagValue !== undefined ? this._pendingState.exagValue : null);
+      var settingsPanel = this.panel ? this.panel.querySelector("#settings-panel") : null;
+      var settingsPanelOpen = settingsPanel ? !settingsPanel.hasAttribute("hidden") : Boolean(this._pendingState && this._pendingState.settingsPanelOpen);
+      var btnLock = this.panel ? this.panel.querySelector("#btn-plano-lock") : null;
+      var planeLock = btnLock ? (btnLock.getAttribute("aria-pressed") === "true") : Boolean(this._pendingState && this._pendingState.planeLock);
+      var chkDebug = this.panel ? this.panel.querySelector("#chk-debug-elev") : null;
+      var debugElev = chkDebug ? Boolean(chkDebug.checked) : Boolean(this._pendingState && this._pendingState.debugElev);
+
+      return {
+        mode: mode,
+        exagValue: (typeof exagValue === "number" && !isNaN(exagValue)) ? exagValue : null,
+        settingsPanelOpen: settingsPanelOpen,
+        planeLock: planeLock,
+        debugElev: debugElev
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  _applyState(state) {
+    if (!state || typeof state !== "object") return;
+
+    // 1. Exageración vertical (slider)
+    if (typeof state.exagValue === "number" && !isNaN(state.exagValue)) {
+      var range = this.panel ? this.panel.querySelector("#exag-range") : null;
+      if (range) {
+        range.value = state.exagValue;
+        this.setExaggeration(state.exagValue);
+      }
+    }
+
+    // 2. Bloqueo del plano de referencia
+    if (typeof state.planeLock === "boolean") {
+      var btnLock = this.panel ? this.panel.querySelector("#btn-plano-lock") : null;
+      var currentlyLocked = btnLock ? (btnLock.getAttribute("aria-pressed") === "true") : false;
+      if (state.planeLock !== currentlyLocked) {
+        if (this.engine && typeof this.engine.togglePlanoLock === "function") {
+          try {
+            this.engine.togglePlanoLock();
+          } catch (e) {
+            console.warn("[estereoscopia] Error al rehidratar bloqueo de plano:", e);
+          }
+        }
+      }
+    }
+
+    // 3. Ver MDT (alineación / depuración en OL)
+    if (typeof state.debugElev === "boolean") {
+      var chkDebug = this.panel ? this.panel.querySelector("#chk-debug-elev") : null;
+      if (chkDebug) {
+        chkDebug.checked = state.debugElev;
+        if (this.engine && typeof this.engine.setDebugElev === "function") {
+          try {
+            this.engine.setDebugElev(state.debugElev);
+          } catch (e) {
+            console.warn("[estereoscopia] Error al rehidratar debugElev:", e);
+          }
+        }
+      }
+    }
+
+    // 4. Panel de configuración abierto/cerrado
+    if (typeof state.settingsPanelOpen === "boolean") {
+      var settingsPanel = this.panel ? this.panel.querySelector("#settings-panel") : null;
+      if (settingsPanel) {
+        var isCurrentlyOpen = !settingsPanel.hasAttribute("hidden");
+        if (state.settingsPanelOpen !== isCurrentlyOpen) {
+          this.toggleSettings();
+        }
+      }
+    }
+
+    // 5. Modo activo (anaglyph / split / null)
+    if (state.mode === "anaglyph" || state.mode === "split" || state.mode === null) {
+      if (this.engine && typeof this.engine._setMode === "function") {
+        try {
+          var res = this.engine._setMode(state.mode);
+          if (res && typeof res.catch === "function") {
+            res.catch(function (err) {
+              console.warn("[estereoscopia] Error asíncrono al rehidratar modo:", err);
+            });
+          }
+        } catch (e) {
+          console.warn("[estereoscopia] Error al rehidratar modo:", e);
+        }
+      }
+    }
+  }
+
+  setState(state, map) {
+    if (!state || typeof state !== "object") return;
+    if (!this.panel || !this.engine) {
+      this._pendingState = state;
+      return;
+    }
+    this._applyState(state);
   }
 
   getAPIRest() { return ""; }
