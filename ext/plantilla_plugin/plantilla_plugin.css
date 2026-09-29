@@ -1,0 +1,115 @@
+/* =====================================================================
+   HOJA DE ESTILOS: PLANTILLA DE PLUGIN ESTÁNDAR
+   Repositorio: Galeria_de_mapas (API-IDEE / API-CNIG)
+   =====================================================================
+
+   NOTAS DE USO:
+   1. Al crear un plugin nuevo a partir de esta plantilla, renombrar las clases
+      con el prefijo de tu herramienta (ej. .g-herramienta_miPlugin).
+   2. El panel utiliza variables CSS inyectadas dinámicamente desde el JS:
+      --g-plugin-bg-color / --g-plugin-bg-color-active (fondo)
+      --g-plugin-border-color / --g-plugin-border-color-active (borde)
+      --g-plugin-icon-color / --g-plugin-icon-color-active (icono/texto)
+   ===================================================================== */
+
+/* ── Contenedor del panel en la barra de herramientas ─────────────────── */
+.g-herramienta_plantilla {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  color: #333333;
+}
+
+/* ── Icono del botón de la herramienta (cuando el panel está plegado) ─── */
+/* Se utiliza mask-image con un SVG para que el icono tome el color       */
+/* configurable de --g-plugin-icon-color mediante background-color.       */
+.g-herramienta_plantilla .m-tools:before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  /* TODO: Reemplazar el SVG de la máscara por el icono representativo de tu herramienta */
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* ── Panel cuando está desplegado ─────────────────────────────────────── */
+.g-herramienta_plantilla.opened .m-tools:before {
+  background-color: var(--g-plugin-icon-color-active, #71A7D3);
+}
+
+/* ── Estructura de la vista interior del plugin ───────────────────────── */
+.plantilla-container {
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  max-width: 360px;
+  box-sizing: border-box;
+}
+
+.plantilla-header {
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.plantilla-body {
+  padding: 12px;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plantilla-descripcion {
+  margin: 0;
+  line-height: 1.4;
+  color: #555555;
+  font-size: 12px;
+}
+
+.plantilla-acciones {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.plantilla-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  background-color: #0078d4;
+  border: 1px solid #005a9e;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.plantilla-btn:hover {
+  background-color: #106ebe;
+  border-color: #004578;
+}
+
+.plantilla-btn:focus-visible {
+  outline: 2px solid #005a9e;
+  outline-offset: 1px;
+}
+
+.plantilla-btn:active {
+  background-color: #005a9e;
+}
