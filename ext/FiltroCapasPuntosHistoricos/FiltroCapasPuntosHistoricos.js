@@ -172,72 +172,132 @@ class miPlugin_filtroCapas {
          <button id="botonCalcular" type="button">Filtrar</button>
     `;
 
-    map.on(IDEE.evt.COMPLETED, () => {
-      (async function checkForIncrease() {
-        let flag = true;
-        let previousValue = -99;
-        while (flag) {
-          const currentValue = map.getLayers().length;
-          if (currentValue > previousValue) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          } else {
-            flag = false;
-          }
-          previousValue = currentValue;
+    const previewEl = document.querySelector('#m-herramienta-previews-filtroCapas');
+    if (previewEl) {
+      previewEl.innerHTML = htmlControl;
+    }
+    const boton = document.getElementById('botonCalcular');
+    if (boton && !boton.dataset.filtroBound) {
+      boton.addEventListener('click', () => self.myFunctionFilterLayer());
+      boton.dataset.filtroBound = '1';
+    }
+
+    if (IDEE && IDEE.evt && IDEE.evt.COMPLETED) {
+      map.on(IDEE.evt.COMPLETED, () => {
+        self._populateSelector();
+      });
+    }
+
+    // Repoblar cuando se añada cualquier capa (cubre la carga diferida de los
+    // datos remotos y los reinicios sameMap OL<->Cesium donde COMPLETED no
+    // vuelve a dispararse). Es idempotente: reescribe las opciones del select.
+    if (IDEE && IDEE.evt && IDEE.evt.ADDED_LAYER) {
+      map.on(IDEE.evt.ADDED_LAYER, () => {
+        self._populateSelector();
+      });
+    }
+
+    // Poblar de inmediato (el while-loop interno espera la estabilización de capas)
+    this._populateSelector();
+    // Fallback de seguridad adicional por si las capas se cargan de forma diferida sin evento COMPLETED
+    setTimeout(() => {
+      self._populateSelector();
+    }, 1500);
+  }
+
+  // Poblado del selector de capas a partir de las capas presentes en el mapa
+  async _populateSelector() {
+    // Candado anti-concurrencia: evita que múltiples invocaciones (COMPLETED,
+    // ADDED_LAYER, setTimeout) corran en paralelo y dupliquen capas filtradas.
+    if (this._populatingSelector) return;
+    this._populatingSelector = true;
+    try {
+      const map = this.map;
+      if (!map || typeof map.getLayers !== 'function') return;
+
+      let flag = true;
+      let previousValue = -99;
+      while (flag) {
+        const currentValue = map.getLayers().length;
+        if (currentValue > previousValue) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } else {
+          flag = false;
         }
+        previousValue = currentValue;
+      }
 
-        const legends = map.getLayers()
-          .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false && capa.filterID)
-          .map(capa => self._capaLegend(capa))
-          .filter(legend => legend != null && legend !== undefined && legend !== '')
-          .reverse();
-        const selector = (self.panel && typeof self.panel.getTemplatePanel === 'function' ? self.panel.getTemplatePanel().querySelector("#seleccionCapasID") : null) || document.querySelector("#seleccionCapasID");
-        if (!selector) return;
-        const currentVal = self._restoredLayer || (selector.value !== valueOri_filtroCapas ? selector.value : null);
-        selector.innerHTML = "";
+      const legends = map.getLayers()
+        .filter(capa => capa.displayInLayerSwitcher && capa.isBase == false && capa.filterID)
+        .map(capa => this._capaLegend(capa))
+        .filter(legend => legend != null && legend !== undefined && legend !== '')
+        .reverse();
+      const selector = (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector("#seleccionCapasID") : null) || document.querySelector("#seleccionCapasID");
+      if (!selector) return;
+      // Valor a restaurar en el selector: prioriza la selección restaurada
+      // del estado y, si no la hay, conserva la selección actual (que se
+      // pierde al reconstruir las opciones con innerHTML = "").
+      const currentVal = this._restoredLayer || (selector.value !== valueOri_filtroCapas ? selector.value : null);
+      selector.innerHTML = "";
 
-        let option = document.createElement("option");
-        option.text = valueOri_filtroCapas;
-        option.value = valueOri_filtroCapas;
-        selector.add(option);
-        legends.forEach((element) => {
-          if (element.includes(' -//- ')) {
-            // pass
-          } else {
-            const opt = document.createElement("option");
-            opt.text = element;
-            opt.value = element;
-            selector.add(opt);
-          }
-        });
-
-        // Rehidratar formulario si existía un estado restaurado
-        if (self._restoredState) {
-          const st = self._restoredState;
-          const inputSearch = document.getElementById("nameSearch") || (self.panel && typeof self.panel.getTemplatePanel === 'function' ? self.panel.getTemplatePanel().querySelector("#nameSearch") : null);
-          if (inputSearch && st.searchTerm !== undefined && st.searchTerm !== null && !inputSearch.value) {
-            inputSearch.value = st.searchTerm;
-          }
-          if (st.selectedLayer && Array.from(selector.options).some(opt => opt.value === st.selectedLayer)) {
-            selector.value = st.selectedLayer;
-          }
-          if (st.applied && st.selectedLayer && st.searchTerm && self.map && typeof self.map.getLayers === 'function') {
-            const filteredName = st.selectedLayer + ' - ' + st.searchTerm;
-            const layers = self.map.getLayers() || [];
-            const alreadyExists = layers.some(l => l && (l.legend === filteredName || l.name === filteredName));
-            if (!alreadyExists && selector.value === st.selectedLayer) {
-              self.myFunctionFilterLayer();
-            }
-          }
-        } else if (currentVal && Array.from(selector.options).some(opt => opt.value === currentVal)) {
-          selector.value = currentVal;
+      let option = document.createElement("option");
+      option.text = valueOri_filtroCapas;
+      option.value = valueOri_filtroCapas;
+      selector.add(option);
+      legends.forEach((element) => {
+        if (element.includes(' -//- ')) {
+          // pass
+        } else {
+          const opt = document.createElement("option");
+          opt.text = element;
+          opt.value = element;
+          selector.add(opt);
         }
-      })();
+      });
 
-      document.querySelector('#m-herramienta-previews-filtroCapas').innerHTML = htmlControl;
-      const boton = document.getElementById('botonCalcular');
-      if (boton) boton.addEventListener('click', () => self.myFunctionFilterLayer());
-    });
+      const targetVal = (this._restoredState && this._restoredState.selectedLayer)
+        ? this._restoredState.selectedLayer
+        : currentVal;
+      if (targetVal && Array.from(selector.options).some(opt => opt.value === targetVal)) {
+        selector.value = targetVal;
+      }
+
+      // Rehidratar formulario si existía un estado restaurado
+      if (this._restoredState) {
+        const st = this._restoredState;
+        const inputSearch = document.getElementById("nameSearch") || (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector("#nameSearch") : null);
+        if (inputSearch && st.searchTerm !== undefined && st.searchTerm !== null && !inputSearch.value) {
+          inputSearch.value = st.searchTerm;
+        }
+        if (st.applied && st.selectedLayer && st.searchTerm) {
+          await this._reapplyFilterIfNeeded(st);
+        }
+      }
+    } finally {
+      this._populatingSelector = false;
+    }
+  }
+
+  // Re-aplica el filtro restaurado UNA sola vez por restauración de estado.
+  // El flag `_filterReapplied` se marca ANTES de crear la capa para que los
+  // eventos ADDED_LAYER posteriores no vuelvan a entrar en cascada.
+  async _reapplyFilterIfNeeded(st) {
+    if (this._filterReapplied) return;
+    if (!this.map || typeof this.map.getLayers !== 'function') return;
+
+    const filteredName = st.selectedLayer + ' - ' + st.searchTerm;
+    const layers = this.map.getLayers() || [];
+    const alreadyExists = layers.some(l => l && (l.legend === filteredName || l.name === filteredName));
+    if (alreadyExists) {
+      this._filterReapplied = true;
+      return;
+    }
+
+    const selector = (this.panel && typeof this.panel.getTemplatePanel === 'function' ? this.panel.getTemplatePanel().querySelector("#seleccionCapasID") : null) || document.querySelector("#seleccionCapasID");
+    if (!selector || selector.value !== st.selectedLayer) return;
+
+    this._filterReapplied = true; // marcar ANTES para evitar reentrada
+    await this.myFunctionFilterLayer();
   }
 
   async myFunctionFilterLayer() {
@@ -364,6 +424,8 @@ class miPlugin_filtroCapas {
     if (map) this.map = map;
     this._restoredState = state;
     if (state.selectedLayer) this._restoredLayer = state.selectedLayer;
+    // Estado nuevo -> permitir re-aplicar el filtro restaurado una vez
+    this._filterReapplied = false;
 
     // Restaurar estado de colapso del panel
     if (state.collapsed !== undefined && this.panel) {
@@ -390,14 +452,9 @@ class miPlugin_filtroCapas {
       }
     }
 
-    // Si el filtro estaba aplicado, re-aplicarlo defensivamente comprobando que no exista ya la capa
-    if (state.applied && state.selectedLayer && state.searchTerm && this.map && typeof this.map.getLayers === 'function') {
-      const filteredName = state.selectedLayer + ' - ' + state.searchTerm;
-      const layers = this.map.getLayers() || [];
-      const alreadyExists = layers.some(l => l && (l.legend === filteredName || l.name === filteredName));
-      if (!alreadyExists && selector && selector.value === state.selectedLayer) {
-        this.myFunctionFilterLayer();
-      }
+    // Si el filtro estaba aplicado, re-aplicarlo una única vez (guardia en _reapplyFilterIfNeeded)
+    if (state.applied && state.selectedLayer && state.searchTerm) {
+      this._reapplyFilterIfNeeded(state);
     }
   }
 }

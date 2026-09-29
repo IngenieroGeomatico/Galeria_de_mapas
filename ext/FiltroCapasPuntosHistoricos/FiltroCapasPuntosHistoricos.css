@@ -1,4 +1,5 @@
 
+/* Icono de la herramienta */
 .g-herramienta .m-tools:before {
   content: "\1F5A9";
   font-size: 22px;
@@ -6,12 +7,10 @@
   color: var(--g-plugin-icon-color, #fff);
 }
 
-
 /* Abrir y cerrar panel */
 .m-panel.m-plugin-herramienta.collapsed {
   height: 40px;
 }
-
 
 .opened .g-cartografia-flecha-izquierda {
   position: absolute !important;
@@ -22,28 +21,29 @@
   background-color: #fff !important;
 }
 
-
-/* Contenedor del plugin */
+/* Contenedor principal del plugin */
 .m-control.m-container.m-herramienta {
   display: flex !important;
   flex-direction: column;
   min-width: 220px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  box-sizing: border-box;
 }
 
-#seleccionCapasID{
-  width: 100%;
-}
-
-
-/* Título */
+/* Cabecera del panel */
 .m-herramienta-header {
   display: block;
-  font-size: 15px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
   height: 40px;
   line-height: 40px;
-  padding: 0 5px;
+  padding: 0 10px;
   text-align: center;
   width: 100%;
+  box-sizing: border-box;
+  letter-spacing: 0.3px;
+  user-select: none;
 }
 
 /* Cabecera del panel: fondo (color1), borde (color2), icono/flecha (color3).
@@ -62,51 +62,155 @@
   border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
-/* Contenedor botones controles */
+/* Contenedor del formulario del filtro */
 .m-herramienta-previews {
-    display: inline-grid;
-    justify-content: safe;
-    align-items: center;
-    gap: 6px;
-    background-color: white;    
-    margin:5px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: #ffffff;
+  padding: 12px;
+  margin: 0;
+  box-sizing: border-box;
 }
 
-/* Botones controles */
-.g-herramienta .m-panel-controls button {
-  font-family: 'Times New Roman', Times, serif !important;
-  font-size: 16px;  
-  font-weight: 700 !important;
-  -webkit-font-smoothing: antialiased;
+/* Contenedor de campos select e input */
+#selectorWrapperID {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Títulos de sección del formulario */
+.g-herramienta .m-herramienta-previews h4 {
+  margin: 4px 0 2px 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #4a5568;
+}
+
+#selectorWrapperID h4 {
+  margin-top: 4px;
+}
+
+/* Selector de capas y campo de búsqueda */
+#seleccionCapasID,
+.seleccionCapasClass,
+#nameSearch {
+  width: 100%;
+  max-width: 100%;
+  height: 34px;
+  padding: 6px 10px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #2d3748;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#seleccionCapasID,
+.seleccionCapasClass {
   cursor: pointer;
-  background-color: #71a7d3;
-  color:whitesmoke;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
+#nameSearch {
+  width: 100%;
+}
 
-#controlToast::before{
+#nameSearch::placeholder {
+  color: #a0aec0;
+  opacity: 1;
+}
+
+#seleccionCapasID:focus,
+.seleccionCapasClass:focus,
+#nameSearch:focus {
+  outline: none;
+  border-color: var(--g-plugin-border-color-active, #71A7D3);
+  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.25);
+}
+
+/* Botones y controles del panel */
+.g-herramienta .m-panel-controls button,
+#botonCalcular {
+  display: block;
+  width: 100%;
+  height: 36px;
+  margin-top: 4px;
+  padding: 6px 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: 13px;
+  font-weight: 600 !important;
+  letter-spacing: 0.3px;
+  text-align: center;
+  color: #ffffff !important;
+  background-color: var(--g-plugin-border-color-active, #71A7D3) !important;
+  border: 1px solid var(--g-plugin-border-color-active, #71A7D3) !important;
+  border-radius: 4px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.05s ease;
+}
+
+.g-herramienta .m-panel-controls button:hover,
+#botonCalcular:hover {
+  background-color: #5b92be !important;
+  border-color: #5b92be !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+.g-herramienta .m-panel-controls button:active,
+#botonCalcular:active {
+  background-color: #4a7fa8 !important;
+  border-color: #4a7fa8 !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  transform: translateY(1px);
+}
+
+.g-herramienta .m-panel-controls button:focus-visible,
+#botonCalcular:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.4);
+}
+
+/* Toast de control */
+#controlToast::before {
   content: "▱";
   font-weight: bold;
-  color:rgb(118, 118, 118)
+  color: rgb(118, 118, 118);
 }
-#controlToast.activated::before{
+
+#controlToast.activated::before {
   content: "▱";
-  color:rgb(122, 239, 255)
-}
-.m-controlToast{
-  color:rgb(118, 118, 118)
+  color: rgb(122, 239, 255);
 }
 
+.m-controlToast {
+  color: rgb(118, 118, 118);
+}
 
+/* Animación de carga SVG */
 #cargaSVG {
-    height: 100%;
-    background-color: #dd61ff82;
-    position: absolute;
-    z-index: 9999;
-    width: 100%;
-  }
-#cargaSVG img{
-    height: 30vh;
+  height: 100%;
+  background-color: #dd61ff82;
+  position: absolute;
+  z-index: 9999;
+  width: 100%;
+}
+
+#cargaSVG img {
+  height: 30vh;
   position: unset;
   display: block;
   margin-left: auto;
@@ -117,7 +221,8 @@
   position: sticky;
 }
 
-.g-herramienta_leyenda{
+/* Plugin de Leyenda */
+.g-herramienta_leyenda {
   order: -1;
 }
 
@@ -137,13 +242,9 @@
   border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
-.g-herramienta_leyenda .m-tools:before{
+.g-herramienta_leyenda .m-tools:before {
   content: "\1F56E";
   color: var(--g-plugin-icon-color, #fff);
-}
-
-#nameSearch{
-  width: -webkit-fill-available;
 }
 
 /* BOTÓN del panel — GENÉRICO para todos los plugins.
