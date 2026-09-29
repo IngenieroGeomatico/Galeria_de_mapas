@@ -20,6 +20,19 @@
 }
 
 /* ---------- Botón del panel (abrir/cerrar) ---------- */
+.m-plugin-storymap.collapsed button.m-panel-btn::before {
+  /* Solo el botón del panel PLEGADO: la clase por defecto (g-cartografia-
+     flecha-derecha) pinta un glifo de la fuente de iconos de API-IDEE que no
+     está disponible en este visor, por lo que aparece sin icono. Se define el
+     contenido explícitamente (patrón de ext_backgorundLayers / vueloFotogrametrico).
+     Cuando el panel está abierto (opened) se conserva la flecha original de
+     cierre, que sí se renderiza con normalidad. */
+  content: "📖";
+  font-size: 20px;
+  font-family: -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  color: var(--g-plugin-icon-color, #fff) !important;
+}
+
 .m-areas>div.m-area>div.m-plugin-storymap.m-panel>button.m-panel-btn {
   background-color: var(--g-plugin-bg-color, #2c5f8a) !important;
   color: var(--g-plugin-icon-color, #fff) !important;
