@@ -189,6 +189,21 @@
   font-size: 1rem;
   line-height: 1.65;
   color: #2c2c2c;
+  /* Transición entre pasos: como el motor oculta el paso saliente con
+     display:none al instante, la animación se aplica al paso que entra,
+     haciendo un fundido con un ligero ascenso que avisa del cambio. */
+  animation: stepFadeIn 1s ease-out;
+}
+
+@keyframes stepFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Aire final: el paso termina con un espaciador que deja la última palabra
@@ -573,7 +588,8 @@
 @media (prefers-reduced-motion: reduce) {
   .arrowScroll svg,
   .navPointer .pointerEffect,
-  .navStep .pointerEffect {
+  .navStep .pointerEffect,
+  .step {
     animation: none;
   }
 }

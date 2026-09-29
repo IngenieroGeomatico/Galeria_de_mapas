@@ -708,12 +708,16 @@ class miPlugin_storymap {
         if (idCap === false || idStep === false || !step) return finAutoplay();
 
         // Tiempo del paso proporcional al número de strings; pausas fijas
-        // cortas al principio y al final ("esperando un poco"); todo se
-        // divide por el multiplicador de velocidad elegido.
+        // al principio y al final ("esperando un poco"); todo se divide por
+        // el multiplicador de velocidad elegido. La pausa inicial es amplia
+        // para leer el arranque del paso antes de que comience el autoscroll;
+        // el valor base por string (4000 ms) da un ritmo de lectura cómodo a
+        // x1 y las pausas y el mínimo de scroll van acordes para que no se
+        // encadene un paso con el siguiente dejando sin leer el texto.
         const strings = this.countStrings(step);
-        const pausaInicio = 1000 / multiplicador;
-        const duracionScroll = Math.max(800, strings * 1200) / multiplicador;
-        const pausaFin = 1500 / multiplicador;
+        const pausaInicio = 4000 / multiplicador;
+        const duracionScroll = Math.max(1600, strings * 4000) / multiplicador;
+        const pausaFin = 3000 / multiplicador;
 
         const lenghtCap = this.cap_.length - 1;
         const lengthStep = this.cap_[lenghtCap].steps.length - 1;
