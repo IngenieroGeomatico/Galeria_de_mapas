@@ -47,9 +47,14 @@ class miPlugin_storymap {
    * @param {boolean} [options.collapsible=true] Permite colapsar el panel
    * @param {string} [options.tooltip='Story Map'] Tooltip del botón
    * @param {Object} [options.content={}] Contenido por idioma { es: { cap: [...] } }
-   * @param {number} [options.delay=2000] Retardo (ms) del autoplay
-   * @param {Object} [options.indexInContent=false] Tarjeta de índice inicial { title, subtitle, js }
-   * @param {boolean} [options.isDraggable=false] Permite arrastrar el panel
+* @param {number} [options.delay=2000] Retardo (ms) del autoplay
+    * @param {Object} [options.indexInContent=false] Tarjeta de índice inicial { title, subtitle, js }
+    * @param {string[]} [options.waitForLayers=[]] Nombres de capas expuestas en window
+    *   (p. ej. 'layerVectorialGJSON_Libro') que deben tener features cargadas antes de
+    *   ejecutar el js de un paso. Al restaurar el estado tras alternar 2D/3D las capas
+    *   se recrean y cargan su GeoJSON de forma asíncrona; esperarlas evita que el paso
+    *   filtre sobre un conjunto vacío y re-centre el mapa en el extent mundial (0,0).
+    * @param {boolean} [options.isDraggable=false] Permite arrastrar el panel
    * @param {number} [options.order] Posición/orden dentro del área de botones
    * @param {Object|string} [options.color1={active:'#ffffff',deactive:'orangered'}] Color de fondo ({ active, deactive } o string)
    * @param {Object|string} [options.color2={active:'#71A7D3',deactive:'#ffffff'}] Color de borde ({ active, deactive } o string)
@@ -66,6 +71,7 @@ class miPlugin_storymap {
     this.content_ = options.content || {};
     this.delay = (options.delay !== undefined && options.delay !== null) ? options.delay : 2000;
     this.indexInContent = options.indexInContent || false;
+    this.waitForLayers = (Array.isArray(options.waitForLayers) ? options.waitForLayers : []);
     this.isDraggable_ = (options.isDraggable !== undefined) ? options.isDraggable : false;
     this.order = (options.order !== undefined && options.order >= -1) ? options.order : null;
 
@@ -135,6 +141,7 @@ class miPlugin_storymap {
     control.content_ = content;
     control.delay = this.delay;
     control.indexInContent = this.indexInContent;
+    control.waitForLayers = this.waitForLayers;
     control.isDraggable_ = this.isDraggable_;
     control.cap_ = null;
     control.idTimeCap = 0;
@@ -498,18 +505,61 @@ class miPlugin_storymap {
      */
     control.addJSCap = function(indexCap, indexStep) {
       try {
-        const oldScript = document.querySelector('#storyMap_jsCap');
-        if (oldScript) document.body.removeChild(oldScript);
-
         const cap = this.cap_[Number(indexCap)];
         const step = cap && cap.steps[Number(indexStep)];
         const js = (step && step.js) || '';
 
-        const newScript = document.createElement('script');
-        newScript.id = 'storyMap_jsCap';
-        const inlineScript = document.createTextNode(`{${js}}`);
-        newScript.appendChild(inlineScript);
-        document.body.appendChild(newScript);
+        const inyectar = () => {
+          const oldScript = document.querySelector('#storyMap_jsCap');
+          if (oldScript) document.body.removeChild(oldScript);
+
+          const newScript = document.createElement('script');
+          newScript.id = 'storyMap_jsCap';
+          const inlineScript = document.createTextNode(`{${js}}`);
+          newScript.appendChild(inlineScript);
+          document.body.appendChild(newScript);
+        };
+
+        // Al alternar 2D/3D el mapa se recrea y las capas de datos listadas en
+        // waitForLayers cargan su GeoJSON de forma asíncrona. Si el js del paso
+        // se ejecutara antes de que terminen de cargar, toGeoJSON() devolvería
+        // vacío y el paso re-centraría el mapa en el extent mundial (0,0). Se
+        // espera a que esas capas tengan features antes de inyectar el script.
+        const capasEspera = (this.waitForLayers || [])
+          .map((name) => window[name])
+          .filter((capa) => capa && typeof capa.getFeatures === 'function');
+
+        const todasCargadas = () => capasEspera.every((capa) => capa.getFeatures().length > 0);
+
+        if (capasEspera.length === 0 || todasCargadas()) {
+          inyectar();
+          return;
+        }
+
+        let inyectado = false;
+        let pollLayers = null;
+        const inyectarCuandoListo = () => {
+          if (inyectado) return;
+          inyectado = true;
+          if (pollLayers) clearInterval(pollLayers);
+          inyectar();
+        };
+
+        const evtLoad = (IDEE && IDEE.evt && IDEE.evt.LOAD) || 'load';
+        capasEspera.forEach((capa) => {
+          if (typeof capa.once === 'function') {
+            capa.once(evtLoad, inyectarCuandoListo);
+          } else if (typeof capa.on === 'function') {
+            capa.on(evtLoad, inyectarCuandoListo);
+          }
+        });
+
+        // Red de seguridad: comprobar periódicamente por si LOAD se emitió antes
+        // de suscribirse, y límite absoluto para no bloquear el storymap.
+        pollLayers = setInterval(() => {
+          if (todasCargadas()) inyectarCuandoListo();
+        }, 150);
+        setTimeout(inyectarCuandoListo, 5000);
       } catch (error) {
         // eslint-disable-next-line no-console
         console.warn('miPlugin_storymap: comprueba el script del paso, respetando ";" y llamando a map o mapjs', error);

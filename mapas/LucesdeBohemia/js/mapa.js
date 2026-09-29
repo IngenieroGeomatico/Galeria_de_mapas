@@ -1318,6 +1318,7 @@ const mp_StoryMap = new IDEE.plugin.miPlugin_storymap({
     subtitle: 'Ramón María del Valle-Inclán',
     js: "console.log('BLAAAAAAAAAAA');",
   },
+  waitForLayers: ['layerVectorialGJSON_Libro', 'layerVectorialGJSON_Madrid'],
   delay:10000,
 });
 
