@@ -49,7 +49,7 @@ var StoryMapJSON = {
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            centrarStorymap({ x: -413064.3575507956, y: 4927841.089710372 })
                             mapajs.setZoom(13)
                             
                         `,
@@ -1007,7 +1007,7 @@ var StoryMapJSON = {
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            centrarStorymap({ x: -413064.3575507956, y: 4927841.089710372 })
                             mapajs.setZoom(13)
                         `,
                 },
@@ -1056,7 +1056,7 @@ var StoryMapJSON = {
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -413064.3575507956, y: 4927841.089710372 })
+                            centrarStorymap({ x: -413064.3575507956, y: 4927841.089710372 })
                             mapajs.setZoom(13)
                         `,
                 },
@@ -1665,7 +1665,7 @@ var StoryMapJSON = {
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -411597.7220705739, y: 4926892.792828205 })
+                            centrarStorymap({ x: -411597.7220705739, y: 4926892.792828205 })
                             mapajs.setZoom(15)
                         `,
                 }
@@ -1753,7 +1753,7 @@ var StoryMapJSON = {
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -411597.7220705739, y: 4926892.792828205 })
+                            centrarStorymap({ x: -411597.7220705739, y: 4926892.792828205 })
                             mapajs.setZoom(15)
                         `,
                 },
@@ -1796,7 +1796,7 @@ var StoryMapJSON = {
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -411597.7220705739, y: 4926892.792828205 })
+                            centrarStorymap({ x: -411597.7220705739, y: 4926892.792828205 })
                             mapajs.setZoom(15)
                         `,
                 },
@@ -1924,7 +1924,7 @@ var StoryMapJSON = {
                             layerVectorialGJSON.clear()
                             layerVectorialGJSON.getImpl().loadFeaturesPromise_ = null
 
-                            mapajs.setCenter({ x: -411597.7220705739, y: 4926892.792828205 })
+                            centrarStorymap({ x: -411597.7220705739, y: 4926892.792828205 })
                             mapajs.setZoom(15)
                         `,
                 },

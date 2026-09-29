@@ -1365,6 +1365,36 @@ return mapajs
 
 }
 
+// Devuelve la implementación activa del mapa: 'cesium' (3D) u 'ol' (2D).
+// El impl de Cesium expone scene.camera; el de OpenLayers (2D) no. Se usa en
+// el resto de helpers que dependen de la implementación (centrarStorymap,
+// aplicaAlturaSobreTerrenoSiCesium).
+function checkImpl() {
+  let mapImpl = null;
+  try {
+    if (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getMapImpl === 'function') {
+      mapImpl = mapajs.getMapImpl();
+    }
+  } catch (e) { /* mapa aún no listo */ }
+  return (mapImpl && mapImpl.scene && mapImpl.scene.camera &&
+    typeof Cesium !== 'undefined') ? 'cesium' : 'ol';
+}
+
+// Centra el mapa en las coordenadas dadas. El visualizador trabaja con el
+// centro en EPSG:3857 (el mismo formato del constructor del mapa y del resto
+// del código), pero en Cesium (3D) el setCenter de la API espera EPSG:4326
+// (lon/lat). La conversión usa IDEE.utils.reproject (síncrona; los scripts de
+// los pasos del storymap no admiten await). Expuesta en window porque la usan
+// los "js" de los pasos del storymap (contrato global).
+function centrarStorymap(coord3857) {
+  if (checkImpl() === 'cesium') {
+    const [lon, lat] = IDEE.utils.reproject([coord3857.x, coord3857.y], 'EPSG:3857', 'EPSG:4326');
+    mapajs.setCenter({ x: lon, y: lat });
+  } else {
+    mapajs.setCenter(coord3857);
+  }
+}
+
 // Altura (m) a la que se elevan los marcadores puntuales sobre el terreno en 3D.
 const ALTURA_PUNTOS_SOBRE_TERRENO = 2;
 
@@ -1463,12 +1493,8 @@ function aplicaAlturaSobreTerrenoSiCesium(capa, metros) {
   // si no hay Cesium (por si la implementación está cambiando).
   const t0 = Date.now();
   const iv = setInterval(() => {
-    const mapImpl = (typeof mapajs !== 'undefined' && mapajs.getMapImpl)
-      ? mapajs.getMapImpl()
-      : null;
-    const esCesium = !!(mapImpl && mapImpl.scene && mapImpl.scene.camera) &&
-      typeof Cesium !== 'undefined';
-    if (!esCesium) {
+    const impl = checkImpl();
+    if (impl !== 'cesium') {
       if (Date.now() - t0 > 5000) clearInterval(iv);
       return;
     }
