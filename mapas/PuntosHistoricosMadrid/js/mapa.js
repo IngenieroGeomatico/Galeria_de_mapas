@@ -58,14 +58,8 @@ mapajs = M.map({
   container: "mapa",
   zoom: 12,
   center: { x: -413064.3575507956, y: 4927841.089710372 },
-  controls: ['attributions'],
   layers: []
 });
-
-mapajs.addAttribution({
-  name: "Autor:",
-  description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
-})
 
 
 // Estilos
@@ -408,8 +402,27 @@ let compositeStonh= styleCluster_Stonh.add(estilo_base_Stonh);
 geojsonData = myFunction_GetData()
 geojsonData.then(() => {
 
-  // creamos la capa
-  // console.log("1: ",geojsonDataAsync.geoJson_Monumentos)
+  const impl = checkImpl();
+
+  // Helper para eliminar capas existentes con el mismo filterID o name (evita duplicación)
+  const removerCapaExistente = (filterID) => {
+    try {
+      if (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getLayers === 'function') {
+        const layers = mapajs.getLayers();
+        if (Array.isArray(layers)) {
+          const duplicadas = layers.filter(l => l && (l.filterID === filterID || l.name === filterID));
+          if (duplicadas.length > 0) {
+            mapajs.removeLayers(duplicadas);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error al deduplicar capa ' + filterID, e);
+    }
+  };
+
+  // 1. Capa Monumentos
+  removerCapaExistente("Monumentos");
   const capaMonumentos = new M.layer.GeoJSON({
     name: "Monumentos",
     source: geojsonDataAsync.geoJson_Monumentos,
@@ -421,11 +434,11 @@ geojsonData.then(() => {
       description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     }
   }, {
-    visibility:true,
+    visibility: true,
     // style:estiloEstacion
   })
   capaMonumentos.filterID = "Monumentos"
-  capaMonumentos.setStyle(compositeMonumentos)
+  capaMonumentos.setStyle(impl === 'cesium' ? estilo_base_Monumentos : compositeMonumentos)
   capaMonumentos.on(M.evt.SELECT_FEATURES, function (features, evt) {
     // se puede comprobar si el elemento seleccionado es un cluster o no
     if (features[0] instanceof M.ClusteredFeature) {
@@ -434,8 +447,13 @@ geojsonData.then(() => {
     }
   });
   mapajs.addLayers(capaMonumentos)
+  if (impl === 'cesium') {
+    activarClusteringCesium("Monumentos", 40, 2, 5000);
+  }
 
 
+  // 2. Capa Placas conmemorativas
+  removerCapaExistente("Placas conmemorativas");
   const capaPlacas = new M.layer.GeoJSON({
     name: "Placas conmemorativas",
     source: geojsonDataAsync.geoJson_Placas,
@@ -447,19 +465,11 @@ geojsonData.then(() => {
       description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     }
   }, {
-    visibility:false,
+    visibility: false,
     // style:estiloEstacion
   })
-  // capaPlacas.setStyle(styleCluster_Monumentos)
-  // capaPlacas.on(M.evt.SELECT_FEATURES, function (features, evt) {
-  //   // se puede comprobar si el elemento seleccionado es un cluster o no
-  //   if (features[0] instanceof M.ClusteredFeature) {
-  //     console.log('Es un cluster');
-  //     mapajs.getPopup().hide()
-  //   }
-  // });
   capaPlacas.filterID = "Placas conmemorativas"
-  capaPlacas.setStyle(styleCluster_Placas)
+  capaPlacas.setStyle(impl === 'cesium' ? estilo_base_Placas : styleCluster_Placas)
   capaPlacas.on(M.evt.SELECT_FEATURES, function (features, evt) {
     // se puede comprobar si el elemento seleccionado es un cluster o no
     if (features[0] instanceof M.ClusteredFeature) {
@@ -468,8 +478,13 @@ geojsonData.then(() => {
     }
   });
   mapajs.addLayers(capaPlacas)
+  if (impl === 'cesium') {
+    activarClusteringCesium("Placas conmemorativas", 40, 2, 5000);
+  }
 
 
+  // 3. Capa Placas Stolpersteine
+  removerCapaExistente("Placas Stolpersteine");
   const capaStolpersteine = new M.layer.GeoJSON({
     name: "Placas Stolpersteine",
     source: geojsonDataAsync.geoJson_Stolpersteine,
@@ -481,19 +496,11 @@ geojsonData.then(() => {
       description: " <a style='color: #0000FF' href='https://datos.madrid.es/portal/site/egob' target='_blank'>Ayuntamiento de Madrid</a> "
     }
   }, {
-    visibility:false,
+    visibility: false,
     // style:estiloEstacion
   })
-  // capaPlacas.setStyle(styleCluster_Monumentos)
-  // capaPlacas.on(M.evt.SELECT_FEATURES, function (features, evt) {
-  //   // se puede comprobar si el elemento seleccionado es un cluster o no
-  //   if (features[0] instanceof M.ClusteredFeature) {
-  //     console.log('Es un cluster');
-  //     mapajs.getPopup().hide()
-  //   }
-  // });
   capaStolpersteine.filterID = "Placas Stolpersteine"
-  capaStolpersteine.setStyle(styleCluster_Stonh)
+  capaStolpersteine.setStyle(impl === 'cesium' ? estilo_base_Stonh : styleCluster_Stonh)
   capaStolpersteine.on(M.evt.SELECT_FEATURES, function (features, evt) {
     // se puede comprobar si el elemento seleccionado es un cluster o no
     if (features[0] instanceof M.ClusteredFeature) {
@@ -502,6 +509,28 @@ geojsonData.then(() => {
     }
   });
   mapajs.addLayers(capaStolpersteine)
+  if (impl === 'cesium') {
+    activarClusteringCesium("Placas Stolpersteine", 40, 2, Number.POSITIVE_INFINITY);
+  }
+
+  // Barrido final de seguridad para deduplicación: asegurar que sólo queda una capa por filterID
+  try {
+    const targetIDs = ["Monumentos", "Placas conmemorativas", "Placas Stolpersteine"];
+    if (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getLayers === 'function') {
+      const allLayers = mapajs.getLayers();
+      if (Array.isArray(allLayers)) {
+        targetIDs.forEach(fid => {
+          const matched = allLayers.filter(l => l && (l.filterID === fid || l.name === fid));
+          if (matched.length > 1) {
+            const sobrantes = matched.slice(0, -1);
+            mapajs.removeLayers(sobrantes);
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('Error en barrido final de deduplicación', e);
+  }
 
   // Oculta el spinner de carga cuando ya están añadidas todas las capas.
   SVGCarga.hidden = true
@@ -591,6 +620,18 @@ const ext_Modal = new IDEE.plugin.miPlugin_modal({
 });
 M.proxy(false)
 mapajs.addPlugin(ext_Modal);
+M.proxy(false)
+const ext_Attribution = new IDEE.plugin.miPlugin_attribution({
+  position: 'BR',
+  mode: 'lite',
+  attributions: [{
+    name: 'Autor:',
+    description: " <a style='color: #0B57D0' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
+  }]
+});
+M.proxy(false)
+mapajs.addPlugin(ext_Attribution);
+M.proxy(false)
 
 mapajs.addPlugin(new IDEE.plugin.miPlugin_filtroCapas())
 
@@ -604,8 +645,196 @@ mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
 mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
 mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
-return mapajs
+// Devolver una promesa que resuelve DESPUES de que geojsonData.then() haya
+// añadido las capas, para que `await reiniciarMapa` (cambioImpl) espere a que
+// existan y `reapplyOverlayOrder` pueda reordenarlas por su z de origen.
+// Patron del commit 9745fb8 (CalidadAireMadrid/CalidadAireComunidadMadrid).
+return geojsonData.then(() => mapajs)
 
+}
+
+function checkImpl() {
+  let mapImpl = null;
+  try {
+    if (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getMapImpl === 'function') {
+      mapImpl = mapajs.getMapImpl();
+    }
+  } catch (e) { /* mapa aún no listo */ }
+  return (mapImpl && mapImpl.scene && mapImpl.scene.camera &&
+    typeof Cesium !== 'undefined') ? 'cesium' : 'ol';
+}
+
+function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize = 2, depthTestDistance = undefined) {
+  if (typeof Cesium === 'undefined') return;
+
+  let intentos = 0;
+  const maxIntentos = 50; // 50 * 100ms = 5s
+
+  const interval = setInterval(() => {
+    intentos++;
+    let ds = null;
+    try {
+      const mapImpl = (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getMapImpl === 'function')
+        ? mapajs.getMapImpl()
+        : null;
+      if (mapImpl && mapImpl.dataSources && mapImpl.dataSources._dataSources) {
+        ds = mapImpl.dataSources._dataSources.find(d => d.name === nombreCapa);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    if (ds) {
+      clearInterval(interval);
+      if (!ds.clustering) return;
+
+      ds.clustering.enabled = true;
+      ds.clustering.pixelRange = pixelRange;
+      ds.clustering.minimumClusterSize = minimumClusterSize;
+
+      // Generación de marcadores de cluster circulares con degradado secuencial y tipografía nítida
+      const dpr = 2; // Factor de alta densidad para máxima nitidez en billboards 3D
+
+      const configBuckets = {
+        '50+': { diametro: 50, c1: '#9F1239', c2: '#4C0519', font: 'bold 15px' },
+        '40+': { diametro: 46, c1: '#9D174D', c2: '#500724', font: 'bold 14px' },
+        '30+': { diametro: 42, c1: '#7C3AED', c2: '#3B0764', font: 'bold 13px' },
+        '20+': { diametro: 38, c1: '#4F46E5', c2: '#1E1B4B', font: 'bold 13px' },
+        '10+': { diametro: 34, c1: '#2563EB', c2: '#172554', font: 'bold 12px' },
+        '5+':  { diametro: 30, c1: '#0284C7', c2: '#082F49', font: 'bold 12px' },
+        '2+':  { diametro: 26, c1: '#0D9488', c2: '#042F2E', font: 'bold 11px' }
+      };
+
+      function crearIconoCluster(texto, cfg) {
+        const diametro = cfg.diametro;
+        const pad = 6;
+        const total = diametro + pad * 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = total * dpr;
+        canvas.height = total * dpr;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return { dataUrl: '', size: total };
+
+        ctx.scale(dpr, dpr);
+
+        const cx = total / 2;
+        const cy = total / 2;
+        const r = diametro / 2;
+
+        // 1. Sombra exterior difusa para dar profundidad y despegar del terreno
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 2;
+
+        // 2. Fondo circular con degradado elegante
+        const grad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+        grad.addColorStop(0, cfg.c1);
+        grad.addColorStop(1, cfg.c2);
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+
+        // 3. Borde exterior blanco de alto contraste
+        ctx.beginPath();
+        ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 4. Anillo interior translúcido
+        ctx.beginPath();
+        ctx.arc(cx, cy, r - 2.5, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // 5. Tipografía nítida con sombra de texto
+        ctx.save();
+        ctx.font = `${cfg.font} system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 1;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(texto, cx, cy + 0.5);
+        ctx.restore();
+
+        return {
+          dataUrl: canvas.toDataURL('image/png'),
+          size: total
+        };
+      }
+
+      const pins = {};
+      for (const k in configBuckets) {
+        pins[k] = crearIconoCluster(k, configBuckets[k]);
+      }
+
+      ds.clustering.clusterEvent.addEventListener((entities, cluster) => {
+        if (cluster.label.show) cluster.label.show = false;
+        cluster.billboard.show = true;
+        cluster.billboard.verticalOrigin = Cesium.VerticalOrigin.BOTTOM;
+        // CLAVE: sin estas dos propiedades los clusters quedan ENTERRADOS bajo el terreno:
+        cluster.billboard.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+        cluster.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+        const count = entities.length;
+        let texto = '2+';
+        if (count >= 50) texto = '50+';
+        else if (count >= 40) texto = '40+';
+        else if (count >= 30) texto = '30+';
+        else if (count >= 20) texto = '20+';
+        else if (count >= 10) texto = '10+';
+        else if (count >= 5) texto = '5+';
+        const pinData = pins[texto] || pins['2+'];
+        cluster.billboard.image = pinData.dataUrl;
+        cluster.billboard.width = pinData.size;
+        cluster.billboard.height = pinData.size;
+      });
+
+      // Configurar disableDepthTestDistance en entidades individuales
+      const updateEntityDepthTest = (ent) => {
+        if (ent && ent.billboard && depthTestDistance !== undefined) {
+          ent.billboard.disableDepthTestDistance = depthTestDistance;
+        }
+      };
+
+      if (ds.entities) {
+        if (ds.entities.values) {
+          ds.entities.values.forEach(updateEntityDepthTest);
+        }
+        if (ds.entities.collectionChanged && typeof ds.entities.collectionChanged.addEventListener === 'function') {
+          ds.entities.collectionChanged.addEventListener((collection, added) => {
+            if (added && Array.isArray(added)) {
+              added.forEach(updateEntityDepthTest);
+            }
+          });
+        }
+      }
+
+      // Forzar recluster inicial cambiando pixelRange (dispara el recálculo):
+      ds.clustering.pixelRange = 0;
+      requestAnimationFrame(() => {
+        ds.clustering.pixelRange = pixelRange;
+        try {
+          const mapImpl = (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getMapImpl === 'function')
+            ? mapajs.getMapImpl()
+            : null;
+          if (mapImpl && mapImpl.scene) {
+            mapImpl.scene.requestRender();
+          }
+        } catch (e) {}
+      });
+    } else if (intentos >= maxIntentos) {
+      clearInterval(interval);
+    }
+  }, 100);
 }
 
 mapa()
