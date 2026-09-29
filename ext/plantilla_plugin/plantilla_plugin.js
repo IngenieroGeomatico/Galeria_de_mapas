@@ -265,11 +265,25 @@
         }
       }
 
+      // Estado abierto/colapsado del panel (se conserva en el swap 2D/3D).
+      // Patrón estándar: leer _collapsed del panel, con fallback a la clase
+      // CSS 'collapsed' del elemento DOM (según versión de API-IDEE).
+      let panelCollapsed = true;
+      if (this._panel) {
+        if (this._panel._collapsed !== undefined) {
+          panelCollapsed = !!this._panel._collapsed;
+        } else if (typeof this._panel.getElement === 'function') {
+          const panelEl = this._panel.getElement();
+          panelCollapsed = panelEl ? panelEl.classList.contains('collapsed') : true;
+        }
+      }
+
       // TODO: Adaptar las propiedades devueltas según el estado real de tu plugin
       return {
         spanActivo: this._spanActivo,
         capaSeleccionadaId: this._capaSeleccionadaId,
         capaSeleccionadaLegend: capaLegend,
+        panelCollapsed,
       };
     }
 
@@ -282,6 +296,20 @@
     setState(state, map) {
       if (!state || typeof state !== 'object') return;
       const mapRef = map || this._map;
+
+      // Restauración del estado del panel (abierto/colapsado) tras el reinicio.
+      // Patrón estándar: collapse() / open() con guarda defensiva.
+      if (typeof state.panelCollapsed === 'boolean' && this._panel) {
+        try {
+          if (state.panelCollapsed && typeof this._panel.collapse === 'function') {
+            this._panel.collapse();
+          } else if (!state.panelCollapsed && typeof this._panel.open === 'function') {
+            this._panel.open();
+          }
+        } catch (e) {
+          console.warn(`${this.name}: Error al restaurar el estado del panel:`, e);
+        }
+      }
 
       // Restauración de propiedades simples con validación de tipo
       if (state.spanActivo !== undefined) {

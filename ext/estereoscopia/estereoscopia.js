@@ -521,12 +521,24 @@
       var chkDebug = this.panel ? this.panel.querySelector("#chk-debug-elev") : null;
       var debugElev = chkDebug ? Boolean(chkDebug.checked) : Boolean(this._pendingState && this._pendingState.debugElev);
 
+      // Estado abierto/colapsado del panel contenedor (swap 2D/3D).
+      var panelCollapsed = true;
+      if (this._iueePanel) {
+        if (this._iueePanel._collapsed !== undefined) {
+          panelCollapsed = !!this._iueePanel._collapsed;
+        } else if (typeof this._iueePanel.getElement === 'function') {
+          var panelEl = this._iueePanel.getElement();
+          panelCollapsed = panelEl ? panelEl.classList.contains('collapsed') : true;
+        }
+      }
+
       return {
         mode: mode,
         exagValue: (typeof exagValue === "number" && !isNaN(exagValue)) ? exagValue : null,
         settingsPanelOpen: settingsPanelOpen,
         planeLock: planeLock,
-        debugElev: debugElev
+        debugElev: debugElev,
+        panelCollapsed: panelCollapsed
       };
     } catch (e) {
       return null;
@@ -535,6 +547,19 @@
 
   _applyState(state) {
     if (!state || typeof state !== "object") return;
+
+    // 0. Panel contenedor abierto/colapsado
+    if (typeof state.panelCollapsed === "boolean" && this._iueePanel) {
+      try {
+        if (state.panelCollapsed && typeof this._iueePanel.collapse === 'function') {
+          this._iueePanel.collapse();
+        } else if (!state.panelCollapsed && typeof this._iueePanel.open === 'function') {
+          this._iueePanel.open();
+        }
+      } catch (e) {
+        console.warn("[estereoscopia] Error al restaurar el estado del panel:", e);
+      }
+    }
 
     // 1. Exageración vertical (slider)
     if (typeof state.exagValue === "number" && !isNaN(state.exagValue)) {

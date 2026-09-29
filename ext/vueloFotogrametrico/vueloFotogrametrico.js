@@ -4616,7 +4616,19 @@
    * @returns {Object} Copia superficial del estado actual
    */
   getState() {
-    return this.data ? { ...this.data } : FlightState.getInitialState();
+    const estado = this.data ? { ...this.data } : FlightState.getInitialState();
+    // Estado abierto/colapsado del panel contenedor (se conserva en el swap 2D/3D).
+    if (this._iueePanel) {
+      let collapsed = true;
+      if (this._iueePanel._collapsed !== undefined) {
+        collapsed = !!this._iueePanel._collapsed;
+      } else if (typeof this._iueePanel.getElement === 'function') {
+        const panelEl = this._iueePanel.getElement();
+        collapsed = panelEl ? panelEl.classList.contains('collapsed') : true;
+      }
+      estado.panelCollapsed = collapsed;
+    }
+    return estado;
   }
 
   /**
@@ -4634,11 +4646,30 @@
       this.map = map;
     }
 
+    // Estado del panel (abierto/colapsado): se restaura y se excluye del merge
+    // para no contaminar this.data / window.__vueloSharedData.
+    const panelCollapsed = state.panelCollapsed;
+    const stateDatos = {};
+    Object.keys(state).forEach((k) => {
+      if (k !== 'panelCollapsed') stateDatos[k] = state[k];
+    });
+    if (this._iueePanel && typeof panelCollapsed === "boolean") {
+      try {
+        if (panelCollapsed && typeof this._iueePanel.collapse === 'function') {
+          this._iueePanel.collapse();
+        } else if (!panelCollapsed && typeof this._iueePanel.open === 'function') {
+          this._iueePanel.open();
+        }
+      } catch (e) {
+        console.warn('[miPlugin_vueloFotogrametrico] Error al restaurar el estado del panel:', e);
+      }
+    }
+
     // Unifica el estado recibido con this.data y window.__vueloSharedData
-    if (this.data && this.data !== state) {
-      Object.assign(this.data, state);
+    if (this.data && this.data !== stateDatos) {
+      Object.assign(this.data, stateDatos);
     } else if (!this.data) {
-      this.data = state;
+      this.data = stateDatos;
     }
     window.__vueloSharedData = this.data;
 

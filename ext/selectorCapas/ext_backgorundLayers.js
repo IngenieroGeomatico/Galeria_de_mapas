@@ -36,6 +36,8 @@ class miPlugin_baseLayer {
     this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
     this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
     this._activeLayerId = null;
+    // Referencia al panel IDEE (para preservar abierto/colapsado en el swap 2D/3D)
+    this._panel = null;
   }
 
   // Devuelve {active, deactive} a partir de un color simple o un objeto.
@@ -57,7 +59,8 @@ class miPlugin_baseLayer {
   }
 
   // ── Coordinación de estado (swap 2D/3D con cambioImpl) ───────────────
-  // Captura el identificador de la capa base actualmente seleccionada.
+  // Captura el identificador de la capa base actualmente seleccionada y el
+  // estado abierto/colapsado del panel (que se conserva en el swap 2D/3D).
   getState() {
     let activeId = this._activeLayerId;
     if (!activeId && typeof document !== 'undefined') {
@@ -74,16 +77,45 @@ class miPlugin_baseLayer {
         if (saved) activeId = saved;
       } catch (e) {}
     }
-    if (!activeId) return null;
+
+    // Estado abierto/colapsado del panel (se conserva en el swap 2D/3D).
+    let panelCollapsed = true;
+    if (this._panel) {
+      if (this._panel._collapsed !== undefined) {
+        panelCollapsed = !!this._panel._collapsed;
+      } else if (typeof this._panel.getElement === 'function') {
+        const el = this._panel.getElement();
+        panelCollapsed = el ? el.classList.contains('collapsed') : true;
+      }
+    }
+
+    // Aunque no haya capa activa, se captura el estado del panel (por ejemplo
+    // user con el selector abierto pero sin capa seleccionada).
     return {
-      activeLayerId: activeId,
+      activeLayerId: activeId || null,
+      panelCollapsed,
     };
   }
 
   // Restaura la capa base seleccionada en la nueva instancia tras el reinicio del mapa.
   // Selecciona el radio button en la UI y aplica la capa base mediante changeBase.
   setState(state, map) {
-    if (!state || typeof state !== 'object' || !state.activeLayerId) return;
+    if (!state || typeof state !== 'object') return;
+
+    // Estado del panel (abierto/colapsado) tras el reinicio del mapa (swap 2D/3D).
+    if (state.panelCollapsed !== undefined && this._panel) {
+      try {
+        if (state.panelCollapsed && typeof this._panel.collapse === 'function') {
+          this._panel.collapse();
+        } else if (!state.panelCollapsed && typeof this._panel.open === 'function') {
+          this._panel.open();
+        }
+      } catch (e) {
+        console.warn('[miPlugin_baseLayer] Error al restaurar el estado del panel:', e);
+      }
+    }
+
+    if (!state.activeLayerId) return;
     const targetId = String(state.activeLayerId);
     this._activeLayerId = targetId;
     if (this.options) {
@@ -177,6 +209,9 @@ class miPlugin_baseLayer {
     control.createView = function () { return document.createElement('div'); };
     panel.addControls(control);
     map.addPanels(panel);
+    // Guardamos la referencia al panel IDEE para poder restablecer su estado
+    // abierto/colapsado tras un cambio de implementación 2D<->3D.
+    this._panel = panel;
 
     // ── Posicionar el botón del plugin (opción `order`) ────────────────
     if (this.order !== null && !Number.isNaN(this.order)) {

@@ -61,6 +61,8 @@ class miPlugin_georrefTeselas {
     this.order = (options.order !== undefined) ? Number(options.order) : null;
     this.map = null;
     this._pendingState = null;
+    // Referencia al panel IDEE (para preservar abierto/colapsado en el swap 2D/3D)
+    this._panel = null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
@@ -120,6 +122,9 @@ class miPlugin_georrefTeselas {
 
     panelExtra.addControls(control);
     map.addPanels(panelExtra);
+    // Guardamos la referencia al panel IDEE para poder restablecer su estado
+    // abierto/colapsado tras un cambio de implementación 2D<->3D.
+    this._panel = panelExtra;
 
     // ── Posicionar el botón del plugin (opción `order`) ────────────────
     if (this.order !== null && !Number.isNaN(this.order)) {
@@ -337,9 +342,20 @@ class miPlugin_georrefTeselas {
       if (!Object.keys(inputs).length && this._pendingState && this._pendingState.inputs) {
         Object.assign(inputs, this._pendingState.inputs);
       }
+      // Estado abierto/colapsado del panel (se conserva en el swap 2D/3D).
+      let panelCollapsed = true;
+      if (this._panel) {
+        if (this._panel._collapsed !== undefined) {
+          panelCollapsed = !!this._panel._collapsed;
+        } else if (typeof this._panel.getElement === 'function') {
+          const panelEl = this._panel.getElement();
+          panelCollapsed = panelEl ? panelEl.classList.contains('collapsed') : true;
+        }
+      }
       return {
         gridType: gridType || 'TMS',
-        inputs
+        inputs,
+        panelCollapsed
       };
     } catch (e) {
       return null;
@@ -371,6 +387,20 @@ class miPlugin_georrefTeselas {
 
   setState(state, map) {
     if (!state || typeof state !== 'object') return;
+
+    // Estado del panel (abierto/colapsado) tras el reinicio del mapa (swap 2D/3D).
+    if (state.panelCollapsed !== undefined && this._panel) {
+      try {
+        if (state.panelCollapsed && typeof this._panel.collapse === 'function') {
+          this._panel.collapse();
+        } else if (!state.panelCollapsed && typeof this._panel.open === 'function') {
+          this._panel.open();
+        }
+      } catch (e) {
+        console.warn('[miPlugin_georrefTeselas] Error al restaurar el estado del panel:', e);
+      }
+    }
+
     this._pendingState = state;
     this._applyState(state);
   }

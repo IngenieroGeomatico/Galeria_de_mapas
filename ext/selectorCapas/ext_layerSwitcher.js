@@ -22,6 +22,10 @@ class miPlugin_layerSwitcher {
     // Se conserva entre re-renders; si un grupo no está presente, se usa el
     // valor "collapsed" con el que se creó (constructorParameters).
     this._groupCollapsed = {};
+    // Panel contenedor del selector (colapsable). Referencia guardada en
+    // addTo() para poder conservar su estado abierto/colapsado entre swaps
+    // 2D/3D (contrato EstadoPlugins), igual que hacen FiltroCapas o storymap.
+    this._panel = null;
   }
 
   // Devuelve {active, deactive} a partir de un color simple o un objeto.
@@ -56,6 +60,18 @@ class miPlugin_layerSwitcher {
         }
       }
     }
+    // Estado abierto/colapsado del panel del selector: se conserva entre
+    // swaps 2D/3D para que el selector no aparezca plegado tras alternar
+    // la implementación. Mismo patrón que FiltroCapas/storymap.
+    let panelCollapsed = false;
+    if (this._panel) {
+      if (this._panel._collapsed !== undefined) {
+        panelCollapsed = !!this._panel._collapsed;
+      } else if (typeof this._panel.getElement === 'function') {
+        const panelEl = this._panel.getElement();
+        panelCollapsed = panelEl ? panelEl.classList.contains('collapsed') : false;
+      }
+    }
     // El idLayer se regenera en cada reinicio de mapa (mapa() crea las capas
     // de nuevo con prefijos temporales), asi que ademas del idLayer actual se
     // captura la legend/name (identificadores estables) para poder reencontrar
@@ -80,6 +96,7 @@ class miPlugin_layerSwitcher {
       }
     }
     return {
+      panelCollapsed,
       optionsOpen: idAtOpen,
       optionsOpenLegend: legendAtOpen,
       groupCollapsed: groupCollapsedCopy,
@@ -145,6 +162,20 @@ class miPlugin_layerSwitcher {
   setState(state, map) {
     if (!state || typeof state !== 'object') return;
     const mapRef = map || this._map;
+
+    // Restaurar estado abierto/colapsado del panel del selector: si estaba
+    // desplegado antes del swap, reabrirlo (por defecto addTo lo crea plegado).
+    if (state.panelCollapsed !== undefined && this._panel) {
+      try {
+        if (state.panelCollapsed && typeof this._panel.collapse === 'function') {
+          this._panel.collapse();
+        } else if (!state.panelCollapsed && typeof this._panel.open === 'function') {
+          this._panel.open();
+        }
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo restaurar el estado del panel', e);
+      }
+    }
 
     const layerExists = (id) => {
       if (!mapRef || typeof mapRef.getLayers !== 'function') return true;
@@ -223,6 +254,9 @@ class miPlugin_layerSwitcher {
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TL,
     });
+    // Referencia al panel para poder restaurar su estado (abierto/colapsado)
+    // en setState() tras un swap 2D/3D con cambioImpl.
+    this._panel = panelExtra;
 
     const htmlPanel = `
       <div aria-label="Selector de capas" role="menuitem" id="div-contenedor-herramienta-layerSwitcher" class="m-control m-container m-herramienta">
