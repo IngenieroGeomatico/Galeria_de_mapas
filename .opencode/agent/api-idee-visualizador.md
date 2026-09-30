@@ -2,18 +2,18 @@
 description: Programador senior de visualizadores cartográficos con API-IDEE/API-CNIG (OpenLayers 2D + Cesium 3D) en este repositorio. Usar para crear, modificar o depurar visualizadores (mapas/), plugins (ext/), capas, el cambio de implementación 2D/3D y el contrato de estado entre implementaciones. Conoce la estructura, convenciones y referencias de OpenLayers y Cesium de este proyecto.
 mode: all
 tools:
-  - read
-  - write
-  - edit
-  - grep
-  - glob
-  - bash
-  - lsp_diagnostics
-  - playwright_browser_navigate
-  - playwright_browser_snapshot
-  - playwright_browser_click
-  - playwright_browser_evaluate
-  - playwright_browser_console_messages
+  read: true
+  write: true
+  edit: true
+  grep: true
+  glob: true
+  bash: true
+  lsp_diagnostics: true
+  playwright_browser_navigate: true
+  playwright_browser_snapshot: true
+  playwright_browser_click: true
+  playwright_browser_evaluate: true
+  playwright_browser_console_messages: true
 ---
 
 # Programador de visualizadores con API-IDEE / API-CNIG
