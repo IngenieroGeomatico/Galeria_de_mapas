@@ -1,12 +1,154 @@
 
 
 const SVGCarga = document.getElementById("cargaSVG")
-// window.onload = (event) => {
-//   SVGCarga.hidden = true
-// };
+
+
+/* ===========================================================================
+   OVERLAY DE CARGA (2D <-> 3D)
+   ---------------------------------------------------------------------------
+   Antes el spinner se ocultaba en el callback OTHER, que se dispara cuando las
+   capas se AÑADEN, no cuando están CARGADAS. Al cambiar de 2D a 3D eso dejaba
+   al usuario mirando un mapa a medias durante varios segundos.
+
+   Ahora el spinner se muestra al pulsar el botón de cambio (antes incluso de que
+   se recargue el bundle) y se oculta sólo cuando las capas VISIBLES están
+   listas. Las ocultas quedan fuera de la espera a propósito: en 2D la API no las
+   carga hasta que se encienden, así que esperarlas dejaría el velo puesto
+   siempre. Ver esperarCapasListas().
+
+   `cargaToken` es lo que hace seguro esto: mapa() se re-ejecuta en cada cambio de
+   implementación, así que sin él los timers de la ejecución anterior podrían
+   cerrar el overlay de la nueva.
+   =========================================================================== */
+
+let cargaToken = 0;
+let timerCarga = null;
+// Token al que pertenece el timer vivo. El callback OTHER puede dispararse
+// varias veces dentro de una misma ejecución de mapa(); sin esto, cada llamada
+// reiniciaría el reloj del tope de seguridad y el velo no caería nunca.
+let tokenTimer = null;
+
+// Las tres capas de este visualizador. Se declara aquí (y no dentro del barrido
+// de deduplicación) porque la necesitan tanto el barrido como la espera de carga.
+const CAPAS_VISUALIZADOR = ["Monumentos", "Placas conmemorativas", "Placas Stolpersteine"];
+
+// Tope de seguridad: si alguna capa no llega a cargar nunca (red caída, dataset
+// vacío), el overlay se retira igualmente. El usuario no puede quedarse atrapado
+// detrás de un velo opaco por una carga fallida.
+const TIMEOUT_CARGA_MS = 45000;
+
+function mostrarCarga() {
+  cargaToken++
+  if (timerCarga) {
+    clearInterval(timerCarga)
+    timerCarga = null
+  }
+  tokenTimer = null
+  if (SVGCarga) SVGCarga.hidden = false
+  return cargaToken
+}
+
+function ocultarCarga(token) {
+  // Sólo la ejecución vigente puede cerrar el overlay: los timers de una
+  // ejecución anterior de mapa() ya no valen.
+  if (token !== cargaToken) return
+  if (timerCarga) {
+    clearInterval(timerCarga)
+    timerCarga = null
+  }
+  tokenTimer = null
+  if (SVGCarga) SVGCarga.hidden = true
+}
+
+/**
+ * ¿Está la capa con sus entidades realmente disponibles?
+ *
+ * La señal NO es la misma en las dos implementaciones, y está medido:
+ *  - 2D (OL): el impl expone `loaded_`, que sí significa "capa cargada".
+ *  - 3D (Cesium): `loaded_` pasa a `true` con `features_` todavía vacío y
+ *   _entities.length_ indefinido, porque la API crea un datasource placeholder
+ *    y lo SUSTITUYE cuando llegan los features. Por eso aquí se resuelve el
+ *    datasource vivo por nombre y se cuentan sus entidades, igual que hace
+ *    activarClusteringCesium().
+ */
+function capaLista(capa) {
+  if (!capa) return false
+  const impl = typeof capa.getImpl === "function" ? capa.getImpl() : null
+  if (!impl) return false
+
+  if (typeof checkImpl === "function" && checkImpl() === "cesium") {
+    try {
+      const mapImpl = mapajs.getMapImpl()
+      const nombre = capa.filterID || capa.name
+      const ds = mapImpl.dataSources._dataSources.filter(d => d && d.name === nombre)[0]
+      if (!ds || !ds.entities || !ds.entities.values) return false
+      return ds.entities.values.length > 0
+    } catch (e) {
+      return false
+    }
+  }
+
+  return impl.loaded_ === true
+}
+
+/** ¿Está la capa encendida? El flag real está en el impl (la fachada no lo expone). */
+function capaVisible(capa) {
+  if (!capa) return false
+  const impl = typeof capa.getImpl === "function" ? capa.getImpl() : null
+  if (impl && typeof impl.visibility === "boolean") return impl.visibility
+  if (capa.options && typeof capa.options.visibility === "boolean") return capa.options.visibility
+  return true
+}
+
+/** Espera a que las capas visibles estén listas y cierra el overlay. */
+function esperarCapasListas(nombres, token) {
+  // El callback OTHER puede invocarse más de una vez por ejecución de mapa().
+  // Si ya hay un timer vivo para ESTE token, se respeta su reloj: reiniciarlo
+  // en cada llamada dejaría el tope de seguridad sin efecto real.
+  if (timerCarga && tokenTimer === token) return
+  tokenTimer = token
+
+  const inicio = Date.now()
+  timerCarga = setInterval(() => {
+    let pendiente = false
+    try {
+      const capas = mapajs.getLayers().filter(l => l && l.filterID)
+      // Sólo se espera a las capas VISIBLES. Las ocultas no aportan nada a lo
+      // que el usuario está mirando y en 2D la API ni siquiera las carga: las
+      // resuelve de forma perezosa al encenderlas (source distinto, 0 features,
+      // loading=false). Esperarlas dejaría el velo puesto hasta el tope de
+      // seguridad en cada arranque y en cada cambio 2D/3D.
+      // El subconjunto se recalcula en cada tick porque el plugin de filtrado
+      // puede apagar capas justo después de que arranque la espera.
+      const visibles = nombres
+        .map(nombre => capas.filter(l => l.filterID === nombre)[0])
+        .filter(c => capaVisible(c))
+      // [] .every() === true: si no queda ninguna visible, no hay nada que esperar.
+      pendiente = !visibles.every(c => capaLista(c))
+    } catch (e) {
+      pendiente = true
+    }
+
+    if (!pendiente || Date.now() - inicio > TIMEOUT_CARGA_MS) {
+      ocultarCarga(token)
+    }
+  }, 300)
+}
+
+// El botón lo crea ext/cambioImpl/cambioImpl.js. Se escucha desde aquí para
+// tapar el spinner en el clic, sin tocar el plugin compartido por todos los
+// visualizadores y sin esperar a que se recargue el bundle y se re-ejecute mapa().
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("APIIDEE-herramienta-button")
+  if (btn) btn.addEventListener("click", mostrarCarga)
+})
 
 
 function mapa() {
+
+  // Cada re-ejecución (carga inicial y cada cambio 2D/3D) abre el overlay.
+  const tokenCarga = mostrarCarga()
+
 
 Base_IGNBaseTodo_TMS_2 = new M.layer.TMS({
   url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
@@ -156,10 +298,15 @@ let estilo_base_Monumentos = new M.style.Generic({
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
       // form: M.style.form.SHIELD,
-      src: 'https://cdn-icons-png.flaticon.com/512/984/984106.png', // Ponerlo en relatvo
+      // Icono LOCAL y relativo. Con la URL remota de flaticon, la API dejaba en
+      // el billboard un valor de imagen NO utilizable
+      // (["rgba(0,0,0,0)",50,"rgba(0,0,0,0)",0]) en las 1765 primitivas: al no
+      // ser una imagen cargable no se generaba textura y el icono no se
+      // dibujaba nunca. Verificado sobre carga limpia, sin tocar nada.
+      src: '../../img/iconos/monumento.png',
       // Tamaño de la fuente
       fontsize: 0.7,
-      scale: 0.08,
+      scale: 0.1,
       // Clase fuente
       class: 'M',
       // Tamaño del radio
@@ -264,7 +411,10 @@ let estilo_base_Placas = new M.style.Generic({
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
       // form: M.style.form.LOZENGE,
-      src: 'https://cdn-icons-png.flaticon.com/512/3897/3897579.png',
+      // Icono local: con la URL remota de flaticon, la API dejaba en el
+      // billboard un valor de imagen no utilizable (ver
+      // activarClusteringCesium) y el icono no se dibujaba en 3D.
+      src: '../../img/iconos/cuadradoAmarillo.png',
       // Tamaño de la fuente
       fontsize: 0.7,
       scale: 0.08,
@@ -372,7 +522,10 @@ let estilo_base_Stonh = new M.style.Generic({
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
       // form: M.style.form.SQUARE,
-      src: 'https://cdn-icons-png.flaticon.com/512/5854/5854013.png',
+      // Icono local: con la URL remota de flaticon, la API dejaba en el
+      // billboard un valor de imagen no utilizable (ver
+      // activarClusteringCesium) y el icono no se dibujaba en 3D.
+      src: '../../img/iconos/romboAmarillo.png',
       // Tamaño de la fuente
       fontsize: 0.7,
       scale: 0.06,
@@ -448,7 +601,10 @@ geojsonData.then(() => {
   });
   mapajs.addLayers(capaMonumentos)
   if (impl === 'cesium') {
-    activarClusteringCesium("Monumentos", 40, 2, 5000);
+    // Sin depthTestDistance: la API ya aplica Infinity al crear el billboard del
+    // estilo. Pasar 5000 la machacaba y dejaba los iconos con depth-test contra
+    // el terreno (cámara a >5 km), por lo que quedaban enterrados.
+    activarClusteringCesium("Monumentos", 40, 2, undefined, '../../img/iconos/monumento.png');
   }
 
 
@@ -479,7 +635,8 @@ geojsonData.then(() => {
   });
   mapajs.addLayers(capaPlacas)
   if (impl === 'cesium') {
-    activarClusteringCesium("Placas conmemorativas", 40, 2, 5000);
+    // Ver comentário en Monumentos: no sobrescribir el Infinity de la API.
+    activarClusteringCesium("Placas conmemorativas", 40, 2, undefined, '../../img/iconos/cuadradoAmarillo.png');
   }
 
 
@@ -510,16 +667,16 @@ geojsonData.then(() => {
   });
   mapajs.addLayers(capaStolpersteine)
   if (impl === 'cesium') {
-    activarClusteringCesium("Placas Stolpersteine", 40, 2, Number.POSITIVE_INFINITY);
+    // Ver comentario en Monumentos: no sobrescribir el Infinity de la API.
+    activarClusteringCesium("Placas Stolpersteine", 40, 2, undefined, '../../img/iconos/romboAmarillo.png');
   }
 
   // Barrido final de seguridad para deduplicación: asegurar que sólo queda una capa por filterID
   try {
-    const targetIDs = ["Monumentos", "Placas conmemorativas", "Placas Stolpersteine"];
     if (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getLayers === 'function') {
       const allLayers = mapajs.getLayers();
       if (Array.isArray(allLayers)) {
-        targetIDs.forEach(fid => {
+        CAPAS_VISUALIZADOR.forEach(fid => {
           const matched = allLayers.filter(l => l && (l.filterID === fid || l.name === fid));
           if (matched.length > 1) {
             const sobrantes = matched.slice(0, -1);
@@ -532,8 +689,9 @@ geojsonData.then(() => {
     console.warn('Error en barrido final de deduplicación', e);
   }
 
-  // Oculta el spinner de carga cuando ya están añadidas todas las capas.
-  SVGCarga.hidden = true
+  // El spinner se cierra cuando las tres capas están REALMENTE cargadas, no
+  // cuando se han añadido: al volver de 3D, «añadida» no implica «pintada».
+  esperarCapasListas(CAPAS_VISUALIZADOR, tokenCarga)
 
 })
 
@@ -560,7 +718,9 @@ async function myFunction_GetData() {
   confJSON_LD = { type: "Point", field: "location", long: "longitude", lat: "latitude" }
 
   if(value_Monumentos.length == 0){
-    SVGCarga.hidden = true
+    // Sin datos no hay nada que esperar: se cierra el overlay y se cancela el
+    // timer, que si no seguiría sonando hasta el tope de seguridad.
+    ocultarCarga(cargaToken)
     M.dialog.info("Necesita tener activada la extensión del navegador CORS para poder cargar los datos")
   }
 
@@ -664,8 +824,40 @@ function checkImpl() {
     typeof Cesium !== 'undefined') ? 'cesium' : 'ol';
 }
 
-function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize = 2, depthTestDistance = undefined) {
+function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize = 2, depthTestDistance = undefined, iconoUrl = null) {
   if (typeof Cesium === 'undefined') return;
+
+  // --- Icono de las features sueltas -----------------------------------------
+  // La API NO consigue convertir el icono del estilo en una imagen válida para
+  // las primitivas de las singles: les deja el valor serializado
+  //   ["rgba(0,0,0,0)",50,"rgba(0,0,0,0)",0]
+  // que no es una imagen cargable, así que no se genera textura y el icono no se
+  // dibuja NUNCA. En los clusters sí escribe un data:image/png válido, y por eso
+  // se veían los clusters pero no las features al hacer zoom.
+  // Verificado sobre carga limpia: 1765/1765 con esa basura, 0 sub-regiones.
+  // Cambiar el `src` del estilo no lo arregla (la API lo vuelve a pisar) y
+  // `ddt`/`verticalOrigin` tampoco: la API los revierte a 0 en cada
+  // reaplicación de estilo. Lo que SÍ persiste es escribir la imagen
+  // directamente en la primitiva (1765/1765 sobreviven al estilo).
+  let iconoSingles = null;
+  if (iconoUrl) {
+    try {
+      const img = new Image();
+      img.onload = () => { iconoSingles = img; };
+      img.src = iconoUrl;
+    } catch (e) { /* ignore */ }
+  }
+
+  // El valor bueno llega como objeto (Image/canvas) o como data URL / ruta.
+  // La basura de la API viene como string que empieza por '['.
+  const imagenUsable = (p) => {
+    const v = p && p.image;
+    if (!v) return false;
+    if (typeof v === 'object') return true;
+    if (typeof v !== 'string') return false;
+    const ini = v.charAt(0);
+    return ini !== '[' && ini !== '{';
+  };
 
   let intentos = 0;
   const maxIntentos = 50; // 50 * 100ms = 5s
@@ -798,25 +990,199 @@ function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize
         cluster.billboard.height = pinData.size;
       });
 
-      // Configurar disableDepthTestDistance en entidades individuales
-      const updateEntityDepthTest = (ent) => {
-        if (ent && ent.billboard && depthTestDistance !== undefined) {
+      // --- NO eliminar los `point` de cada entidad -----------------------------
+      // tempting, pero NO se deben borrar los `point` (5px) que la API crea junto
+      // al billboard: aunque quedan tapados por el icono y duplican primitivas
+      // (~3530 en vez de 1765), son IMPRESCINDIBLES para el agrupado. El código
+      // de cluster de la API lee `entity.point._billboard`, así que poner
+      // `ent.point = undefined` revienta el render con:
+      //   TypeError: Cannot read properties of undefined (reading '_billboard')
+      //   at O (...) at Z.t [as _cluster] (...)
+      //   -> "An error occurred while rendering. Rendering has stopped."
+      // Verificado en navegador: al borrarlos en bloque, 1765 -> 0 y elCesium
+      // deja de renderizar. Se conservan tal cual.
+      //
+      // --- CLAVE: las singles salían INVISIBLES al desclusterizar ---------------
+      // No basta con el valor del graphics: la API deja Infinity en
+      // `entity.billboard`, pero ese valor NO llega a la primitiva.
+      // Medido en navegador a 300 m, ya desclusterizado (1765 singles, 0 ocultas):
+      //   single : show=true, heightReference=1 (CLAMP_TO_GROUND), ddt=0
+      //   cluster: show=true, heightReference=1 (CLAMP_TO_GROUND), ddt=Infinity
+      // La única diferencia real es disableDepthTestDistance. Con el depth test
+      // activo la primitiva entra en el z-buffer y el terreno la tapa: por eso se
+      // veían los clusters (su clusterEvent sí fija Infinity sobre la
+      // primitiva) y no las features sueltas al hacer zoom.
+      const depthSingles = depthTestDistance !== undefined ? depthTestDistance : Number.POSITIVE_INFINITY;
+
+      const ajustarEntidad = (ent) => {
+        if (!ent) return;
+        if (depthTestDistance !== undefined && ent.billboard) {
           ent.billboard.disableDepthTestDistance = depthTestDistance;
         }
       };
 
+      // Repara directamente sobre las primitivas de las singles, igual que hace
+      // el clusterEvent con las suyas. NO se toca `show`: ese lo gobierna el
+      // agrupado y cambiarlo rompería el desclusterizado.
+      //
+      // NO se toca `height`. En Cesium el alto de un Billboard son PÍXELES, no
+      // metros: fijarlo a 2 (para los "2 m sobre el terreno") convirtió los
+      // iconos en barras de 50x2 px, invisibles. La elevación del icono se
+      // resuelve con `verticalOrigin`, pero la API lo revierte a 0 en cada
+      // reaplicación de estilo, así que ni se intenta (código muerto).
+      //
+      // Lo único que hay que reparar de verdad es `image`: es la causa raíz de
+      // que las singles no se dibujen (ver cabecera de la función).
+      //
+      // Devuelve el nº de primitivas corregidas, o null si la colección todavía
+      // no existe (las primitivas se crean al maquetar cada entidad).
+      const ajustarPrimitivasSingles = (destino) => {
+        let aplicados = 0;
+        try {
+          const cl = destino && destino._entityCluster;
+          if (!cl || !cl._billboardCollection) return null;
+          const cols = [cl._billboardCollection, cl._pointCollection];
+          for (let c = 0; c < cols.length; c++) {
+            const col = cols[c];
+            if (!col || typeof col.length !== 'number' || typeof col.get !== 'function') continue;
+            for (let i = 0; i < col.length; i++) {
+              const p = col.get(i);
+              if (!p) continue;
+              let cambia = false;
+              if (p.disableDepthTestDistance !== depthSingles) {
+                p.disableDepthTestDistance = depthSingles;
+                cambia = true;
+              }
+              if (iconoSingles && !imagenUsable(p)) {
+                p.image = iconoSingles;
+                cambia = true;
+              }
+              if (cambia) aplicados++;
+            }
+          }
+        } catch (e) { /* ignore */ }
+        return aplicados;
+      };
+
       if (ds.entities) {
         if (ds.entities.values) {
-          ds.entities.values.forEach(updateEntityDepthTest);
+          ds.entities.values.forEach(ajustarEntidad);
         }
         if (ds.entities.collectionChanged && typeof ds.entities.collectionChanged.addEventListener === 'function') {
           ds.entities.collectionChanged.addEventListener((collection, added) => {
             if (added && Array.isArray(added)) {
-              added.forEach(updateEntityDepthTest);
+              added.forEach(ajustarEntidad);
             }
+            ajustarPrimitivasSingles(ds);
           });
         }
       }
+
+      // Las primitivas se crean de forma asíncrona conforme llegan los features
+      // (medido: ~60 s en carga limpia, con 0 primitivas a los 30 s) y la API
+      // reaplica su estilo DESPUÉS, así que hay que reintentarlo en background
+      // durante un margen amplio. Se re-resuelve el datasource por nombre
+      // porque la API lo sustituye al llegar los features (mismo motivo que en
+      // la sincronización de visibilidad).
+      //
+      // El poller solo se autodetiene cuando la colección de primitivas ha
+      // igualado al número de entidades Y además lleva 10 s sin cambios: si no,
+      // se pararía en una ventana en la que aún no se ha maquetado todo y
+      // quedarían iconos sin reparar.
+      let ticksDepth = 0;
+      let sinCambiosDepth = 0;
+      const timerDepth = setInterval(() => {
+        ticksDepth++;
+        let completas = false;
+        try {
+          const mapImpl = (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getMapImpl === 'function')
+            ? mapajs.getMapImpl() : null;
+          const dsVivo = (mapImpl && mapImpl.dataSources && mapImpl.dataSources._dataSources)
+            ? mapImpl.dataSources._dataSources.find(d => d && d.name === nombreCapa)
+            : null;
+          if (dsVivo) {
+            const aplicados = ajustarPrimitivasSingles(dsVivo);
+            // null = la colección aún no existe (siguen llegando features): NO
+            // cuenta como "sin cambios", o el poller se autodetiene antes de que
+            // se maqueten las primitivas y el arreglo no llega a aplicarse.
+            if (aplicados !== null) {
+              sinCambiosDepth = aplicados > 0 ? 0 : sinCambiosDepth + 1;
+              const col = dsVivo._entityCluster._billboardCollection;
+              const entidades = (dsVivo.entities && dsVivo.entities.values) ? dsVivo.entities.values.length : 0;
+              completas = entidades > 0 && col.length >= entidades;
+            }
+          }
+        } catch (e) { /* ignore */ }
+        // Tope duro: 400 * 400ms = 160s, por si la carga se atasca.
+        if ((completas && sinCambiosDepth >= 25) || ticksDepth >= 400) clearInterval(timerDepth);
+      }, 400);
+
+
+      // --- Optimización: las capas ocultas no deben renderizar -----------------
+      // Nada propagaba la visibilidad de la capa a `ds.show`, así que Placas y
+      // Stolpersteine seguían renderizando sus ~552 entidades estando apagadas.
+      //
+      // Importante: durante la carga, la API sustituye el datasource por otro
+      // cuando llegan los features. Fijar `ds.show` una sola vez sobre el
+      // datasource placeholder se pierde, así que se vuelve a resolver POR
+      // NOMBRE en cada tick mientras la carga se asienta.
+      try {
+        const capa = (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getLayers === 'function')
+          ? mapajs.getLayers().filter(l => l && (l.filterID === nombreCapa || l.name === nombreCapa))[0]
+          : null;
+        if (capa) {
+          // La fachada de la capa NO expone getVisible/getVisibility/visible:
+          // el flag real vive en la implementación. Sin esto, leerVisibilidad()
+          // devolvía undefined y TODAS las capas quedaban visibles.
+          const leerVisibilidad = () => {
+            const impl = typeof capa.getImpl === 'function' ? capa.getImpl() : null;
+            if (impl && typeof impl.visibility === 'boolean') return impl.visibility;
+            if (capa.options && typeof capa.options.visibility === 'boolean') return capa.options.visibility;
+            if (typeof capa.getVisible === 'function') return capa.getVisible();
+            if (typeof capa.getVisibility === 'function') return capa.getVisibility();
+            return true;
+          };
+          const visibleCapa = leerVisibilidad() !== false;
+          ds.show = visibleCapa;
+
+          // Resolver el datasource vivo por nombre (evita fijarlo en el que la
+          // API va a descartar). Se acota: 20 * 400ms = 8s, y se autodetiene en
+          // cuanto la visibilidad ya está sincronizada.
+          let ticksVis = 0;
+          const timerVis = setInterval(() => {
+            ticksVis++;
+            try {
+              const mapImpl = (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getMapImpl === 'function')
+                ? mapajs.getMapImpl() : null;
+              const dsVivo = (mapImpl && mapImpl.dataSources && mapImpl.dataSources._dataSources)
+                ? mapImpl.dataSources._dataSources.find(d => d && d.name === nombreCapa)
+                : null;
+              if (dsVivo) dsVivo.show = leerVisibilidad() !== false;
+              const yaSincronizado = dsVivo && dsVivo.show === (leerVisibilidad() !== false);
+              if (yaSincronizado || ticksVis >= 20) clearInterval(timerVis);
+            } catch (e) {
+              clearInterval(timerVis);
+            }
+          }, 400);
+
+          // Interceptar setVisible para que el panel de capas siga funcionando.
+          if (typeof capa.setVisible === 'function' && !capa.__syncShowCesium) {
+            const original = capa.setVisible.bind(capa);
+            capa.setVisible = function (visible) {
+              const r = original(visible);
+              try {
+                const mapImpl = mapajs.getMapImpl();
+                const dsVivo = (mapImpl && mapImpl.dataSources && mapImpl.dataSources._dataSources)
+                  ? mapImpl.dataSources._dataSources.find(d => d && d.name === nombreCapa)
+                  : null;
+                (dsVivo || ds).show = visible !== false;
+              } catch (e) {}
+              return r;
+            };
+            capa.__syncShowCesium = true;
+          }
+        }
+      } catch (e) { /* ignore */ }
 
       // Forzar recluster inicial cambiando pixelRange (dispara el recálculo):
       ds.clustering.pixelRange = 0;

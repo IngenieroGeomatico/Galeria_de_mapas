@@ -403,5 +403,8 @@ FodyWeavers.xsd
 # Playwright MCP working directory (capturas y snapshots temporales de QA)
 .playwright-mcp/
 
+# Directorio de trabajo de depuración (capturas y pruebas temporales)
+.debug/
+
 # Credenciales de Azure (nunca subir)
 azure-ad-credentials.json
