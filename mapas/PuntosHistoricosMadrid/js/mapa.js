@@ -17,6 +17,49 @@ const CENTRO_MADRID = { x: -413064.3575507956, y: 4927841.089710372 };
 
 
 /* ===========================================================================
+   ICONOS EN BASE64
+   ---------------------------------------------------------------------------
+   Devuelve el data URI de un icono de img/iconos/, generado en
+   js/iconosBase64.js por js/generarIconosBase64.js.
+
+   Por qué un data URI y no la ruta al PNG: abierto con file://, el navegador
+   trata cada fichero local como origen opaco. La API-CNIG construye el icono de
+   una feature dibujándolo en un canvas, y al haber metido una imagen de disco
+   ese canvas queda "tainted", de modo que al intentar extraerlo falla:
+
+     SecurityError: The canvas has been tainted by cross-origin data
+     Error loading image for billboard: SecurityError: The operation is insecure
+
+   El icono se quedaba sin pintar en 2D y Cesium lanzaba el error de arriba al
+   subir la textura del billboard. Medido bajo file://: los datos cargan bien
+   (1765 features), la imagen del PNG también llega a cargar (512x512), pero el
+   canvas de estilo de la API sale VACÍO porque la extracción falla. Los datos no
+   tienen nada que ver.
+
+   Un data URI no viene de un fichero local, así que no tainted nada y funciona
+   igual abierto por file:// o servido por HTTP. Los PNG de img/iconos/ siguen
+   siendo la fuente única: para cambiar un icono se regenera con
+     node mapas/PuntosHistoricosMadrid/js/generarIconosBase64.js
+
+   Con fallback a la ruta relativa por si el script no se cargara, para que el
+   fallo sea el de siempre (visible al menos al servirlo por HTTP) y no un
+   ReferenceError.
+   =========================================================================== */
+function iconoBase64(clave) {
+  const iconos = (typeof window !== 'undefined') ? window.ICONOS_BASE64 : null;
+  if (iconos && typeof iconos[clave] === 'string' && iconos[clave].length > 0) {
+    return iconos[clave];
+  }
+  const rutas = {
+    monumento: '../../img/iconos/monumento.png',
+    cuadradoAmarillo: '../../img/iconos/cuadradoAmarillo.png',
+    romboAmarillo: '../../img/iconos/romboAmarillo.png'
+  };
+  return rutas[clave] || '';
+}
+
+
+/* ===========================================================================
    CUADRAR LA VISTA AL ARRANCAR
    ---------------------------------------------------------------------------
    El `center` del constructor de M.map va en EPSG:3857, que es lo que espera
@@ -392,12 +435,21 @@ let estilo_base_Monumentos = new M.style.Generic({
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
       // form: M.style.form.SHIELD,
-      // Icono LOCAL y relativo. Con la URL remota de flaticon, la API dejaba en
-      // el billboard un valor de imagen NO utilizable
-      // (["rgba(0,0,0,0)",50,"rgba(0,0,0,0)",0]) en las 1765 primitivas: al no
-      // ser una imagen cargable no se generaba textura y el icono no se
-      // dibujaba nunca. Verificado sobre carga limpia, sin tocar nada.
-      src: '../../img/iconos/monumento.png',
+      // Icono en base64 (data URI) en lugar de una ruta a un PNG.
+      //
+      // Con la URL remota de flaticon la API dejaba en el billboard un valor de
+      // imagen NO utilizable (["rgba(0,0,0,0)",50,"rgba(0,0,0,0)",0]) en las 1765
+      // primitivas: al no ser una imagen cargable no se generaba textura y el
+      // icono no se dibujaba nunca.
+      //
+      // Y con una ruta LOCAL al PNG tampoco funciona bajo file://: el navegador
+      // trata cada fichero como origen opaco, el canvas donde la API dibuja el
+      // icono queda tainted y falla al extraerlo, con
+      //   Error loading image for billboard: SecurityError: The operation is insecure
+      // Un data URI no viene de un fichero local, así que no tainted nada y
+      // funciona igual en file:// y en http://.
+      // El base64 lo genera js/generarIconosBase64.js desde img/iconos/.
+      src: iconoBase64('monumento'),
       // Tamaño de la fuente
       fontsize: 0.7,
       scale: 0.1,
@@ -505,10 +557,10 @@ let estilo_base_Placas = new M.style.Generic({
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
       // form: M.style.form.LOZENGE,
-      // Icono local: con la URL remota de flaticon, la API dejaba en el
-      // billboard un valor de imagen no utilizable (ver
-      // activarClusteringCesium) y el icono no se dibujaba en 3D.
-      src: '../../img/iconos/cuadradoAmarillo.png',
+      // Icono en base64 (data URI) para que también funcione abierto por file://,
+      // donde una ruta local tainted el canvas de estilo de la API y el icono se
+      // quedaba sin pintar. Ver iconoBase64() en la cabecera.
+      src: iconoBase64('cuadradoAmarillo'),
       // Tamaño de la fuente
       fontsize: 0.7,
       scale: 0.08,
@@ -616,10 +668,10 @@ let estilo_base_Stonh = new M.style.Generic({
       // BAN(cículo)|BLAZON(diálogo cuadrado)|BUBBLE(diálogo redondo)|CIRCLE(círculo)|LOZENGE(diamante)|MARKER(diálogo redondeado)
       // NONE(ninguno)|SHIELD(escudo)|SIGN(triángulo)|SQUARE(cuadrado)|TRIANGLE(triángulo invertido)
       // form: M.style.form.SQUARE,
-      // Icono local: con la URL remota de flaticon, la API dejaba en el
-      // billboard un valor de imagen no utilizable (ver
-      // activarClusteringCesium) y el icono no se dibujaba en 3D.
-      src: '../../img/iconos/romboAmarillo.png',
+      // Icono en base64 (data URI) para que también funcione abierto por file://,
+      // donde una ruta local tainted el canvas de estilo de la API y el icono se
+      // quedaba sin pintar. Ver iconoBase64() en la cabecera.
+      src: iconoBase64('romboAmarillo'),
       // Tamaño de la fuente
       fontsize: 0.7,
       scale: 0.06,
@@ -698,7 +750,7 @@ geojsonData.then(() => {
     // Sin depthTestDistance: la API ya aplica Infinity al crear el billboard del
     // estilo. Pasar 5000 la machacaba y dejaba los iconos con depth-test contra
     // el terreno (cámara a >5 km), por lo que quedaban enterrados.
-    activarClusteringCesium("Monumentos", 40, 2, undefined, '../../img/iconos/monumento.png');
+    activarClusteringCesium("Monumentos", 40, 2, undefined, iconoBase64('monumento'));
   }
 
 
@@ -730,7 +782,7 @@ geojsonData.then(() => {
   mapajs.addLayers(capaPlacas)
   if (impl === 'cesium') {
     // Ver comentário en Monumentos: no sobrescribir el Infinity de la API.
-    activarClusteringCesium("Placas conmemorativas", 40, 2, undefined, '../../img/iconos/cuadradoAmarillo.png');
+    activarClusteringCesium("Placas conmemorativas", 40, 2, undefined, iconoBase64('cuadradoAmarillo'));
   }
 
 
@@ -762,7 +814,7 @@ geojsonData.then(() => {
   mapajs.addLayers(capaStolpersteine)
   if (impl === 'cesium') {
     // Ver comentario en Monumentos: no sobrescribir el Infinity de la API.
-    activarClusteringCesium("Placas Stolpersteine", 40, 2, undefined, '../../img/iconos/romboAmarillo.png');
+    activarClusteringCesium("Placas Stolpersteine", 40, 2, undefined, iconoBase64('romboAmarillo'));
   }
 
   // Barrido final de seguridad para deduplicación: asegurar que sólo queda una capa por filterID
