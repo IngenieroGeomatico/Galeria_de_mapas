@@ -1096,37 +1096,70 @@ function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize
       // Verificado en navegador: al borrarlos en bloque, 1765 -> 0 y elCesium
       // deja de renderizar. Se conservan tal cual.
       //
-      // --- CLAVE: las singles salían INVISIBLES al desclusterizar ---------------
-      // No basta con el valor del graphics: la API deja Infinity en
-      // `entity.billboard`, pero ese valor NO llega a la primitiva.
-      // Medido en navegador a 300 m, ya desclusterizado (1765 singles, 0 ocultas):
+      // --- CLAVE: el recorte por el terreno se corrige SOBRE LAS ENTIDADES ------
+      // Estado de partida medido en navegador a 300 m, ya desclusterizado
+      // (1765 singles, 0 ocultas):
       //   single : show=true, heightReference=1 (CLAMP_TO_GROUND), ddt=0
       //   cluster: show=true, heightReference=1 (CLAMP_TO_GROUND), ddt=Infinity
-      // La única diferencia real es disableDepthTestDistance. Con el depth test
-      // activo la primitiva entra en el z-buffer y el terreno la tapa: por eso se
-      // veían los clusters (su clusterEvent sí fija Infinity sobre la
-      // primitiva) y no las features sueltas al hacer zoom.
-      const depthSingles = depthTestDistance !== undefined ? depthTestDistance : Number.POSITIVE_INFINITY;
+      // Los singles llegan CLAMP_TO_GROUND, pegados a la superficie, y con el
+      // icono de 51 px dibujado sobre el punto queda medio enterrado en el
+      // terreno. El resto de este bloque explica por qué se corrige en la
+      // entidad y no en la primitiva.
+      //
+      // Patrón tomado de mapas/LucesdeBohemia/js/mapa.js
+      // (aplicaAlturaSobreTerrenoSiCesium), que ya resolvía este mismo recorte.
+      //
+      // MEDIDO: escribir en la PRIMITIVA no sirve. La API re-maqueta las
+      // primitivas cada ~250 ms y borra verticalOrigin y disableDepthTestDistance
+      // (puestos a BOTTOM e Infinity, a los 500 ms ya estaban las 1765 de nuevo a
+      // 0). Un poller que repone en cada tick es una carrera perdida, y por eso el
+      // PNG seguía viéndose cortado aunque el poller estuviera vivo.
+      //
+      // Escribir en la ENTIDAD sí persiste: la API respeta el valor y lo propaga
+      // a la primitiva (medido: rel 1765/1765 y ddt 1765/1765 sostenidos a los 5 s,
+      // mientras la misma operación sobre la primitiva caía a 0).
+      //
+      // El arreglo va sobre `heightReference` + `height`, no sobre `verticalOrigin`:
+      // con RELATIVE_TO_GROUND el icono deja de estar pegado a la superficie, que
+      // es lo que lo cortaba. `verticalOrigin` se queda en su valor por defecto.
+      //
+      // NO se fija `width`/`height` del billboard: en Cesium el alto de un
+      // Billboard son PÍXELES, no metros, y fijarlo a 2 convertía los iconos en
+      // barras de 50x2 px invisibles. Solo se toca `height` cuando el graphics es
+      // un Point (donde sí son metros).
+      const ALTURA_SOBRE_TERRENO = 2; // metros
+      const ddtEntidad = depthTestDistance !== undefined ? depthTestDistance : Number.POSITIVE_INFINITY;
+      const propAlturaRef = new Cesium.ConstantProperty(Cesium.HeightReference.RELATIVE_TO_GROUND);
+      const propAlturaMetros = new Cesium.ConstantProperty(ALTURA_SOBRE_TERRENO);
+      const propDdt = new Cesium.ConstantProperty(ddtEntidad);
+
+      // Entidades ya ajustadas, para no reescribir sus propiedades en cada tick.
+      // Un WeakSet no retiene memoria: al descartar la datasource, se descarta él.
+      const entidadesAjustadas = new WeakSet();
 
       const ajustarEntidad = (ent) => {
-        if (!ent) return;
-        if (depthTestDistance !== undefined && ent.billboard) {
-          ent.billboard.disableDepthTestDistance = depthTestDistance;
+        if (!ent || entidadesAjustadas.has(ent)) return;
+        for (const g of [ent.billboard, ent.point]) {
+          if (!g) continue;
+          g.heightReference = propAlturaRef;
+          g.disableDepthTestDistance = propDdt;
+          // Solo el Point mide en metros; en el Billboard `height` son píxeles.
+          if (g === ent.point) g.height = propAlturaMetros;
+        }
+        entidadesAjustadas.add(ent);
+      };
+
+      const ajustarEntidades = (destino) => {
+        if (destino && destino.entities && destino.entities.values) {
+          destino.entities.values.forEach(ajustarEntidad);
         }
       };
 
-      // Repara directamente sobre las primitivas de las singles, igual que hace
-      // el clusterEvent con las suyas. NO se toca `show`: ese lo gobierna el
-      // agrupado y cambiarlo rompería el desclusterizado.
-      //
-      // NO se toca `height`. En Cesium el alto de un Billboard son PÍXELES, no
-      // metros: fijarlo a 2 (para los "2 m sobre el terreno") convirtió los
-      // iconos en barras de 50x2 px, invisibles. La elevación del icono se
-      // resuelve con `verticalOrigin`, pero la API lo revierte a 0 en cada
-      // reaplicación de estilo, así que ni se intenta (código muerto).
-      //
-      // Lo único que hay que reparar de verdad es `image`: es la causa raíz de
-      // que las singles no se dibujen (ver cabecera de la función).
+      // Repara la `image` de las primitivas de las singles, que es la causa raíz
+      // de que las features sueltas no se dibujen (ver cabecera de la función).
+      // Solo la imagen: los valores de anclaje y profundidad van ya en la entidad.
+      // NO se toca `show`: ese lo gobierna el agrupado y cambiarlo rompería el
+      // desclusterizado.
       //
       // Devuelve el nº de primitivas corregidas, o null si la colección todavía
       // no existe (las primitivas se crean al maquetar cada entidad).
@@ -1142,16 +1175,13 @@ function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize
             for (let i = 0; i < col.length; i++) {
               const p = col.get(i);
               if (!p) continue;
-              let cambia = false;
-              if (p.disableDepthTestDistance !== depthSingles) {
-                p.disableDepthTestDistance = depthSingles;
-                cambia = true;
-              }
+              // Solo la imagen. El anclaje vertical y la altura van en la entidad
+              // (ver ajustarEntidad): escribirlos aquí no sirve porque la API los
+              // revierte en el siguiente re-maquetado.
               if (iconoSingles && !imagenUsable(p)) {
                 p.image = iconoSingles;
-                cambia = true;
+                aplicados++;
               }
-              if (cambia) aplicados++;
             }
           }
         } catch (e) { /* ignore */ }
@@ -1172,22 +1202,54 @@ function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize
         }
       }
 
-      // Las primitivas se crean de forma asíncrona conforme llegan los features
-      // (medido: ~60 s en carga limpia, con 0 primitivas a los 30 s) y la API
-      // reaplica su estilo DESPUÉS, así que hay que reintentarlo en background
-      // durante un margen amplio. Se re-resuelve el datasource por nombre
-      // porque la API lo sustituye al llegar los features (mismo motivo que en
-      // la sincronización de visibilidad).
+      // Las entidades y las primitivas llegan de forma asíncrona conforme se
+      // cargan los features (medido: ~60 s en carga limpia, con 0 primitivas a
+      // los 30 s) y la API reaplica su estilo DESPUÉS, así que hay que
+      // reintentarlo en background durante un margen amplio. Se re-resuelve el
+      // datasource por nombre porque la API lo sustituye al llegar los features
+      // (mismo motivo que en la sincronización de visibilidad).
       //
-      // El poller solo se autodetiene cuando la colección de primitivas ha
-      // igualado al número de entidades Y además lleva 10 s sin cambios: si no,
-      // se pararía en una ventana en la que aún no se ha maquetado todo y
-      // quedarían iconos sin reparar.
+      // El poller cubre dos cosas: ajustar las entidades nuevas (anclaje y
+      // altura) y reparar la `image` de las primitivas. Solo se autodetiene
+      // cuando la colección de primitivas ha igualado al número de entidades Y
+      // además lleva 10 s sin cambios: si no, se pararía en una ventana en la
+      // que aún no se ha maquetado todo y quedarían iconos sin reparar.
+      //
+      // Lectura de visibilidad de la capa, compartida entre la sincronización
+      // de `ds.show` y el poller de reparación de primitivas.
+      //
+      // La fachada de la capa NO expone getVisible/getVisibility/visible: el flag
+      // real vive en la implementación. Sin esto, leerVisibilidad() devolvía
+      // undefined y TODAS las capas quedaban visibles.
+      const capaPorNombre = () => {
+        if (typeof mapajs === 'undefined' || !mapajs || typeof mapajs.getLayers !== 'function') return null;
+        return mapajs.getLayers().filter(l => l && (l.filterID === nombreCapa || l.name === nombreCapa))[0] || null;
+      };
+      const leerVisibilidad = () => {
+        const capa = capaPorNombre();
+        if (!capa) return true;
+        const impl = typeof capa.getImpl === 'function' ? capa.getImpl() : null;
+        if (impl && typeof impl.visibility === 'boolean') return impl.visibility;
+        if (capa.options && typeof capa.options.visibility === 'boolean') return capa.options.visibility;
+        if (typeof capa.getVisible === 'function') return capa.getVisible();
+        if (typeof capa.getVisibility === 'function') return capa.getVisibility();
+        return true;
+      };
+
+      // Las primitivas solo se maquetan si la capa está visible. Con la capa
+      // apagada la colección queda vacía, así que el poller de reparación de
+      // imágenes no tenía nada que hacer y se autodetenía: al encender la capa
+      // más tarde la API maquetaba las primitivas con la imagen por defecto y no
+      // quedaba nadie que la reparara (medido en Placa conmemorativa: 425
+      // primitivas con la basura de la API y ninguna imagen válida). Por eso una
+      // capa oculta mantiene el poller vivo: no se cuenta como "arreglado".
+      const capaOculta = () => leerVisibilidad() === false;
+
       let ticksDepth = 0;
-      let sinCambiosDepth = 0;
+      let ticksQuietos = 0;
       const timerDepth = setInterval(() => {
         ticksDepth++;
-        let completas = false;
+        let listoParaParar = false;
         try {
           const mapImpl = (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getMapImpl === 'function')
             ? mapajs.getMapImpl() : null;
@@ -1195,20 +1257,40 @@ function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize
             ? mapImpl.dataSources._dataSources.find(d => d && d.name === nombreCapa)
             : null;
           if (dsVivo) {
+            // El anclaje y la altura van en la ENTIDAD, y la API sustituye la
+            // datasource cuando llegan los features: hay que ajustar las
+            // entidades del datasource vivo, no solo el placeholder inicial.
+            // El WeakSet de ajustarEntidad evita reescribir lo ya hecho.
+            ajustarEntidades(dsVivo);
             const aplicados = ajustarPrimitivasSingles(dsVivo);
             // null = la colección aún no existe (siguen llegando features): NO
-            // cuenta como "sin cambios", o el poller se autodetiene antes de que
-            // se maqueten las primitivas y el arreglo no llega a aplicarse.
+            // cuenta como quieto, o el poller se autodetiene antes de que se
+            // maqueten las primitivas y el arreglo no llega a aplicarse.
             if (aplicados !== null) {
-              sinCambiosDepth = aplicados > 0 ? 0 : sinCambiosDepth + 1;
               const col = dsVivo._entityCluster._billboardCollection;
               const entidades = (dsVivo.entities && dsVivo.entities.values) ? dsVivo.entities.values.length : 0;
-              completas = entidades > 0 && col.length >= entidades;
+              // La API crea las entidades ANTES de maquetar sus primitivas, así
+              // que hay una ventana en la que ya hay N entidades y todavía menos
+              // de N primitivas. Con la condición de antes el poller se
+              // autodetenía en esa ventana y el arreglo llegaba tarde o no
+              // llegaba: medido en Monumentos, 1765 primitivas sin aplicar nada.
+              // Se admite un margen para no depender de que la API mantenga el
+              // 1:1 en el conteo entre entidades y primitivas.
+              const maquetadas = entidades > 0 && col.length >= entidades * 0.98;
+              // Solo se cuenta como quieto un tick en el que no hubo NADA que
+              // reparar. Lo que queda por reparar es solo la `image` de las
+              // primitivas: el anclaje y la altura van en la entidad y persisten
+              // solos, así que no hay carrera con la API.
+              // Una capa apagada nunca se da por reparada: se espera a que se
+              // encienda y entonces sí se reponen las primitivas.
+              const enReposo = maquetadas && aplicados === 0 && !capaOculta();
+              ticksQuietos = enReposo ? ticksQuietos + 1 : 0;
+              listoParaParar = ticksQuietos >= 50;
             }
           }
         } catch (e) { /* ignore */ }
         // Tope duro: 400 * 400ms = 160s, por si la carga se atasca.
-        if ((completas && sinCambiosDepth >= 25) || ticksDepth >= 400) clearInterval(timerDepth);
+        if (listoParaParar || ticksDepth >= 400) clearInterval(timerDepth);
       }, 400);
 
 
@@ -1221,21 +1303,8 @@ function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize
       // datasource placeholder se pierde, así que se vuelve a resolver POR
       // NOMBRE en cada tick mientras la carga se asienta.
       try {
-        const capa = (typeof mapajs !== 'undefined' && mapajs && typeof mapajs.getLayers === 'function')
-          ? mapajs.getLayers().filter(l => l && (l.filterID === nombreCapa || l.name === nombreCapa))[0]
-          : null;
+        const capa = capaPorNombre();
         if (capa) {
-          // La fachada de la capa NO expone getVisible/getVisibility/visible:
-          // el flag real vive en la implementación. Sin esto, leerVisibilidad()
-          // devolvía undefined y TODAS las capas quedaban visibles.
-          const leerVisibilidad = () => {
-            const impl = typeof capa.getImpl === 'function' ? capa.getImpl() : null;
-            if (impl && typeof impl.visibility === 'boolean') return impl.visibility;
-            if (capa.options && typeof capa.options.visibility === 'boolean') return capa.options.visibility;
-            if (typeof capa.getVisible === 'function') return capa.getVisible();
-            if (typeof capa.getVisibility === 'function') return capa.getVisibility();
-            return true;
-          };
           const visibleCapa = leerVisibilidad() !== false;
           ds.show = visibleCapa;
 
@@ -1270,6 +1339,20 @@ function activarClusteringCesium(nombreCapa, pixelRange = 40, minimumClusterSize
                   ? mapImpl.dataSources._dataSources.find(d => d && d.name === nombreCapa)
                   : null;
                 (dsVivo || ds).show = visible !== false;
+                // Al ENCENDER la capa es cuando la API maqueta sus primitivas, y
+                // lo hace con los valores por defecto (heightReference
+                // CLAMP_TO_GROUND), que es de donde viene el recorte por el
+                // terreno. Se corrige aquí para no esperar al siguiente tick del
+                // poller, que va a 400 ms. Solo cuando se enciende: al apagar la
+                // API deja de maquetar y no hay nada que reparar.
+                if (visible !== false && dsVivo) {
+                  setTimeout(() => {
+                    try {
+                      ajustarEntidades(dsVivo);
+                      ajustarPrimitivasSingles(dsVivo);
+                    } catch (e) { /* ignore */ }
+                  }, 0);
+                }
               } catch (e) {}
               return r;
             };
