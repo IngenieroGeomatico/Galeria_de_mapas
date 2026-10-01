@@ -2,6 +2,89 @@
 
 const SVGCarga = document.getElementById("cargaSVG")
 
+/* ===========================================================================
+   CENTRO INICIAL DE LA VISTA
+   ---------------------------------------------------------------------------
+   Puerta del Sol, en EPSG:3857 (el sistema en el que trabaja el constructor de
+   M.map y el resto del visualizador). Lo comparten el `center` del constructor y
+   centrarVistaInicial().
+
+   Es una constante y no un literal suelto porque ambos tienen que decir
+   exactamente lo mismo: si divergieran, el mapa arrancaría en un sitio y
+   se cuadraría en otro.
+   =========================================================================== */
+const CENTRO_MADRID = { x: -413064.3575507956, y: 4927841.089710372 };
+
+
+/* ===========================================================================
+   CUADRAR LA VISTA AL ARRANCAR
+   ---------------------------------------------------------------------------
+   El `center` del constructor de M.map va en EPSG:3857, que es lo que espera
+   OpenLayers, pero Cesium trabaja en EPSG:4326 y no aplica ese valor. Al arrancar
+   en 3D la cámara se quedaba en la vista por defecto de Cesium durante unos 3 s
+   (medido: mar Rojo, lon 35.642 / lat 18.91, 82 km de altura) y hasta que
+   cambioImpl aplicaba la vista guardada, con un salto visible. La posición final
+   era correcta; el fallo era el arranque en falso.
+
+   El detalle que hace que esto no sea trivial: cuando se ejecuta mapa() el
+   bundle de Cesium AÚN NO se ha recargado, así que getMapImpl() sigue
+   devolviendo el mapa 2D anterior y cualquier comprobación de implementación
+   da "OpenLayers". Medido en carga limpia: el mapa 2D sigue siendo el que se ve
+   hasta los ~1,7 s, y la escena de Cesium no existe hasta ese momento.
+
+   Por eso no se decide una sola vez al arrancar, sino que se ESPERA a que la
+   escena exista y se aplica el centro UNA vez, en ese instante. Un reintento con
+   tope de intentos resultaba en un fallo silencioso: los primeros intentos se
+   consumían mientras todavía no había escena y, para cuando aparecía, el bucle
+   ya había terminado. Con la espera activa el centro se aplica en el mismo
+   momento en que Cesium queda disponible y la cámara va directa a su sitio
+   (medido: Madrid a los 1,7 s, sin pasar por la vista por defecto).
+
+   El centro se pide en EPSG:4326 a setCenter porque el `center` del constructor
+   va en EPSG:3857 (el que espera OpenLayers) y Cesium lo ignora. La
+   reproyección usa IDEE.utils.reproject, que es síncrono, siguiendo el patrón de
+   mapas/LucesdeBohemia/js/mapa.js.
+   =========================================================================== */
+function centrarVistaInicial() {
+  if (!mapajs) return;
+  const api = (typeof IDEE !== 'undefined' && IDEE) ? IDEE : M;
+
+  const aplicar = () => {
+    // getMapImpl se pide al mapa (mapajs), NO al bundle global: IDEE.getMapImpl
+    // no existe y devuelve undefined, con lo que la comprobación de Cesium
+    // fallaría siempre.
+    const mapImpl = (typeof mapajs.getMapImpl === 'function') ? mapajs.getMapImpl() : null;
+    if (!(mapImpl && mapImpl.scene && mapImpl.scene.camera && typeof Cesium !== 'undefined')) {
+      return false;
+    }
+    try {
+      const [lon, lat] = api.utils.reproject(
+        [CENTRO_MADRID.x, CENTRO_MADRID.y], 'EPSG:3857', 'EPSG:4326');
+      mapajs.setCenter({ x: lon, y: lat });
+    } catch (e) {
+      // Un fallo aquí no debe impedir que el mapa arranque: el constructor ya
+      // dejó un centro razonable y cambioImpl acaba aplicando la vista.
+      console.warn('centrarVistaInicial fallo', e);
+    }
+    return true;
+  };
+
+  // En 2D el constructor ya coloca bien el centro: se aplica y se termina.
+  if (!aplicar()) {
+    // Todavía no es Cesium (el bundle se está recargando). Se espera a que la
+    // escena exista, con un tope generoso para no esperar indefinidamente si
+    // algún día no llegara. 120 * 100ms = 12s.
+    let intentos = 0;
+    const esperar = () => {
+      intentos++;
+      if (intentos > 120) return;
+      if (aplicar()) return;
+      setTimeout(esperar, 100);
+    };
+    setTimeout(esperar, 100);
+  }
+}
+
 
 /* ===========================================================================
    OVERLAY DE CARGA (2D <-> 3D)
@@ -199,9 +282,20 @@ M.config.POPUP_INTELLIGENCE.activate = false
 mapajs = M.map({
   container: "mapa",
   zoom: 12,
-  center: { x: -413064.3575507956, y: 4927841.089710372 },
+  center: CENTRO_MADRID,
   layers: []
 });
+
+// Cuadra la cámara nada más crear el mapa, antes de que se carguen las capas.
+//
+// Por qué hace falta: el `center` del constructor va en EPSG:3857, que es lo que
+// espera OpenLayers, pero Cesium trabaja en EPSG:4326 y no aplica ese valor. Al
+// arrancar el visualizador en 3D, la cámara se quedaba en la vista por defecto
+// de Cesium (medido: mar Rojo, lon 35.642 / lat 18.91, 82 km) durante unos 3 s
+// y hasta que `cambioImpl` aplicaba la vista guardada, lo que producía un salto
+// visible. La posición final era correcta; lo que sobraba era el arranque en
+// falso, así que se corrige fijando el centro en cuanto el mapa existe.
+centrarVistaInicial();
 
 
 // Estilos
