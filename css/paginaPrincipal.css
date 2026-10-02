@@ -1,79 +1,714 @@
+/* ==========================================================================
+   Galería de Mapas - hoja de estilos de la página principal
+   --------------------------------------------------------------------------
+   Orden: tokens -> base -> cabecera -> buscador -> resumen -> secciones ->
+   tarjetas -> estado vacío -> pie -> responsive -> accesibilidad
+
+   Paleta: se mantiene el naranja/rojo de marca (#db4938) como acento,
+   con dos temas (claro y oscuro) seleccionados según la preferencia del
+   sistema operativo mediante prefers-color-scheme.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Tokens de diseño
+   -------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+
+  /* Marca */
+  --brand: #db4938;
+  --brand-strong: #c83802;
+  --brand-ink: #a92f04;
+  --brand-soft: #fdeeea;
+  --brand-line: rgba(219, 73, 56, .28);
+
+  /* Neutros */
+  --bg: #f5f6f8;
+  --bg-degradado: radial-gradient(1200px 600px at 15% -10%, #fff2ed 0%, rgba(255, 242, 237, 0) 60%);
+  --surface: #ffffff;
+  --surface-2: #fafafb;
+  --text: #1b1d21;
+  --text-muted: #5c626b;
+  /* --text-faint se usa en texto pequeño real (etiquetas, pie, placeholder),
+     así que tiene que llegar a 4.5:1 sobre su fondo y no solo "verse tenue". */
+  --text-faint: #6a717b;
+  --border: rgba(17, 19, 24, .10);
+  --border-strong: rgba(17, 19, 24, .16);
+
+  /* Cabecera translúcida */
+  --cabecera-bg: rgba(255, 255, 255, .78);
+  --cabecera-line: rgba(17, 19, 24, .08);
+
+  /* Sombras */
+  --shadow-xs: 0 1px 2px rgba(17, 19, 24, .05);
+  --shadow-sm: 0 1px 2px rgba(17, 19, 24, .06), 0 2px 6px rgba(17, 19, 24, .05);
+  --shadow-md: 0 4px 10px rgba(17, 19, 24, .07), 0 12px 28px rgba(17, 19, 24, .09);
+  --shadow-lg: 0 10px 20px rgba(17, 19, 24, .10), 0 24px 48px rgba(17, 19, 24, .14);
+  --sombra-media: inset 0 0 0 1px rgba(17, 19, 24, .08);
+
+  /* Forma y ritmo */
+  --radius-lg: 18px;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --gap: 1.25rem;
+  --ancho-max: 1440px;
+  --transicion: 180ms cubic-bezier(.4, 0, .2, 1);
+  --transicion-lenta: 420ms cubic-bezier(.22, .61, .36, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --brand: #f2765f;
+    --brand-strong: #ff8b73;
+    --brand-ink: #ffb3a1;
+    --brand-soft: rgba(219, 73, 56, .16);
+    --brand-line: rgba(242, 118, 95, .34);
+
+    --bg: #0f1114;
+    --bg-degradado: radial-gradient(1200px 600px at 15% -10%, rgba(219, 73, 56, .16) 0%, rgba(219, 73, 56, 0) 60%);
+    --surface: #171a1f;
+    --surface-2: #1c2026;
+    --text: #e9ebee;
+    --text-muted: #a4abb4;
+    --text-faint: #919aa5;
+    --border: rgba(255, 255, 255, .10);
+    --border-strong: rgba(255, 255, 255, .16);
+
+    --cabecera-bg: rgba(15, 17, 20, .76);
+    --cabecera-line: rgba(255, 255, 255, .08);
+
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, .40);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .35);
+    --shadow-md: 0 4px 10px rgba(0, 0, 0, .50), 0 12px 28px rgba(0, 0, 0, .45);
+    --shadow-lg: 0 10px 20px rgba(0, 0, 0, .55), 0 24px 48px rgba(0, 0, 0, .55);
+    --sombra-media: inset 0 0 0 1px rgba(255, 255, 255, .07);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. Base
+   -------------------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  padding-top: 10px;
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg);
+  background-image: var(--bg-degradado);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
 }
 
-.navbar-brand {
-  padding-left: 10px;
+/* La rejilla de Bootstrap añade gutter lateral con márgenes negativos: se anula
+   para que el contenedor de la página controle por completo el ritmo horizontal. */
+.container-fluid {
+  width: 100%;
+  max-width: var(--ancho-max);
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 3.5vw, 2.5rem);
 }
 
-.form-inline {
-  padding: 0px 20px;
-}
-
-input.search-query {
-  color: #333;
-}
-
-.example {
-  display: block;
-  padding: 0.65rem;
-  height: 91%;
-  margin: 0.65rem 0;
-  overflow: auto;
-  max-height: 400px;
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.example p.description {
-  font-size: smaller;
-  margin: 5px 0;
+.saltar {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 200;
+  transform: translate(-50%, -140%);
+  padding: .65rem 1.1rem;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform var(--transicion);
 }
 
-.example:hover {
-  background-color: #F5F5F5;
+.saltar:focus {
+  transform: translate(-50%, 0);
 }
 
-h3 {
-  padding: 1px 20px;
+/* --------------------------------------------------------------------------
+   3. Cabecera
+   -------------------------------------------------------------------------- */
+
+.cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--cabecera-bg);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  backdrop-filter: blur(14px) saturate(180%);
+  box-shadow: var(--shadow-xs);
 }
 
-#idImgAPICNIG {
-  padding: 0px 20px;
-}
-
-#navbarID {
-  background-color: #ff6c35 !important;
-}
-
-.example.bg-light.border.rounded {
-  border: 2px solid orangered !important;
-  color: #c83802;
-}
-
-.example.bg-light.border.rounded:hover {
-  color: blue;
-}
-
-img{
+/* Filete de color de marca en el borde superior */
+.cabecera::before {
+  content: "";
   display: block;
-  margin-left: auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--brand) 0%, #f0a23a 55%, var(--brand) 100%);
+}
+
+.cabecera__inner {
+  max-width: var(--ancho-max);
+  margin-inline: auto;
+  padding: .85rem clamp(1rem, 3.5vw, 2.5rem);
+  display: flex;
+  align-items: center;
+  gap: 1rem 1.25rem;
+}
+
+.marca__logo {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: .35rem;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transicion), box-shadow var(--transicion);
+}
+
+.marca__logo:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* El logo oficial de API-IDEE es apaisado (viewBox 715x447, ~1.6:1), así que se
+   dimensiona por alto y se deja que el ancho salga de la proporción del SVG; con
+   un alto y un ancho fijos a la.square se vería encajado y pequeño. */
+.marca__logo img {
+  display: block;
+  width: auto;
+  height: 32px;
+}
+
+.marca__texto {
   margin-right: auto;
-  width: -moz-available;
+  min-width: 0;
 }
 
-.exampleSection{
+.marca__titulo {
+  margin: 0;
+  font-size: clamp(1.1rem, 2.4vw, 1.4rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -.02em;
+}
+
+.marca__subtitulo {
+  margin: .1rem 0 0;
+  font-size: .82rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* --------------------------------------------------------------------------
+   4. Buscador
+   -------------------------------------------------------------------------- */
+
+.buscador {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 15rem;
+  max-width: 26rem;
+  min-width: 0;
+  padding-inline: .85rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--transicion), box-shadow var(--transicion), background-color var(--transicion);
+}
+
+.buscador:focus-within {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 4px var(--brand-soft);
+}
+
+.buscador__icono {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  transition: color var(--transicion);
+}
+
+.buscador:focus-within .buscador__icono {
+  color: var(--brand);
+}
+
+.buscador__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: .6rem .65rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: .95rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.buscador__input:focus,
+.buscador__input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.buscador__input::placeholder {
+  color: var(--text-faint);
+}
+
+.buscador__limpiar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color var(--transicion), color var(--transicion), transform var(--transicion);
+}
+
+.buscador__limpiar:hover {
+  background: var(--brand);
+  color: #fff;
+  transform: rotate(90deg);
+}
+
+/* --------------------------------------------------------------------------
+   5. Resumen / contador
+   -------------------------------------------------------------------------- */
+
+.contenido {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: var(--ancho-max);
+  margin-inline: auto;
+  padding: 1.75rem clamp(1rem, 3.5vw, 2.5rem) 3rem;
+}
+
+.resumen {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0 0 1.5rem;
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+
+.resumen__punto {
+  width: .5rem;
+  height: .5rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+/* --------------------------------------------------------------------------
+   6. Rejilla y secciones
+   -------------------------------------------------------------------------- */
+
+.galeria {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: var(--gap);
+}
+
+.seccion {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-top: .75rem;
+  padding-bottom: .6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.seccion:first-child {
+  margin-top: 0;
+}
+
+.seccion__titulo {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.seccion__titulo::before {
+  content: "";
+  display: inline-block;
+  width: .28rem;
+  height: 1.05em;
+  margin-right: .6rem;
+  vertical-align: -.15em;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand), #f0a23a);
+}
+
+.seccion__contador {
+  padding: .1rem .55rem;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: .78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.seccion__contador:empty {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   7. Tarjetas
+   -------------------------------------------------------------------------- */
+
+.tarjeta-col {
+  display: flex;
+  min-width: 0;
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transicion), box-shadow var(--transicion), border-color var(--transicion);
+}
+
+.tarjeta:hover,
+.tarjeta:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--brand-line);
+  box-shadow: var(--shadow-lg);
+  color: inherit;
+}
+
+.tarjeta:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+
+/* Portada: todas las capturas se recortan al mismo proporción para que la
+   rejilla quede regular aunque las imágenes tengan ratios distintos. */
+.tarjeta__media {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: var(--sombra-media);
+}
+
+.tarjeta__media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  transition: transform var(--transicion-lenta);
+}
+
+.tarjeta:hover .tarjeta__media img,
+.tarjeta:focus-visible .tarjeta__media img {
+  transform: scale(1.06);
+}
+
+.tarjeta__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  flex: 1 1 auto;
+  padding: 1rem 1.1rem .75rem;
+}
+
+.tarjeta__titulo {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -.01em;
+  color: var(--text);
+  transition: color var(--transicion);
+}
+
+.tarjeta:hover .tarjeta__titulo {
+  color: var(--brand-strong);
+}
+
+.tarjeta__badge {
+  display: inline-block;
+  margin-left: .35rem;
+  padding: .05rem .45rem;
+  border: 1px solid var(--brand-line);
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  vertical-align: .12em;
+  white-space: nowrap;
+}
+
+.tarjeta__desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .875rem;
+  line-height: 1.55;
+}
+
+.tarjeta__desc cite {
+  font-style: italic;
+}
+
+.tarjeta__desc code {
+  padding: .05rem .3rem;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: .85em;
+}
+
+.tarjeta__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-top: auto;
+  padding-top: .35rem;
+}
+
+.tag {
+  padding: .12rem .55rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: .74rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.tarjeta:hover .tag {
+  border-color: var(--brand-line);
+  color: var(--brand-ink);
+}
+
+/* Pie anclado abajo (margin-top en el cuerpo) para que todas las llamadas a la
+   acción queden alineadas aunque las descripciones tengan distinto largo. */
+.tarjeta__pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .7rem 1.1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.tarjeta__cta {
+  color: var(--brand-strong);
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+
+.tarjeta__cta::after {
+  content: "\2192";
+  display: inline-block;
+  margin-left: .4rem;
+  transition: transform var(--transicion);
+}
+
+.tarjeta:hover .tarjeta__cta::after,
+.tarjeta:focus-visible .tarjeta__cta::after {
+  transform: translateX(4px);
+}
+
+/* --------------------------------------------------------------------------
+   8. Estado sin resultados
+   -------------------------------------------------------------------------- */
+
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+  margin: 2.5rem auto 0;
+  padding: 2.5rem 1.5rem;
+  max-width: 30rem;
   text-align: center;
-  /* margin: 0px 30px; */
-  width: -moz-available;
-}
-.container-fluid{
-  padding: 0px 20px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
 }
 
+.vacio strong {
+  color: var(--text);
+  font-size: 1.05rem;
+}
 
-/* main {
-  max-width: 900px;
-  margin: auto;
-  padding: 0.5rem;
+.enlace-boton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand-strong);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.enlace-boton:hover {
+  color: var(--brand);
+}
+
+/* --------------------------------------------------------------------------
+   9. Pie
+   -------------------------------------------------------------------------- */
+
+.pie {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.pie p {
+  max-width: var(--ancho-max);
+  margin-inline: auto;
+  padding: 1.25rem clamp(1rem, 3.5vw, 2.5rem);
+  color: var(--text-faint);
+  font-size: .84rem;
   text-align: center;
-} */
+}
+
+.pie a {
+  color: var(--brand-strong);
+  text-decoration: none;
+  border-bottom: 1px solid var(--brand-line);
+}
+
+.pie a:hover {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+/* --------------------------------------------------------------------------
+   10. Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  .cabecera__inner {
+    flex-wrap: wrap;
+    row-gap: .75rem;
+  }
+
+  .buscador {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
+@media (max-width: 400px) {
+  :root {
+    --gap: 1rem;
+  }
+
+  .marca__subtitulo {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   11. Accesibilidad
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .tarjeta:hover,
+  .tarjeta:focus-visible {
+    transform: none;
+  }
+
+  .tarjeta:hover .tarjeta__media img,
+  .tarjeta:focus-visible .tarjeta__media img {
+    transform: none;
+  }
+}
+
+@media print {
+  .cabecera,
+  .pie,
+  .buscador,
+  .resumen,
+  .vacio {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .tarjeta {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+}

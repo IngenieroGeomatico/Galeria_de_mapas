@@ -2,9 +2,12 @@
 <html lang="es">
 
 <head>
-  <!-- Required meta tags -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Galería de Mapas | API-IDEE</title>
+  <meta name="description"
+    content="Galería de visualizadores cartográficos creados con la API-IDEE: calidad del aire, storymaps, fotogrametría, visualizadores 2D y 3D.">
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
@@ -18,351 +21,534 @@
 
   <!-- CSS propio -->
   <link rel="stylesheet" type="text/css" href="./css/paginaPrincipal.css" />
-
-
-
-  <title>Galería de Mapas</title>
 </head>
 
 <body>
-
   <!-- Option 1: Bootstrap Bundle with Popper -->
-  <script src="./bootstrap/bootstrap.bundle.min.js.js"></script>
+  <script defer src="./bootstrap/bootstrap.bundle.min.js.js"></script>
   <!-- jquery -->
-  <script src="./js/jquery/jquery.min.js"></script>
+  <script defer src="./js/jquery/jquery.min.js"></script>
 
   <!-- js propio -->
-  <script src="./js/paginaPrincipal.js"></script>
+  <script defer src="./js/paginaPrincipal.js"></script>
 
+  <a class="saltar" href="#examples">Saltar al contenido</a>
 
-  <nav id="navbarID" class="navbar navbar-light bg-light">
-    <a id="idImgAPICNIG" href="https://plataforma.idee.es/cnig-api" target="_blank">
-      <img src="http://componentes.cnig.es/api-core/img/logo-apicnig.png" width="50" height="50">
-    </a>
+  <header class="cabecera">
+    <div class="cabecera__inner">
 
-    <h3>Galería de Mapas API-IDEE de IngenieroGeomático</h3>
-    <form class="form-inline" role="search">
-      <div class="input-group">
-        <input name="q" type="text" id="keywords" class="form-control search-query" placeholder="Buscar..."
-          aria-label="Examples" aria-describedby="count" autocomplete="off" autofocus="">
+      <a id="idImgAPIIDEE" class="marca__logo" href="https://plataforma.idee.es/web/idee/idee-api" target="_blank"
+        rel="noopener noreferrer" title="Ir a la página de API-IDEE">
+        <img src="./img/logo/API_IDEE.svg" width="56"
+          height="35" alt="Logotipo de la API-IDEE">
+      </a>
+
+      <div class="marca__texto">
+        <h1 class="marca__titulo">Galería de Mapas de IngenieroGeomático</h1>
+        <p class="marca__subtitulo">Visualizadores con la API-IDEE</p>
       </div>
-    </form>
-  </nav>
+
+      <form class="buscador" role="search" onsubmit="return false">
+        <span class="buscador__icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+          </svg>
+        </span>
+        <label class="visually-hidden" for="keywords">Buscar visualizadores</label>
+        <input name="q" type="text" id="keywords" class="buscador__input" placeholder="Buscar por nombre, tema o palabra clave…"
+          aria-describedby="resumen" autocomplete="off" autofocus>
+        <button type="button" id="limpiarBusqueda" class="buscador__limpiar" aria-label="Borrar la búsqueda" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" aria-hidden="true">
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+          </svg>
+        </button>
+      </form>
+
+    </div>
+  </header>
 
 
-  <div class="container-fluid">
-    <div id="examples" class="row mt-3">
+  <main class="contenido">
+
+    <p class="resumen" id="resumen" role="status" aria-live="polite">
+      <span class="resumen__punto"></span>
+      <span id="resumenTexto">Visualizadores creados con la API-IDEE</span>
+    </p>
+
+    <div id="examples" class="galeria">
 
       <!--  -->
       <!-- Ejemplos visualizadores -->
       <!--  -->
 
-      <!-- inicio tarjeta sección Madrid-->
-      <div class="example exampleSection bg-light border rounded">
-        <span class="mainlink">
-          <strong>Madrid</strong><br>
-        </span>
+      <!-- inicio sección Madrid-->
+      <div class="seccion">
+        <h2 class="seccion__titulo">Madrid</h2>
+        <span class="seccion__contador" aria-hidden="true"></span>
       </div>
-      <!-- fin tarjeta -->
+      <!-- fin sección Madrid-->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/CalidadAireMadrid/" target="_blank">
-          <span class="mainlink">
-            <strong>Estaciones calidad aire Madrid</strong><br>
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/CalidadAireMadrid/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/calidadAireMAdrid.png" alt="Captura del visualizador de estaciones de calidad del aire de Madrid"
+              loading="lazy" decoding="async">
           </span>
-          <p class="description">Datos en tiempo real de las estaciones de calidad del aire del ayuntamiento de Madrid
-          </p>
-          <p class="keywords">#Calidad #Aire #Madrid #TiempoReal</p>
-          <img src="img/calidadAireMAdrid.png" alt="img/mapaBase.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Estaciones de calidad del aire de Madrid</h3>
+            <p class="tarjeta__desc">Datos en tiempo real de las estaciones de calidad del aire del Ayuntamiento de
+              Madrid.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Calidad</span>
+              <span class="tag">#Aire</span>
+              <span class="tag">#Madrid</span>
+              <span class="tag">#TiempoReal</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/LucesdeBohemia/" target="_blank">
-          <span class="mainlink">
-            <strong>"StoryMap" Luces de Bohemia"</strong><br>
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/LucesdeBohemia/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/lucesdeBohemia.png"
+              alt="Captura del story map de Luces de Bohemia sobre Madrid" loading="lazy" decoding="async">
           </span>
-          <p class="description">"Story Map" de Luces de Bohemia, escrito por Ramón María del Valle-Inclán y publicado
-            en 1920</p>
-          <p class="keywords">#Libro #StoryMap #Madrid #Esperpento</p>
-          <img src="img/lucesdeBohemia.png" alt="img/mapaBase.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Luces de Bohemia <span class="tarjeta__badge">StoryMap</span></h3>
+            <p class="tarjeta__desc">Story Map de <cite>Luces de Bohemia</cite>, escrita por Ramón María del
+              Valle-Inclán y publicada en 1920.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Libro</span>
+              <span class="tag">#StoryMap</span>
+              <span class="tag">#Madrid</span>
+              <span class="tag">#Esperpento</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/PuntosHistoricosMadrid/" target="_blank">
-          <span class="mainlink">
-            <strong>Puntos de interés histórico de Madrid</strong><br>
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/PuntosHistoricosMadrid/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/PuntosHistoricos.png"
+              alt="Captura del visualizador de puntos de interés histórico de Madrid" loading="lazy" decoding="async">
           </span>
-          <p class="description">Visualizador que ofrece la información sobre puntos de interés histórico y monumentos
-            de Madrid</p>
-          <p class="keywords">#Historia #PuntoDeInterés #Madrid #POI #Monumentos</p>
-          <img src="img/PuntosHistoricos.png" alt="img/PuntosHistoricos.png" width="200">
-        </a>
-      </div>
-      <!-- fin tarjeta -->
-      <!-- fin tarjeta sección Madrid-->
-
-
-      <!-- inicio tarjeta sección Madrid-->
-      <div class="example exampleSection bg-light border rounded">
-        <span class="mainlink">
-          <strong>Comunidad de Madrid</strong><br>
-        </span>
-      </div>
-      <!-- fin tarjeta -->
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/CalidadAireComunidadMadrid/" target="_blank">
-          <span class="mainlink">
-            <strong>Estaciones calidad aire Comunidad de Madrid</strong><br>
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Puntos de interés histórico de Madrid</h3>
+            <p class="tarjeta__desc">Visualizador que ofrece la información sobre puntos de interés histórico y
+              monumentos de Madrid.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Historia</span>
+              <span class="tag">#PuntoDeInterés</span>
+              <span class="tag">#Madrid</span>
+              <span class="tag">#POI</span>
+              <span class="tag">#Monumentos</span>
+            </span>
           </span>
-          <p class="description">Datos en tiempo real de las estaciones de calidad del aire de la Comunidad de Madrid
-          </p>
-          <p class="keywords">#Calidad #Aire #ComunidadMadrid #TiempoReal</p>
-          <img src="img/calidadAureComunidadMadrid.png" alt="img/mapaBase.png" width="200">
-        </a>
-      </div>
-      <!-- fin tarjeta -->
-      <!-- fin tarjeta sección Comunidad de Madrid-->
-
-
-      <!-- inicio tarjeta sección Galicia-->
-      <div class="example exampleSection bg-light border rounded">
-        <span class="mainlink">
-          <strong>Galicia</strong><br>
-        </span>
-      </div>
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/CaminoDeLosFaros/" target="_blank">
-          <span class="mainlink">
-            <strong>Camino de los Faros</strong><br>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
           </span>
-          <p class="description">Etapas del camino de los Faros por la costa de la muerte en Galicia</p>
-          <p class="keywords">#SEnderismo #Ruta #Galicia #Camino</p>
-          <img src="img/caminoFaros.png" alt="img/mapaBase.png" width="200">
-        </a>
-      </div>
-      <!-- fin tarjeta -->
-      <!-- fin tarjeta sección Galicia-->
-
-      <!-- inicio tarjeta sección España-->
-      <div class="example exampleSection bg-light border rounded">
-        <span class="mainlink">
-          <strong>España</strong><br>
-        </span>
-      </div>
-
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/paroEspMun/" target="_blank">
-          <span class="mainlink">
-            <strong>Porcentaje de Paro en España por Municipios</strong><br>
-          </span>
-          <p class="description">Prcentaje de Paro en españa calculado a partir de la población y el número de parados
-          </p>
-          <p class="keywords">#España #Paro #Municipios</p>
-          <img src="img/paro.png" alt="img/paro.png" width="200">
         </a>
       </div>
       <!-- fin tarjeta -->
 
-      <!-- fin tarjeta sección España-->
-
-      <!-- inicio tarjeta sección-->
-      <div class="example exampleSection bg-light border rounded">
-        <span class="mainlink">
-          <strong>Otros</strong><br>
-          <!--<small>(mapaBase.html)</small>-->
-        </span>
+      <!-- inicio sección Comunidad de Madrid-->
+      <div class="seccion">
+        <h2 class="seccion__titulo">Comunidad de Madrid</h2>
+        <span class="seccion__contador" aria-hidden="true"></span>
       </div>
-      <!-- fin tarjeta -->
+      <!-- fin sección Comunidad de Madrid-->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/GDAL_JS/" target="_blank">
-          <span class="mainlink">
-            <strong>Transformador de formatos con gdal3.js</strong><br>
-            <!--<small>(mapaBase.html)</small>-->
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/CalidadAireComunidadMadrid/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/calidadAureComunidadMadrid.png"
+              alt="Captura del visualizador de estaciones de calidad del aire de la Comunidad de Madrid"
+              loading="lazy" decoding="async">
           </span>
-          <p class="description">Aplicación para transformación y visualización de datos</p>
-          <p class="keywords">#GDAL #Transformación</p>
-          <img src="img/gdaljs.png" alt="img/mapaBase.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Estaciones de calidad del aire de la Comunidad de Madrid</h3>
+            <p class="tarjeta__desc">Datos en tiempo real de las estaciones de calidad del aire de la Comunidad de
+              Madrid.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Calidad</span>
+              <span class="tag">#Aire</span>
+              <span class="tag">#ComunidadMadrid</span>
+              <span class="tag">#TiempoReal</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
+      <!-- inicio sección Galicia-->
+      <div class="seccion">
+        <h2 class="seccion__titulo">Galicia</h2>
+        <span class="seccion__contador" aria-hidden="true"></span>
+      </div>
+      <!-- fin sección Galicia-->
+
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/estereoscopia/" target="_blank">
-          <span class="mainlink">
-            <strong>Estereoscopía (anaglifo y vista partida)</strong><br>
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/CaminoDeLosFaros/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/caminoFaros.png" alt="Captura del visualizador del Camino de los Faros en Galicia"
+              loading="lazy" decoding="async">
           </span>
-          <p class="description">Visualizador estereoscópico del relieve: anaglifo rojo/cian y vista partida,
-            en 2D  y 3D. Requiere gafas anaglíficas para el modo anaglifo.</p>
-          <p class="keywords">#Estereoscopía #Anaglifo #2.5D</p>
-          <img src="img/estereoscopia.png" alt="img/estereoscopia.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Camino de los Faros</h3>
+            <p class="tarjeta__desc">Etapas del Camino de los Faros por la costa de la muerte en Galicia.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Senderismo</span>
+              <span class="tag">#Ruta</span>
+              <span class="tag">#Galicia</span>
+              <span class="tag">#Camino</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
+      <!-- inicio sección España-->
+      <div class="seccion">
+        <h2 class="seccion__titulo">España</h2>
+        <span class="seccion__contador" aria-hidden="true"></span>
+      </div>
+      <!-- fin sección España-->
+
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/vueloFotogrametrico/" target="_blank">
-          <span class="mainlink">
-            <strong>Vuelo fotogramétrico</strong><br>
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/paroEspMun/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/paro.png" alt="Mapa coroplético del porcentaje de paro por municipios en España"
+              loading="lazy" decoding="async">
           </span>
-          <p class="description">Importa, planifica y visualiza vuelos fotogramétricos en 2D y 3D:
-            fotocentros, huellas y líneas de pasada, con cálculo de vuelo por GSD, orientación
-            óptima y recorte al área.</p>
-          <p class="keywords">#Fotogrametría #PNOA #Vuelo #GSD #3D</p>
-          <img src="img/vueloFotogrametrico.png" alt="img/vueloFotogrametrico.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Porcentaje de paro en España por municipios</h3>
+            <p class="tarjeta__desc">Porcentaje de paro en España calculado a partir de la población y el número de
+              parados.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#España</span>
+              <span class="tag">#Paro</span>
+              <span class="tag">#Municipios</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
-      <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/georrefGrids/" target="_blank">
-          <span class="mainlink">
-            <strong>Georreferenciador de teselas</strong><br>
-            <!--<small>(mapaBase.html)</small>-->
-          </span>
-          <p class="description">Visualizador para georreferenciar teselas</p>
-          <p class="keywords">#Teselas #DGGS</p>
-          <img src="img/georrefTeselas.png" alt="img/georrefTeselas.png" width="200">
-        </a>
+      <!-- inicio sección Otros-->
+      <div class="seccion">
+        <h2 class="seccion__titulo">Otros</h2>
+        <span class="seccion__contador" aria-hidden="true"></span>
       </div>
-      <!-- fin tarjeta -->
+      <!-- fin sección Otros-->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/satelites/" target="_blank">
-          <span class="mainlink">
-            <strong>Estación espacial internacional y Galileo</strong><br>
-            <!--<small>(mapaBase.html)</small>-->
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/GDAL_JS/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/gdaljs.png" alt="Captura del transformador de formatos con gdal3.js" loading="lazy"
+              decoding="async">
           </span>
-          <p class="description">
-            Visualizador que muestra en tiempo real la Estación espacial internacional
-            y los satélites Galileo
-          </p>
-          <p class="keywords">#TiempoReal #ISS #Galileo</p>
-          <img src="img/ISS.png" alt="img/ISS.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Transformador de formatos con gdal3.js</h3>
+            <p class="tarjeta__desc">Aplicación para la transformación y visualización de datos.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#GDAL</span>
+              <span class="tag">#Transformación</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/constelaciones/" target="_blank">
-          <span class="mainlink">
-            <strong>Constelaciones</strong><br>
-            <!--<small>(mapaBase.html)</small>-->
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/estereoscopia/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/estereoscopia.png" alt="Captura del visualizador estereoscópico del relieve" loading="lazy"
+              decoding="async">
           </span>
-          <p class="description">
-            Visualizador que muestra en tiempo real las contelaciones, estellas y planetas
-          </p>
-          <p class="keywords">#TiempoReal #Constelaciones #Planetas #Estrellas</p>
-          <img src="img/constelaciones.png" alt="img/constelaciones.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Estereoscopía <span class="tarjeta__badge">anaglifo y vista partida</span></h3>
+            <p class="tarjeta__desc">Visualizador estereoscópico del relieve: anaglifo rojo/cian y vista partida, en 2D y
+              3D. Requiere gafas anaglíficas para el modo anaglifo.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Estereoscopía</span>
+              <span class="tag">#Anaglifo</span>
+              <span class="tag">#2.5D</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
-
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/georefMemes/" target="_blank">
-          <span class="mainlink">
-            <strong>Georreferenciador de memes</strong><br>
-            <!--<small>(mapaBase.html)</small>-->
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/vueloFotogrametrico/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/vueloFotogrametrico.png" alt="Captura del visualizador de vuelos fotogramétricos"
+              loading="lazy" decoding="async">
           </span>
-          <p class="description">
-            Visualizador que muestra los video-memes georreferenciados
-          </p>
-          <p class="keywords">#Memes #youtube</p>
-          <img src="img/georefMemes.png" alt="img/georefMemes.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Vuelo fotogramétrico</h3>
+            <p class="tarjeta__desc">Importa, planifica y visualiza vuelos fotogramétricos en 2D y 3D: fotocentros,
+              huellas y líneas de pasada, con cálculo de vuelo por GSD, orientación óptima y recorte al área.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Fotogrametría</span>
+              <span class="tag">#PNOA</span>
+              <span class="tag">#Vuelo</span>
+              <span class="tag">#GSD</span>
+              <span class="tag">#3D</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
+      <!-- inicio tarjeta-->
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/georrefGrids/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/georrefTeselas.png" alt="Captura del georreferenciador de teselas" loading="lazy"
+              decoding="async">
+          </span>
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Georreferenciador de teselas</h3>
+            <p class="tarjeta__desc">Visualizador para georreferenciar teselas.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Teselas</span>
+              <span class="tag">#DGGS</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
+        </a>
+      </div>
+      <!-- fin tarjeta -->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded"
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/satelites/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/ISS.png" alt="Captura del visualizador de la Estación Espacial Internacional y Galileo"
+              loading="lazy" decoding="async">
+          </span>
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Estación espacial internacional y Galileo</h3>
+            <p class="tarjeta__desc">Visualizador que muestra en tiempo real la Estación Espacial Internacional y los
+              satélites Galileo.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#TiempoReal</span>
+              <span class="tag">#ISS</span>
+              <span class="tag">#Galileo</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
+        </a>
+      </div>
+      <!-- fin tarjeta -->
+
+      <!-- inicio tarjeta-->
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/constelaciones/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/constelaciones.png" alt="Captura del visualizador de constelaciones, estrellas y planetas"
+              loading="lazy" decoding="async">
+          </span>
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Constelaciones</h3>
+            <p class="tarjeta__desc">Visualizador que muestra en tiempo real las constelaciones, estrellas y
+              planetas.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#TiempoReal</span>
+              <span class="tag">#Constelaciones</span>
+              <span class="tag">#Planetas</span>
+              <span class="tag">#Estrellas</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
+        </a>
+      </div>
+      <!-- fin tarjeta -->
+
+      <!-- inicio tarjeta-->
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/georefMemes/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/georefMemes.png" alt="Captura del georreferenciador de memes" loading="lazy" decoding="async">
+          </span>
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Georreferenciador de memes</h3>
+            <p class="tarjeta__desc">Visualizador que muestra los video-memes georreferenciados.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Memes</span>
+              <span class="tag">#YouTube</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
+        </a>
+      </div>
+      <!-- fin tarjeta -->
+
+      <!-- inicio tarjeta-->
+      <div class="tarjeta-col">
+        <a class="tarjeta"
           href="./mapas/GJSONdesdeURL/?gjson_url=https://ingenierogeomatico.github.io/Galeria_de_mapas/datos/madrid_barrios.geojson"
-          target="_blank">
-          <span class="mainlink">
-            <strong>Visualizador de GeoJSON publicados en internet</strong><br>
+          target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/GJSONdesdeURL.png" alt="Captura del visualizador de GeoJSON cargados desde una URL"
+              loading="lazy" decoding="async">
           </span>
-          <p class="description">
-            Visualizador que muestra un geojson a partir de su URL mediante parámetro GET gjson_url
-          </p>
-          <p class="keywords">#GeoJSON #GET</p>
-          <img src="img/GJSONdesdeURL.png" alt="img/GJSONdesdeURL.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Visualizador de GeoJSON publicados en internet</h3>
+            <p class="tarjeta__desc">Visualizador que muestra un GeoJSON a partir de su URL mediante el parámetro GET
+              <code>gjson_url</code>.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#GeoJSON</span>
+              <span class="tag">#GET</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
       <!-- inicio tarjeta-->
       <!-- ha dejado de funcionar la API-->
-      <!-- <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/GeorreferenciadorNoticias" target="_blank">
-          <span class="mainlink">
-            <strong>Georreferenciador de noticias</strong><br>
+      <!-- <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/GeorreferenciadorNoticias" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/georrefNoticias.png" alt="Captura del georreferenciador de noticias" loading="lazy"
+              decoding="async">
           </span>
-          <p class="description">
-            Visualizador georreferencia noticias
-          </p>
-          <p class="keywords">#TiempoReal #noticias</p>
-          <img src="img/georrefNoticias.png" alt="img/georrefNoticias.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Georreferenciador de noticias</h3>
+            <p class="tarjeta__desc">Visualizador que georreferencia noticias.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#TiempoReal</span>
+              <span class="tag">#Noticias</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div> -->
       <!-- fin tarjeta -->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/comparacionVistas/" target="_blank">
-          <span class="mainlink">
-            <strong>Comparación de vistas</strong><br>
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/comparacionVistas/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/mapaBase.png" alt="Captura del visualizador de comparación de vistas" loading="lazy"
+              decoding="async">
           </span>
-          <p class="description">
-            Compara varias vistas del territorio (cortinilla y espejo). Cada vista es un
-            mapa independiente y puede estar en 2D o 3D.
-          </p>
-          <p class="keywords">#Comparación #Cortinilla #Espejo #2D #3D #Supraplugin</p>
-          <img src="img/mapaBase.png" alt="img/mapaBase.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Comparación de vistas</h3>
+            <p class="tarjeta__desc">Compara varias vistas del territorio (cortinilla y espejo). Cada vista es un mapa
+              independiente y puede estar en 2D o 3D.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Comparación</span>
+              <span class="tag">#Cortinilla</span>
+              <span class="tag">#Espejo</span>
+              <span class="tag">#2D</span>
+              <span class="tag">#3D</span>
+              <span class="tag">#Supraplugin</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
       <!-- inicio tarjeta-->
-      <div class="col-md-4 col-sm-6">
-        <a class="example  bg-light border rounded" href="./mapas/MapaBase/" target="_blank">
-          <span class="mainlink">
-            <strong>Visualizador base</strong><br>
-            <!--<small>(mapaBase.html)</small>-->
+      <div class="tarjeta-col">
+        <a class="tarjeta" href="./mapas/MapaBase/" target="_blank" rel="noopener">
+          <span class="tarjeta__media">
+            <img src="img/mapaBase.png" alt="Captura del visualizador base de la API-IDEE" loading="lazy"
+              decoding="async">
           </span>
-          <p class="description">Ejemplo de un visualizador simple</p>
-          <p class="keywords">#Base #Simple</p>
-          <img src="img/mapaBase.png" alt="img/mapaBase.png" width="200">
+          <span class="tarjeta__cuerpo">
+            <h3 class="tarjeta__titulo">Visualizador base</h3>
+            <p class="tarjeta__desc">Ejemplo de un visualizador simple.</p>
+            <span class="tarjeta__tags" aria-hidden="true">
+              <span class="tag">#Base</span>
+              <span class="tag">#Simple</span>
+            </span>
+          </span>
+          <span class="tarjeta__pie" aria-hidden="true">
+            <span class="tarjeta__cta">Abrir visualizador</span>
+          </span>
         </a>
       </div>
       <!-- fin tarjeta -->
 
-
-      <!-- fin tarjeta sección-->
-
     </div>
-  </div>
 
+    <p id="sinResultados" class="vacio" hidden>
+      <strong>Sin resultados.</strong>
+      <span>Prueba con otra palabra clave o <button type="button" class="enlace-boton" id="restablecerBusqueda">borrar
+          la búsqueda</button>.</span>
+    </p>
+
+  </main>
+
+
+  <footer class="pie">
+    <p>Galería de visualizadores creados con la
+      <a href="https://plataforma.idee.es/web/idee/idee-api" target="_blank" rel="noopener noreferrer">API-IDEE</a> ·
+      <a href="https://github.com/ingenierogeomatico/Galeria_de_mapas" target="_blank" rel="noopener noreferrer">código
+        fuente</a>
+    </p>
+  </footer>
 
 </body>
 
