@@ -1566,11 +1566,19 @@
     constructor(options = {}) {
     this.name = "miPlugin_vueloFotogrametrico";
     this.options = options || {};
-    // Posición (índice, empezando en 0) del botón del plugin dentro del div
-    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
-    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
-    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
-    this.order = (options.order !== undefined) ? Number(options.order) : null;
+    // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
+    // API monta como flex column). Es un valor CSS `order`, no un índice: lo
+    // aplica la propia API haciendo style.order sobre el panel, así que no hay
+    // que reordenar el DOM a mano.
+    // Los paneles sin `order` valen 0, así que:
+    //   order: -1  => por delante de todos (los negativos van antes que el 0);
+    //   order: 0   => primera posición, empatada con los que no llevan order;
+    //   order: 2   => detrás de los que van en 0;
+    //   order: 99  => al final de la esquina;
+    //   null       => sin valor explícito: donde lo deje la API.
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
@@ -1579,6 +1587,7 @@
     this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
     this.map = null;
     this.panel = null;
+    this._control = null;       // control IDEE del panel (lo suelta destroy())
 
     // Estado de datos importados (persiste entre swaps OL<->Cesium). Si ya existe
     // en window.__vueloSharedData (venimos de un swap), se re-hidrata; si no, se
@@ -1657,7 +1666,9 @@
       className: 'g-herramienta_vuelo',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TR,
-      order: 1,
+      // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
+      // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
+      order: this.order,
     });
 
     const htmlPanel =
@@ -1670,43 +1681,18 @@
 
     const controlVuelo = new IDEE.Control(new IDEE.impl.Control(), 'controlVuelo');
     controlVuelo.createView = () => document.createElement('div');
+    // La API compara controles con equals() para retirarlos del panel
+    // (IDEE.ui.Panel.removeControls) y del mapa. Sin este método, destroy() ->
+    // map.removeControls() revienta con "e.equals is not a function" y el panel
+    // se queda colgado en el mapa. Estricto a propósito: un equals laxo
+    // ("other instanceof IDEE.Control") desregistraría también los controles de
+    // los demás plugins al quitar este.
+    controlVuelo.equals = function (other) { return other === this; };
+    // Referencia al control: destroy() la usa para soltarlo del mapa.
+    this._control = controlVuelo;
 
     panelVuelo.addControls(controlVuelo);
     map.addPanels(panelVuelo);
-
-    // ── Posicionar el botón del plugin (opción `order`) ────────────────
-    if (this.order !== null && !Number.isNaN(this.order)) {
-      const panelEl = panelVuelo.getElement ? panelVuelo.getElement() : document.querySelector('.m-panel.g-herramienta_vuelo');
-      if (panelEl && panelEl.parentElement) {
-        const area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
-          ? panelEl.parentElement
-          : panelEl.closest('.m-area');
-        if (area) {
-          const siblings = Array.from(area.children).filter(el =>
-            el.classList && el.classList.contains('m-panel')
-          );
-          if (siblings.length > 1) {
-            const target = Math.max(0, Math.min(this.order, siblings.length - 1));
-            const current = siblings.indexOf(panelEl);
-            if (current !== target) {
-              const ref = (target >= siblings.length)
-                ? null
-                : siblings[target];
-              if (ref && ref !== panelEl) {
-                if (target > current) {
-                  const next = siblings[target + 1] || null;
-                  area.insertBefore(panelEl, next);
-                } else {
-                  area.insertBefore(panelEl, ref);
-                }
-              } else if (ref === null) {
-                area.appendChild(panelEl);
-              }
-            }
-          }
-        }
-      }
-    }
 
     // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
     // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
@@ -4704,6 +4690,16 @@
   destroy() {
     this.cleanup();
     if (window.__vueloActivePlugin === this) window.__vueloActivePlugin = null;
+    // map.removePlugins() de la API llama solo a destroy(): si aquí no se suelta
+    // el control, el panel del visualizador de vuelo se queda colgado en el mapa.
+    // La cadena es removeControls -> Panel.removeControls -> removePanel, y
+    // necesita el equals() del control (ver buildPanel).
+    try {
+      if (this.map && this._control) this.map.removeControls([this._control]);
+    } catch (e) { /* Si el mapa o el control ya no están */ }
+    this._control = null;
+    this._iueePanel = null;
+    this.panel = null;
   }
 
   getAPIRest() { return ""; }

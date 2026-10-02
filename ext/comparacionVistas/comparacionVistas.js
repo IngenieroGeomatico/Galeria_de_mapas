@@ -4705,6 +4705,54 @@
         }),
       };
     }
+
+    /**
+     * Destruccion del item.
+     *
+     * A diferencia del resto de plugins, este no se registra con
+     * map.addPlugin(): es un ITEM de un miPlugin_supraplugin, así que no lo
+     * exige la API. Se implementa igualmente porque quitar el item debe soltar
+     * de verdad lo que vive FUERA del DOM: los tres oyentes en window
+     * ("message" de los iframes, "message" de la ventana espejo y
+     * "beforeunload"), el BroadcastChannel de sincronización y su temporizador.
+     * Borrar el HTML no los quita, y se quedan escuchando en una vista ya
+     * eliminada.
+     *
+     * La llama miPlugin_supraplugin._teardownDom(true) al desmontar la barra.
+     */
+    destroy() {
+      // Oyentes de window.
+      if (this._onMessage) {
+        try { window.removeEventListener("message", this._onMessage); } catch (e) { /* ignora */ }
+        this._onMessage = null;
+      }
+      if (this._onSyncWinMsg) {
+        try { window.removeEventListener("message", this._onSyncWinMsg); } catch (e) { /* ignora */ }
+        this._onSyncWinMsg = null;
+      }
+      if (this._onUnload) {
+        try { window.removeEventListener("beforeunload", this._onUnload); } catch (e) { /* ignora */ }
+        this._onUnload = null;
+      }
+      // Canal de sincronización y temporizador de saludo.
+      if (this._syncChannel) {
+        try { this._syncChannel.close(); } catch (e) { /* ignora */ }
+        this._syncChannel = null;
+      }
+      if (this._syncHelloTimer) {
+        try { clearTimeout(this._syncHelloTimer); } catch (e) { /* ignora */ }
+        this._syncHelloTimer = null;
+      }
+      // Ventanas espejo abiertas por este item.
+      if (this._syncPeerWin && !this._syncPeerWin.closed) {
+        try { this._syncPeerWin.close(); } catch (e) { /* ignora */ }
+      }
+      this._syncPeerWin = null;
+      this._remotePending = null;
+      this._vistas = null;
+      this._root = null;
+      this._supra = null;
+    }
   }
 
   if (typeof window !== "undefined") {

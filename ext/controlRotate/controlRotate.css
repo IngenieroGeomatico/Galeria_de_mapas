@@ -1,0 +1,62 @@
+/* =====================================================================
+   ESTILOS DEL PLUGIN DIAL DE ROTACIÓN (miPlugin_controlRotate)
+   =====================================================================
+   El dial es el control Rotate de la propia API (IDEE.control.Rotate), que
+   la API dibuja como panel .m-panel.m-rotate dentro de las areas de esquina
+   (.m-area .m-top .m-left). Aquí solo se ajusta para que se vea como uno más
+   de los botones de herramienta:
+
+     - el tamaño por defecto del control es 43,2 px (el panel) frente a los
+       40 px de los botones de las herramientas, así que se iguala a 40;
+     - el botón "Girar al norte" que trae dentro se quita, porque el norte se
+       orienta con doble clic (clase .g-controlRotate--sinNorte);
+     - se oculta la flecha de plegado, que en los paneles no plegables no
+       aporta nada y la API ya deja oculta... salvo al sacarlo de su area, de
+       modo que se reaffirma aquí.
+
+   El tamaño se fija con la variable --g-controlRotate-lado, que escribe el
+   plugin en línea (opción `size`), con 40 px por defecto.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Tamaño: el panel, su contenedor de controles y el contenedor del control
+   se fuerzan al mismo lado que los botones de las herramientas.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate {
+  width: var(--g-controlRotate-lado, 40px);
+  height: var(--g-controlRotate-lado, 40px);
+}
+
+.m-panel.m-rotate.g-controlRotate .m-panel-controls,
+.m-panel.m-rotate.g-controlRotate .m-control {
+  width: var(--g-controlRotate-lado, 40px);
+  height: var(--g-controlRotate-lado, 40px);
+}
+
+/* ---------------------------------------------------------------------
+   Flecha de plegado: fuera. El dial nunca se pliega.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate .m-panel-btn {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------
+   Botón de norte: fuera. El doble clic sobre el dial lo hace.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate--sinNorte #m-rotate-button {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------
+   El dial es un control: el cursor debe decir que se puede arrastrar, y no
+   debe robar el arrastre al mapa.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate #m-rotate-slider-container,
+.m-panel.m-rotate.g-controlRotate .m-rotate-container {
+  cursor: grab;
+}
+
+.m-panel.m-rotate.g-controlRotate #m-rotate-slider-container:active,
+.m-panel.m-rotate.g-controlRotate .m-rotate-container:active {
+  cursor: grabbing;
+}

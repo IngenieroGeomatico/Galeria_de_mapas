@@ -3,11 +3,16 @@ class miPlugin_cambioImpl {
     constructor(options = {}) {
         this.name = 'miPlugin_cambioImpl';
         this.options = options || {};
-        // Posición (índice, empezando en 0) del botón del plugin dentro del div
-        // de botones (el m-area donde se colocan los paneles). Si se omite o no es
-        // un número válido, el botón queda donde lo coloca Mapea por defecto (el
-        // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
-        this.order = (options.order !== undefined) ? Number(options.order) : null;
+        // Orden del botón del plugin dentro del área de botones (el m-area donde se
+        // colocan los paneles). Lo aplica la propia API: IDEE.ui.Panel hace
+        // style.order sobre el panel, dentro de un flex column, así que el
+        // valor es un valor CSS `order` y no un índice (los paneles sin `order`
+        // valen 0 y se quedan por delante). Si se omite o no es un número
+        // válido, el botón queda donde lo coloca Mapea por defecto (el orden de
+        // addPanels / addPlugin).
+        this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+          ? Number(options.order)
+          : null;
         // Colores configurables. Cada uno puede ser un color (string) o un
         // objeto {active, deactive}:
         //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
@@ -17,6 +22,13 @@ class miPlugin_cambioImpl {
         this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
         this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
         this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+
+        // Referencias que necesita destroy(): el mapa, el panel, el control y
+        // el <style> de colores que se inyecta en <head>.
+        this._map = null;
+        this._panel = null;
+        this._control = null;
+        this._styleEl = null;
     }
 
     // Devuelve {active, deactive} a partir de un color simple o un objeto.
@@ -28,6 +40,7 @@ class miPlugin_cambioImpl {
 
     // `addTo` será invocado por el framework cuando el plugin se añada al mapa
     addTo(map) {
+        this._map = map;
         const opts = this.options || {};
         const buttonTitle = opts.buttonTitle || 'Herramienta';
         // mapsFunction puede ser:
@@ -48,7 +61,11 @@ class miPlugin_cambioImpl {
         const panelExtracontrol_cambImpl = new M.ui.Panel('toolsExtra1_cambImpl', {
             "className": 'm-herramienta_cambImpl',
             "collapsedButtonClass": 'm-tools',
-            "position": M.ui.position.TL
+            "position": M.ui.position.TL,
+            // `order` lo aplica la propia API: el Panel hace
+            // style.order sobre su elemento dentro del area, que es un flex
+            // column, y asi coloca el boton dentro de la pila de la esquina.
+            "order": this.order
         });
 
         const htmlPanel =
@@ -61,6 +78,20 @@ class miPlugin_cambioImpl {
         const control_cambImpl = new M.Control(new M.impl.Control(), 'Control_cambImpl');
         panelExtracontrol_cambImpl.addControls(control_cambImpl);
 
+        // La API compara controles con equals() para retirarlos del panel
+        // (M.ui.Panel.removeControls) y del mapa. Sin este método, destroy() ->
+        // map.removeControls() revienta con "e.equals is not a function" y el
+        // panel se queda colgado en el mapa. Estricto a propósito: un equals laxo
+        // ("other instanceof M.Control") desregistraría también los controles de
+        // los demás plugins al quitar este.
+        control_cambImpl.equals = function (other) {
+            return other === this;
+        };
+
+        // Referencias que necesita destroy().
+        this._panel = panelExtracontrol_cambImpl;
+        this._control = control_cambImpl;
+
         // Con esta línea, se comparte con el objeto window la variable control1
         window.control_cambImpl = control_cambImpl;
 
@@ -71,40 +102,6 @@ class miPlugin_cambioImpl {
 
 
         map.addPanels([panelExtracontrol_cambImpl]);
-
-        // ── Posicionar el botón del plugin (opción `order`) ────────────────
-        if (this.order !== null && !Number.isNaN(this.order)) {
-            const panelEl = panelExtracontrol_cambImpl.getElement ? panelExtracontrol_cambImpl.getElement() : document.querySelector('.m-panel.m-herramienta_cambImpl');
-            if (panelEl && panelEl.parentElement) {
-                const area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
-                    ? panelEl.parentElement
-                    : panelEl.closest('.m-area');
-                if (area) {
-                    const siblings = Array.from(area.children).filter(el =>
-                        el.classList && el.classList.contains('m-panel')
-                    );
-                    if (siblings.length > 1) {
-                        const target = Math.max(0, Math.min(this.order, siblings.length - 1));
-                        const current = siblings.indexOf(panelEl);
-                        if (current !== target) {
-                            const ref = (target >= siblings.length)
-                                ? null
-                                : siblings[target];
-                            if (ref && ref !== panelEl) {
-                                if (target > current) {
-                                    const next = siblings[target + 1] || null;
-                                    area.insertBefore(panelEl, next);
-                                } else {
-                                    area.insertBefore(panelEl, ref);
-                                }
-                            } else if (ref === null) {
-                                area.appendChild(panelEl);
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         const div = document.querySelector('.m-herramienta_cambImpl .m-panel-controls');
         div.innerHTML = htmlPanel;
@@ -144,6 +141,7 @@ class miPlugin_cambioImpl {
           ));
           (document.head || document.documentElement).appendChild(styleEl);
         }
+        this._styleEl = styleEl;
         control_cambImpl.manageActivation(div);
 
         btn.addEventListener('click', (e) => {
@@ -570,6 +568,41 @@ class miPlugin_cambioImpl {
         }
 
 
+    }
+
+    /**
+     * Destruccion. map.removePlugins() de la API la exige: sin este metodo
+     * lanza "t.destroy is not a function" y ABORTA el resto del lote de plugins
+     * que se estuvieran quitando.
+     *
+     * Solo retira la UI de este plugin (el boton 2D/3D y su panel): su
+     * activate/deactivate no se tocan, asi que el mapa sigue siendo valido y el
+     * resto de plugins puede seguir desmontandose con normalidad. Lo que hay
+     * que soltar ademas del control es el <style> de colores, que se metio en
+     * <head> con un id propio y se queda ahi para siempre.
+     */
+    destroy() {
+        try {
+            if (this._map && this._control) this._map.removeControls([this._control]);
+        } catch (e) { /* Si el mapa o el control ya no estan */ }
+
+        // El <style> de colores se inyecta una sola vez por id: se quita solo
+        // si es el que creo esta instancia (puede haberlo creado otra anterior
+        // que se dismantelo antes).
+        if (this._styleEl && this._styleEl.parentNode) {
+            try { this._styleEl.parentNode.removeChild(this._styleEl); } catch (e) { /* ignora */ }
+        }
+
+        // El control se compartia con el resto del visor por window: se retira
+        // solo si sigue siendo el de esta instancia.
+        if (typeof window !== 'undefined' && window.control_cambImpl === this._control) {
+            try { delete window.control_cambImpl; } catch (e) { window.control_cambImpl = null; }
+        }
+
+        this._styleEl = null;
+        this._control = null;
+        this._panel = null;
+        this._map = null;
     }
 }
 

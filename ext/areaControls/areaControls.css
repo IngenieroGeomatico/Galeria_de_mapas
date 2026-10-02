@@ -1,0 +1,56 @@
+/* =====================================================================
+   ESTILOS DEL AREA DE CONTROLES (miPlugin_areaControls)
+   =====================================================================
+   Prefijo de clase propio: .g-areaControls (no colisiona con la API-CNIG,
+   que usa .m-area .m-top .m-bottom .m-left .m-right).
+
+   El area es un div a todo el ancho, arriba o abajo del visualizador, con
+   los plugins de tipo control en FILA (flex-direction: row). Como es un
+   flex row, el atributo order de cada plugin ordena de izquierda a derecha,
+   que es justo lo que la API no permite hacer dentro de sus areas de
+   esquina (esas son flex column y order solo apila en vertical).
+   ===================================================================== */
+
+.g-areaControls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  /* Los margenes laterales los calcula areaControls.js midiendo el rail de
+     botones de la API, y se escriben como padding en línea. box-sizing evita
+     que ese padding ensanche la banda. */
+  box-sizing: border-box;
+  /* La banda solo ocupa lo que necesita y no se pinta de fondo: el mapa se
+     ve igual por detrás. */
+  background: transparent;
+  /* La banda no debe robar el clic al mapa en los huecos entre controles. */
+  pointer-events: none;
+  z-index: 850;
+}
+
+/* Al entrar un plugin se le pone pointer-events:auto, de modo que cada control
+   sí recibe su clic pero los espacios intermedios no. */
+.g-areaControls > * {
+  pointer-events: auto;
+}
+
+/* Banda abierta abajo (defecto) */
+.g-areaControls--bottom {
+  bottom: 10px;
+}
+
+/* Banda abierta arriba */
+.g-areaControls--top {
+  top: 10px;
+}
+
+/* En pantallas estrechas se aparta un poco de los bordes. Solo el gap: tocar
+   left/right descuadraría la medida del rail, que se toma del contenedor. */
+@media (max-width: 768px) {
+  .g-areaControls {
+    gap: 6px;
+  }
+}

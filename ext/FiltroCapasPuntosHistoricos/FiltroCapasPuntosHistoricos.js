@@ -24,11 +24,19 @@ class miPlugin_filtroCapas {
   constructor(options = {}) {
     this.name = 'miPlugin_filtroCapas';
     this.options = options || {};
-    // Posición (índice, empezando en 0) del botón del plugin dentro del div
-    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
-    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
-    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
-    this.order = (options.order !== undefined) ? Number(options.order) : null;
+    // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
+    // API monta como flex column). Es un valor CSS `order`, no un índice: lo
+    // aplica la propia API haciendo style.order sobre el panel, así que no hay
+    // que reordenar el DOM a mano.
+    // Los paneles sin `order` valen 0, así que:
+    //   order: -1  => por delante de todos (los negativos van antes que el 0);
+    //   order: 0   => primera posición, empatada con los que no llevan order;
+    //   order: 2   => detrás de los que van en 0;
+    //   order: 99  => al final de la esquina;
+    //   null       => sin valor explícito: donde lo deje la API.
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
     this.map = null;
     this.panel = null;
     // Colores configurables. Cada uno puede ser un color (string) o un
@@ -78,6 +86,9 @@ class miPlugin_filtroCapas {
       className: 'g-herramienta',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TL,
+      // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
+      // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
+      order: this.order,
     });
 
     const htmlPanel = `
@@ -96,45 +107,22 @@ class miPlugin_filtroCapas {
 
     const control = new IDEE.Control(new IDEE.impl.Control(), 'controlFiltroCapas');
     control.createView = () => document.createElement('div');
+    // La API compara controles con equals() para retirarlos del panel
+    // (IDEE.ui.Panel.removeControls) y del mapa. Sin este metodo, destroy() ->
+    // map.removeControls() revienta con "e.equals is not a function" y el panel
+    // se queda colgado en el mapa. Estricto a proposito: un equals laxo
+    // ("other instanceof IDEE.Control") desregistraria tambien los controles de
+    // los demas plugins al quitar este.
+    control.equals = function (other) {
+      return other === this;
+    };
 
     panelExtra.addControls(control);
     this.panel = panelExtra;
+    // El control se guarda aparte para que destroy() pueda soltarlo del mapa.
+    this._control = control;
 
     map.addPanels(panelExtra);
-
-    // ── Posicionar el botón del plugin (opción `order`) ────────────────
-    if (this.order !== null && !Number.isNaN(this.order)) {
-      const panelEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta');
-      if (panelEl && panelEl.parentElement) {
-        const area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
-          ? panelEl.parentElement
-          : panelEl.closest('.m-area');
-        if (area) {
-          const siblings = Array.from(area.children).filter(el =>
-            el.classList && el.classList.contains('m-panel')
-          );
-          if (siblings.length > 1) {
-            const target = Math.max(0, Math.min(this.order, siblings.length - 1));
-            const current = siblings.indexOf(panelEl);
-            if (current !== target) {
-              const ref = (target >= siblings.length)
-                ? null
-                : siblings[target];
-              if (ref && ref !== panelEl) {
-                if (target > current) {
-                  const next = siblings[target + 1] || null;
-                  area.insertBefore(panelEl, next);
-                } else {
-                  area.insertBefore(panelEl, ref);
-                }
-              } else if (ref === null) {
-                area.appendChild(panelEl);
-              }
-            }
-          }
-        }
-      }
-    }
 
     // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
     // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
@@ -457,6 +445,23 @@ class miPlugin_filtroCapas {
       this._reapplyFilterIfNeeded(state);
     }
   }
+
+  // Destruccion. map.removePlugins() de la API la exige: sin este metodo lanza
+  // "t.destroy is not a function" y aborta el resto del lote de plugins.
+  // Suelta el control del mapa (la API se lleva el panel con el) y anula las
+  // referencias. Los listeners del formulario viven dentro del HTML del panel,
+  // asi que se van con el.
+  destroy() {
+    try {
+      if (this.map && this._control) this.map.removeControls([this._control]);
+    } catch (e) { /* ignora si el mapa o el control ya no estan */ }
+    this._control = null;
+    this.map = null;
+    this.panel = null;
+    this._restoredLayer = null;
+    this._restoredState = null;
+    this._filterReapplied = false;
+  }
 }
 
 // ===================================================================
@@ -466,11 +471,19 @@ class miPlugin_leyenda {
   constructor(options = {}) {
     this.name = 'miPlugin_leyenda';
     this.options = options || {};
-    // Posición (índice, empezando en 0) del botón del plugin dentro del div
-    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
-    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
-    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
-    this.order = (options.order !== undefined) ? Number(options.order) : null;
+    // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
+    // API monta como flex column). Es un valor CSS `order`, no un índice: lo
+    // aplica la propia API haciendo style.order sobre el panel, así que no hay
+    // que reordenar el DOM a mano.
+    // Los paneles sin `order` valen 0, así que:
+    //   order: -1  => por delante de todos (los negativos van antes que el 0);
+    //   order: 0   => primera posición, empatada con los que no llevan order;
+    //   order: 2   => detrás de los que van en 0;
+    //   order: 99  => al final de la esquina;
+    //   null       => sin valor explícito: donde lo deje la API.
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
     this.map = null;
     this.panel = null;
     // Colores configurables. Cada uno puede ser un color (string) o un
@@ -509,6 +522,9 @@ class miPlugin_leyenda {
       className: 'g-herramienta_leyenda',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.BL,
+      // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
+      // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
+      order: this.order,
     });
     this.panel = panelExtra;
 
@@ -528,43 +544,22 @@ class miPlugin_leyenda {
 
     const control = new IDEE.Control(new IDEE.impl.Control(), 'controlLeyenda');
     control.createView = () => document.createElement('div');
+    // La API compara controles con equals() para retirarlos del panel
+    // (IDEE.ui.Panel.removeControls) y del mapa. Sin este metodo, destroy() ->
+    // map.removeControls() revienta con "e.equals is not a function" y el panel
+    // se queda colgado en el mapa. Estricto a proposito: un equals laxo
+    // ("other instanceof IDEE.Control") desregistraria tambien los controles de
+    // los demas plugins al quitar este.
+    control.equals = function (other) {
+      return other === this;
+    };
 
     panelExtra.addControls(control);
-    map.addPanels(panelExtra);
+    // El control se guarda para que destroy() pueda soltarlo del mapa (el panel
+    // ya estaba guardado arriba, para restaurar su estado tras el swap 2D/3D).
+    this._control = control;
 
-    // ── Posicionar el botón del plugin (opción `order`) ────────────────
-    if (this.order !== null && !Number.isNaN(this.order)) {
-      const panelEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta_leyenda');
-      if (panelEl && panelEl.parentElement) {
-        const area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
-          ? panelEl.parentElement
-          : panelEl.closest('.m-area');
-        if (area) {
-          const siblings = Array.from(area.children).filter(el =>
-            el.classList && el.classList.contains('m-panel')
-          );
-          if (siblings.length > 1) {
-            const target = Math.max(0, Math.min(this.order, siblings.length - 1));
-            const current = siblings.indexOf(panelEl);
-            if (current !== target) {
-              const ref = (target >= siblings.length)
-                ? null
-                : siblings[target];
-              if (ref && ref !== panelEl) {
-                if (target > current) {
-                  const next = siblings[target + 1] || null;
-                  area.insertBefore(panelEl, next);
-                } else {
-                  area.insertBefore(panelEl, ref);
-                }
-              } else if (ref === null) {
-                area.appendChild(panelEl);
-              }
-            }
-          }
-        }
-      }
-    }
+    map.addPanels(panelExtra);
 
     // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
     // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
@@ -621,6 +616,20 @@ class miPlugin_leyenda {
         this.panel.open();
       }
     }
+  }
+
+  // Destruccion. map.removePlugins() de la API la exige: sin este metodo lanza
+  // "t.destroy is not a function" y aborta el resto del lote de plugins.
+  // Suelta el control del mapa (la API se lleva el panel con el) y anula las
+  // referencias. Los listeners del formulario viven dentro del HTML del panel,
+  // asi que se van con el.
+  destroy() {
+    try {
+      if (this.map && this._control) this.map.removeControls([this._control]);
+    } catch (e) { /* ignora si el mapa o el control ya no estan */ }
+    this._control = null;
+    this.map = null;
+    this.panel = null;
   }
 }
 

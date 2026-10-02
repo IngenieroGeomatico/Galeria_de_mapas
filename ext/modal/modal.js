@@ -106,7 +106,10 @@ class miPlugin_modal {
    * @param {string} [options.url_es] URL alternativa en español
    * @param {string} [options.url_en] URL alternativa en inglés
    * @param {string} [options.tooltip='Más información'] Tooltip del botón
-   * @param {number} [options.order] Posición/orden dentro del área de botones
+   * @param {number} [options.order] Posición del panel dentro del área de botones
+   *   (valor CSS `order`, no un índice; los paneles sin `order` valen 0): -1 =>
+   *   por delante de todos, 0 => primera posición, 2 => detrás de los de 0,
+   *   99 => al final, null => sin valor explícito.
    */
   constructor(options = {}) {
     this.name = 'miPlugin_modal';
@@ -116,7 +119,9 @@ class miPlugin_modal {
     this.collapsed_ = (options.collapsed !== undefined) ? options.collapsed : true;
     this.collapsible_ = (options.collapsible !== undefined) ? options.collapsible : true;
     this.tooltip_ = options.tooltip || 'Más información';
-    this.order = (options.order !== undefined && options.order >= -1) ? options.order : null;
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
 
     // Contenido inline opcional (prioritario frente a remote.get): permite que el
     // popup funcione incluso abriendo el visualizador con file://, donde el

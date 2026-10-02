@@ -55,7 +55,10 @@ class miPlugin_storymap {
     *   se recrean y cargan su GeoJSON de forma asíncrona; esperarlas evita que el paso
     *   filtre sobre un conjunto vacío y re-centre el mapa en el extent mundial (0,0).
     * @param {boolean} [options.isDraggable=false] Permite arrastrar el panel
-   * @param {number} [options.order] Posición/orden dentro del área de botones
+   * @param {number} [options.order] Posición del panel dentro del área de botones
+    *   (valor CSS `order`, no un índice; los paneles sin `order` valen 0): -1 =>
+    *   por delante de todos, 0 => primera posición, 2 => detrás de los de 0,
+    *   99 => al final, null => sin valor explícito.
    * @param {Object|string} [options.color1={active:'#ffffff',deactive:'orangered'}] Color de fondo ({ active, deactive } o string)
    * @param {Object|string} [options.color2={active:'#71A7D3',deactive:'#ffffff'}] Color de borde ({ active, deactive } o string)
    * @param {Object|string} [options.color3={active:'#71A7D3',deactive:'#ffffff'}] Color de icono/texto ({ active, deactive } o string)
@@ -73,7 +76,9 @@ class miPlugin_storymap {
     this.indexInContent = options.indexInContent || false;
     this.waitForLayers = (Array.isArray(options.waitForLayers) ? options.waitForLayers : []);
     this.isDraggable_ = (options.isDraggable !== undefined) ? options.isDraggable : false;
-    this.order = (options.order !== undefined && options.order >= -1) ? options.order : null;
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
 
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:

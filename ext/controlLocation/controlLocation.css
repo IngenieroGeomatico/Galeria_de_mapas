@@ -1,0 +1,13 @@
+/* =====================================================================
+   ESTILOS DEL PLUGIN BOTÓN DE UBICACIÓN (miPlugin_controlLocation)
+   =====================================================================
+   El botón es el control Location de la propia API (IDEE.control.Location),
+   que la API dibuja como panel .m-panel.m-location dentro de las areas de
+   esquina. Solo se ajusta un detalle: reaffirmar que la flecha de plegado no
+   se ve, porque el botón no se pliega (aunque la API ya la oculta dentro de
+   su area, el panel puede quedar fuera de ella al reiniciar el mapa).
+   ===================================================================== */
+
+.m-panel.m-location.g-controlLocation .m-panel-btn {
+  display: none !important;
+}

@@ -36,7 +36,14 @@ class miPlugin_attribution {
    * @param {boolean} [options.collapsed=true] Estado inicial colapsado
    * @param {boolean} [options.collapsible=true] Permite colapsar el panel
    * @param {string} [options.tooltip='Atribución y créditos'] Tooltip del botón
-   * @param {number} [options.order] Posición/orden dentro del área de botones
+   * @param {number} [options.order] Posición del panel dentro del área de
+   *   botones (valor CSS `order`, no un índice; los paneles sin `order` valen 0):
+   *   -1 => por delante de todos, 0 => primera posición, 2 => detrás de los de
+   *   0, 99 => al final, null => sin valor explícito.
+   * @param {string} [options.openPosition='bottom'] En el modo 'lite', banda
+   *   donde se despliega la barra de créditos ('bottom' o 'top'). Se usa la
+   *   banda compartida de controles (miPlugin_areaControls); si esa extensión
+   *   no está cargada, la barra se ancla abajo del contenedor como antes.
    * @param {Array<Object|string>} [options.attributions=[]] Atribuciones estáticas a nivel de mapa
    */
   constructor(options = {}) {
@@ -48,7 +55,12 @@ class miPlugin_attribution {
     this.collapsed_ = (options.collapsed !== undefined) ? options.collapsed : true;
     this.collapsible_ = (options.collapsible !== undefined) ? options.collapsible : true;
     this.tooltip_ = options.tooltip || 'Atribución y créditos';
-    this.order = (options.order !== undefined && options.order >= -1) ? options.order : null;
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
+     // Banda de controles en la que se despliega la barra del modo 'lite'.
+     this.openPosition_ = (options.openPosition === 'top') ? 'top' : 'bottom';
+     this._area = null;
     this.attributions_ = options.attributions || [];
 
     // Colores configurables (color1=fondo, color2=borde, color3=icono).
@@ -490,7 +502,25 @@ class miPlugin_attribution {
     });
     bar.appendChild(closeBtn);
 
-    container.appendChild(bar);
+    // La barra se cuelga en la banda compartida de controles para que conviva con
+    // la escala, las coordenadas o el dial en lugar de repartirse por esquinas.
+    // Si miPlugin_areaControls no está cargada, se cae al anclaje anterior
+    // (position:absolute al pie del contenedor), de modo que el plugin sigue
+    // funcionando por sí solo.
+    let colgada = false;
+    const ClaseArea = (typeof window !== 'undefined') ? window.miPlugin_areaControls : null;
+    if (typeof ClaseArea === 'function') {
+      try {
+        this._area = new ClaseArea({ openPosition: this.openPosition_ });
+        this._area.addTo(map);
+        colgada = this._area.monta(bar, { order: this.order !== null ? this.order : 0 }) !== null;
+      } catch (e) {
+        console.warn('miPlugin_attribution: no se pudo colgar la barra en la banda de controles.', e);
+      }
+    }
+    if (!colgada) {
+      container.appendChild(bar);
+    }
     this.refresh(map);
 
     // La barra sigue el estado del panel (abierto/cerrado) vía su clase .opened
@@ -590,6 +620,16 @@ class miPlugin_attribution {
       }
       this._liteObserver = null;
     }
+    // Baja en la banda de controles, si llegó a colgarse en ella. Va antes de
+    // anular la referencia a la barra, que es justo lo que necesita desmonta().
+    if (this._area && this._liteBar) {
+      try {
+        this._area.desmonta(this._liteBar);
+      } catch (e) {
+        // Ignorar
+      }
+    }
+    this._area = null;
     if (this._liteBar && this._liteBar.parentNode) {
       try {
         this._liteBar.parentNode.removeChild(this._liteBar);

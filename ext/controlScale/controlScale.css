@@ -1,0 +1,83 @@
+/* =====================================================================
+   ESTILOS DEL PLUGIN ESCALA Y NIVEL DE VISTA (miPlugin_controlScale)
+   =====================================================================
+   Sustituye al control 'scale*true' de la API, que pintaba un cuadro azul
+   ("Nivel de zoom 13.49 | Escala = 1 : 35.000") en la esquina inferior
+   derecha. Se replican sus medidas para que el cambio no se note: fondo azul,
+   borde blanco, esquinas redondeadas, sombra suave y texto de 12 px.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Contenedor: dentro de la banda de controles (ext/areaControls) manda el
+   flujo de esa banda, así que aquí no se posiciona; solo se garantiza que
+   quede centrado verticalmente y que no robe el clic al mapa.
+   --------------------------------------------------------------------- */
+.g-controlScale {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Es una lectura, no un botón: sin cursor de mano. */
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------------
+   La caja: el mismo aspecto que el control de escala de la API.
+   --------------------------------------------------------------------- */
+.g-controlScale-caja {
+  box-sizing: border-box;
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+  font-family: Muli, "sans-serif";
+  font-size: 12px;
+  color: #ffffff;
+  background: rgb(113, 167, 211);
+  border: 1.6px solid rgb(255, 255, 255);
+  border-radius: 20px;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 2px 4px 0, rgba(0, 0, 0, 0.02) 0 -1px 0 0;
+  padding: 6px 12px 3px;
+}
+
+.g-controlScale-dato {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.g-controlScale-etiqueta {
+  font-weight: 400;
+}
+
+.g-controlScale-valor {
+  font-weight: 400;
+}
+
+/* ---------------------------------------------------------------------
+   Oculto por visibilidad desactivada.
+   --------------------------------------------------------------------- */
+.g-controlScale[aria-hidden="true"] {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------
+   Respaldo: si ext/areaControls no está cargada, la lectura se ancla abajo a
+   la izquierda, que es donde la ponía el control de la API.
+   --------------------------------------------------------------------- */
+.g-controlScale--suelto {
+  position: absolute;
+  z-index: 850;
+  left: 10px;
+  bottom: 10px;
+}
+
+/* ---------------------------------------------------------------------
+   Pantallas estrechas: algo menos de relleno para no comerse el mapa.
+   --------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .g-controlScale-caja {
+    font-size: 11px;
+    padding: 4px 9px 2px;
+  }
+}

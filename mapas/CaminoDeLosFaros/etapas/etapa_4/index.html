@@ -10,6 +10,15 @@
     <link type="text/css" rel="stylesheet" href="https://componentes.idee.es/api-idee/assets/css/apiidee.ol.min.css">
     <link href="./css/etapa.css" rel="stylesheet" />
 
+  <!-- Ficheros javascript de la API-CNIG. Deben cargarse ANTES de las extensiones
+       de abajo: al registrarse un plugin se hace window.IDEE.plugin.X = X, y si la
+       API todavia no existe esa registracion se pierde en cuanto el bundle reemplaza
+       window.IDEE, que es lo que hacia fallar IDEE.plugin.miPlugin_cambioImpl con
+       "is not a constructor". Mismo orden que en mapas/PuntosHistoricosMadrid. -->
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/vendor/browser-polyfill.js"></script>
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.ol.min.js"></script>
+  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>
+
   <link type="text/css" rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
   <script src="../../../../ext/cambioImpl/cambioImpl.js" type="text/javascript"></script>
 
@@ -21,16 +30,32 @@
 
   <script src="../../../../ext/layergroup_cesium/layergroup_cesium.js" type="text/javascript"></script>
 
+  <!-- Controles 2D del mapa (escala, ubicacion y rotacion), ahora como plugins
+       porque Cesium no sabe crearlos al construir el mapa y eso abortaba el
+       cambio 2D/3D. La rotacion y la ubicacion se cuelgan en las columnas de
+       las areas de esquina, como los demas botones de las herramientas; la
+       escala es una lectura ancha y va en la banda de areaControls, que por eso
+       debe cargarse antes que ella (parametros `order` = posicion en la fila
+       y `openPosition` = banda superior o inferior). -->
+  <link type="text/css" rel="stylesheet" href="../../../../ext/areaControls/areaControls.css">
+  <script src="../../../../ext/areaControls/areaControls.js" type="text/javascript"></script>
+
+  <link type="text/css" rel="stylesheet" href="../../../../ext/controlScale/controlScale.css">
+  <script src="../../../../ext/controlScale/controlScale.js" type="text/javascript"></script>
+
+  <link type="text/css" rel="stylesheet" href="../../../../ext/controlLocation/controlLocation.css">
+  <script src="../../../../ext/controlLocation/controlLocation.js" type="text/javascript"></script>
+
+  <link type="text/css" rel="stylesheet" href="../../../../ext/controlRotate/controlRotate.css">
+  <script src="../../../../ext/controlRotate/controlRotate.js" type="text/javascript"></script>
+
 
   </head>
 
   <body>
       <!-- Contenedor principal del mapa -->
       <div id="mapjs" class="m-container"></div>
-      <!-- Ficheros javascript de la API -->
-      <script type="text/javascript" src="https://componentes.idee.es/api-idee/vendor/browser-polyfill.js"></script>
-      <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.ol.min.js"></script>
-      <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>
+      <!-- Los ficheros de la API-CNIG se cargan en el head, antes de las extensiones -->
       <script type="text/javascript" src="./js/etapa.js"></script>
 
 

@@ -89,6 +89,11 @@
      * @param {string} [options.texto='Botón de ejemplo'] Texto inicial del botón.
      * @param {number} [options.vecesPulsado=0] Contador inicial de pulsaciones.
      * @param {boolean} [options.activo=false] Estado activo/inactivo inicial.
+     * @param {number} [options.order=null] Posición del item dentro de la barra
+     * supraplugin (CSS `order` sobre su ranura; las ranuras sin `order` valen 0):
+     * -1 => por delante de todos, 0 => primera posición, 2 => detrás de las de
+     * 0, 99 => al final, null => orden natural de addItem. Lo lee el
+     * supraplugin al montar el item, así que no hay que hacer nada más con él.
      * @param {Function} [options.onClick] Callback opcional invocado al pulsar.
      */
     constructor(options = {}) {
@@ -96,6 +101,10 @@
       this.name = "miPlugin_plantillaItem";
       this.options = options || {};
       this.id = this.options.id || ("plantillaItem-" + nextUid());
+
+      // Posición en la barra supraplugin (la lee el supraplugin al montar).
+      this.order = (this.options.order !== undefined && this.options.order !== null
+        && !isNaN(Number(this.options.order))) ? Number(this.options.order) : null;
 
       // Referencia a la barra supraplugin anfitriona y al contenedor DOM
       this.supra = null;

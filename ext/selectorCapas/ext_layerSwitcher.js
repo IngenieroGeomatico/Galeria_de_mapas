@@ -3,11 +3,19 @@ class miPlugin_layerSwitcher {
   constructor(options = {}) {
     this.name = 'miPlugin_layerSwitcher';
     this.options = options || {};
-    // Posición (índice, empezando en 0) del botón del plugin dentro del div
-    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
-    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
-    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
-    this.order = (options.order !== undefined) ? Number(options.order) : null;
+    // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
+    // API monta como flex column). Es un valor CSS `order`, no un índice: lo
+    // aplica la propia API haciendo style.order sobre el panel, así que no hay
+    // que reordenar el DOM a mano.
+    // Los paneles sin `order` valen 0, así que:
+    //   order: -1  => por delante de todos (los negativos van antes que el 0);
+    //   order: 0   => primera posición, empatada con los que no llevan order;
+    //   order: 2   => detrás de los que van en 0;
+    //   order: 99  => al final de la esquina;
+    //   null       => sin valor explícito: donde lo deje la API.
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
@@ -253,6 +261,9 @@ class miPlugin_layerSwitcher {
       className: 'g-herramienta_selectorCapa',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TL,
+      // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
+      // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
+      order: this.order,
     });
     // Referencia al panel para poder restaurar su estado (abierto/colapsado)
     // en setState() tras un swap 2D/3D con cambioImpl.
@@ -274,57 +285,20 @@ class miPlugin_layerSwitcher {
 
     const control = new IDEE.Control(new IDEE.impl.Control(), 'controlLayer_layerSwitcher');
     control.createView = () => document.createElement('div');
+    // La API compara controles con equals() para retirarlos del panel
+    // (IDEE.ui.Panel.removeControls) y del mapa. Sin este metodo, destroy() ->
+    // map.removeControls() revienta con "e.equals is not a function" y el panel
+    // se queda colgado en el mapa. Estricto a proposito: un equals laxo
+    // ("other instanceof IDEE.Control") desregistraria tambien los controles de
+    // los demas plugins al quitar este.
+    control.equals = function (other) {
+      return other === this;
+    };
 
     panelExtra.addControls(control);
     map.addPanels(panelExtra);
-
-    // ── Posicionar el botón del plugin (opción `order`) ────────────────
-    // Reordena el panel del plugin dentro del div donde Mapea coloca los
-    // botones de los paneles (el m-area que contiene los .m-panel). El
-    // `order` (opcional) es el índice 0-based del botón dentro de esa lista:
-    // - order:0  => primer botón del área;
-    // - order:2  => tercer botón del área;
-    // - omitido  => el botón queda donde lo colocó map.addPanels.
-    // Se ejecuta DESPUÉS de addPanels para disponer del panel en el DOM.
-    if (this.order !== null && !Number.isNaN(this.order)) {
-      const panelEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta_selectorCapa');
-      if (panelEl && panelEl.parentElement) {
-        // El div que contiene los botones/paneles (el m-area del panel).
-        const area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
-          ? panelEl.parentElement
-          : panelEl.closest('.m-area');
-        if (area) {
-          // Paneles (botones) hermanos en el orden actual del DOM.
-          const siblings = Array.from(area.children).filter(el =>
-            el.classList && el.classList.contains('m-panel')
-          );
-          if (siblings.length > 1) {
-            // Posición objetivo (clamp a rango válido).
-            const target = Math.max(0, Math.min(this.order, siblings.length - 1));
-            const current = siblings.indexOf(panelEl);
-            if (current !== target) {
-              const ref = (target >= siblings.length)
-                ? null
-                : siblings[target];
-              if (ref && ref !== panelEl) {
-                // Si movemos hacia delante y nos apoyamos en un hermano que
-                // está antes del propio panel, hay que insertar en el
-                // siguiente para no quedarnos pendientes. Se recalcula según
-                // la posición relativa.
-                if (target > current) {
-                  const next = siblings[target + 1] || null;
-                  area.insertBefore(panelEl, next);
-                } else {
-                  area.insertBefore(panelEl, ref);
-                }
-              } else if (ref === null) {
-                area.appendChild(panelEl);
-              }
-            }
-          }
-        }
-      }
-    }
+    // Referencia al control: destroy() la usa para soltarlo del mapa.
+    this._control = control;
 
     // ── Aplicar colores configurables (color1=fondo, color2=borde, color3=icono) ──
     // Se inyectan 6 variables CSS en el panel (estado normal y ".opened/active").
@@ -2047,15 +2021,72 @@ class miPlugin_layerSwitcher {
     // Update the list whenever a layer is added to the map
     try {
       if (map && typeof map.on === 'function' && IDEE && IDEE.evt) {
-        map.on(IDEE.evt.ADDED_LAYER, async (capas) => {
+        // Se guarda la funcion para poder desengancharla en destroy().
+        this._onAddedLayer = async (capas) => {
           await renderLayerList();
-        });
+        };
+        map.on(IDEE.evt.ADDED_LAYER, this._onAddedLayer);
       }
     } catch (e) {
       console.warn('layerSwitcher: could not attach ADDED_LAYER listener', e);
     }
 
+    // Igual se guarda el desenganche del clic sobre el mapa (esta definido mas
+    // arriba, pero lo alcanza la elevacion de la declaracion de funcion).
+    this._unbindMapClick = unbindMapClick;
+
     control.activate();
+  }
+
+  // Destruccion. map.removePlugins() de la API la exige: sin este metodo lanza
+  // "t.destroy is not a function" y aborta el resto del lote de plugins.
+  // Deja el mapa como estaba: suelta el control (y con el el panel), desengancha
+  // el clic sobre el mapa y el de ADDED_LAYER, y borra los ayudantes globales
+  // que el plugin deja en window para los atributos onclick en linea del panel.
+  destroy() {
+    // 1) Clic sobre el mapa (singleclick del impl de OpenLayers).
+    try {
+      if (this._unbindMapClick) this._unbindMapClick();
+    } catch (e) { /* ignora: el mapa puede estar ya destruido */ }
+    this._unbindMapClick = null;
+
+    // 2) Listener de capas añadidas en la fachada de la API.
+    try {
+      const API = (typeof window !== 'undefined') ? (window.IDEE || window.M) : null;
+      if (this._map && this._onAddedLayer && API && API.evt && typeof this._map.off === 'function') {
+        this._map.off(API.evt.ADDED_LAYER, this._onAddedLayer);
+      }
+    } catch (e) { /* ignora */ }
+    this._onAddedLayer = null;
+
+    // 3) Control fuera del mapa (la API se lleva el panel con el).
+    try {
+      if (this._map && this._control) this._map.removeControls([this._control]);
+    } catch (e) { /* ignora si el mapa o el control ya no estan */ }
+    this._control = null;
+    this._map = null;
+    this._panel = null;
+
+    // 4) Ayudantes globales que el HTML del panel referencia en linea
+    //    (onclick="renderLayerList()" y compañía). Solo se borran los que
+    //    define este plugin; la clase en window.IDEE.plugin no se toca.
+    const GLOBALES = [
+      'renderLayerList', 'toggleLayerVisibility', 'toggleLayerOptions', 'toggleGroup',
+      'startRenameLayer', '_renameLayerName', 'handleDragStart', 'handleDragOver',
+      'handleDrop', 'handleDragEnd', 'deleteLayer', 'getLayerKind', 'setLayerOpacity',
+      'closeSheet', 'locateFeature', 'openLayerInfo', '_lsPickerLayers',
+      '__lsDragId', '__lsDragHandleArmed'
+    ];
+    if (typeof window !== 'undefined') {
+      GLOBALES.forEach((nombre) => {
+        try {
+          if (typeof window[nombre] === 'function') delete window[nombre];
+        } catch (e) { /* ignora */ }
+      });
+    }
+
+    this._optionsOpen = null;
+    this._groupCollapsed = {};
   }
 }
 

@@ -24,6 +24,22 @@
    10. Exposición triple en window, window.IDEE.plugin y window.M.plugin para
        sobrevivir a la recarga del bundle de la API durante el swap 2D/3D.
 
+   PARÁMETROS DE CONSTRUCCIÓN IMPORTANTES (todos en el constructor):
+     - position : esquina donde se cuelga el panel ('TL', 'TR', 'BL', 'BR').
+     - order    : posición del panel DENTRO de esa esquina. Es un valor CSS
+                  `order` sobre el panel dentro del área `.m-area` (flex column),
+                  NO un índice. Los paneles sin `order` valen 0, así que:
+                  order:-1 => por delante de todos; order:0 => primera posición
+                  (empatada con los que no lo llevan); order:2 => detrás de los
+                  de 0; order:99 => al final; null => sin valor explícito.
+     - collapsible : si el panel se pliega a botón o se deja abierto.
+     - color1   : color de fondo del botón ({ active, deactive } o string).
+     - color2   : color de borde ({ active, deactive } o string).
+     - color3   : color de icono/texto ({ active, deactive } o string).
+     Estos cinco (position, order, collapsible, color1, color2, color3) son el
+     mínimo que debe aceptar cualquier plugin con panel: son los que usa quien
+     instancia el mapa para situar y pintar la herramienta.
+
    PASOS PARA CREAR UN PLUGIN NUEVO A PARTIR DE ESTA PLANTILLA:
    1. Copiar la carpeta completa:
       ext/plantilla_plugin/  ->  ext/<nombre_del_plugin>/
@@ -69,7 +85,10 @@
      * @param {Object} [options={}] Opciones de configuración.
      * @param {string} [options.position='TL'] Posición del panel ('TL', 'TR', 'BL', 'BR').
      * @param {boolean} [options.collapsible=true] Si el panel puede plegarse/desplegarse.
-     * @param {number} [options.order=null] Posición ordinal (0-based) del botón en el área m-area.
+     * @param {number} [options.order=null] Posición del panel dentro de la esquina
+     * elegida (valor CSS `order` sobre el panel, dentro del área `.m-area`):
+     * -1 => por delante de todos, 0 => primera posición, 2 => detrás de los de
+     * 0, 99 => al final, null => sin valor explícito.
      * @param {Object|string} [options.color1] Color de fondo del botón ({ active, deactive } o string).
      * @param {Object|string} [options.color2] Color de borde ({ active, deactive } o string).
      * @param {Object|string} [options.color3] Color de icono/texto ({ active, deactive } o string).
@@ -89,9 +108,16 @@
       this.position = options.position || 'TL';
       this.collapsible = (options.collapsible !== undefined) ? Boolean(options.collapsible) : true;
 
-      // Posición (índice 0-based) del botón dentro del área de herramientas (m-area).
-      // Si se define un número, se reordena en el DOM tras addPanels. Si es null,
-      // queda en el orden natural en que se ejecutó addPanels / addPlugin.
+      // Posición del panel DENTRO de la esquina elegida (área `.m-area`, que la API
+      // monta como flex column). Es un valor CSS `order`, no un índice: lo aplica
+      // la propia API haciendo style.order sobre el panel (ver el addTo de más
+      // abajo), así que no hay que reordenar el DOM a mano. Los paneles sin
+      // `order` valen 0, así que:
+      //   order: -1  => por delante de todos (los negativos van antes que el 0);
+      //   order: 0   => primera posición, empatada con los que no llevan order;
+      //   order: 2   => detrás de los que van en 0;
+      //   order: 99  => al final de la esquina;
+      //   null       => sin valor: el panel se queda donde lo deje la API.
       this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
         ? Number(options.order)
         : null;
@@ -366,6 +392,11 @@
         className: 'g-herramienta_plantilla',
         collapsedButtonClass: 'm-tools',
         position: pos,
+        // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre
+        // el panel, dentro del area (un flex column). NO hay que reordenar el
+        // DOM a mano. Ojo: es un valor CSS `order`, no un índice; los paneles
+        // sin `order` valen 0 y se quedan por delante.
+        order: this.order,
       });
       this._panel = panel;
 
@@ -373,6 +404,20 @@
       // TODO: Personalizar el nombre del control
       const control = new IDEE.Control(new IDEE.impl.Control(), 'controlPlantilla');
       this._control = control;
+
+      // OBLIGATORIO para que destroy() funcione: la API usa equals() para
+      // distinguir controles al retirarlos del panel y del mapa
+      // (IDEE.ui.Panel.removeControls y el removeControls de la implementación).
+      // Sin este método, destroy() -> map.removeControls() lanza
+      // "e.equals is not a function" y el panel se queda colgado en el mapa
+      // aunque removePlugins() devuelva sin error.
+      // Que sea ESTRICTO importa: un equals laxo del estilo
+      // "other instanceof IDEE.Control" devuelve true para cualquier otro
+      // control, así que al desmontar este plugin la API desregistraría
+      // también los controles de los demás.
+      control.equals = function (other) {
+        return other === this;
+      };
 
       // 3. Definir la creación de la vista HTML (DOM)
       control.createView = () => {
@@ -423,46 +468,8 @@
       panel.addControls(control);
       map.addPanels(panel);
 
-      // 5. Posicionar el botón del plugin (opción `order`) en la barra de herramientas
-      // Reordena el panel dentro del div de botones (el contenedor .m-area de Mapea/API-IDEE).
-      if (this.order !== null && !Number.isNaN(this.order)) {
-        try {
-          const panelEl = (typeof panel.getElement === 'function')
-            ? panel.getElement()
-            : document.querySelector('.m-panel.g-herramienta_plantilla');
-
-          if (panelEl && panelEl.parentElement) {
-            const area = Array.from(panelEl.parentElement.children).some((el) => el === panelEl)
-              ? panelEl.parentElement
-              : panelEl.closest('.m-area');
-
-            if (area) {
-              const siblings = Array.from(area.children).filter((el) =>
-                el.classList && el.classList.contains('m-panel')
-              );
-              if (siblings.length > 1) {
-                const target = Math.max(0, Math.min(this.order, siblings.length - 1));
-                const current = siblings.indexOf(panelEl);
-                if (current !== -1 && current !== target) {
-                  const ref = (target >= siblings.length) ? null : siblings[target];
-                  if (ref && ref !== panelEl) {
-                    if (target > current) {
-                      const next = siblings[target + 1] || null;
-                      area.insertBefore(panelEl, next);
-                    } else {
-                      area.insertBefore(panelEl, ref);
-                    }
-                  } else if (ref === null) {
-                    area.appendChild(panelEl);
-                  }
-                }
-              }
-            }
-          }
-        } catch (e) {
-          console.warn(`${this.name}: No se pudo aplicar el orden en la barra de herramientas`, e);
-        }
-      }
+      // 5. El botón ya está colocado dentro del área por el `order` que se le
+      // pasó al Panel en el paso 1. No hace falta reordenar el DOM.
 
       // 6. Aplicar variables CSS de colores configurables al panel
       try {
@@ -497,15 +504,25 @@
 
     /**
      * Desmonta el plugin y limpia referencias y oyentes de eventos.
+     *
+     * map.removePlugins([plugin]) de la API la exige: sin este método lanza
+     * "t.destroy is not a function" y ABORTA el resto del lote de plugins que
+     * se estiverem quitando. La API solo llama a destroy() y borra el plugin
+     * de su lista: el panel y el control los tiene que soltar este método.
+     *
+     * Receta: map.removeControls([control]) -> IDEE.ui.Panel.removeControls()
+     * descuelga el control del panel y, si era el último, hace removePanel().
+     * Por eso el control necesita su método equals() (ver addTo). Ojo: llamar
+     * solo a panel.close() NO desmonta nada, únicamente lo colapsa.
      */
     destroy() {
-      // TODO: Desuscribir listeners de eventos del mapa (map.un(...)) si se registraron
-      if (this._panel && typeof this._panel.close === 'function') {
-        try {
-          this._panel.close();
-        } catch (e) {
-          /* Fallback silencioso */
+      // TODO: Desuscribir listeners de eventos del mapa (map.off(...)) si se registraron
+      try {
+        if (this._map && this._control && typeof this._map.removeControls === 'function') {
+          this._map.removeControls([this._control]);
         }
+      } catch (e) {
+        /* El mapa o el control pueden estar ya destruidos */
       }
       this._panel = null;
       this._control = null;

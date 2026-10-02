@@ -66,6 +66,20 @@
      * @param {string} [options.className] Clase CSS extra para la barra.
      * @param {Array}  [options.items]     Items iniciales a montar (ver contrato).
      * @param {boolean}[options.collapsible=false] Si la barra puede plegarse.
+     * @param {number} [options.order=null] Orden por defecto de los items que no
+     * declaren el suyo (CSS `order` sobre su ranura).
+
+     POSICIÓN DE LOS ITEMS (parámetro `order`)
+     Cada item se cuelga en una ranura (.supra-bar__slot) dentro de una fila
+     flex, así que su posición se fija con un valor CSS `order` sobre la ranura.
+     Hay dos formas de pasarlo, por orden de prioridad:
+       1) supra.addItem(item, { order: 2 })     -> explícito en el montaje.
+       2) new MiPluginItem({ order: 2 })          -> el item se coloca solo.
+          (el supraplugin lee item.order si existe).
+     Semántica (igual que en los plugins con panel; las ranuras sin `order`
+     valen 0): order:-1 => por delante de todos, order:0 => primera posición,
+     order:2 => detrás de las de 0, order:99 => al final,
+     null/undefined => el orden natural de addItem.
      */
     constructor(options = {}) {
       this.name = "miPlugin_supraplugin";
@@ -75,6 +89,10 @@
       this.title = this.options.title || "";
       this.className = this.options.className || "";
       this.collapsible = !!this.options.collapsible;
+      // Orden por defecto de los items que no declaren el suyo (CSS `order`
+      // sobre su ranura). Mismo parámetro que en los plugins con panel.
+      this.order = (this.options.order !== undefined && this.options.order !== null
+        && !isNaN(Number(this.options.order))) ? Number(this.options.order) : null;
 
       this.map = null;
       this.container = null;      // barra raíz
@@ -83,8 +101,20 @@
       this._collapsed = false;
 
       // Adopta items iniciales (aún sin montar: se montan en addTo).
+      // Cada entrada puede ser el item tal cual, o { item, order } para
+      // colocarlo en una posición concreta de la barra.
       if (Array.isArray(this.options.items)) {
-        this.options.items.forEach((it) => this.items.push({ item: it, opts: {}, mountedEl: null }));
+        this.options.items.forEach((it) => {
+          if (it && typeof it === "object" && typeof it.getSupraElement !== "function" && it.item !== undefined) {
+            this.items.push({
+              item: it.item,
+              opts: (it.order !== undefined && it.order !== null) ? { order: it.order } : {},
+              mountedEl: null
+            });
+          } else {
+            this.items.push({ item: it, opts: {}, mountedEl: null });
+          }
+        });
       }
     }
 
@@ -267,6 +297,17 @@
       if (!this.itemsContainer) return;
       var slot = document.createElement("div");
       slot.className = "supra-bar__slot";
+      // Posición del item dentro de la barra (CSS order sobre la ranura).
+      // Prioridad: opts.order del addItem > item.order del propio item >
+      // this.order (orden por defecto de la barra).
+      var orden = (record.opts && record.opts.order !== undefined && record.opts.order !== null)
+        ? record.opts.order
+        : (record.item && typeof record.item.order !== "undefined" && record.item.order !== null)
+          ? record.item.order
+          : this.order;
+      if (orden !== null && !isNaN(Number(orden))) {
+        slot.style.order = String(Number(orden));
+      }
       this.itemsContainer.appendChild(slot);
       record.slot = slot;
 
@@ -329,6 +370,11 @@
     // --- API pública para colgar objetos -----------------------------------
     /**
      * Añade un item al supraplugin. Ver "Contrato de item" en la cabecera.
+     * @param {Object} [opts] Opciones del item.
+     * @param {number} [opts.order] Posición del item en la barra (CSS `order`;
+     * las ranuras sin `order` valen 0): -1 => por delante de todos, 0 =>
+     * primera posición, 2 => detrás de las de 0, 99 => al final. Si no se
+     * pasa, se usa el `order` que declare el propio item (si lo tiene).
      * @returns {miPlugin_supraplugin} this (encadenable)
      */
     addItem(item, opts = {}) {
@@ -360,20 +406,55 @@
       this._notifyMapResize();
     }
 
-    _teardownDom() {
+    /**
+     * Retira la barra del DOM.
+     * @param {boolean} [conItems=false] Si además se llama a destroy() de cada
+     *   item. Por defecto NO: en el cambio 2D/3D el supraplugin anterior
+     *   entrega sus items al nuevo, y si se destruyeran aquí el nuevo montaría
+     *   items ya desmontados. Solo remove()/destroy() los destruyen de verdad.
+     */
+    _teardownDom(conItems) {
       if (this.container && this.container.parentNode) {
         this.container.parentNode.removeChild(this.container);
       }
       this.container = null;
       this.itemsContainer = null;
-      this.items.forEach(function (r) { r.mountedEl = null; r.slot = null; });
+      // Los items que se hayan montado se desmontan ellos mismos: quitar el
+      // DOM no basta para los que tengan recursos fuera de él (oyentes en
+      // window, BroadcastChannel, temporizadores...). Solo se llama a los que
+      // implementen destroy(); el resto se conforma con desaparecer su HTML.
+      this.items.forEach(function (r) {
+        var item = r.item;
+        if (conItems && item && typeof item.destroy === "function") {
+          try { item.destroy(); } catch (e) { console.warn("[supraplugin] destroy() del item falló:", e); }
+        }
+        r.mountedEl = null;
+        r.slot = null;
+      });
     }
 
     /** Desmonta por completo la barra y limpia el registro global. */
     remove() {
-      this._teardownDom();
+      this._teardownDom(true);
       if (window.__supraplugins[this.id] === this) delete window.__supraplugins[this.id];
       this._notifyMapResize();
+    }
+
+    /**
+     * Destruccion. map.removePlugins() de la API la exige: sin este metodo
+     * lanza "t.destroy is not a function" y ABORTA el resto del lote de plugins
+     * que se estuvieran quitando.
+     *
+     * El supraplugin no crea panel ni control de la API (su barra es hermana
+     * del contenedor del mapa), asi que no hay nada que soltar con
+     * map.removeControls(): basta con quitar la barra del DOM y limpiar el
+     * registro global, que es justo lo que ya hace remove().
+     */
+    destroy() {
+      this.remove();
+      this.map = null;
+      this._host = null;
+      this._toggleBtn = null;
     }
   }
 

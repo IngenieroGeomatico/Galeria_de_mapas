@@ -174,11 +174,19 @@
     constructor(options = {}) {
     this.name = "miPlugin_estereoscopia";
     this.options = options || {};
-    // Posición (índice, empezando en 0) del botón del plugin dentro del div
-    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
-    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
-    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
-    this.order = (options.order !== undefined) ? Number(options.order) : null;
+    // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
+    // API monta como flex column). Es un valor CSS `order`, no un índice: lo
+    // aplica la propia API haciendo style.order sobre el panel, así que no hay
+    // que reordenar el DOM a mano.
+    // Los paneles sin `order` valen 0, así que:
+    //   order: -1  => por delante de todos (los negativos van antes que el 0);
+    //   order: 0   => primera posición, empatada con los que no llevan order;
+    //   order: 2   => detrás de los que van en 0;
+    //   order: 99  => al final de la esquina;
+    //   null       => sin valor explícito: donde lo deje la API.
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono.
@@ -188,6 +196,7 @@
     this.map = null;
     this.engine = null;
     this.panel = null;         // contenido del control dentro del IDEE.ui.Panel
+    this._control = null;       // control IDEE del panel (lo suelta destroy())
     this.cursorsInjected = false;
     this._pendingState = null;
   }
@@ -300,7 +309,9 @@
       className: 'g-herramienta_estereo',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TR,
-      order: 0,
+      // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
+      // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
+      order: this.order,
     });
 
     var htmlPanel =
@@ -313,43 +324,18 @@
 
     var controlEstereo = new IDEE.Control(new IDEE.impl.Control(), 'controlEstereo');
     controlEstereo.createView = function () { return document.createElement('div'); };
+    // La API compara controles con equals() para retirarlos del panel
+    // (IDEE.ui.Panel.removeControls) y del mapa. Sin este método, destroy() ->
+    // map.removeControls() revienta con "e.equals is not a function" y el panel
+    // se queda colgado en el mapa. Estricto a propósito: un equals laxo
+    // ("other instanceof IDEE.Control") desregistraría también los controles de
+    // los demás plugins al quitar este.
+    controlEstereo.equals = function (other) { return other === this; };
+    // Referencia al control: destroy() la usa para soltarlo del mapa.
+    this._control = controlEstereo;
 
     panelEstereo.addControls(controlEstereo);
     map.addPanels(panelEstereo);
-
-    // ── Posicionar el botón del plugin (opción `order`) ────────────────
-    if (this.order !== null && !Number.isNaN(this.order)) {
-      var panelEl = panelEstereo.getElement ? panelEstereo.getElement() : document.querySelector('.m-panel.g-herramienta_estereo');
-      if (panelEl && panelEl.parentElement) {
-        var area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
-          ? panelEl.parentElement
-          : panelEl.closest('.m-area');
-        if (area) {
-          var siblings = Array.from(area.children).filter(el =>
-            el.classList && el.classList.contains('m-panel')
-          );
-          if (siblings.length > 1) {
-            var target = Math.max(0, Math.min(this.order, siblings.length - 1));
-            var current = siblings.indexOf(panelEl);
-            if (current !== target) {
-              var ref = (target >= siblings.length)
-                ? null
-                : siblings[target];
-              if (ref && ref !== panelEl) {
-                if (target > current) {
-                  var next = siblings[target + 1] || null;
-                  area.insertBefore(panelEl, next);
-                } else {
-                  area.insertBefore(panelEl, ref);
-                }
-              } else if (ref === null) {
-                area.appendChild(panelEl);
-              }
-            }
-          }
-        }
-      }
-    }
 
     // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono)
     // al panel. Se inyectan 6 variables CSS (estado normal y ".opened/active").
@@ -504,6 +490,16 @@
   destroy() {
     this.cleanup();
     if (window.__estereoActivePlugin === this) window.__estereoActivePlugin = null;
+    // map.removePlugins() de la API llama solo a destroy(): si aquí no se suelta
+    // el control, el panel de estereoscopía se queda colgado en el mapa. La
+    // cadena es removeControls -> Panel.removeControls -> removePanel, y necesita
+    // el equals() del control (ver buildPanel).
+    try {
+      if (this.map && this._control) this.map.removeControls([this._control]);
+    } catch (e) { /* Si el mapa o el control ya no están */ }
+    this._control = null;
+    this._iueePanel = null;
+    this.panel = null;
   }
 
   // ── Contrato de preservación de estado (cambioImpl OL <-> Cesium) ──

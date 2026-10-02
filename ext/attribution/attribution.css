@@ -206,6 +206,17 @@
   display: none;
 }
 
+/* Dentro de la banda compartida de controles (miPlugin_areaControls) la barra
+   deja de ser absoluta: monta() la pone en el flujo (position:static) y pasa a
+   ser un item más de la fila, ordenada por su atributo `order` junto a la
+   escala, las coordenadas o el dial. Se anula el ancho máximo heredado, que
+   estaba pensado para una franja a todo el ancho. */
+.g-areaControls > .m-attribution-bar {
+  flex: 0 1 auto;
+  max-width: none;
+  z-index: auto;
+}
+
 /* El rail de botones de la API se pinta POR ENCIMA de la barra desplegada:
    .ol-overlaycontainer-stopevent crea un contexto de apilamiento con z-index 0
    (inline, lo fija la API) que "atrapa" el z-index 999 de los paneles del rail;

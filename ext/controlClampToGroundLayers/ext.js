@@ -18,13 +18,19 @@ class miPlugin_clampToGround {
   constructor(options = {}) {
     this.name = 'miPlugin_clampToGround';
     this.options = options || {};
-    // Posición (índice, empezando en 0) del botón del plugin dentro del div
-    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
-    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
-    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
-    this.order = (options.order !== undefined) ? Number(options.order) : null;
+    // Orden del botón del plugin dentro del área de botones (el m-area donde se
+    // colocan los paneles). Lo aplica la propia API: IDEE.ui.Panel hace
+    // style.order sobre el panel, dentro de un flex column, así que el valor
+    // es un valor CSS `order` y no un índice (los paneles sin `order` valen 0 y
+    // se quedan por delante). Si se omite o no es un número válido, el botón
+    // queda donde lo coloca Mapea por defecto (el orden de addPanels /
+    // addPlugin).
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
     this.map = null;
     this.control = null;
+    this.panel = null;
     this._activeState = null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
@@ -63,43 +69,16 @@ class miPlugin_clampToGround {
       className: 'm-herramientaC1',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TL,
+      // `order` lo aplica la propia API (style.order dentro del area, que es
+      // un flex column), asi que no hace falta reordenar el DOM a mano.
+      order: this.order,
     });
 
     map.addPanels([panelExtraControlC1]);
+    // Referencia al panel: la necesita destroy() para bajarlo con removePanel
+    // (aquí no se cuelga un control en el panel, así que removeControls no vale).
+    this.panel = panelExtraControlC1;
 
-    // ── Posicionar el botón del plugin (opción `order`) ────────────────
-    if (this.order !== null && !Number.isNaN(this.order)) {
-      const panelEl = panelExtraControlC1.getElement ? panelExtraControlC1.getElement() : document.querySelector('.m-panel.m-herramientaC1');
-      if (panelEl && panelEl.parentElement) {
-        const area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
-          ? panelEl.parentElement
-          : panelEl.closest('.m-area');
-        if (area) {
-          const siblings = Array.from(area.children).filter(el =>
-            el.classList && el.classList.contains('m-panel')
-          );
-          if (siblings.length > 1) {
-            const target = Math.max(0, Math.min(this.order, siblings.length - 1));
-            const current = siblings.indexOf(panelEl);
-            if (current !== target) {
-              const ref = (target >= siblings.length)
-                ? null
-                : siblings[target];
-              if (ref && ref !== panelEl) {
-                if (target > current) {
-                  const next = siblings[target + 1] || null;
-                  area.insertBefore(panelEl, next);
-                } else {
-                  area.insertBefore(panelEl, ref);
-                }
-              } else if (ref === null) {
-                area.appendChild(panelEl);
-              }
-            }
-          }
-        }
-      }
-    }
 
     document.querySelector('.m-herramientaC1 .m-panel-controls').innerHTML +=
       `
@@ -321,6 +300,46 @@ class miPlugin_clampToGround {
         }
       }
     }
+  }
+
+  /**
+   * Destruccion. map.removePlugins() de la API la exige: sin este metodo lanza
+   * "t.destroy is not a function" y ABORTA el resto del lote de plugins que se
+   * estuvieran quitando.
+   *
+   * Este plugin es un caso particular: su panel se crea con map.addPanels y su
+   * HTML se inyecta directamente en el panel, SIN colgar el control de la API
+   * en él. Por eso la cadena habitual (map.removeControls -> el panel se queda
+   * sin controles -> removePanel) no sirve aquí: no hay control que retirar. Se
+   * usa map.removePanel, que sí es público, y antes se desactiva el control para
+   * que no deje hover sobre el terreno si estaba activado.
+   */
+  destroy() {
+    const ctrl = this.control;
+    if (ctrl && typeof ctrl.deactivate === 'function') {
+      try {
+        const res = ctrl.deactivate();
+        if (res && typeof res.catch === 'function') res.catch(() => {});
+      } catch (e) {
+        /* El mapa puede estar ya destruido */
+      }
+    }
+    try {
+      if (this.map && this.panel && typeof this.map.removePanel === 'function') {
+        this.map.removePanel(this.panel);
+      }
+    } catch (e) {
+      /* Si el panel ya no estaba, se deja como estaba */
+    }
+    // El control se compartía con el resto del visor por window: se retira solo
+    // si sigue siendo el de esta instancia.
+    if (typeof window !== 'undefined' && window.controlC1 === ctrl) {
+      try { delete window.controlC1; } catch (e) { window.controlC1 = null; }
+    }
+    this.control = null;
+    this.panel = null;
+    this._activeState = false;
+    this.map = null;
   }
 }
 

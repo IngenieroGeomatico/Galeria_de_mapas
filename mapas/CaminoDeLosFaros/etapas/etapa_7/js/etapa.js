@@ -46,14 +46,93 @@ function updateConfigBaseLayer() {
   return
 }
 
+/*
+ * Pega al terreno las geometrias de una capa vectorial cuando la implementacion
+ * es Cesium.
+ *
+ * En OpenLayers no hace falta nada, pero en Cesium las entidades nacen a altura 0
+ * sobre el elipsoide y el MDT del IGN las tapa, de modo que ruta, atajos, puntos e
+ * indicaciones desaparecen al pasar a 3D. Se fija CLAMP_TO_GROUND en los puntos y
+ * clampToGround en las lineas, y se anula el recorte por profundidad para que los
+ * marcadores no se corten contra el terreno.
+ *
+ * OJO con el momento: al cambiar de implementacion el GeoJSON se vuelve a pedir y
+ * las entidades de Cesium tardan decenas de segundos en crearse (se midio en torno
+ * a 40-50 s). Por eso no basta con aplicar el clamp en el acto: hay que engancharse
+ * al IDEE.evt.LOAD de la capa y ademas reintentar durante un rato por si el LOAD se
+ * hubiera perdido.
+ *
+ * Patron equivalente al de mapas/LucesdeBohemia/js/mapa.js.
+ */
+function pegaAlTerrenoSiCesium(capa) {
+  if (typeof window.Cesium === 'undefined') return; // 2D: no hace nada
+
+  const localizaDataSource = () => {
+    try {
+      const ds = mapjs.getMapImpl().dataSources;
+      const lista = (ds && ds._dataSources) || [];
+      for (const d of lista) {
+        if (d && d.name === capa.name) return d;
+      }
+    } catch (e) { /* todavia no esta la escena */ }
+    return null;
+  };
+
+  const aplicar = () => {
+    const ds = localizaDataSource();
+    const entidades = (ds && ds.entities) ? ds.entities.values : null;
+    if (!entidades || !entidades.length) return false;
+
+    let n = 0;
+    entidades.forEach((e) => {
+      if (e.polyline) {
+        e.polyline.clampToGround = new window.Cesium.ConstantProperty(true);
+        n++;
+      }
+      if (e.point) {
+        e.point.heightReference = new window.Cesium.ConstantProperty(
+          window.Cesium.HeightReference.CLAMP_TO_GROUND
+        );
+        e.point.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+        n++;
+      }
+      if (e.polygon) {
+        e.polygon.heightReference = new window.Cesium.ConstantProperty(
+          window.Cesium.HeightReference.CLAMP_TO_GROUND
+        );
+        n++;
+      }
+    });
+    return n > 0;
+  };
+
+  // Al crearse las entidades...
+  try {
+    capa.on(IDEE.evt.LOAD, aplicar);
+  } catch (e) { /* si el evento no existe, siguen los reintentos */ }
+
+  // ...y por si acaso, reintentos hasta que haya geometria (tarda ~40-50 s).
+  let intentos = 0;
+  const temporizador = setInterval(() => {
+    intentos++;
+    if (aplicar() || intentos > 90) clearInterval(temporizador);
+  }, 2000);
+}
+
 function mapa() {
 
 updateConfigBaseLayer()
 
+// La escala, las coordenadas y la rotacion NO se piden como `controls` del mapa:
+// Cesium no puede crear los controles de OpenLayers ('scale' lanza "La
+// implementacion usada no puede crear controles Scale" y aborta la creacion del
+// mapa), y ademas esos controles solo existen en 2D. Se añaden como plugins de
+// ext/, que saben esconderse en 3D y sobreviven al cambio de implementacion.
+// El selector de base de capas lo aporta miPlugin_baseLayer.
+
 // Configuración del mapa
 mapjs = IDEE.map({
   container: 'mapjs', //id del contenedor del mapa
-  controls: ['scale*true', 'rotate', 'location', 'backgroundlayers'],
   zoom: 8,
   center: { x: -987492.7064936283, y: 5359858.7732718475 },
 });
@@ -195,6 +274,12 @@ mapjs.addLayers([atajos]);
 mapjs.addLayers([PuntosInteres]);
 mapjs.addLayers([indicaciones]);
 
+// En 3D las geometrias tienen que ir pegadas al MDT o el terreno las tapa.
+pegaAlTerrenoSiCesium(ruta);
+pegaAlTerrenoSiCesium(atajos);
+pegaAlTerrenoSiCesium(PuntosInteres);
+pegaAlTerrenoSiCesium(indicaciones);
+
 
 ruta.on(IDEE.evt.LOAD, (features) => {
   rutaExt = ruta.getMaxExtent()
@@ -215,6 +300,17 @@ ruta.on(IDEE.evt.LOAD, (features) => {
   }));
   mapjs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
   mapjs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
+
+  // Controles 2D como plugins, en el sitio que ocupaba cada uno en el mapa: el
+  // dial de rotacion y el boton de ubicacion se cuelgan en las columnas de las
+  // areas de esquina de la API, igual que los botones de las demas herramientas,
+  // y la lectura de escala (1:n y nivel de zoom) va en la banda de areaControls,
+  // porque es un div ancho que en la columna estorba. En la banda, `order` fija
+  // la posicion de izquierda a derecha y `openPosition` elige si la banda se
+  // abre arriba o abajo.
+  mapjs.addPlugin(new IDEE.plugin.miPlugin_controlScale({ order: 0, openPosition: 'bottom' }));
+  mapjs.addPlugin(new IDEE.plugin.miPlugin_controlLocation());
+  mapjs.addPlugin(new IDEE.plugin.miPlugin_controlRotate({ order: -1 }));
 
   return mapjs
 

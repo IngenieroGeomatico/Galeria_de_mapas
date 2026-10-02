@@ -24,11 +24,19 @@ class miPlugin_baseLayer {
   constructor(options = {}) {
     this.name = 'miPlugin_baseLayer';
     this.options = options || {};
-    // Posición (índice, empezando en 0) del botón del plugin dentro del div
-    // de botones (el m-area donde se colocan los paneles). Si se omite o no es
-    // un número válido, el botón queda donde lo coloca Mapea por defecto (el
-    // orden de addPanels / addPlugin). Ej: order:0 => primer botón del área.
-    this.order = (options.order !== undefined) ? Number(options.order) : null;
+    // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
+    // API monta como flex column). Es un valor CSS `order`, no un índice: lo
+    // aplica la propia API haciendo style.order sobre el panel, así que no hay
+    // que reordenar el DOM a mano.
+    // Los paneles sin `order` valen 0, así que:
+    //   order: -1  => por delante de todos (los negativos van antes que el 0);
+    //   order: 0   => primera posición, empatada con los que no llevan order;
+    //   order: 2   => detrás de los que van en 0;
+    //   order: 99  => al final de la esquina;
+    //   null       => sin valor explícito: donde lo deje la API.
+    this.order = (options.order !== undefined && options.order !== null && !Number.isNaN(Number(options.order)))
+      ? Number(options.order)
+      : null;
     // Colores configurables. Cada uno puede ser un color (string) o un
     // objeto {active, deactive}:
     //   color1 = fondo, color2 = borde (botón+panel), color3 = icono/flecha.
@@ -198,54 +206,36 @@ class miPlugin_baseLayer {
     }
 
     // ── Panel IDEE ────────────────────────────────────────────────────
+    // this._control se guarda para que destroy() pueda soltar el control del
+    // mapa (y con el el panel) cuando el plugin se desmonta.
     var panel = new IDEE.ui.Panel('toolsExtra_baseLayer', {
       collapsible: true,
       className: 'g-herramienta_baseLayer',
       collapsedButtonClass: 'm-tools',
       position: position,
+      // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
+      // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
+      order: this.order,
     });
 
     var control = new IDEE.Control(new IDEE.impl.Control(), 'controlBackgroundLayer');
     control.createView = function () { return document.createElement('div'); };
+    // La API compara controles con equals() para retirarlos del panel
+    // (IDEE.ui.Panel.removeControls) y del mapa. Sin este metodo, destroy() ->
+    // map.removeControls() revienta con "e.equals is not a function" y el panel
+    // se queda colgado en el mapa. Estricto a proposito: un equals laxo
+    // ("other instanceof IDEE.Control") desregistraria tambien los controles de
+    // los demas plugins al quitar este.
+    control.equals = function (other) {
+      return other === this;
+    };
     panel.addControls(control);
     map.addPanels(panel);
-    // Guardamos la referencia al panel IDEE para poder restablecer su estado
-    // abierto/colapsado tras un cambio de implementación 2D<->3D.
+    // Guardamos las referencias que necesita destroy(): el panel para poder
+    // restablecer su estado abierto/colapsado tras un cambio de implementación
+    // 2D<->3D, y el control para soltarlo del mapa al desmontar.
     this._panel = panel;
-
-    // ── Posicionar el botón del plugin (opción `order`) ────────────────
-    if (this.order !== null && !Number.isNaN(this.order)) {
-      const panelEl = panel.getElement ? panel.getElement() : document.querySelector('.m-panel.g-herramienta_baseLayer');
-      if (panelEl && panelEl.parentElement) {
-        const area = Array.from(panelEl.parentElement.children).some(el => el === panelEl)
-          ? panelEl.parentElement
-          : panelEl.closest('.m-area');
-        if (area) {
-          const siblings = Array.from(area.children).filter(el =>
-            el.classList && el.classList.contains('m-panel')
-          );
-          if (siblings.length > 1) {
-            const target = Math.max(0, Math.min(this.order, siblings.length - 1));
-            const current = siblings.indexOf(panelEl);
-            if (current !== target) {
-              const ref = (target >= siblings.length)
-                ? null
-                : siblings[target];
-              if (ref && ref !== panelEl) {
-                if (target > current) {
-                  const next = siblings[target + 1] || null;
-                  area.insertBefore(panelEl, next);
-                } else {
-                  area.insertBefore(panelEl, ref);
-                }
-              } else if (ref === null) {
-                area.appendChild(panelEl);
-              }
-            }
-          }
-        }
-      }
-    }
+    this._control = control;
 
     // ── Aplicar colores configurables (color1=fondo, color2=borde, color3=icono) ──
     // Se inyectan 6 variables CSS (estado normal y ".opened/active") mediante un
@@ -395,6 +385,21 @@ class miPlugin_baseLayer {
 
     control.deactivate = function () {};
     control.activate();
+  }
+
+  // Destruccion. map.removePlugins() de la API la exige: sin este metodo lanza
+  // "t.destroy is not a function" y aborta el resto del lote de plugins.
+  // Suelta el control del mapa (la API se lleva el panel con el) y anula las
+  // referencias. Los listeners de los radios viven dentro del HTML del panel,
+  // asi que se van con el.
+  destroy() {
+    try {
+      if (this._map && this._control) this._map.removeControls([this._control]);
+    } catch (e) { /* ignora si el mapa o el control ya no estan */ }
+    this._control = null;
+    this._map = null;
+    this._panel = null;
+    this._activeLayerId = null;
   }
 }
 
