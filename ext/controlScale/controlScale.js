@@ -21,17 +21,56 @@
 
    CONTENIDO:
      - 2D (OpenLayers): nivel de zoom del mapa y su escala 1:nnnnnn. La escala
-       se toma de la API (map.getExactScale(), con map.getScale() como
-       reserva) y se corrige por la latitud del punto mirado: el valor de la
-       API mide metros de plano y no cambia al desplazarse, cuando la escala de
-       un mapa es sobre el suelo (ver _corregirPorLatitud).
+       sale de la resolución de la vista, convertida a metros de suelo con el
+       factor que da la propia proyección (ver ESCALA y _factorProyeccion).
      - 3D (Cesium): no hay nivel de zoom, así que en su lugar se muestra la
        altura de la cámara sobre el elipsoide, y la escala se calcula a partir
        del campo de visión y del tamaño del lienzo. La escala de un mapa en
        perspectiva no es constante (depende de la distancia a la que esté el
        punto mirado), de modo que el valor es el del centro de la vista. Esta
-       vía no necesita corrección por latitud: ya sale de la geometría de la
-       cámara.
+       vía no necesita factor de proyección: los metros por píxel ya salen de
+       la geometría de la cámara, que es una distancia real sobre el terreno.
+
+   ESCALA:
+     Qué número se pinta y por qué es el mismo en cualquier proyección.
+
+     La conversión es la del ejemplo "Projection and Scale" de OpenLayers, el
+     patrón canónico para mantener la escala al cambiar de proyección: se le
+     pregunta a la proyección cuántos metros de suelo mide un metro proyectado
+     en el punto que se está mirando, y se multiplica.
+
+         const mpu = proyeccion.getMetersPerUnit();
+         const factor = getPointResolution(proyeccion, 1 / mpu, centro, 'm') * mpu;
+         escala = resolucion * factor / M_POR_PX;
+
+     En EPSG:3857 el factor es el coseno de la latitud, porque Mercator estira
+     hacia los polos; en EPSG:4326 es el factor de latitud de los grados; en una
+     proyección cónica sería el del cono. NO hay ninguna fórmula de latitudes
+     en el plugin, y esa es la diferencia con la versión anterior, que arrancaba
+     en 3857 y se leía mal en el resto.
+
+     Que el sentido esté bien se ha medido, no supuesto: la distancia geodésica
+     entre dos puntos separados 100 px da suelo/resolución = 1,0000 en el
+     ecuador, 0,9653 a 15,15 grados, 0,8660 a 30, 0,7071 a 45 y 0,6482 a 49,59,
+     que es el coseno clavado en las cinco. Multiplicar. Antes se dividía, que
+     va al revés: hacía que la escala creciera al subir al norte cuando Mercator
+     afina el detalle. La etapa de Camino de los Faros, en 43,32 N, salía
+     42.710 en vez de 31.073.
+
+     El píxel se queda en los 72 dpi de la API. OL NO USA DPI: su ScaleLine
+     trabaja en metros y píxeles y pone una barra de una distancia redonda
+     ("100 km"); el "1 : n" lo introduce la API al dividir por 0,0254/72. Por
+     eso el píxel es el de la API, para que nuestra escala y la suya COINCIDAN
+     EN EL ECUADOR, que es el único punto en el que se pueden contrastar. En el
+     ecuador dan el mismo número; a 49,59 N la nuestra da 27.687 y la de la API
+     sigue en 42.710, que es su escala del ecuador y no la del sitio.
+
+     Contrastado contra ol.proj, que es la fuente, en ocho latitudes de 0 a 85
+     grados: diferencia del 0,00% salvo el 0,01% a 85 grados, que es redondeo.
+
+     Con esto, 2D y 3D dicen lo mismo. Antes se separaban por un factor de 4/3,
+     porque el cálculo de 3D usaba el píxel de 96 dpi de una pantalla y el de
+     2D el de 72 de la API.
 
    ESPACIOS:
      Los huecos entre etiqueta, valor y separador los pone el CSS (`gap` en
@@ -58,19 +97,17 @@
      acierta siempre: setToClosestScale(50000) deja 49999.
 
       Lo que se escribe es la misma magnitud que se pinta, así que escribir lo
-     que se lee deja lo que se lee (ver _descorregirPorLatitud). Sin esa vuelta,
-     a 15 grados de latitud el campo enseñaba 25.900 tras escribir 25.000, y
+     que se lee deja lo que se lee (ver _resolucionDeEscala). Sin esa vuelta, a
+     15 grados de latitud el campo enseñaba 25.900 tras escribir 25.000, y
      reescribir ese 25.900 se iba a 26.826.
 
    TRANSICIÓN:
      Un salto de golpe al escribir un número queda brusco, así que en 2D se
      anima con la propia vista de OpenLayers (view.animate, 550 ms, curva
      easeOut) y no con map.setZoom(), que salta. Para la escala se anima la
-     resolución, que es lo que la vista sabe interpolar: la equivalente a una
-     escala nominal es escala * 0,0254/72 (ver M_POR_PX_API, con el pie de que
-     la API publica su escala midiendo el píxel a 72 dpi y no a los 96 con los
-     que aquí se calcula la de 3D). Por eso no se usa setToClosestScale(), que
-     además no devuelve nada.
+     resolución, que es lo que la vista sabe interpolar, y esa resolución es la
+     que sale de _resolucionDeEscala(). Por eso no se usa setToClosestScale(),
+     que además no devuelve nada.
 
      En 3D no hay vista que animar y la cámara no tiene transición de altura:
      el cambio es instantáneo, aunque se conservan el rumbo y la inclinación
@@ -93,22 +130,26 @@
 (function () {
   'use strict';
 
-  /** Píxeles por pulgada con los que trabaja la API (96 dpi). */
-  const PPI = 96;
-  /** Metros que mide un píxel a 96 dpi: 0,0254 / 96. */
-  const M_POR_PX = 0.0254 / PPI;
-  /** Semieje mayor de la esfera de Mercator (EPSG:3857). */
-  const SEMI_MAYOR_3857 = 20037508.342789244;
-  /** Límite de latitud de la proyección de Mercator. */
-  const LAT_MAX_MERCATOR = 85;
-  /** Metros por píxel con los que PUBLICA la API su escala: 0,0254 / 72.
+   /** Píxeles por pulgada con los que trabaja la API al publicar su escala (72 dpi).
    *
-   * Ojo: la API mide el píxel a 72 dpi cuando publica la escala, no a los 96 dpi
-   * con los que este plugin calcula la de 3D. Comprobado a pelo:
-   * resolución = escala * 0,0254/72 en 1:5.000 (1,76389), 1:25.000 (8,81944),
-   * 1:100.000 (35,2778) y 1:500.000 (176,389). Con 96 dpi saldría un 33% mayor.
-   * De aquí sale la resolución a la que hay que ir para escribir una escala. */
-  const M_POR_PX_API = 0.0254 / 72;
+   * ESTE es el píxel de todo el plugin, en 2D y en 3D, y es a propósito. La API
+   * mide el píxel a 72 dpi, no a los 96 que tendría una pantalla, y esa es la
+   * medida con la que hay que poder contrastar nuestra escala con la suya: en el
+   * ecuador tienen que dar exactamente el mismo número. Con 96 dpi, 2D diría
+   * 4/3 de lo que dice la API.
+   *
+   * Ojo con quién decide esto: OL NO USA DPI. Su ScaleLine trabaja en metros y
+   * píxeles y pone una barra de una distancia redonda ("100 km"); el "1 : n" lo
+   * introduce la API al dividir por 0,0254/72. Así que el dpi es decisión
+   * nuestra, y se toma el de la API para tener un punto de referencia con el
+   * que contrastar.
+   *
+   * Comprobado a pelo, con la fórmula de la API: resolución = escala * 0,0254/72
+   * en 1:5.000 (1,76389), 1:25.000 (8,81944), 1:100.000 (35,2778) y 1:500.000
+   * (176,389). Con 96 dpi saldría un 33% mayor, que es justo el error. */
+  const PPI = 72;
+  /** Metros que mide un píxel con esos dpi: 0,0254 / 72. */
+  const M_POR_PX = 0.0254 / PPI;
   /** Duración de la transición al escribir un valor, en ms. */
   const DURACION_TRANSICION = 550;
   /** Campo de visión por defecto de la cámara de Cesium (rad). */
@@ -215,10 +256,14 @@
             'Se admite la escala con o sin el 1: delante (25000, 1:25000 o ' +
             '1 : 25.000) y con coma o punto decimal. Escape deshace. Con Alt y ' +
             'las flechas se salta de diez en diez.</p>' +
-            '<p>La escala que se escribe es la del suelo, la misma que se ve: ' +
-            'en 2D se corrige por la latitud, porque en Mercator un metro del ' +
-            'plano son menos metros de suelo cuanto más al norte. Por eso la ' +
-            'que publica la API sale distinta.</p></div>';
+            '<p>La escala que se ve y la que se escribe es la del SUELO, y por eso ' +
+            'no coincide con la que publica la API salvo en el ecuador. La ' +
+            'API mide metros de PLANO, y un metro del plano no son lo mismo ' +
+            'que un metro de suelo en cuanto el mapa se estira hacia los polos. ' +
+            'El criterio es el mismo que usa OpenLayers para su resolución en ' +
+            'el punto, y por eso vale en cualquier proyección. En el ecuador ' +
+            'los dos números coinciden exactamente; a 49,6 grados norte esta ' +
+            'escala marca unos dos tercios de la de la API.</p></div>';
           if (IDEE && IDEE.utils && typeof IDEE.utils.stringToHtml === 'function') {
             try {
               html = IDEE.utils.stringToHtml(html);
@@ -623,10 +668,11 @@
     _alEntrarEnEdicion(campo) {
       if (!campo || this._campoEditando === campo) return;
       this._campoEditando = campo;
-      // Se apunta con qué texto se entra, porque la lectura que se pinta es la
-      // escala YA CORREGIDA por la latitud y setToClosestScale() espera la
-      // nominal: si alguien selecciona el valor y pulsa Intro sin escribir
-      // nada, aplicarlo cambiaría la escala sin que nadie hubiera tocado nada.
+      // Se apunta con qué texto se entra, porque lo que se pinta es la escala
+      // del SUELO y no la del plano: si alguien selecciona el valor y pulsa
+      // Intro sin escribir nada, aplicarlo no debe cambiar la escala. Por eso
+      // se compara con el texto de entrada antes de decidir que no hay nada
+      // que aplicar.
       this._textoAlEntrar = campo.value;
       campo.classList.add('g-controlScale-campo--editando');
       try {
@@ -800,15 +846,15 @@
      * Lleva la vista a una escala 1:n con transición.
      *
      * No se usa map.setToClosestScale() porque salta y no devuelve nada, y
-     * porque aquí ya está el dato: la resolución equivalente a una escala
-     * nominal es escala * 0,0254/72 (ver M_POR_PX_API). Con eso se anima la
-     * resolución, que es lo que la vista sabe interpolar.
+     * porque aquí ya está el dato: la resolución que corresponde a una escala
+     * la da _resolucionDeEscala(). Con eso se anima la resolución, que es lo
+     * que la vista sabe interpolar.
      *
      * El número que se escribe es la escala sobre el suelo, la misma que se
-     * pinta, así que en 2D se deshace antes la corrección por latitud. En 3D no
-     * hay vista que animar y la escala es una distancia real, así que se
-     * convierte a altura de cámara (_alturaParaEscala3D) y se aplica por la
-     * misma vía que la altura.
+     * pinta, así que en 2D la resolución sale con el factor de la proyección
+     * puesto. En 3D no hay vista que animar y la escala es una distancia real,
+     * así que se convierte a altura de cámara (_alturaParaEscala3D) y se aplica
+     * por la misma vía que la altura.
      * @param {number} escala Denominador pedido, sobre el suelo.
      */
     _irAEscala(escala) {
@@ -824,21 +870,22 @@
         return;
       }
       // Lo que se escribe es la escala sobre el suelo, la misma que se pinta,
-      // así que se deshace antes la corrección por latitud.
-      const resolucion = this._descorregirPorLatitud(escala) * M_POR_PX_API;
+      // así que la resolución equivalente sale con _resolucionDeEscala().
+      const resolucion = this._resolucionDeEscala(escala);
       const vista = this._vistaOL();
-      if (!vista || typeof vista.animate !== 'function') {
+      if (!vista || typeof vista.animate !== 'function' || resolucion === null) {
+        // Vía de reserva: la de la API. Aquí no hay vista, luego no hay factor
+        // que aplicar, así que se le pasa el número tal cual. La API espera el
+        // del plano y el nuestro es el del suelo, así que fuera del ecuador el
+        // resultado se desvía; es el precio de una vía que en 2D no debería
+        // llegar a usarse nunca, y se prefiere a dejar el mapa quieto.
         try {
           if (this._map && typeof this._map.setToClosestScale === 'function') {
-            this._map.setToClosestScale(this._descorregirPorLatitud(escala));
+            this._map.setToClosestScale(escala);
           }
         } catch (e) {
           this._rechazar(this._elUnidad);
         }
-        return;
-      }
-      if (!isFinite(resolucion) || resolucion <= 0) {
-        this._rechazar(this._elUnidad);
         return;
       }
       try {
@@ -846,7 +893,7 @@
       } catch (e) {
         try {
           if (this._map && typeof this._map.setToClosestScale === 'function') {
-            this._map.setToClosestScale(this._descorregirPorLatitud(escala));
+            this._map.setToClosestScale(escala);
           }
         } catch (e2) {
           this._rechazar(this._elUnidad);
@@ -974,7 +1021,7 @@
       // animación se ejecute otra vez en vez de no hacer nada.
       try { void campo.offsetWidth; } catch (e) { /* silencioso */ }
       campo.classList.add('g-controlScale-campo--rechazado');
-      // Y un temporizador para quitar elAviso, que si se queda puesto parece
+      // Y un temporizador para quitar el aviso, que si se queda puesto parece
       // un resaltado permanente.
       if (this._timerRechazo) window.clearTimeout(this._timerRechazo);
       this._timerRechazo = window.setTimeout(function () {
@@ -997,100 +1044,131 @@
     }
 
     /**
-     * Proyección en la que está el mapa.
-     * @returns {string} Código de la proyección ('EPSG:3857', 'EPSG:4326'...).
-     */
-    _proyeccion() {
-      try {
-        const vista = this._vistaOL();
-        if (vista && typeof vista.getProjection === 'function') {
-          const proyeccion = vista.getProjection();
-          if (proyeccion && typeof proyeccion.getCode === 'function') {
-            return String(proyeccion.getCode());
-          }
-        }
-      } catch (e) {
-        /* se usa la de por defecto */
-      }
-      return 'EPSG:3857';
-    }
-
-    /**
-     * Latitud del punto que se está mirando, en grados.
+     * Centro de la vista como pareja de coordenadas.
      *
-     * Es el dato que hace falta para corregir la escala: la proyección de
-     * Mercator estira el mapa hacia los polos, de modo que un metro del plano
-     * son menos metros de suelo cuanto más al norte.
-     * @returns {number|null} Latitud en grados, o null si no se puede saber.
+     * Ojo con la forma: la vista de OpenLayers lo devuelve como ARRAY
+     * [x, y], mientras que el facade de la API lo devuelve como {x, y}. Se
+     * aceptan las dos, que este es justo el tipo de detalle que hace que un
+     * plugin funcione en un sitio y no en otro.
+     * @param {Object} vista Vista de OpenLayers.
+     * @returns {Array<number>|null} [x, y], o null si no se puede leer.
      */
-    _latitudCentro() {
+    _centroVista(vista) {
       try {
-        const mapa = this._map;
-        if (!mapa || typeof mapa.getCenter !== 'function') return null;
-        const centro = mapa.getCenter();
-        if (!centro || !isFinite(centro.x) || !isFinite(centro.y)) return null;
-
-        let latitud;
-        if (this._proyeccion() === 'EPSG:4326') {
-          latitud = centro.y;
-        } else {
-          // Inversa de Web Mercator: y = R * ln(tan(pi/4 + lat*pi/360)).
-          latitud = (2 * Math.atan(Math.exp(centro.y / SEMI_MAYOR_3857)) - Math.PI / 2) * 180 / Math.PI;
+        if (!vista || typeof vista.getCenter !== 'function') return null;
+        const centro = vista.getCenter();
+        if (!centro) return null;
+        if (centro.length === 2 && isFinite(centro[0]) && isFinite(centro[1])) {
+          return [centro[0], centro[1]];
         }
-        if (!isFinite(latitud)) return null;
-        // Mercator no llega a los polos y ahí el factor se dispara.
-        return Math.max(-LAT_MAX_MERCATOR, Math.min(LAT_MAX_MERCATOR, latitud));
+        if (isFinite(centro.x) && isFinite(centro.y)) return [centro.x, centro.y];
+        return null;
       } catch (e) {
         return null;
       }
     }
 
     /**
-     * Corrige la escala nominal por la latitud del punto mirado.
+     * Metros de SUELO por metro proyectado en el punto que se está mirando.
      *
-     * La API publica una escala nominal (map.getExactScale(), con map.getScale()
-     * como reserva) que mide metros de PLANO por píxel, y por eso sale el mismo
-     * número con el mapa en el ecuador y a 60 grados. La escala de un mapa es
-     * sobre el suelo, y en Mercator el suelo se encoge con el factor
-     * 1 / cos(latitud), así que la nominal hay que dividirla por ese coseno.
-     * Es lo mismo que hace el control Scale de OpenLayers al apoyarse en
-     * getPointResolution, que en la versión de la API no está disponible.
+     * Este es el número que hace que la escala valga para cualquier proyección,
+     * y se le pregunta a la proyección en vez de calcularlo aquí. En EPSG:3857
+     * sale coseno de la latitud, porque Mercator estira hacia los polos; en
+     * EPSG:4326 sale el factor de latitud de los grados; en una proyección
+     * cónica sería el del cono. No hay ni una fórmula de latitudes en el
+     * plugin, que es lo que hacía fallar antes: arrancaba en 3857 y no cubría
+     * las demás.
      *
-     * En 3D no hace falta: la escala se calcula con la geometría de la cámara,
-     * que ya es una distancia real sobre el terreno.
-     * @param {number} escala Escala nominal 1:n.
-     * @returns {number} Escala 1:n corregida por la latitud.
+     * La fórmula es la del ejemplo "Projection and Scale" de OpenLayers, que es
+     * el patrón canónico para mantener la escala al cambiar de proyección:
+     *
+     *     const mpu = proyeccion.getMetersPerUnit();
+     *     getPointResolution(proyeccion, 1 / mpu, centro, 'm') * mpu
+     *
+     * que es el número de metros de suelo por unidad proyectada. Si la
+     * proyección no trae getPointResolutionFunc(), getPointResolution() ya
+     * devuelve la resolución sin corregir, que es lo que hace OL también.
+     *
+     * En 3D no se usa: allí los metros por píxel salen de la geometría de la
+     * cámara y ya son de suelo, sin proyección de por medio.
+     * @param {Object} vista Vista de OpenLayers.
+     * @returns {number|null} Factor, o null si no se puede calcular.
      */
-    _corregirPorLatitud(escala) {
-      const latitud = this._latitudCentro();
-      if (latitud === null) return escala;
-      const coseno = Math.cos(latitud * Math.PI / 180);
-      // El tope de latitud ya acota el factor a ~11,5; esto es solo el cinturón.
-      if (!isFinite(coseno) || coseno <= 0.05) return escala;
-      const corregida = escala / coseno;
-      return (isFinite(corregida) && corregida > 0) ? corregida : escala;
+    _factorProyeccion(vista) {
+      try {
+        if (!vista || typeof vista.getProjection !== 'function') return null;
+        const proyeccion = vista.getProjection();
+        if (!proyeccion) return null;
+        const centro = this._centroVista(vista);
+        if (centro === null) return null;
+
+        const mpu = (typeof proyeccion.getMetersPerUnit === 'function')
+          ? Number(proyeccion.getMetersPerUnit()) : 1;
+        if (!isFinite(mpu) || mpu <= 0) return null;
+
+        const ol = window.ol;
+        let punto;
+        if (ol && ol.proj && typeof ol.proj.getPointResolution === 'function') {
+          punto = ol.proj.getPointResolution(proyeccion, 1 / mpu, centro, 'm');
+        } else if (typeof proyeccion.getPointResolutionFunc === 'function') {
+          // Reserva: la propia proyección trae su función, que es lo que
+          // llama por dentro getPointResolution(), pero devuelve en las
+          // unidades de la proyección, así que hay que pasarlas a metros.
+          punto = Number(proyeccion.getPointResolutionFunc()(1 / mpu, centro)) * mpu;
+        } else {
+          punto = 1 / mpu;
+        }
+        const factor = Number(punto) * mpu;
+        return (isFinite(factor) && factor > 0) ? factor : null;
+      } catch (e) {
+        return null;
+      }
     }
 
     /**
-     * Operación inversa de _corregirPorLatitud(): de la escala sobre el suelo
-     * a la escala nominal con la que publica la API.
+     * Escala 1:n a la que lleva una resolución de la vista.
      *
-     * Hace falta al escribir una escala, para que el número que se ve en el
-     * campo y el número que se escribe coincidan. Sin esta corrección, a 15
-     * grados de latitud el campo enseña 25.900 tras escribir 25.000, y
-     * reescribir ese 25.900 se iba a 26.826: el control se contradecía a sí
-     * mismo y no era idempotente. Con ella, escribir lo que se lee deja lo que
-     * se lee.
-     * @param {number} escala Escala 1:n sobre el suelo, tal y como se pinta.
-     * @returns {number} Escala nominal 1:n que espera la API.
+     * Es el camino bueno, el que se usa siempre que haya vista, y no pasar por
+     * la API a propósito. La razón es que la escala de la API es la resolución
+     * dividida entre 0,0254/72 sin más, y la resolución de una vista va en las
+     * unidades de SU proyección: en EPSG:3857 son metros y sale bien, pero en
+     * EPSG:4326 son grados, y dividir grados entre el milímetro del píxel de la
+     * API da un disparate. Pasando por la vista, las unidades sí se convierten
+     * de verdad, porque el factor de proyección viene en las mismas unidades
+     * que la resolución.
+     *
+     * La cuenta es la del ejemplo "Projection and Scale" de OpenLayers: la
+     * resolución proyectada por los metros de suelo que mide un metro
+     * proyectado, y al final dividido por el píxel de 72 dpi de la API (M_POR_PX)
+     * para poder contrastar con ella.
+     * @param {number} resolucion Resolución de la vista, en sus unidades.
+     * @param {number|null} factor Factor de _factorProyeccion().
+     * @returns {number|null} Escala 1:n del suelo, o null si no se puede.
      */
-    _descorregirPorLatitud(escala) {
-      const latitud = this._latitudCentro();
-      if (latitud === null) return escala;
-      const coseno = Math.cos(latitud * Math.PI / 180);
-      if (!isFinite(coseno) || coseno <= 0.05) return escala;
-      const nominal = escala * coseno;
-      return (isFinite(nominal) && nominal > 0) ? nominal : escala;
+    _escalaDeResolucion(resolucion, factor) {
+      if (!isFinite(resolucion) || resolucion <= 0) return null;
+      if (factor === null || !isFinite(factor) || factor <= 0) return null;
+      const escala = resolucion * factor / M_POR_PX;
+      return (isFinite(escala) && escala > 0) ? escala : null;
+    }
+
+    /**
+     * Resolución de la vista que corresponde a una escala 1:n.
+     *
+     * Operación inversa de _escalaDeResolucion(), y hace falta al escribir una
+     * escala para que el número del campo y el que se lee coincidan: escribir
+     * lo que se lee tiene que dejar lo que se lee. Sin esa vuelta el control se
+     * contradecía a sí mismo.
+     * @param {number} escala Escala 1:n del suelo, tal y como se pinta.
+     * @returns {number|null} Resolución de la vista, o null si no se puede.
+     */
+    _resolucionDeEscala(escala) {
+      if (!isFinite(escala) || escala <= 0) return null;
+      const factor = this._factorProyeccion(this._vistaOL());
+      // Sin factor se devuelve la cuenta plana, que es lo que hace OL cuando la
+      // proyección no sabe corregirse. Peor que no corregir es no hacer nada.
+      const resolucion = (factor === null ? escala * M_POR_PX : escala * M_POR_PX / factor);
+      return (isFinite(resolucion) && resolucion > 0) ? resolucion : null;
     }
 
     /**
@@ -1120,36 +1198,46 @@
     /**
      * Escala 1:n del punto mirado en 2D.
      *
-     * Se toma el valor nominal que publica la API y se corrige por la latitud,
-     * para que la lectura cambie al desplazarse por el mapa (en Mercator, un
-     * metro del plano son menos metros de suelo cuanto más nos alejamos del
-     * ecuador). La razón está explicada en _corregirPorLatitud().
+     * Sale de la resolución de la vista y del factor de la proyección (ver
+     * _escalaDeResolucion y _factorProyeccion), que es lo que hace que la
+     * lectura cambie al desplazarse por el mapa y lo que hace que valga igual
+     * en cualquier proyección. La escala de la API solo se usa de reserva,
+     * para el caso raro de que no haya vista a la que preguntarle.
      * @returns {number|null} Denominador de la escala, o null si no hay dato.
      */
     _escala2D() {
+      const vista = this._vistaOL();
+      if (vista && typeof vista.getResolution === 'function') {
+        let resolucion = null;
+        try {
+          resolucion = Number(vista.getResolution());
+        } catch (e) {
+          resolucion = null;
+        }
+        const escala = this._escalaDeResolucion(resolucion, this._factorProyeccion(vista));
+        if (escala !== null) return escala;
+      }
+      // Reserva: la escala que publica la API, tal cual. Sin factor que aplicar
+      // es su número del plano, que en el ecuador es el bueno.
       const map = this._map;
       if (!map) return null;
-      let nominal = null;
       try {
         if (typeof map.getExactScale === 'function') {
           const exacto = Number(map.getExactScale());
-          if (isFinite(exacto) && exacto > 0) nominal = exacto;
+          if (isFinite(exacto) && exacto > 0) return exacto;
         }
       } catch (e) {
         /* se prueba el otro */
       }
-      if (nominal === null) {
-        try {
-          if (typeof map.getScale === 'function') {
-            const escala = Number(map.getScale());
-            if (isFinite(escala) && escala > 0) nominal = escala;
-          }
-        } catch (e) {
-          /* sin dato */
+      try {
+        if (typeof map.getScale === 'function') {
+          const escala = Number(map.getScale());
+          if (isFinite(escala) && escala > 0) return escala;
         }
+      } catch (e) {
+        /* sin dato */
       }
-      if (nominal === null) return null;
-      return this._corregirPorLatitud(nominal);
+      return null;
     }
 
     /**
@@ -1172,8 +1260,13 @@
      *
      * Con la cámara de Cesium, los metros por píxel del centro de la vista
      * son 2 * altura * tan(fov/2) / alto_del_lienzo, y la escala es esa
-     * resolución dividida por el tamaño del píxel. No se usa la proyección
-     * del elipsoide porque la vista puede estar inclinada.
+     * resolución dividida por el tamaño del píxel (M_POR_PX, los 72 dpi de la
+     * API, para que 3D y 2D digan lo mismo). No se usa la proyección del
+     * elipsoide porque la vista puede estar inclinada.
+     *
+     * Aquí no hay factor de proyección que aplicar, y no por descuido: los
+     * metros por píxel salen de la geometría de la cámara y ya son una
+     * distancia real sobre el terreno.
      * @returns {number|null} Denominador de la escala, o null si no hay dato.
      */
     _escala3D() {
