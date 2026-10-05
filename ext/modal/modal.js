@@ -150,6 +150,71 @@ class miPlugin_modal {
     this.panel = null;
     this.map_ = null;
     this.map = null;
+
+    // Colores configurables, con el mismo reparto y los mismos valores por
+    // defecto que el resto de plugins del repositorio (color1 = fondo,
+    // color2 = borde, color3 = icono y texto; ver ext/CalidadAireMadridTiempoReal,
+    // que es el que fija el patrón). Sin ellos, el botón del modal y el título de
+    // su ventana se veían con el azul de la propia API (#71a7d3), que era el
+    // único color de esta hoja que venía de fuera.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+  }
+
+  /**
+   * Devuelve {active, deactive} a partir de un color simple o de un objeto.
+   * @param {string|Object} c Color u objeto de colores.
+   * @returns {{active: string, deactive: string}} Los dos estados.
+   */
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
+  }
+
+  /**
+   * Vuelca los colores configurados a variables CSS del panel del modal.
+   *
+   *  Las seis variables del esquema (reposo y activo de fondo, borde e icono) se
+   *  ponen en línea sobre el panel que la API crea para el control, y modal.css
+   *  las consume con `var(--g-plugin-bg-color, orangered)` y compañía, de modo
+   *  que el color se cambia desde el visualizador sin tocar la hoja de estilos.
+   *
+   *  Aquí sí hay dos estados: el botón colapsado (reposo) y la ventana abierta
+   *  (activo), así que se declaran los dos.
+   * @returns {boolean} true si se pudieron poner las variables.
+   */
+  _aplicarColores() {
+    try {
+      // El panel que guarda el plugin es el objeto de la API (IDEE.ui.Panel), no
+      // un nodo del DOM, así que de él hay que pedir el elemento con
+      // getElement(). Medido: sin ese paso las variables no llegan a nada y el
+      // modal se ve con los colores de reserva de la hoja.
+      let el = null;
+      const paneles = [this.panel_, this.panel];
+      for (let i = 0; i < paneles.length && !el; i++) {
+        const p = paneles[i];
+        if (!p) continue;
+        if (p.style) el = p;
+        else if (typeof p.getElement === 'function') el = p.getElement();
+      }
+      if (!el) el = document.querySelector('.m-panel-modal');
+      if (!el || !el.style) return false;
+      const c1 = this.resolveColor(this.color1);
+      const c2 = this.resolveColor(this.color2);
+      const c3 = this.resolveColor(this.color3);
+      el.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      el.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      el.style.setProperty('--g-plugin-border-color', c2.deactive);
+      el.style.setProperty('--g-plugin-border-color-active', c2.active);
+      el.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      el.style.setProperty('--g-plugin-icon-color-active', c3.active);
+      return true;
+    } catch (e) {
+      console.warn(`${this.name}: no se pudieron aplicar los colores.`, e);
+      return false;
+    }
   }
 
   /**
@@ -354,6 +419,10 @@ class miPlugin_modal {
     this.panel_ = panel;
     this.map = map;
     this.map_ = map;
+
+    // Colores del esquema sobre el panel (ver _aplicarColores). Se llama aquí y
+    // no en el constructor porque el panel todavía no existe.
+    this._aplicarColores();
   }
 
   /**

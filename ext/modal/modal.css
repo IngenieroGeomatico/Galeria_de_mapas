@@ -6,9 +6,14 @@
   width: 40px;
 }
 
+/* Botón colapsado: fondo = color1 y texto/icono = color3 del esquema (las
+   variables las escribe el plugin en línea, ver _aplicarColores; los valores de
+   reserva son los del esquema por defecto). El !important es el habitual: la
+   hoja de la API gana a estas reglas y no se puede leer con cssRules. */
 .m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn {
-  background-color: #71a7d3;
-  color: #fff;
+  background-color: var(--g-plugin-bg-color, orangered);
+  color: var(--g-plugin-icon-color, #fff);
+  border-color: var(--g-plugin-border-color, #ffffff);
 }
 
 .m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn:disabled {
@@ -41,7 +46,8 @@ div.m-areas > div.m-area > div.m-panel-modal.opened,
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
   background-color: #fff;
-  border: 1px solid #d3d3d3;
+  /* El marco de la ventana es el borde del esquema (color2). */
+  border: 1px solid var(--g-plugin-border-color, #d3d3d3);
   border-radius: 5px;
   height: auto !important;
   z-index: 999999;
@@ -56,7 +62,8 @@ div.m-areas > div.m-area > div.m-panel.m-panel-modal.opened > button.m-panel-btn
   top: 0 !important;
   left: auto !important;
   box-shadow: none;
-  color: #71a7d3;
+  /* La cruz de cierre es el icono del esquema (color3). */
+  color: var(--g-plugin-icon-color, #71a7d3);
   z-index: 9999;
   cursor: pointer;
   float: none;
@@ -100,10 +107,12 @@ div#popup-box {
   max-height: calc(100vh - 175px) !important;
 }
 
+/* La cabecera de la ventana es el fondo del esquema (color1) con el texto del
+   icono (color3), en su estado activo, que es el de la ventana abierta. */
 .m-panel-modal.opened #popup-box > div > p.popup-title {
-  background-color: #71a7d3;
+  background-color: var(--g-plugin-bg-color-active, #71a7d3);
   border-radius: 5px;
-  color: #fff;
+  color: var(--g-plugin-icon-color-active, #fff);
   font-weight: 700;
   padding: 7px 10px 5px;
 }
