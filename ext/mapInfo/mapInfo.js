@@ -837,9 +837,14 @@
       principal.appendChild(etiqueta);
       principal.appendChild(valor);
 
+      // la barra que divide entre secciones. SIN texto: el glifo "|" va de la
+      // fila 2 a la 13 mientras que el texto va de la 2 a la 10 (medido por
+      // píxeles), porque elPipe baja de la línea base, y por mucho que se
+      // centre la caja la marca quedaba colgando y se veía torcida. La barra la
+      // dibuja el CSS con alto fijo y `align-self: center`, así que su tinta cae
+      // en las mismas filas que las letras (ver .g-mapInfo-separador).
       const separador = document.createElement('span');
       separador.className = 'g-mapInfo-separador';
-      separador.textContent = '|';
 
       // Escala 1 : n, común a las dos implementaciones.
       const escala = document.createElement('span');
@@ -875,7 +880,6 @@
 
       const separador2 = document.createElement('span');
       separador2.className = 'g-mapInfo-separador';
-      separador2.textContent = '|';
       const separador3 = separador2.cloneNode(true);
 
       // Selector de proyección del visor.

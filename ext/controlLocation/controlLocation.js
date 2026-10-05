@@ -10,10 +10,20 @@
    Cesium (3D) NO sabe construirlo: lanza "La implementación usada no puede
    crear controles Location" y aborta la creación del mapa al conmutar 2D/3D.
 
-   Este plugin NO reimplementa la geolocalización: reutiliza el control nativo
-   de la API (IDEE.control.Location) y lo cuelga en el mapa en tiempo de
-   ejecución, que es lo que permite decidir la implementación antes de
-   crearlo. En 3D no se añade.
+   En 2D este plugin NO reimplementa la geolocalización: reutiliza el control
+   nativo de la API (IDEE.control.Location) y lo cuelga en el mapa en tiempo de
+   ejecución, que es lo que permite decidir la implementación antes de crearlo.
+
+   En 3D sí hace falta hacerlo aquí, porque el control nativo no existe para ese
+   motor: se dibuja a mano el mismo panel (con las mismas clases que usa la API,
+   para que se vea igual y para que controlLocation.css siga sirviendo tal cual) y
+   la geolocalización la pone el plugin con la API de Cesium:
+     - posición: navigator.geolocation (watchPosition si hay seguimiento,
+       getCurrentPosition si no, que es lo que distingue el control de la API);
+     - cámara: camera.flyTo, bajando a una altura de ciudad si se estaba viendo
+       el mundo entero y respetando la altura actual si ya se está más cerca;
+     - marca: una entidad de Cesium, y trackedEntity cuando hay seguimiento.
+   Está todo en _crearPanel3D(), _localizar(), _llevarAposicion() y _marcar().
 
    A diferencia de una lectura de coordenadas del puntero (que es lo que
   Este plugin NO muestra), aquí no hay ningún texto: el botón ofrece la
@@ -72,7 +82,12 @@
 
   /**
    * Botón de "mi ubicación": pide la posición al navegador y centra el mapa
-   * sobre ella. Solo tiene sentido en 2D (en 3D no se monta).
+   * sobre ella.
+   *
+   * En 2D se reutiliza el control nativo de la API (IDEE.control.Location). En 3D
+   * ese control no existe —es el de MapLibre y el motor de Cesium no lo puede
+   * construir—, así que este plugin dibuja el mismo panel a mano y mueve la
+   * cámara con la API de Cesium. Vease _crearPanel3D().
    */
   class miPlugin_controlLocation {
     /**
@@ -83,7 +98,14 @@
      * (es el `order` CSS del panel de la API). Por defecto, al final.
      * @param {boolean} [options.tracking=true] El control nativo distingue si
      * sigue la posición (tracking) o solo centra una vez. Por defecto true,
-     * que es el comportamiento del control 'location' de la API.
+     * que es el comportamiento del control 'location' de la API. En 3D el
+     * seguimiento se hace con watchPosition y la entidad seguida de Cesium.
+     * @param {number} [options.altura3D=1500] Altura de cámara (m) a la que se
+     * baja cuando se localiza estando muy alto (vista de mundo). Si la cámara ya
+     * está más cerca, se respeta la que hay.
+     * @param {number} [options.alturaMinima3D=20000] Por debajo de esta altura de
+     * cámara (m) no se cambia la altura: se va a la posición con la que se está,
+     * que es lo que se espera al pulsar "mi ubicación" estando a escala de ciudad.
      * @param {string|Object} [options.color1] Color de fondo. Un color o un
      * objeto {active, deactive}.
      * @param {string|Object} [options.color2] Color de borde. Un color o un
@@ -107,11 +129,23 @@
       this._listenersApi = [];
       this._espera = null;
 
+      // Estado de la geolocalizacion en 3D: el id de watchPosition en curso y la
+      // entidad de Cesium que marca la posicion. En 2D los lleva el control
+      // nativo de la API; aqui se guardan para poder soltarlos al desmontar y
+      // para el cambio de implementacion.
+      this._watchId = null;
+      this._entidad = null;
+
       // Configuración.
       this._visible = (options.visible !== undefined) ? Boolean(options.visible) : true;
       this.order = (options.order !== undefined && !Number.isNaN(Number(options.order)))
         ? Number(options.order) : undefined;
       this._tracking = (options.tracking !== undefined) ? Boolean(options.tracking) : true;
+      // Alturas de camara al localizar en 3D (metros).
+      this._altura3D = (options.altura3D !== undefined && Number(options.altura3D) > 0)
+        ? Number(options.altura3D) : 1500;
+      this._alturaMinima3D = (options.alturaMinima3D !== undefined && Number(options.alturaMinima3D) > 0)
+        ? Number(options.alturaMinima3D) : 20000;
 
       // Colores configurables, con el mismo reparto y los mismos valores por
       // defecto que el resto de plugins del repositorio (color1 = fondo,
@@ -173,7 +207,9 @@
             'del navegador y centra el mapa sobre ella.</p>' +
             '<p>El navegador pedirá permiso para compartir la ubicación la ' +
             'primera vez. Si lo deniega, el mapa no se mueve.</p>' +
-            '<p>En la visualización 3D (Cesium) no se muestra.</p></div>';
+            '<p>En la visualización 3D (Cesium) el botón también está: como el ' +
+            'control de la API no se puede construir en ese motor, lo dibuja ' +
+            'este plugin y mueve la cámara y la marca de posición directamente.</p></div>';
           if (IDEE && IDEE.utils && typeof IDEE.utils.stringToHtml === 'function') {
             try {
               html = IDEE.utils.stringToHtml(html);
@@ -208,6 +244,23 @@
         return !!(nativo && nativo.scene && nativo.scene.camera);
       } catch (e) {
         return false;
+      }
+    }
+
+    /**
+     * Devuelve la implementación nativa del mapa (ol.Map o Cesium.Viewer).
+     *
+     *  Es el patrón que usan el resto de plugins del repositorio
+     *  (ext/controlRotate, ext/mapInfo): en 3D hace falta para llegar a la
+     *  cámara y a las entidades de Cesium.
+     * @returns {Object|null} Instancia nativa.
+     */
+    _impl() {
+      try {
+        return (this._map && typeof this._map.getMapImpl === 'function')
+          ? this._map.getMapImpl() : null;
+      } catch (e) {
+        return null;
       }
     }
 
@@ -250,6 +303,304 @@
     // =====================================================================
     // MONTAJE DEL CONTROL NATIVO EN LA COLUMNA DE ESQUINA
     // =====================================================================
+
+    /**
+     * Devuelve el espacio de nombres de Cesium, o null si no está cargado.
+     *
+     *  Es el mismo global que usa el resto del repositorio para el 3D (ver
+     *  ext/comparacionVistas). Se comprueba `Cartesian3.fromDegrees` y no
+     *  `fromDegrees` porque en la versión de Cesium que trae la API el atajo no
+     *  está exportado (medido: `window.Cesium` tiene 1267 miembros y
+     *  `Cesium.fromDegrees` es undefined, mientras que
+     *  `Cesium.Cartesian3.fromDegrees` sí es función).
+     * @returns {Object|null} Namespace de Cesium.
+     */
+    _cesium() {
+      try {
+        const C = window.Cesium;
+        if (!C || !C.Cartesian3 || typeof C.Cartesian3.fromDegrees !== 'function') return null;
+        return C;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Crea el panel del botón de ubicación en 3D, sin control nativo de la API.
+     *
+     *  En 3D el control Location de la API no existe: es el de MapLibre y la
+     *  implementación de Cesium no lo puede construir ("La implementación usada no
+     *  puede crear controles Location", medido). Así que aquí se dibuja a mano el
+     *  mismo DOM que la API construye en 2D —con las mismas clases— para que el
+     *  plugin se vea igual y para que controlLocation.css, que ya se apoya en
+     *  esas clases, siga sirviendo sin cambiar nada.
+     *
+     *  El panel se cuelga en la misma esquina que en 2D (.m-area.m-bottom.m-right,
+     *  medido) y con el mismo `order` que el botón nativo, para que caiga en el
+     *  mismo sitio de la columna.
+     * @returns {boolean} true si se ha creado el panel.
+     */
+    _crearPanel3D() {
+      const C = this._cesium();
+      if (!C) return false;
+      const host = this._host;
+      if (!host || !host.querySelector) return false;
+
+      // Ya montado (o reutilizado de otra instancia): no se duplica.
+      const previo = host.querySelector('.m-panel.m-location.g-controlLocation');
+      if (previo) {
+        this._panel = previo;
+        this._enlazarBoton3D();
+        this._aplicarColores();
+        return true;
+      }
+
+      let area = host.querySelector('.m-area.m-bottom.m-right');
+      if (!area) area = host.querySelector('.m-area');
+      if (!area) return false;
+
+      const panel = document.createElement('div');
+      panel.className = 'm-panel m-location opened no-collapsible g-controlLocation';
+      if (this.order !== undefined) panel.style.order = String(this.order);
+
+      // La flecha de plegado: en 2D la pone la API con el icono de cerrar y
+      // controlLocation.css la esconde (este panel no se pliega). Se reproduce
+      // para que el DOM sea el mismo y el CSS no tenga que saber de dónde viene.
+      const cerrar = document.createElement('button');
+      cerrar.type = 'button';
+      cerrar.className = 'm-panel-btn g-cartografia-flecha-izquierda';
+      cerrar.setAttribute('aria-hidden', 'true');
+      cerrar.tabIndex = -1;
+      panel.appendChild(cerrar);
+
+      const controles = document.createElement('div');
+      controles.className = 'm-panel-controls';
+      const contenedor = document.createElement('div');
+      contenedor.className = 'm-control m-location-container';
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.id = 'm-location-button';
+      boton.className = 'g-cartografia-gps2';
+      boton.title = 'Mi ubicación';
+      boton.setAttribute('aria-label', 'Mi ubicación');
+      contenedor.appendChild(boton);
+      controles.appendChild(contenedor);
+      panel.appendChild(controles);
+      area.appendChild(panel);
+
+      this._panel = panel;
+      this._boton3D = boton;
+      this._enlazarBoton3D();
+      this._aplicarColores();
+      return true;
+    }
+
+    /**
+     * Enlaza el clic del botón propio de 3D con la geolocalización.
+     *
+     *  Va en `_crearPanel3D()` y no en el constructor porque el botón se crea
+     *  distinto en 2D (lo crea la API) y en 3D.
+     */
+    _enlazarBoton3D() {
+      if (!this._boton3D) {
+        this._boton3D = (this._panel && this._panel.querySelector) ? this._panel.querySelector('#m-location-button') : null;
+      }
+      if (!this._boton3D) return;
+      const self = this;
+      this._on(this._boton3D, 'click', function (evento) {
+        if (evento && typeof evento.preventDefault === 'function') evento.preventDefault();
+        self._localizar();
+      });
+    }
+
+    /**
+     * Pide la posición al navegador y lleva la cámara hasta ella.
+     *
+     *  Con `tracking` se usa watchPosition y la posición se va siguiendo; sin él,
+     *  getCurrentPosition y una sola vez, que es lo que distingue el control de
+     *  la API. Si ya había una escucha en curso se suelta antes de abrir otra,
+     *  porque al pulsar dos veces se acumulaban.
+     * @returns {boolean} true si se ha podido pedir la posición.
+     */
+    _localizar() {
+      const nav = window.navigator;
+      if (!nav || !nav.geolocation) {
+        console.warn(`${this.name}: este navegador no tiene geolocalización.`);
+        return false;
+      }
+      if (!this._es3D(this._map)) {
+        // En 2D la hace el control nativo de la API.
+        if (this._control && typeof this._control.setTracking === 'function') {
+          this._control.setTracking(true);
+        }
+        return false;
+      }
+      const C = this._cesium();
+      if (!C) return false;
+
+      const self = this;
+      const opciones = {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 300000,
+      };
+      const alRecibir = function (posicion) { self._llevarAposicion(posicion); };
+      const alFallar = function (error) { self._errorGeolocalizacion(error); };
+
+      this._pararSeguimiento();
+      try {
+        if (this._tracking) {
+          this._watchId = nav.geolocation.watchPosition(alRecibir, alFallar, opciones);
+        } else {
+          nav.geolocation.getCurrentPosition(alRecibir, alFallar, opciones);
+        }
+        return true;
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo pedir la posición.`, e);
+        return false;
+      }
+    }
+
+    /**
+     * Lleva la cámara de Cesium a la posición recibida y la marca en el globo.
+     *
+     *  La altura se decide así: si la cámara está más alta que
+     *  `alturaMinima3D` (es decir, se está viendo casi el mundo entero) se baja a
+     *  `altura3D`, que es una altura de ciudad; y si ya está más cerca se respeta
+     *  la que hay, que es lo que se espera al pulsar "mi ubicación" estando a
+     *  escala de ciudad. Sin esto, localizar desde la vista de mundo dejaría el
+     *  globo a la altura del mundo y no se vería nada.
+     * @param {GeolocationPosition} posicion Posición del navegador.
+     */
+    _llevarAposicion(posicion) {
+      const C = this._cesium();
+      const mapa = this._impl();
+      if (!C || !mapa || !mapa.scene || !posicion || !posicion.coords) return;
+
+      const longitud = Number(posicion.coords.longitude);
+      const latitud = Number(posicion.coords.latitude);
+      if (!isFinite(longitud) || !isFinite(latitud)) return;
+
+      let altura = this._altura3D;
+      try {
+        const actual = Number(mapa.camera.positionCartographic.height);
+        if (isFinite(actual) && actual > 0 && actual <= this._alturaMinima3D) altura = actual;
+      } catch (e) {
+        /* si no se puede leer la altura, se usa la por defecto */
+      }
+      // La precisión que da el navegador es la altura mínima: bajar por debajo de
+      // ella solo pone la cámara dentro del suelo.
+      const precision = Number(posicion.coords.accuracy);
+      if (isFinite(precision) && precision > 0 && altura < precision) altura = precision;
+
+      try {
+        const destino = C.Cartesian3.fromDegrees(longitud, latitud, altura);
+        // Solo la posición: un flyTo con destino y sin heading ni pitch deja la
+        // cámara con la orientación que ya tenía, que es lo que se quiere (la
+        // brújula se queda como estaba). Antes se añadía un lookAt detrás para
+        // mirar al norte, pero con rango 0 Cesium lanza "normalized result is not a
+        // number" (medido) porque la cámara acaba en el mismo punto que el
+        // destino; y no hace falta, porque el flyTo ya coloca la cámara.
+        mapa.camera.flyTo({ destination: destino, duration: 2 });
+      } catch (e) {
+        try {
+          mapa.camera.setView({ destination: C.Cartesian3.fromDegrees(longitud, latitud, altura) });
+        } catch (e2) {
+          console.warn(`${this.name}: no se pudo mover la cámara.`, e2);
+          return;
+        }
+      }
+      this._marcar(longitud, latitud, altura);
+    }
+
+    /**
+     * Pone (o mueve) la entidad que marca la posición en el globo.
+     *
+     *  Con seguimiento activo se le asigna a `trackedEntity`, que es la forma que
+     *  tiene Cesium de hacer que la cámara la siga; sin él, la entidad se queda
+     *  quieta en el sitio como marca de referencia.
+     * @param {number} longitud Longitud en grados.
+     * @param {number} latitud Latitud en grados.
+     * @param {number} altura Altura de la cámara (m).
+     */
+    _marcar(longitud, latitud, altura) {
+      const C = this._cesium();
+      const mapa = this._impl();
+      if (!C || !mapa || !mapa.entities) return;
+      try {
+        const posicion = C.Cartesian3.fromDegrees(longitud, latitud, 0);
+        if (this._entidad && !this._entidad.isDestroyed && !this._entidad.isDestroyed()) {
+          this._entidad.position = posicion;
+        } else {
+          this._entidad = mapa.entities.add({
+            name: 'miPlugin_controlLocation',
+            position: posicion,
+            point: {
+              pixelSize: 12,
+              color: C.Color.fromCssColorString ? C.Color.fromCssColorString('#ffffff') : undefined,
+              outlineColor: C.Color.BLACK,
+              outlineWidth: 2,
+              heightReference: C.HeightReference.CLAMP_TO_GROUND,
+            },
+          });
+        }
+        if (this._tracking) mapa.trackedEntity = this._entidad;
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo marcar la posición.`, e);
+      }
+    }
+
+    /**
+     * Avisa de que no se ha podido obtener la posición.
+     *
+     *  No se mueve el mapa (igual que el control de la API: si el navegador
+     *  deniega el permiso, lo que hay que hacer es no hacer nada visible) y el
+     *  motivo se deja en el título del botón, que es donde se mira cuando el
+     *  mapa no se ha movido.
+     * @param {GeolocationPositionError} error Error del navegador.
+     */
+    _errorGeolocalizacion(error) {
+      const motivos = {
+        1: 'Permiso de ubicación denegado',
+        2: 'No se ha podido determinar la posición',
+        3: 'La solicitud de ubicación ha tardado demasiado',
+      };
+      const motivo = motivos[error && error.code] || 'No se ha podido determinar la posición';
+      console.warn(`${this.name}: ${motivo}.`);
+      const boton = this._boton3D;
+      if (boton) boton.title = this._tracking ? 'Mi ubicación (seguimiento)' : 'Mi ubicación';
+    }
+
+    /**
+     * Suelta la escucha de `watchPosition`, si la hubiera.
+     */
+    _pararSeguimiento() {
+      if (this._watchId === null || this._watchId === undefined) return;
+      try {
+        if (window.navigator && window.navigator.geolocation) {
+          window.navigator.geolocation.clearWatch(this._watchId);
+        }
+      } catch (e) {
+        /* el navegador puede no tener ya la escucha */
+      }
+      this._watchId = null;
+    }
+
+    /**
+     * Quita la entidad de la posición y deja de seguirla.
+     */
+    _quitarMarca() {
+      const mapa = this._impl();
+      try {
+        if (mapa && mapa.trackedEntity && this._entidad && mapa.trackedEntity === this._entidad) {
+          mapa.trackedEntity = undefined;
+        }
+        if (this._entidad && typeof this._entidad.remove === 'function') this._entidad.remove();
+      } catch (e) {
+        /* el mapa puede estar ya destruido */
+      }
+      this._entidad = null;
+    }
 
     /**
      * Crea el control Location de la API y lo añade al mapa en caliente.
@@ -318,7 +669,7 @@
      */
     _aplicarVisibilidad() {
       if (!this._panel) return;
-      this._panel.style.display = (this._visible && !this._es3D(this._map)) ? '' : 'none';
+      this._panel.style.display = this._visible ? '' : 'none';
     }
 
     /**
@@ -348,6 +699,15 @@
           this._control.setTracking(this._tracking);
         } catch (e) {
           /* el control puede no estar listo */
+        }
+      }
+      // En 3D el seguimiento es de este plugin: si se desactiva, se suelta la
+      // escucha y la entidad deja de estar seguida.
+      if (!this._tracking) {
+        this._pararSeguimiento();
+        const mapa = this._impl();
+        if (mapa && this._entidad && mapa.trackedEntity === this._entidad) {
+          try { mapa.trackedEntity = undefined; } catch (e) { /* el mapa puede estar yendo a destruirse */ }
         }
       }
     }
@@ -429,8 +789,14 @@
       const evt = (IDEE && IDEE.evt) ? IDEE.evt : {};
       this._host = this._resolveHost(map);
 
-      // En 3D no se monta: es la implementación que no sabe crear este control.
-      if (this._es3D(map)) return;
+      if (this._es3D(map)) {
+        // En 3D no hay control nativo que montar (es el de MapLibre y el motor de
+        // Cesium no lo construye), así que se dibuja el panel aquí y la
+        // geolocalización la pone este plugin. Vease _crearPanel3D().
+        this._crearPanel3D();
+        this._aplicarVisibilidad();
+        return;
+      }
 
       if (!this._anadirControl()) return;
       this._prepararPanel();
@@ -447,6 +813,15 @@
         else window.clearTimeout(this._espera);
         this._espera = null;
       }
+      // Geolocalización de 3D: primero se suelta la escucha y la marca, que si
+      // no se quedan escuchando y escribiendo en un mapa que ya no existe.
+      this._pararSeguimiento();
+      this._quitarMarca();
+      // Y el panel propio de 3D, que es de este plugin y no de la API (en 2D el
+      // panel lo crea el control nativo y se va con removeControls).
+      if (this._panel && this._panel.parentNode) {
+        try { this._panel.parentNode.removeChild(this._panel); } catch (e) { /* silencioso */ }
+      }
       if (this._control && this._map && typeof this._map.removeControls === 'function') {
         try {
           this._map.removeControls([this._control]);
@@ -456,6 +831,7 @@
       }
       this._control = null;
       this._panel = null;
+      this._boton3D = null;
       this._host = null;
       this._map = null;
     }
@@ -469,7 +845,10 @@
      * @returns {{visible: boolean}} Estado del botón de ubicación.
      */
     getState() {
-      return { visible: Boolean(this._visible) };
+      return {
+        visible: Boolean(this._visible),
+        tracking: Boolean(this._tracking),
+      };
     }
 
     /**
@@ -480,10 +859,16 @@
      */
     setState(state, map) {
       if (map) this._map = map;
-      if (state && typeof state === 'object' && typeof state.visible === 'boolean') {
-        this._visible = state.visible;
+      const st = (state && typeof state === 'object') ? state : {};
+      if (typeof st.visible === 'boolean') this._visible = st.visible;
+      if (typeof st.tracking === 'boolean' && st.tracking !== this._tracking) {
+        this.setTracking(st.tracking);
       }
-      this._prepararPanel();
+      // En 3D el panel lo pone este plugin, no la API: sin esto, al volver de 3D
+      // el botón no se volvería a montar (en 2D lo monta _prepararPanel, que
+      // busca el panel que la API acaba de crear).
+      if (this._es3D(this._map)) this._crearPanel3D();
+      else this._prepararPanel();
       this._aplicarVisibilidad();
     }
   }

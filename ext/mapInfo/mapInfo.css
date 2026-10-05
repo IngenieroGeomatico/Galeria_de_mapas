@@ -78,6 +78,13 @@
   column-gap: 0.42em;
   font-family: Muli, "sans-serif";
   font-size: 12px;
+  /* UNA sola línea base para todo el panel. Es el detalle que hace que la tira
+   parezca recta: con `line-height` en la caja, etiquetas, valores, el desplegable
+   y los campos heredan la misma altura de línea y su texto se apoya en la misma
+   línea base. Antes el desplegable llevaba `line-height: 1.25` y las etiquetas el
+   `normal` del navegador, así que el texto de la proyección quedaba un pelo más
+   bajo que el de las otras secciones. */
+  line-height: 1.25;
   /* El texto va en el color de icono del esquema, y el fondo y el borde en los
      suyos. La lectura solo tiene un estado (no es un botón que se abra), así que
      usa el de reposo; el "active" queda declarado por si un visualizador quiere
@@ -131,14 +138,25 @@
   color: inherit;
 }
 
-/* Por lo mismo, la barra vertical necesita sus huecos como margen: un
-   separador con " | " se vería como "|" pegado a los dos lados. El margen es
-   corto a propósito: es la marca que divide, no un elemento más de la tira, y
-   con aire alrededor la caja parecía más suelta de lo que está. La barra va
-   también atenuada para que el ojo vaya a los números. */
+/* La barra que divide, DIBUJADA y no con el glifo "|".
+   Motivo (medido por píxeles, con filas absolutas de pantalla): el glifo va de
+   la fila 2 a la 13 de su caja, o sea 12 de alto, mientras que el texto va de la
+   2 a la 10, o sea 9. El "|" baja de la línea base, así que por mucho que se
+   centre la caja la marca queda colgando un píxel y medio por debajo del texto,
+   y eso es lo que se veía de torcida.
+
+   Dibujándola con el alto del texto (9 px) queda casi, pero `align-self: center`
+   la deja en las filas 733..741 y el texto en las 732..740, así que con un
+   píxel hacia arriba caen en las mismas filas exactas. */
 .g-mapInfo-separador {
   margin: 0;
-  color: rgba(255, 255, 255, 0.55);
+  width: 1px;
+  height: 9px;
+  align-self: center;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 1px;
+  transform: translateY(-1px);
 }
 
 /* ---------------------------------------------------------------------
@@ -160,6 +178,9 @@
    Comprobado: sin !important el campo se ve con un recuadro negro de 1 px.
 
    --------------------------------------------------------------------- */
+/* Los campos de texto, igual que el desplegable: misma altura y el mismo
+   line-height que la caja, porque la hoja de la API también les pone
+   `line-height: normal`. */
 .g-mapInfo-caja .g-mapInfo-campo {
   box-sizing: border-box;
   height: 1.25em;
@@ -219,11 +240,12 @@
    es la forma de decir que ahí no se puede cambiar sin tener que escribir un
    párrafo.
    --------------------------------------------------------------------- */
-/* La caja y el desplegable miden la misma altura que la línea de texto
-   (1.25em, medido: el desplegableaba 19 px frente a los 15 del texto y su
-   etiqueta se quedaba 1,5 px por encima del centro de las otras secciones), y
-   el `line-height` hace que el texto del desplegable quede centrado dentro, que
-   es lo mismo que en los campos de texto. */
+/* El desplegable mide lo mismo que la línea de texto (1,25em: medido, el
+   desplegableaba 19 px frente a los 15 del texto) y su `line-height` es el
+   MISMO que el de la caja, 1.25. No puede aquí "heredarlo sin más": la hoja de
+   la API pone `line-height: normal` a los controles de formulario (medido), que
+   es justo lo que dejaba el texto de la proyección en otra línea base que el de
+   las etiquetas. */
 .g-mapInfo-caja .g-mapInfo-selector {
   box-sizing: border-box;
   height: 1.25em;
@@ -314,11 +336,11 @@
      falta empujarla a mano. */
 }
 
-/* La casilla y su etiqueta no llevan barra delante (no separan dos lecturas,
-   sino que activan una cosa), pero el aire les llega igual desde el `column-gap`
-   de la caja, que es el mismo que el de cualquier otro dato. */
 .g-mapInfo-caja .g-mapInfo-alcance {
-  margin-left: 0;
+  /* Sin margen: el aire le llega del column-gap de la caja, que es el mismo que
+     separa cualquier otro dato. Poner un margen aquí era lo que hacía que esta
+     sección se viera con más aire que las demás. */
+  margin: 0;
 }
 
 /* Al marcar, la casilla se pinta con el fondo del esquema y se le abre un hueco
