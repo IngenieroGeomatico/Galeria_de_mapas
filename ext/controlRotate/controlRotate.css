@@ -19,6 +19,36 @@
    ===================================================================== */
 
 /* ---------------------------------------------------------------------
+   Colores del esquema (color1/color2/color3), los mismos que usan el resto de
+   plugins del repositorio: fondo = color1, borde = color2, icono = color3. Las
+   variables las escribe el plugin en línea (ver _aplicarColores) y los valores
+   de reserva son los del esquema por defecto (naranja de fondo), de modo que el
+   dial se ve igual aunque no se pase nada.
+
+   El dial no se abre ni se cierra, así que solo hay estado de reposo; el
+   "active" queda declarado por si un visualizador quiere distinguirlo. El
+   !important es necesario porque la hoja de la API da estilo a .m-panel y no se
+   puede leer con cssRules para saber qué selector gana.
+   --------------------------------------------------------------------- */
+/* El disco azul que se ve no es el panel, que es transparente, sino el
+   contenedor del control que la API crea dentro (#m-rotate-slider-container,
+   medido: es lo único de 44x44 con fondo propio). Es en el que se pintan el
+   fondo y el color de los trazos del dial. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-slider-container {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* El trazo y la aguja del dial se pintan con el color de icono del esquema. Sin
+   esto el dial seguiría con el azul de la API por mucho que se cambiara el
+   fondo, que es justo lo que se quiere evitar al parameterizar el color. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-marker,
+.m-panel.m-rotate.g-controlRotate #m-rotate-marker * {
+  stroke: var(--g-plugin-icon-color, #ffffff) !important;
+}
+
+/* ---------------------------------------------------------------------
    Tamaño: el panel, su contenedor de controles y el contenedor del control
    se fuerzan al mismo lado que los botones de las herramientas.
    --------------------------------------------------------------------- */

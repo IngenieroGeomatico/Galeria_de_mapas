@@ -104,6 +104,12 @@
      * los botones de las herramientas de la API.
      * @param {number} [options.step=15] Salto de giro con la rueda, en grados.
      * @param {number} [options.rotation=0] Rotación inicial, en radianes.
+     * @param {string|Object} [options.color1] Color de fondo. Un color o un
+     * objeto {active, deactive}.
+     * @param {string|Object} [options.color2] Color de borde. Un color o un
+     * objeto {active, deactive}.
+     * @param {string|Object} [options.color3] Color de icono y texto. Un color o
+     * un objeto {active, deactive}.
      */
     constructor(options = {}) {
       // Identificador obligatorio del plugin (gestor de plugins y cambioImpl).
@@ -136,6 +142,58 @@
       // Estado de la rotación (radianes, sentido horario como OpenLayers).
       this._rotacion = (options.rotation !== undefined && !isNaN(Number(options.rotation)))
         ? Number(options.rotation) : 0;
+
+      // Colores configurables, con el mismo reparto y los mismos valores por
+      // defecto que el resto de plugins del repositorio (color1 = fondo,
+      // color2 = borde, color3 = icono; ver ext/CalidadAireMadridTiempoReal).
+      this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+      this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+      this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+    }
+
+    /**
+     * Devuelve {active, deactive} a partir de un color simple o de un objeto.
+     *
+     *  Es el mismo traductor que usan los plugins que ya tenían esquema de
+     *  colores, para que un color se pueda pasar como '#fff' o como
+     *  {active: '#fff', deactive: '#eee'} indistintamente.
+     * @param {string|Object} c Color u objeto de colores.
+     * @returns {{active: string, deactive: string}} Los dos estados.
+     */
+    resolveColor(c) {
+      return (typeof c === 'object' && c !== null)
+        ? { active: c.active, deactive: c.deactive }
+        : { active: c, deactive: c };
+    }
+
+    /**
+     * Vuelca los colores configurados a variables CSS del panel del dial.
+     *
+     *  Las seis variables del esquema (reposo y activo de fondo, borde e icono)
+     *  se ponen en línea sobre el panel que la API crea para el control, y
+     *  controlRotate.css las consume con `var(--g-plugin-bg-color, orangered)`
+     *  y compañía. Así el color se cambia desde el visualizador sin tocar la hoja
+     *  de estilos. El dial no tiene dos estados (no se abre ni se cierra), así
+     *  que lo que se ve es el de reposo.
+     * @returns {boolean} true si se pudieron poner las variables.
+     */
+    _aplicarColores() {
+      try {
+        if (!this._panel || !this._panel.style) return false;
+        const c1 = this.resolveColor(this.color1);
+        const c2 = this.resolveColor(this.color2);
+        const c3 = this.resolveColor(this.color3);
+        this._panel.style.setProperty('--g-plugin-bg-color', c1.deactive);
+        this._panel.style.setProperty('--g-plugin-bg-color-active', c1.active);
+        this._panel.style.setProperty('--g-plugin-border-color', c2.deactive);
+        this._panel.style.setProperty('--g-plugin-border-color-active', c2.active);
+        this._panel.style.setProperty('--g-plugin-icon-color', c3.deactive);
+        this._panel.style.setProperty('--g-plugin-icon-color-active', c3.active);
+        return true;
+      } catch (e) {
+        console.warn(`${this.name}: no se pudieron aplicar los colores.`, e);
+        return false;
+      }
     }
 
     /**
@@ -352,6 +410,8 @@
         panel.style.setProperty('--g-controlRotate-lado', this._lado + 'px');
       }
       if (!this._conNorte) panel.classList.add('g-controlRotate--sinNorte');
+      // Y los colores configurados, como variables CSS sobre el panel.
+      this._aplicarColores();
       // La API no lleva el `order` del control al panel, de modo que se
       // escribe aquí: en la columna (flex column) es lo que decide si el
       // dial va primero o al final.
