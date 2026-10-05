@@ -55,8 +55,11 @@
   font-weight: 700;
   font-size: 14px;
   white-space: nowrap;
-  /* El título es el color de icono del esquema (era el rojo de marca del repo). */
-  color: var(--g-plugin-icon-color, #db4938);
+  /* El título es el color de icono del esquema en su estado ACTIVO (era el rojo de
+     marca del repo). Va el "active" y no el de reposo a propósito: la barra es
+     blanca y el color de reposo del esquema es blanco, así que con ese el título
+     no se vería (medido: salía blanco sobre blanco). */
+  color: var(--g-plugin-icon-color-active, #db4938);
 }
 
 .supra-bar__items {

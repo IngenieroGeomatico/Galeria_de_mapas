@@ -130,6 +130,11 @@
       this.color1 = (this.options.color1 !== undefined) ? this.options.color1 : { active: '#ffffff', deactive: 'orangered' };
       this.color2 = (this.options.color2 !== undefined) ? this.options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
       this.color3 = (this.options.color3 !== undefined) ? this.options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+      // Y se apunta si el item trae colores PROPIOS, que es lo que decide si los
+      // escribe o los deja heredar de la barra (ver _aplicarColores).
+      this._coloresPropios = (this.options.color1 !== undefined)
+        || (this.options.color2 !== undefined)
+        || (this.options.color3 !== undefined);
     }
 
     /**
@@ -150,18 +155,20 @@
      *  ponen en línea sobre el nodo raíz del item, y plantilla_item.css las
      *  consume con `var(--g-plugin-bg-color, orangered)` y compañía.
      *
-     *  Si el item está dentro de un supraplugin y este trae sus propios colores,
-     *  se usan los del supraplugin: la barra es una sola cosa y sus items no
-     *  pueden ir cada uno de un color.
-     * @returns {boolean} true si se pudieron poner las variables.
+     *  Si el item está dentro de un supraplugin y NO trae colores propios, no se
+     *  escribe nada y se hereda de la barra, que es donde sí se escriben: así
+     *  cambiar el color de la barra cambia el de todos sus items de golpe. Si el
+     *  item escribe sus propias variables, el cambio de la barra no le llega
+     *  (medido), que es justo lo contrario de lo que se quiere en una barra.
+     * @returns {boolean} true si el item se pinta con el color que le tocaba.
      */
     _aplicarColores() {
       try {
         if (!this.container || !this.container.style) return false;
-        const supra = this.supra;
-        const c1 = this.resolveColor((supra && supra.color1 !== undefined) ? supra.color1 : this.color1);
-        const c2 = this.resolveColor((supra && supra.color2 !== undefined) ? supra.color2 : this.color2);
-        const c3 = this.resolveColor((supra && supra.color3 !== undefined) ? supra.color3 : this.color3);
+        if (this.supra && !this._coloresPropios) return true;
+        const c1 = this.resolveColor(this.color1);
+        const c2 = this.resolveColor(this.color2);
+        const c3 = this.resolveColor(this.color3);
         this.container.style.setProperty('--g-plugin-bg-color', c1.deactive);
         this.container.style.setProperty('--g-plugin-bg-color-active', c1.active);
         this.container.style.setProperty('--g-plugin-border-color', c2.deactive);
