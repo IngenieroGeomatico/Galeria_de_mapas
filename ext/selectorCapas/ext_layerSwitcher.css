@@ -1,24 +1,13 @@
-﻿/* ---------------------------------------------------------------------
-   Color de acento del interruptor.
-
-   OJO con el selector, que es lo que hace que esto funcione o no: el bloque
-   estaba montado sobre `.g-herramienta_layerSwitcher`, una clase que NO existe
-   en el DOM (medido: no aparece en el HTML que monta ext_layerSwitcher.js, y
-   tampoco hay ni una regla más que la use). Con el bloque así, la variable
-   `--bl-accent` no se declaraba nunca y las 27 reglas que la usan quedaban sin
-   valor: los acentos del interruptor se perdían en vez de tomar la reserva.
-
-   Aquí se declara en el panel de verdad, `.m-panel.g-herramienta_selectorCapa`,
-   que es el nodo que el plugin crea y sobre el que escribe
-   `--g-plugin-accent-color`. Con eso el acento es el del esquema (el color3 en
-   su estado activo: el azul de la casa) y los fondos azul claro que lo
-   acompañan se derivan de él con color-mix(), porque en CSS no hay forma de poner
-   un color más claro sin nombrarlo entero.
-
-   Antes el acento iba escrito a pelo en 27 reglas, con un #0078d4 que no era el
-   azul de ningún otro plugin. */
-.m-panel.g-herramienta_selectorCapa {
-  --bl-accent: var(--g-plugin-accent-color, #0078d4);
+.g-herramienta_layerSwitcher {
+  /* Scoped variables for base layer selector styling */
+  --bl-bg: #f9f9f9;
+  --bl-border: #ddd;
+  --bl-accent: #0078d4;
+  --bl-radius: 6px;
+  --bl-color: #222;
+  --bl-heading: #333;
+  --bl-gap: 0.5em;
+  --bl-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
 }
 
 .g-herramienta_selectorCapa .m-tools:before {
@@ -192,7 +181,7 @@
 }
 
 .overlay-layer-selector .ls-nombre:hover {
-  color: var(--bl-accent);
+  color: #0078d4;
 }
 
 /* ── Ojito de visibilidad por capa ────────────────────────────────── */
@@ -227,7 +216,7 @@
 
 /* Capa visible: ojito azul claro (relacionado con el estado activo) */
 .overlay-layer-selector .ls-eye-on {
-  background: color-mix(in srgb, var(--bl-accent) 10%, #ffffff);
+  background: #eaf3fc;
   border: 1px solid #d3e4f5;
 }
 
@@ -265,8 +254,8 @@
 /* Estado abierto: flecha rotada y resaltada */
 .overlay-layer-selector .ls-options-open {
   transform: rotate(180deg);
-  color: var(--bl-accent);
-  background: color-mix(in srgb, var(--bl-accent) 10%, #ffffff);
+  color: #0078d4;
+  background: #eaf3fc;
 }
 
 /* ── Panel desplegable de opciones de la capa ────────────────────── */
@@ -312,14 +301,14 @@
 .overlay-layer-selector .ls-opacity-slider {
   flex: 1 1 auto;
   min-width: 0;
-  accent-color: var(--bl-accent);
+  accent-color: #0078d4;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
   height: 7px;
   border-radius: 6px;
   /* gradiente por defecto (0%): el JS lo sobrescribe con el valor real */
-  background: linear-gradient(to right, var(--bl-accent) 0%, var(--bl-accent) 0%, #d7dde7 0%, #d7dde7 100%);
+  background: linear-gradient(to right, #0078d4 0%, #0078d4 0%, #d7dde7 0%, #d7dde7 100%);
 }
 
 /* "Rellena" visualmente el track del slider con el valor (llamado por JS). */
@@ -330,7 +319,7 @@
   height: 16px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid var(--bl-accent);
+  border: 2px solid #0078d4;
   box-shadow: 0 1px 2px rgba(0,0,0,0.2);
   cursor: pointer;
 }
@@ -340,7 +329,7 @@
   height: 16px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid var(--bl-accent);
+  border: 2px solid #0078d4;
   box-shadow: 0 1px 2px rgba(0,0,0,0.2);
   cursor: pointer;
 }
@@ -352,7 +341,7 @@
 
 .overlay-layer-selector .ls-option-value {
   font-size: 0.8em;
-  color: var(--bl-accent);
+  color: #0078d4;
   font-weight: 600;
   flex-shrink: 0;
   min-width: 34px;
@@ -388,8 +377,8 @@
 }
 
 .overlay-layer-selector .ls-action-info:hover {
-  background: color-mix(in srgb, var(--bl-accent) 10%, #ffffff);
-  color: var(--bl-accent);
+  background: #eef6fd;
+  color: #0078d4;
 }
 
 /* Botón de borrar: tono rojo al pasar el ratón para advertir del efecto */
@@ -505,9 +494,9 @@
 }
 
 .ls-sheet-layer-picker:focus-visible {
-  outline: 2px solid var(--bl-accent);
+  outline: 2px solid #0078d4;
   outline-offset: -1px;
-  border-color: var(--bl-accent);
+  border-color: #0078d4;
 }
 
 .ls-sheet-title {
@@ -613,13 +602,13 @@
 }
 
 .ls-attr-table tbody tr:hover {
-  background: color-mix(in srgb, var(--bl-accent) 10%, #ffffff);
+  background: #eef6fd;
 }
 
 /* Fila seleccionada (feature localizado en el mapa) */
 .ls-attr-table tbody tr.ls-row-active {
   background: #d6ecfe;
-  outline: 2px solid var(--bl-accent);
+  outline: 2px solid #0078d4;
   outline-offset: -2px;
 }
 
@@ -641,9 +630,9 @@
 }
 
 .ls-sheet-sublayer-picker:focus-visible {
-  outline: 2px solid var(--bl-accent);
+  outline: 2px solid #0078d4;
   outline-offset: -1px;
-  border-color: var(--bl-accent);
+  border-color: #0078d4;
 }
 
 .ls-sheet-sublayer-picker:disabled {
@@ -714,8 +703,8 @@
 }
 
 .overlay-layer-selector .ls-action-rename:hover {
-  color: var(--bl-accent);
-  background: color-mix(in srgb, var(--bl-accent) 10%, #ffffff);
+  color: #0078d4;
+  background: #eef6fd;
 }
 
 /* Input de renombrado en linea: ocupa el ancho del nombre y lo sustituye. */
@@ -726,11 +715,11 @@
   font-size: 0.95em;
   color: #1a1a1a;
   background: #fff;
-  border: 1px solid var(--bl-accent);
+  border: 1px solid #0078d4;
   border-radius: 4px;
   padding: 2px 6px;
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bl-accent) 15%, transparent);
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.15);
 }
 
 .overlay-layer-selector .ls-rename-input.error {
@@ -789,15 +778,15 @@
    linea azul en la parte superior (la capa soltada quedará por encima) o
    inferior (quedará por debajo), segun la mitad de la fila recorrida. */
 .overlay-layer-selector li.ls-drop-above {
-  box-shadow: 0 -3px 0 0 var(--bl-accent);
+  box-shadow: 0 -3px 0 0 #0078d4;
 }
 
 .overlay-layer-selector li.ls-drop-below {
-  box-shadow: 0 3px 0 0 var(--bl-accent);
+  box-shadow: 0 3px 0 0 #0078d4;
 }
 
 .overlay-layer-selector li.ls-drop-above.ls-drop-below {
-  box-shadow: 0 -3px 0 0 var(--bl-accent), 0 3px 0 0 var(--bl-accent);
+  box-shadow: 0 -3px 0 0 #0078d4, 0 3px 0 0 #0078d4;
 }
 
 /* Zona "meter dentro de un grupo": se suelta sobre la mitad inferior de la
@@ -805,12 +794,12 @@
    azulado y una linea de insercion en el borde superior del bloque, indicando
    que la capa entrara como hija (arriba del resto de hijas del grupo). */
 .overlay-layer-selector li.ls-group.ls-drop-into-group > .ls-row {
-  background: color-mix(in srgb, var(--bl-accent) 10%, #ffffff);
-  box-shadow: inset 3px 0 0 0 var(--bl-accent);
+  background: #eef6fd;
+  box-shadow: inset 3px 0 0 0 #0078d4;
 }
 
 .overlay-layer-selector li.ls-group.ls-drop-into-group > .ls-children {
-  box-shadow: inset 0 3px 0 0 var(--bl-accent);
+  box-shadow: inset 0 3px 0 0 #0078d4;
 }
 
 /* Mientras se arrastra, se desactiva la interaccion con botones. */

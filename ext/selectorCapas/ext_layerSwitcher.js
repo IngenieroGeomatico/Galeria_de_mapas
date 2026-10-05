@@ -301,12 +301,7 @@ class miPlugin_layerSwitcher {
     this._control = control;
 
     // ── Aplicar colores configurables (color1=fondo, color2=borde, color3=icono) ──
-    // Se inyectan 6 variables CSS en el panel (estado normal y ".opened/active"),
-    // más una séptima, --g-plugin-accent-color, que es el color3 en su estado
-    // activo. Esa séptima es la que usa el interruptor por dentro (casillas,
-    // deslizadores, enlaces y anillos de foco): antes llevaba su propio azul
-    // escrito en el CSS, que no era el de ningún otro plugin. Ver el bloque de
-    // variables scoped al principio de ext_layerSwitcher.css.
+    // Se inyectan 6 variables CSS en el panel (estado normal y ".opened/active").
     const c1 = this.resolveColor(this.color1);
     const c2 = this.resolveColor(this.color2);
     const c3 = this.resolveColor(this.color3);
@@ -318,7 +313,6 @@ class miPlugin_layerSwitcher {
       panelEl.style.setProperty('--g-plugin-border-color-active', c2.active);
       panelEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
       panelEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
-      panelEl.style.setProperty('--g-plugin-accent-color', c3.active);
     }
 
     const panelSelector = document.querySelector('.g-herramienta_selectorCapa .m-panel-controls');
