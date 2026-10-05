@@ -11,6 +11,12 @@
    Contenedor: dentro de la banda de controles (ext/areaControls) manda el
    flujo de esa banda, así que aquí no se posiciona; solo se garantiza que
    quede centrado verticalmente y que no robe el clic al mapa.
+
+   El tope de ancho es lo que permite el reparto en dos líneas: si la lectura
+   pudiera medir todo lo que quiere, nunca llegaría a partirse. Con
+   `flex-grow: 0` no se come el ancho de la banda ni empuja de sitio a los
+   otros controles que la comparten (en las etapas, controlLocation va a su
+   derecha).
    --------------------------------------------------------------------- */
 .g-mapInfo {
   box-sizing: border-box;
@@ -21,16 +27,44 @@
   -webkit-user-select: none;
   /* Es una lectura, no un botón: sin cursor de mano. */
   cursor: default;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
 }
 
 /* ---------------------------------------------------------------------
    La caja: el mismo aspecto que el control de escala de la API.
+
+   Es UNA TIRA, no una columna: todos los datos van en la MISMA línea, uno
+   detrás de otro y con la barra vertical de por medio (nivel de zoom, escala,
+   coordenadas del puntero, selector de proyección y casilla de recorte). Solo
+   aparece una segunda línea cuando de verdad no cabe, y lo decide el ancho con
+   `flex-flow: row wrap`: la caja mide lo que miden sus hijos hasta que se le
+   acaba el ancho disponible y, en ese momento, lo que no entre entero pasa a la
+   línea de abajo.
+
+   Para que el reparto salga bien hacen falta dos cosas:
+
+   1) `max-width: 100%`. Sin él la caja se mide por su contenido y, por estrecho
+      que sea el visualizador, nunca se parte: el texto se saldría del mapa en
+      vez de bajar de línea.
+   2) El `nowrap` va en cada DATO y no en la caja. Un dato es un bloque corto
+      (etiqueta y número, desplegable, casilla) y no debe partirse por la
+      mitad; lo que baja de línea son datos enteros, nunca un número por un lado
+      y su etiqueta por otro.
+
+   Los huecos entre dato y dato NO son un `gap` de la caja, sino el margen del
+   separador (ver .g-mapInfo-separador), para que el aire quede pegado a la
+   barra vertical y no repartido a partes iguales por los dos lados.
    --------------------------------------------------------------------- */
 .g-mapInfo-caja {
   box-sizing: border-box;
   display: flex;
+  flex-flow: row wrap;
   align-items: baseline;
-  white-space: nowrap;
+  justify-content: flex-start;
+  max-width: 100%;
+  row-gap: 2px;
   font-family: Muli, "sans-serif";
   font-size: 12px;
   color: #ffffff;
@@ -38,31 +72,42 @@
   border: 1.6px solid rgb(255, 255, 255);
   border-radius: 20px;
   box-shadow: rgba(0, 0, 0, 0.2) 0 2px 4px 0, rgba(0, 0, 0, 0.02) 0 -1px 0 0;
-  padding: 6px 12px 3px;
+  padding: 4px 10px 3px;
 }
 
-/* El hueco va aquí y no en el texto. Los hijos de una caja flex colapsan el
-   espacio final de su contenido (CSS Text 3, 4.1.1), así que poner "Nivel de
-   zoom " con un espacio detrás no dibuja nada: el navegador se lo come y la
-   etiqueta queda pegada a su número. Con `gap` el espacio se pinta siempre. */
+/* El hueco entre la etiqueta y su número va aquí y no en el texto. Los hijos de
+   una caja flex colapsan el espacio final de su contenido (CSS Text 3, 4.1.1),
+   así que poner "Nivel de zoom " con un espacio detrás no dibuja nada: el
+   navegador se lo come y la etiqueta queda pegada a su número. Con `gap` el
+   espacio se pinta siempre. El `nowrap` es lo que impide que un dato se parta
+   por la mitad al repartirse la tira en dos líneas. */
 .g-mapInfo-dato {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.3em;
+  gap: 0.32em;
+  white-space: nowrap;
 }
 
+/* La etiqueta va un punto más apagada que el número: separa lo que se lee de lo
+   que se está midiendo sin gastar un color nuevo ni un separador más. */
 .g-mapInfo-etiqueta {
   font-weight: 400;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .g-mapInfo-valor {
   font-weight: 400;
+  color: #ffffff;
 }
 
 /* Por lo mismo, la barra vertical necesita sus huecos como margen: un
-   separador con " | " se vería como "|" pegado a los dos lados. */
+   separador con " | " se vería como "|" pegado a los dos lados. El margen es
+   corto a propósito: es la marca que divide, no un elemento más de la tira, y
+   con aire alrededor la caja parecía más suelta de lo que está. La barra va
+   también atenuada para que el ojo vaya a los números. */
 .g-mapInfo-separador {
-  margin: 0 0.3em;
+  margin: 0 0.22em;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 /* ---------------------------------------------------------------------
@@ -129,8 +174,139 @@
   outline-offset: 1px;
 }
 
+/* ---------------------------------------------------------------------
+   El selector de proyección.
+
+   El contenedor tiene pointer-events: none para no robarle el clic al mapa,
+   así que hay que devolvérselo aquí como se hace con los campos: sin esto el
+   desplegable no se abriría nunca.
+
+   El fondo transparente y el color heredado son para que se lea como una
+   cifra más de la lectura, igual que los campos. En 3D se ve grisado, que
+   es la forma de decir que ahí no se puede cambiar sin tener que escribir un
+   párrafo.
+   --------------------------------------------------------------------- */
+.g-mapInfo-caja .g-mapInfo-selector {
+  box-sizing: border-box;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  color: inherit !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 0 1px !important;
+  /* Los nombres oficiales son largos ("ETRS89 / UTM zone 30N (EPSG:25830)"), así
+     que se les da sitio. Y un tope en em, no en píxeles, para que la casilla
+     siga siendo proporcional si cambia el tamaño de letra. */
+  max-width: 26em;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+
+/* La flecha del navegador se ve sobre fondo transparente con el mismo
+   problema que los input, y aquí el !important es por el mismo motivo que en
+   los campos: la hoja de la API no se puede leer con cssRules para saber qué
+   selector gana. */
+.g-mapInfo-caja .g-mapInfo-selector option {
+  background: rgb(113, 167, 211);
+  color: #ffffff;
+}
+
+.g-mapInfo-caja .g-mapInfo-selector:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 1px;
+}
+
+.g-mapInfo-caja .g-mapInfo-selector:disabled {
+  color: rgba(255, 255, 255, 0.55);
+  cursor: default;
+  opacity: 1;
+}
+
+/* El desplegable lleva un subrayado fino para que se lea como un control y no
+   como una cifra más de la lectura: con el fondo transparente no queda nada más
+   que diga que ahí se abre una lista. El `!important` es por el mismo motivo que
+   en los campos: la hoja de la API no se puede leer con cssRules para saber qué
+   selector le da borde a los input y gana a estas reglas. */
+.g-mapInfo-caja .g-mapInfo-selector {
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.5) !important;
+  padding: 0 1px 1px !important;
+}
+
+.g-mapInfo-caja .g-mapInfo-selector:hover {
+  border-bottom-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* ---------------------------------------------------------------------
+   La casilla de recorte.
+
+   Mismo tratamiento que los campos y el desplegable, y por el mismo motivo: el
+   contenedor tiene `pointer-events: none`, así que sin devolvérselo aquí la
+   casilla no se podría marcar. El fondo transparente y `appearance: none` la
+   dejan como una cifra más de la lectura, y la marca se dibuja a mano con dos
+   `box-shadow`, que es lo único que queda visible en un input al que se le ha
+   quitado la apariencia nativa.
+
+   La casilla es de verdad un input[type=checkbox] y no un adorno con
+   `aria-hidden`, para que conserve el papel, el foco de teclado y el espacio que
+   la activa.
+   --------------------------------------------------------------------- */
+.g-mapInfo-caja .g-mapInfo-casilla {
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+  /* La casilla es un cuadrado y su línea de base es el borde de abajo, así que
+     con `align-items: baseline` se queda asomando por encima de las mayúsculas.
+     `vertical-align` no sirve aquí: dentro de una caja flex no manda. Con este
+     píxel de margen se apoya donde debe. */
+  margin-top: 0.12em !important;
+}
+
+/* La casilla y su etiqueta no llevan barra delante (no separan dos lecturas, sino
+   que activan una cosa), pero sí necesitan un poco de aire: el desplegable acaba
+   en su propia flecha y sin este margen la palabra "cortar" se le pegaba. Poco,
+   para no volver a ensanchar la tira. */
+.g-mapInfo-caja .g-mapInfo-alcance {
+  margin-left: 0.5em;
+}
+
+.g-mapInfo-caja .g-mapInfo-casilla:checked {
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 0 0 2px rgb(113, 167, 211);
+}
+
+/* Al pasar por encima se enciende un poco: es la única pista de que la casilla
+   es pulsable, porque está dibujada a mano y no lleva la pista nativa. */
+.g-mapInfo-caja .g-mapInfo-casilla:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.g-mapInfo-caja .g-mapInfo-casilla:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 1px;
+}
+
+.g-mapInfo-caja .g-mapInfo-casilla:disabled {
+  border-color: rgba(255, 255, 255, 0.45);
+  cursor: default;
+}
+
 /* Valor no válido: una sacudida y un fondo breve. La clase la quita el
-   temporizador de _rechazar(). */
+   temporizador de _rechazar(), y vale para un campo escrito y para el
+   selector al que se le pide una proyección que el visor no puede usar. */
 @keyframes g-mapInfo-rechazo {
   0%   { transform: translateX(0); }
   25%  { transform: translateX(-3px); }
@@ -138,7 +314,7 @@
   100% { transform: translateX(0); }
 }
 
-.g-mapInfo-caja .g-mapInfo-campo--rechazado {
+.g-mapInfo-caja .g-mapInfo-rechazado {
   animation: g-mapInfo-rechazo 220ms ease-in-out 1;
   background: rgba(255, 255, 255, 0.4);
   text-decoration: none;
