@@ -32,13 +32,40 @@
  *   area.monta(elemento, { order: 1 });   // cuelga el plugin en la banda
  *   area.desmonta(elemento);
  *
- * El constructor no recibe argumentos obligatorios: new miPlugin_areaControls()
+ // El constructor no recibe argumentos obligatorios: new miPlugin_areaControls()
  * deja la banda abajo y sin order asignado.
+ *
+ * COLORES: se declaran igual que en el resto de plugins (color1 = fondo, color2 =
+ * borde, color3 = icono y texto; ver ext/CalidadAireMadridTiempoReal). La banda
+ * en si no se pinta (es transparente, para que se vea el mapa detras), asi que
+ * aqui lo que se hace es dejar las seis variables CSS puestas en ella: los plugins
+ * que se cuelgan en la banda las heredan, y asi se puede dar color a toda la
+ * banda de una vez sin tocar las hojas de estilo de cada plugin.
  */
-
 class miPlugin_areaControls {
+  /**
+   * Constructor del plugin. Funciona sin argumentos.
+   * @param {Object} [options={}] Opciones de configuracion (todas opcionales).
+   * @param {string} [options.openPosition='bottom'] 'top' o 'bottom'.
+   * @param {number} [options.order=0] Orden de los hijos que no traigan el suyo.
+   * @param {string} [options.className] Prefijo de clase de la banda.
+   * @param {number} [options.padLeft] Margen izquierdo en píxeles.
+   * @param {number} [options.padRight] Margen derecho en píxeles.
+   * @param {string|Object} [options.color1] Color de fondo. Un color o un objeto
+   * {active, deactive}.
+   * @param {string|Object} [options.color2] Color de borde. Un color o un objeto
+   * {active, deactive}.
+   * @param {string|Object} [options.color3] Color de icono y texto. Un color o un
+   * objeto {active, deactive}.
+   */
   constructor(options = {}) {
     this.name = 'miPlugin_areaControls';
+
+    // Colores configurables, con el mismo reparto y los mismos valores por
+    // defecto que el resto de plugins del repositorio.
+    this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+    this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+    this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
 
     // 'top' abre la banda arriba, 'bottom' (defecto) abajo.
     this.openPosition = (options.openPosition === 'top') ? 'top' : 'bottom';
@@ -66,6 +93,51 @@ class miPlugin_areaControls {
   }
 
   /**
+   * Devuelve {active, deactive} a partir de un color simple o de un objeto.
+   *
+   *  Es el mismo traductor que usan los plugins que ya tenían esquema de colores,
+   *  para que un color se pueda pasar como '#fff' o como {active: '#fff',
+   *  deactive: '#eee'} indistintamente.
+   * @param {string|Object} c Color u objeto de colores.
+   * @returns {{active: string, deactive: string}} Los dos estados.
+   */
+  resolveColor(c) {
+    return (typeof c === 'object' && c !== null)
+      ? { active: c.active, deactive: c.deactive }
+      : { active: c, deactive: c };
+  }
+
+  /**
+   * Vuelca los colores configurados a variables CSS de la banda.
+   *
+   *  Las seis variables del esquema (reposo y activo de fondo, borde e icono) se
+   *  ponen en linea sobre el div de la banda. La banda no se pinta, asi que su
+   *  valor no es que se vea de otro color, sino que los plugins que se cuelgan
+   *  dentro la heredan: por la cascada, el que se ponga en el constructor de la
+   *  banda alcanza a todos ellos sin tocar sus hojas de estilo. Los plugins que
+   *  traigan sus propios colores se los ponen encima y mandan ellos.
+   * @returns {boolean} true si se pudieron poner las variables.
+   */
+  _aplicarColores() {
+    try {
+      if (!this._area || !this._area.style) return false;
+      const c1 = this.resolveColor(this.color1);
+      const c2 = this.resolveColor(this.color2);
+      const c3 = this.resolveColor(this.color3);
+      this._area.style.setProperty('--g-plugin-bg-color', c1.deactive);
+      this._area.style.setProperty('--g-plugin-bg-color-active', c1.active);
+      this._area.style.setProperty('--g-plugin-border-color', c2.deactive);
+      this._area.style.setProperty('--g-plugin-border-color-active', c2.active);
+      this._area.style.setProperty('--g-plugin-icon-color', c3.deactive);
+      this._area.style.setProperty('--g-plugin-icon-color-active', c3.active);
+      return true;
+    } catch (e) {
+      console.warn(`${this.name}: no se pudieron aplicar los colores.`, e);
+      return false;
+    }
+  }
+
+  /**
    * Devuelve el div del area, creandolo la primera vez.
    * Reutiliza el que ya exista en el DOM, de modo que varios plugins que se
    * registren en el mismo mapa compartan banda.
@@ -79,6 +151,9 @@ class miPlugin_areaControls {
       '--' + this.openPosition);
     if (previa && previa.parentNode) {
       this._area = previa;
+      // La banda reutilizada puede venir de otra instancia (o del mapa anterior)
+      // con otros colores, asi que se repintan los de esta.
+      this._aplicarColores();
       return this._area;
     }
 
@@ -128,6 +203,7 @@ class miPlugin_areaControls {
 
     anfitrion.appendChild(area);
     this._area = area;
+    this._aplicarColores();
     this._vigilarRail();
     this._ajustarEspacio();
     return this._area;

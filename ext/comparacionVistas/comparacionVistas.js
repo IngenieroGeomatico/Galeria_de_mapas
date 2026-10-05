@@ -1474,6 +1474,14 @@
      * @param {number} [options.lon] Centro inicial (lon). Def. -3.70
      * @param {number} [options.lat] Centro inicial (lat). Def. 40.42
      * @param {number} [options.zoom] Zoom inicial. Def. 12
+     *
+     * --- Colores (esquema comun del repositorio) ---
+     * @param {string|Object} [options.color1] Color de fondo. Un color o un
+     *   objeto {active, deactive}.
+     * @param {string|Object} [options.color2] Color de borde. Un color o un
+     *   objeto {active, deactive}.
+     * @param {string|Object} [options.color3] Color de icono y texto. Un color o
+     *   un objeto {active, deactive}.
      */
     constructor(options = {}) {
       this.name = "miPlugin_comparacionVistas";
@@ -1482,6 +1490,17 @@
       this.initLon = (typeof this.options.lon === "number") ? this.options.lon : -3.70;
       this.initLat = (typeof this.options.lat === "number") ? this.options.lat : 40.42;
       this.initZoom = (typeof this.options.zoom === "number") ? this.options.zoom : 12;
+
+      // Colores configurables, con el mismo reparto y los mismos valores por
+      // defecto que el resto de plugins del repositorio (color1 = fondo,
+      // color2 = borde, color3 = icono y texto). Este plugin tiene ademas su
+      // propia paleta --cmpv-* (comparacionVistas.css) para la barra de division
+      // y su tirador, que el usuario cambia con sus propios selectores de color;
+      // las variables de aqui son las del esquema comun, que se ponen en el
+      // contenedor para que todo lo que las use tome el color del constructor.
+      this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+      this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+      this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
 
       this.supra = null;
       this.ui = null;
@@ -1707,10 +1726,55 @@
       this._resolveWorkArea();
       this._adoptPrimaryView();
       this.ui = this._buildUI();
+      this._aplicarColores();
       // Aplica la configuración de comparación INICIAL (modo + swipe/grid).
       this._applyInitialComparison();
       this._refreshUI();
       return this.ui;
+    }
+
+    /**
+     * Devuelve {active, deactive} a partir de un color simple o de un objeto.
+     *
+     *  Es el mismo traductor que usan los plugins que ya tenían esquema de colores,
+     *  para que un color se pueda pasar como '#fff' o como {active: '#fff',
+     *  deactive: '#eee'} indistintamente.
+     * @param {string|Object} c Color u objeto de colores.
+     * @returns {{active: string, deactive: string}} Los dos estados.
+     */
+    resolveColor(c) {
+      return (typeof c === "object" && c !== null)
+        ? { active: c.active, deactive: c.deactive }
+        : { active: c, deactive: c };
+    }
+
+    /**
+     * Vuelca los colores configurados a variables CSS del contenedor.
+     *
+     *  Las seis variables del esquema (reposo y activo de fondo, borde e icono) se
+     *  ponen en línea sobre el contenedor del plugin, y las hojas que las lean
+     *  toman el color del constructor. La barra de división y su tirador siguen con
+     *  la paleta propia --cmpv-*, que el usuario cambia con sus selectores de color:
+     *  son dos cosas distintas y no se mezclan.
+     * @returns {boolean} true si se pudieron poner las variables.
+     */
+    _aplicarColores() {
+      try {
+        if (!this.ui || !this.ui.style) return false;
+        const c1 = this.resolveColor(this.color1);
+        const c2 = this.resolveColor(this.color2);
+        const c3 = this.resolveColor(this.color3);
+        this.ui.style.setProperty('--g-plugin-bg-color', c1.deactive);
+        this.ui.style.setProperty('--g-plugin-bg-color-active', c1.active);
+        this.ui.style.setProperty('--g-plugin-border-color', c2.deactive);
+        this.ui.style.setProperty('--g-plugin-border-color-active', c2.active);
+        this.ui.style.setProperty('--g-plugin-icon-color', c3.deactive);
+        this.ui.style.setProperty('--g-plugin-icon-color-active', c3.active);
+        return true;
+      } catch (e) {
+        console.warn("[" + this.name + "] no se pudieron aplicar los colores.", e);
+        return false;
+      }
     }
 
     // Aplica el modo inicial y su configuración específica (swipe/layout). Si el
