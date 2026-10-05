@@ -1,7 +1,13 @@
 /* =====================================================================
-   PLUGIN ESCALA Y NIVEL DE VISTA PARA API-IDEE / API-CNIG
+   PLUGIN DE INFORMACIÓN DEL MAPA PARA API-IDEE / API-CNIG
    Repositorio: Galeria_de_mapas
    =====================================================================
+
+   QUÉ ES ESTE PLUGIN:
+   Lee lo que se está mirando y deja escribirlo. Hoy son el nivel de zoom (en
+   2D) o la altura de la cámara (en 3D), y la escala 1:n. Se llama mapInfo y
+   no "escala" porque va a crecer por ese lado: cuando se le añadan lecturas,
+   este es el sitio donde van, y el nombre tiene que aguantar el crecimiento.
 
    MOTIVACIÓN:
    El control 'scale*true' del constructor IDEE.map({controls}) pintaba en la
@@ -74,7 +80,7 @@
 
    ESPACIOS:
      Los huecos entre etiqueta, valor y separador los pone el CSS (`gap` en
-     .g-controlScale-dato y margen en .g-controlScale-separador), nunca el
+     .g-mapInfo-dato y margen en .g-mapInfo-separador), nunca el
      texto. Un espacio final dentro de un hijo flex se colapsa (CSS Text 3,
      4.1.1) y no se dibuja, así que "Nivel de zoom " se vería pegado al
      número.
@@ -121,7 +127,7 @@
       dos implementaciones, y se cae al patrón canónico del repo
       (map.getMapImpl() con scene.camera) si ese método no existe.
    3. Constructor sin argumentos obligatorio:
-      new IDEE.plugin.miPlugin_controlScale()
+      new IDEE.plugin.miPlugin_mapInfo()
    4. Contrato de estado getState()/setState() para el swap 2D/3D.
    5. Exposición triple (window / IDEE.plugin / M.plugin) para sobrevivir
       a la recarga del bundle de la API.
@@ -184,7 +190,7 @@
   /**
    * Escala y nivel de vista del mapa, en la banda de controles.
    */
-  class miPlugin_controlScale {
+  class miPlugin_mapInfo {
     /**
      * Constructor del plugin. Funciona sin argumentos.
      * @param {Object} [options={}] Opciones de configuración (todas opcionales).
@@ -199,7 +205,7 @@
      */
     constructor(options = {}) {
       // Identificador obligatorio del plugin (gestor de plugins y cambioImpl).
-      this.name = 'miPlugin_controlScale';
+      this.name = 'miPlugin_mapInfo';
       this.options = options || {};
 
       // Referencia al mapa y a los elementos de interfaz.
@@ -243,7 +249,7 @@
     getHelp() {
       const IDEE = api();
       return {
-        title: 'Escala y nivel de vista',
+        title: 'Información del mapa',
         content: new Promise((resolve) => {
           let html = '<div><p>Escala del mapa (1 : n) y nivel de zoom, o altura ' +
             'de la cámara en la visualización 3D.</p>' +
@@ -417,34 +423,34 @@
      */
     _construirUI() {
       const cont = document.createElement('div');
-      cont.className = 'g-controlScale';
-      cont.title = 'Escala y nivel de vista del mapa. Púlsalo para escribirlos a mano.';
+      cont.className = 'g-mapInfo';
+      cont.title = 'Información del mapa. Púlsalo para escribir los valores a mano.';
 
       const caja = document.createElement('div');
-      caja.className = 'g-controlScale-caja';
+      caja.className = 'g-mapInfo-caja';
 
       // Dato principal: nivel de zoom en 2D, altura de la cámara en 3D.
       // Los textos van SIN espacios de relleno: los aporta el `gap` de
-      // .g-controlScale-dato y el margen del separador, porque un espacio
+      // .g-mapInfo-dato y el margen del separador, porque un espacio
       // final dentro de un hijo flex se colapsa y no se vería.
       const principal = document.createElement('span');
-      principal.className = 'g-controlScale-dato';
+      principal.className = 'g-mapInfo-dato';
       const etiqueta = document.createElement('span');
-      etiqueta.className = 'g-controlScale-etiqueta';
+      etiqueta.className = 'g-mapInfo-etiqueta';
       etiqueta.textContent = 'Nivel de zoom';
       const valor = this._crearCampo('Nivel de zoom');
       principal.appendChild(etiqueta);
       principal.appendChild(valor);
 
       const separador = document.createElement('span');
-      separador.className = 'g-controlScale-separador';
+      separador.className = 'g-mapInfo-separador';
       separador.textContent = '|';
 
       // Escala 1 : n, común a las dos implementaciones.
       const escala = document.createElement('span');
-      escala.className = 'g-controlScale-dato';
+      escala.className = 'g-mapInfo-dato';
       const unidad = document.createElement('span');
-      unidad.className = 'g-controlScale-etiqueta';
+      unidad.className = 'g-mapInfo-etiqueta';
       unidad.textContent = 'Escala = 1 :';
       const valorEscala = this._crearCampo('Escala');
       escala.appendChild(unidad);
@@ -480,7 +486,7 @@
     _crearCampo(nombre) {
       const campo = document.createElement('input');
       campo.type = 'text';
-      campo.className = 'g-controlScale-valor g-controlScale-campo';
+      campo.className = 'g-mapInfo-valor g-mapInfo-campo';
       campo.inputMode = 'decimal';
       campo.autocomplete = 'off';
       campo.spellcheck = false;
@@ -674,7 +680,7 @@
       // se compara con el texto de entrada antes de decidir que no hay nada
       // que aplicar.
       this._textoAlEntrar = campo.value;
-      campo.classList.add('g-controlScale-campo--editando');
+      campo.classList.add('g-mapInfo-campo--editando');
       try {
         campo.select();
       } catch (e) {
@@ -745,7 +751,7 @@
       if (this._campoEditando === campo) {
         this._campoEditando = null;
         this._textoAlEntrar = null;
-        campo.classList.remove('g-controlScale-campo--editando');
+        campo.classList.remove('g-mapInfo-campo--editando');
       }
       this._actualizar();
     }
@@ -1016,16 +1022,16 @@
      */
     _rechazar(campo) {
       if (!campo) return;
-      campo.classList.remove('g-controlScale-campo--rechazado');
+      campo.classList.remove('g-mapInfo-campo--rechazado');
       // Hay que forzar un reflow para que al volver a añadir la clase la
       // animación se ejecute otra vez en vez de no hacer nada.
       try { void campo.offsetWidth; } catch (e) { /* silencioso */ }
-      campo.classList.add('g-controlScale-campo--rechazado');
+      campo.classList.add('g-mapInfo-campo--rechazado');
       // Y un temporizador para quitar el aviso, que si se queda puesto parece
       // un resaltado permanente.
       if (this._timerRechazo) window.clearTimeout(this._timerRechazo);
       this._timerRechazo = window.setTimeout(function () {
-        campo.classList.remove('g-controlScale-campo--rechazado');
+        campo.classList.remove('g-mapInfo-campo--rechazado');
       }, 700);
     }
 
@@ -1548,7 +1554,7 @@
         if (!this._montarEnArea(ui)) {
           // Sin banda (ext/areaControls no cargada): se ancla abajo a la
           // izquierda, que es donde la ponía el control de la API.
-          ui.classList.add('g-controlScale--suelto');
+          ui.classList.add('g-mapInfo--suelto');
           this._host.appendChild(ui);
         }
         this._container = ui;
@@ -1677,12 +1683,12 @@
   // re-instanciarla sin volver a cargar este fichero.
   // =====================================================================
   if (typeof window !== 'undefined') {
-    window.miPlugin_controlScale = miPlugin_controlScale;
+    window.miPlugin_mapInfo = miPlugin_mapInfo;
     window.IDEE = window.IDEE || {};
     window.IDEE.plugin = window.IDEE.plugin || {};
-    window.IDEE.plugin.miPlugin_controlScale = miPlugin_controlScale;
+    window.IDEE.plugin.miPlugin_mapInfo = miPlugin_mapInfo;
     window.M = window.M || {};
     window.M.plugin = window.M.plugin || {};
-    window.M.plugin.miPlugin_controlScale = miPlugin_controlScale;
+    window.M.plugin.miPlugin_mapInfo = miPlugin_mapInfo;
   }
 })();

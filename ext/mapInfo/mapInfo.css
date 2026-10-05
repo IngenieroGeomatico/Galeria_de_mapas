@@ -1,5 +1,5 @@
 /* =====================================================================
-   ESTILOS DEL PLUGIN ESCALA Y NIVEL DE VISTA (miPlugin_controlScale)
+   ESTILOS DEL PLUGIN INFORMACION DEL MAPA (miPlugin_mapInfo)
    =====================================================================
    Sustituye al control 'scale*true' de la API, que pintaba un cuadro azul
    ("Nivel de zoom 13.49 | Escala = 1 : 35.000") en la esquina inferior
@@ -12,7 +12,7 @@
    flujo de esa banda, así que aquí no se posiciona; solo se garantiza que
    quede centrado verticalmente y que no robe el clic al mapa.
    --------------------------------------------------------------------- */
-.g-controlScale {
+.g-mapInfo {
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -26,7 +26,7 @@
 /* ---------------------------------------------------------------------
    La caja: el mismo aspecto que el control de escala de la API.
    --------------------------------------------------------------------- */
-.g-controlScale-caja {
+.g-mapInfo-caja {
   box-sizing: border-box;
   display: flex;
   align-items: baseline;
@@ -45,23 +45,23 @@
    espacio final de su contenido (CSS Text 3, 4.1.1), así que poner "Nivel de
    zoom " con un espacio detrás no dibuja nada: el navegador se lo come y la
    etiqueta queda pegada a su número. Con `gap` el espacio se pinta siempre. */
-.g-controlScale-dato {
+.g-mapInfo-dato {
   display: inline-flex;
   align-items: baseline;
   gap: 0.3em;
 }
 
-.g-controlScale-etiqueta {
+.g-mapInfo-etiqueta {
   font-weight: 400;
 }
 
-.g-controlScale-valor {
+.g-mapInfo-valor {
   font-weight: 400;
 }
 
 /* Por lo mismo, la barra vertical necesita sus huecos como margen: un
    separador con " | " se vería como "|" pegado a los dos lados. */
-.g-controlScale-separador {
+.g-mapInfo-separador {
   margin: 0 0.3em;
 }
 
@@ -84,7 +84,7 @@
    Comprobado: sin !important el campo se ve con un recuadro negro de 1 px.
 
    --------------------------------------------------------------------- */
-.g-controlScale-caja .g-controlScale-campo {
+.g-mapInfo-caja .g-mapInfo-campo {
   box-sizing: border-box;
   font-family: inherit !important;
   font-size: inherit !important;
@@ -110,13 +110,13 @@
 /* Pista de que el número se puede escribir: subrayado al pasar por encima.
    Se usa text-decoration y no un borde porque un borde desplazaría el texto
    respecto de la etiqueta al aparecer. */
-.g-controlScale-caja .g-controlScale-campo:hover {
+.g-mapInfo-caja .g-mapInfo-campo:hover {
   text-decoration: underline dotted rgba(255, 255, 255, 0.65);
   text-underline-offset: 3px;
 }
 
 /* Editando: fondo claro y sin subrayado. */
-.g-controlScale-caja .g-controlScale-campo--editando {
+.g-mapInfo-caja .g-mapInfo-campo--editando {
   background: rgba(255, 255, 255, 0.22);
   text-decoration: none;
   outline: none;
@@ -124,22 +124,22 @@
 
 /* El foco de teclado se marca, para no perder la accesibilidad al quitar el
    marco por defecto. */
-.g-controlScale-caja .g-controlScale-campo:focus-visible {
+.g-mapInfo-caja .g-mapInfo-campo:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.9);
   outline-offset: 1px;
 }
 
 /* Valor no válido: una sacudida y un fondo breve. La clase la quita el
    temporizador de _rechazar(). */
-@keyframes g-controlScale-rechazo {
+@keyframes g-mapInfo-rechazo {
   0%   { transform: translateX(0); }
   25%  { transform: translateX(-3px); }
   75%  { transform: translateX(3px); }
   100% { transform: translateX(0); }
 }
 
-.g-controlScale-caja .g-controlScale-campo--rechazado {
-  animation: g-controlScale-rechazo 220ms ease-in-out 1;
+.g-mapInfo-caja .g-mapInfo-campo--rechazado {
+  animation: g-mapInfo-rechazo 220ms ease-in-out 1;
   background: rgba(255, 255, 255, 0.4);
   text-decoration: none;
 }
@@ -147,7 +147,7 @@
 /* ---------------------------------------------------------------------
    Oculto por visibilidad desactivada.
    --------------------------------------------------------------------- */
-.g-controlScale[aria-hidden="true"] {
+.g-mapInfo[aria-hidden="true"] {
   display: none !important;
 }
 
@@ -155,7 +155,7 @@
    Respaldo: si ext/areaControls no está cargada, la lectura se ancla abajo a
    la izquierda, que es donde la ponía el control de la API.
    --------------------------------------------------------------------- */
-.g-controlScale--suelto {
+.g-mapInfo--suelto {
   position: absolute;
   z-index: 850;
   left: 10px;
@@ -166,7 +166,7 @@
    Pantallas estrechas: algo menos de relleno para no comerse el mapa.
    --------------------------------------------------------------------- */
 @media (max-width: 768px) {
-  .g-controlScale-caja {
+  .g-mapInfo-caja {
     font-size: 11px;
     padding: 4px 9px 2px;
   }

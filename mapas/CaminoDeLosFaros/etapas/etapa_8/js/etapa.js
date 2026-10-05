@@ -308,7 +308,7 @@ ruta.on(IDEE.evt.LOAD, (features) => {
   // porque es un div ancho que en la columna estorba. En la banda, `order` fija
   // la posicion de izquierda a derecha y `openPosition` elige si la banda se
   // abre arriba o abajo.
-  mapjs.addPlugin(new IDEE.plugin.miPlugin_controlScale({ order: 0, openPosition: 'bottom' }));
+  mapjs.addPlugin(new IDEE.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
   mapjs.addPlugin(new IDEE.plugin.miPlugin_controlLocation());
   mapjs.addPlugin(new IDEE.plugin.miPlugin_controlRotate({ order: -1 }));
 
