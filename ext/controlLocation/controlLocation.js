@@ -84,6 +84,12 @@
      * @param {boolean} [options.tracking=true] El control nativo distingue si
      * sigue la posición (tracking) o solo centra una vez. Por defecto true,
      * que es el comportamiento del control 'location' de la API.
+     * @param {string|Object} [options.color1] Color de fondo. Un color o un
+     * objeto {active, deactive}.
+     * @param {string|Object} [options.color2] Color de borde. Un color o un
+     * objeto {active, deactive}.
+     * @param {string|Object} [options.color3] Color de icono y texto. Un color o
+     * un objeto {active, deactive}.
      */
     constructor(options = {}) {
       // Identificador obligatorio del plugin (gestor de plugins y cambioImpl).
@@ -106,6 +112,52 @@
       this.order = (options.order !== undefined && !Number.isNaN(Number(options.order)))
         ? Number(options.order) : undefined;
       this._tracking = (options.tracking !== undefined) ? Boolean(options.tracking) : true;
+
+      // Colores configurables, con el mismo reparto y los mismos valores por
+      // defecto que el resto de plugins del repositorio (color1 = fondo,
+      // color2 = borde, color3 = icono; ver ext/CalidadAireMadridTiempoReal).
+      this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+      this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+      this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+    }
+
+    /**
+     * Devuelve {active, deactive} a partir de un color simple o de un objeto.
+     * @param {string|Object} c Color u objeto de colores.
+     * @returns {{active: string, deactive: string}} Los dos estados.
+     */
+    resolveColor(c) {
+      return (typeof c === 'object' && c !== null)
+        ? { active: c.active, deactive: c.deactive }
+        : { active: c, deactive: c };
+    }
+
+    /**
+     * Vuelca los colores configurados a variables CSS del panel del botón.
+     *
+     *  Las seis variables del esquema (reposo y activo de fondo, borde e icono)
+     *  se ponen en línea sobre el panel que la API crea para el control, y
+     *  controlLocation.css las consume. El botón no se abre ni se cierra, así
+     *  que lo que se ve es el estado de reposo.
+     * @returns {boolean} true si se pudieron poner las variables.
+     */
+    _aplicarColores() {
+      try {
+        if (!this._panel || !this._panel.style) return false;
+        const c1 = this.resolveColor(this.color1);
+        const c2 = this.resolveColor(this.color2);
+        const c3 = this.resolveColor(this.color3);
+        this._panel.style.setProperty('--g-plugin-bg-color', c1.deactive);
+        this._panel.style.setProperty('--g-plugin-bg-color-active', c1.active);
+        this._panel.style.setProperty('--g-plugin-border-color', c2.deactive);
+        this._panel.style.setProperty('--g-plugin-border-color-active', c2.active);
+        this._panel.style.setProperty('--g-plugin-icon-color', c3.deactive);
+        this._panel.style.setProperty('--g-plugin-icon-color-active', c3.active);
+        return true;
+      } catch (e) {
+        console.warn(`${this.name}: no se pudieron aplicar los colores.`, e);
+        return false;
+      }
     }
 
     /**
@@ -243,6 +295,7 @@
         if (panel) {
           self._panel = panel;
           panel.classList.add('g-controlLocation');
+          self._aplicarColores();
           self._aplicarVisibilidad();
           return;
         }

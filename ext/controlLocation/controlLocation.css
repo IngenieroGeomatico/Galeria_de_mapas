@@ -6,7 +6,38 @@
    esquina. Solo se ajusta un detalle: reaffirmar que la flecha de plegado no
    se ve, porque el botón no se pliega (aunque la API ya la oculta dentro de
    su area, el panel puede quedar fuera de ella al reiniciar el mapa).
+
+   Más los colores del esquema (color1/color2/color3), los mismos que usan el
+   resto de plugins del repositorio: fondo = color1, borde = color2, icono =
+   color3. Las variables las escribe el plugin en línea (ver _aplicarColores) y
+   los valores de reserva son los del esquema por defecto (naranja de fondo), de
+   modo que el botón se ve igual aunque no se pase nada.
+
+   El botón no se abre ni se cierra, así que solo hay estado de reposo; el
+   "active" queda declarado por si un visualizador quiere distinguirlo.
+
+   OJO con el selector: hay que llevar la ESTRUCTURA (`.m-areas > div.m-area >
+   div.m-panel`) y no solo las clases del panel. La hoja de la API tampoco se
+   puede leer con cssRules para saber qué selector usa, pero está medido que con
+   el selector plano el fondo no cambia (sigue el azul de la API) y con el
+   estructural sí, porque el de la API es más específico. Mismo patrón que
+   ext/attribution/attribution.css.
    ===================================================================== */
+
+/* El disco de fondo lo pinta el propio panel (medido: es el único elemento del
+   botón con fondo propio; el de dentro es transparente y solo pone el anillo). */
+.m-areas > div.m-area > div.m-panel.m-location.g-controlLocation {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* El anillo y el icono (un glifo de la fuente de iconos de la API) con el color
+   de borde y de icono del esquema. */
+.m-areas > div.m-area > div.m-panel.m-location.g-controlLocation #m-location-button {
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
 
 .m-panel.m-location.g-controlLocation .m-panel-btn {
   display: none !important;

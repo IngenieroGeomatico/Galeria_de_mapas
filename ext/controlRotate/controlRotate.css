@@ -33,10 +33,18 @@
 /* El disco azul que se ve no es el panel, que es transparente, sino el
    contenedor del control que la API crea dentro (#m-rotate-slider-container,
    medido: es lo único de 44x44 con fondo propio). Es en el que se pintan el
-   fondo y el color de los trazos del dial. */
+   fondo y el color de los trazos del dial. Ese selector no necesita estructura
+   porque el contenedor interior no lo estiliza la API con selector estructural. */
 .m-panel.m-rotate.g-controlRotate #m-rotate-slider-container {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* El borde del panel, que tampoco se ve si el selector no lleva la estructura:
+   el de la API es `.m-areas > div.m-area > div.m-panel`, más específico que
+   `.m-panel.m-rotate.g-controlRotate` (medido). */
+.m-areas > div.m-area > div.m-panel.m-rotate.g-controlRotate {
   border-color: var(--g-plugin-border-color, #ffffff) !important;
 }
 
