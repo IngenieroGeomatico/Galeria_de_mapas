@@ -211,7 +211,24 @@
   -webkit-appearance: none;
   margin: 0 !important;
   padding: 0 1px !important;
-  min-width: 3.5em;
+  /* El campo se ajusta a lo que mide SU valor, en vez de a un ancho de sobra.
+     Motivo, medido recorriendo el mapa de este visor de pruebas: el nivel de zoom
+     ocupa 4 o 5 caracteres siempre ("13.88", "28.46"), pero la escala va de 1
+     ("1" en el zoom 28) a 10 ("64.568.500" en el 2.78). Con un ancho fijo de 8
+     caracteres (58 px, lo que medía) sobraban 3 caracteres en los dos campos
+     primeros, que es el aire que se veía de más, y además se truncaba la escala
+     en los zooms bajos, que es justo el valor más grande.
+     `field-sizing` es la forma de que el ancho sea el de la cifra en cada caso:
+     42 px el nivel de zoom y 21 px la escala en el zoom 20.
+     El atributo `size` se queda como reserva para los navegadores que no lo
+     entienden (si no se entendiera, el ancho seria el de `size`, o sea 8
+     caracteres, que es lo de antes: se ve un poco más ancho, pero no se rompe
+     nada). */
+  field-sizing: content;
+  /* Sin suelo: el campo no tiene fondo ni borde, así que un ancho mínimo solo
+     serviría para dejar aire invisible (con `field-sizing` el mínimo es el
+     propio contenido). */
+  min-width: 0;
   /* El número va centrado en su campo (mira el comentario de arriba). */
   text-align: center;
   /* Sin esto el navegador no deja copiar el valor con el ratón. */
