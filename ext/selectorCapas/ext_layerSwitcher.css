@@ -108,13 +108,19 @@
      - fondo  = color1.active  (--g-plugin-bg-color-active)
      - texto  = color2.active  (--g-plugin-border-color-active)
      - borde  = color2.active  (--g-plugin-border-color-active) */
-.m-areas>div.m-area>div.m-panel>button.m-panel-btn {
+/* El selector tiene que llevar la clase del panel (.g-herramienta_selectorCapa).
+   Con el genérico `.m-areas>div.m-area>div.m-panel>button.m-panel-btn` la regla
+   NO gana: medido, el botón sale en el azul de la API (rgb 113,167,211) aunque la
+   variable valga orangered, porque su regla es más específica; en cuanto se le
+   añade la clase del panel, gana el color del constructor. Es el mismo motivo por
+   el que el plugin de calidad del aire escribe su selector así. */
+.m-areas>div.m-area>div.m-panel.g-herramienta_selectorCapa>button.m-panel-btn {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #fff) !important;
   border-color: var(--g-plugin-border-color, #fff) !important;
 }
 
-.m-areas>div.m-area>div.m-panel.opened>button.m-panel-btn {
+.m-areas>div.m-area>div.m-panel.g-herramienta_selectorCapa.opened>button.m-panel-btn {
   background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
   color: var(--g-plugin-border-color-active, #71A7D3) !important;
   border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
