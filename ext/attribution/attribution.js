@@ -301,8 +301,17 @@ class miPlugin_attribution {
       return document.createElement('div');
     };
 
+    // La API usa equals() para decidir qué controles se van al quitar otro, y lo
+    // hace en DOS direcciones distintas:
+    //   - IDEE.ui.Panel.removeControls: controlQuitado.equals(controlDelPanel)
+    //   - impl.removeControls:           controlDelMapa.equals(controlQuitado)
+    // La segunda recorre TODOS los controles del mapa, así que un equals laxo
+    // ("other instanceof IDEE.Control") haría que un solo removePlugins se
+    // llevara por delante los controles de todos los demás plugins. Estricto a
+    // propósito: en ambas llamadas el argumento es el mismo objeto que ya está
+    // en la lista, así que la identidad basta y sobra.
     control.equals = function(other) {
-      return other instanceof IDEE.Control || other === this;
+      return other === this;
     };
 
     // Crear el panel de atribución y asociar el control.
@@ -417,8 +426,11 @@ class miPlugin_attribution {
     control.createView = function() {
       return document.createElement('div');
     };
+    // Mismo criterio estricto que en el control del modo normal (ver arriba): un
+    // equals laxo haría que quitar la atribución se llevara también los
+    // controles de los demás plugins.
     control.equals = function(other) {
-      return other instanceof IDEE.Control || other === this;
+      return other === this;
     };
 
     const panel = new IDEE.ui.Panel('toolsExtra_attribution', {

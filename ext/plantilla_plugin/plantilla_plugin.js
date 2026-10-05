@@ -406,15 +406,25 @@
       this._control = control;
 
       // OBLIGATORIO para que destroy() funcione: la API usa equals() para
-      // distinguir controles al retirarlos del panel y del mapa
-      // (IDEE.ui.Panel.removeControls y el removeControls de la implementación).
-      // Sin este método, destroy() -> map.removeControls() lanza
-      // "e.equals is not a function" y el panel se queda colgado en el mapa
-      // aunque removePlugins() devuelva sin error.
-      // Que sea ESTRICTO importa: un equals laxo del estilo
-      // "other instanceof IDEE.Control" devuelve true para cualquier otro
-      // control, así que al desmontar este plugin la API desregistraría
-      // también los controles de los demás.
+      // distinguir controles al retirarlos del panel y del mapa. Sin este
+      // método, destroy() -> map.removeControls() lanza "e.equals is not a
+      // function" y el panel se queda colgado en el mapa aunque removePlugins()
+      // devuelva sin error (el error lo traga su propio try/catch).
+      //
+      // Que sea ESTRICTO no es un detalle de estilo: la API lo llama en DOS
+      // direcciones distintas, y solo una es evidente.
+      //   - IDEE.ui.Panel.removeControls: controlQuitado.equals(controlDelPanel)
+      //     Solo afecta a los controles de ESE panel.
+      //   - impl.removeControls:           controlDelMapa.equals(controlQuitado)
+      //     Recorre TODOS los controles del mapa, con el orden de argumentos
+      //     invertido, para decidir cuáles conservar.
+      // Esa segunda es la que obliga a la identidad: un equals laxo del estilo
+      // "other instanceof IDEE.Control" da true ante cualquier control, así que
+      // basta con que un control con equals laxo esté en el mapa para que el
+      // primer removePlugins() desregistre los controles de todos los demás
+      // plugins. Con equals estricto no se pierde nada, porque en las dos
+      // llamadas el argumento es siempre el mismo objeto que ya está en la
+      // lista que se está recorriendo.
       control.equals = function (other) {
         return other === this;
       };
