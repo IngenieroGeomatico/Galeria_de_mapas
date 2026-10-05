@@ -89,27 +89,38 @@
   border: 1.6px solid var(--g-plugin-border-color, #ffffff);
   border-radius: 20px;
   box-shadow: rgba(0, 0, 0, 0.2) 0 2px 4px 0, rgba(0, 0, 0, 0.02) 0 -1px 0 0;
-  padding: 4px 10px 3px;
+  /* Relleno simétrico arriba y abajo: no hay razón para que sean distintos y así
+     el texto queda a la misma distancia de los dos bordes de la caja. */
+  padding: 4px 10px;
 }
 
-/* El hueco entre la etiqueta y su número va aquí y no en el texto. Los hijos de
-   una caja flex colapsan el espacio final de su contenido (CSS Text 3, 4.1.1),
-   así que poner "Nivel de zoom " con un espacio detrás no dibuja nada: el
-   navegador se lo come y la etiqueta queda pegada a su número. Con `gap` el
-   espacio se pinta siempre. El `nowrap` es lo que impide que un dato se parta
-   por la mitad al repartirse la tira en dos líneas. */
+/* Cada dato es un bloque corto (etiqueta y número, desplegable, casilla) y no
+   debe partirse por la mitad; lo que baja de línea son datos enteros, nunca un
+   número por un lado y su etiqueta por otro. Por eso el `nowrap` va aquí y no en
+   la caja.
+
+   Y las tres cosas que hacen que las secciones se vean iguales entre sí:
+   `align-items: center` (no `baseline`) para que la etiqueta y su control
+   compartan el MISMO eje aunque tengan distinta altura; `min-height` para que
+   todas las secciones miden lo mismo (medido: sin esto, la del desplegable
+   medía 19 px y la de la casilla 17,3, y sus contenidos quedaban 1,5 y 2 px
+   desplazados del centro de las demás); y un `gap` igual al `column-gap` de la
+   caja, para que el aire sea el mismo dentro de una sección que entre secciones
+   (medido: 3,84 px dentro y 5,04 px entre, que es lo que se veía). */
 .g-mapInfo-dato {
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.32em;
+  align-items: center;
+  gap: 0.42em;
+  min-height: 1.25em;
   white-space: nowrap;
 }
 
 /* La etiqueta va un punto más apagada que el número: separa lo que se lee de lo
    que se está midiendo sin gastar un color nuevo ni un separador más. */
-/* La etiqueta se apaga con opacidad y no con un blanco a medias: así lo que se ve
-   en la caja sigue siendo el color configurado (el de icono) en vez de un blanco
-   fijo que se desmiente en cuanto se cambia el esquema. */
+/* El hueco entre la etiqueta y su número va en el `gap` del dato y no en el
+   texto: los hijos de una caja flex colapsan el espacio final de su contenido
+   (CSS Text 3, 4.1.1), así que poner "Nivel de zoom " con un espacio detrás no
+   dibuja nada. Con `gap` el espacio se pinta siempre. */
 .g-mapInfo-etiqueta {
   font-weight: 400;
   opacity: 0.85;
@@ -151,6 +162,8 @@
    --------------------------------------------------------------------- */
 .g-mapInfo-caja .g-mapInfo-campo {
   box-sizing: border-box;
+  height: 1.25em;
+  line-height: 1.25;
   font-family: inherit !important;
   font-size: inherit !important;
   font-weight: 400 !important;
@@ -206,8 +219,15 @@
    es la forma de decir que ahí no se puede cambiar sin tener que escribir un
    párrafo.
    --------------------------------------------------------------------- */
+/* La caja y el desplegable miden la misma altura que la línea de texto
+   (1.25em, medido: el desplegableaba 19 px frente a los 15 del texto y su
+   etiqueta se quedaba 1,5 px por encima del centro de las otras secciones), y
+   el `line-height` hace que el texto del desplegable quede centrado dentro, que
+   es lo mismo que en los campos de texto. */
 .g-mapInfo-caja .g-mapInfo-selector {
   box-sizing: border-box;
+  height: 1.25em;
+  line-height: 1.25;
   font-family: inherit !important;
   font-size: inherit !important;
   color: inherit !important;
