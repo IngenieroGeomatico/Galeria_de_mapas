@@ -40,6 +40,42 @@
      4.1.1) y no se dibuja, así que "Nivel de zoom " se vería pegado al
      número.
 
+   EDICIÓN A MANO:
+     Los dos valores se pueden escribir y el mapa va allí. En reposo se ven
+     como simples cifras; al pulsar encima se convierten en un campo de texto.
+     El control 'scale*true' de la API hace lo mismo pero con contenteditable,
+     que se ha descartado por tres motivos:
+
+       - no hay teclado numérico en móvil (falta inputmode), ni semántica de
+         min/max/step, ni escalado con las flechas;
+       - admite texto enriquecido, así que un pegado mete marcado dentro;
+       - no valida nada, y la API tampoco: map.setToClosestScale('abc') deja
+         el mapa con getZoom() === NaN, sin resolución y sin recuperación.
+
+     Aquí los valores son <input type="text" inputmode="decimal">, se validan
+     y se topan ANTES de llamar a la API (ver _aplicarTexto), y después de
+     aplicar se relee del mapa lo que ha quedado de verdad, porque la API no
+     acierta siempre: setToClosestScale(50000) deja 49999.
+
+      Lo que se escribe es la misma magnitud que se pinta, así que escribir lo
+     que se lee deja lo que se lee (ver _descorregirPorLatitud). Sin esa vuelta,
+     a 15 grados de latitud el campo enseñaba 25.900 tras escribir 25.000, y
+     reescribir ese 25.900 se iba a 26.826.
+
+   TRANSICIÓN:
+     Un salto de golpe al escribir un número queda brusco, así que en 2D se
+     anima con la propia vista de OpenLayers (view.animate, 550 ms, curva
+     easeOut) y no con map.setZoom(), que salta. Para la escala se anima la
+     resolución, que es lo que la vista sabe interpolar: la equivalente a una
+     escala nominal es escala * 0,0254/72 (ver M_POR_PX_API, con el pie de que
+     la API publica su escala midiendo el píxel a 72 dpi y no a los 96 con los
+     que aquí se calcula la de 3D). Por eso no se usa setToClosestScale(), que
+     además no devuelve nada.
+
+     En 3D no hay vista que animar y la cámara no tiene transición de altura:
+     el cambio es instantáneo, aunque se conservan el rumbo y la inclinación
+     (ver _fijarAlturaCamara).
+
    CONVENCIONES:
    1. Resolvedor dual de la API (window.IDEE || window.M) mediante api(),
       eligiendo el global que tenga la API REALMENTE cargada (.ui y .map).
@@ -65,10 +101,28 @@
   const SEMI_MAYOR_3857 = 20037508.342789244;
   /** Límite de latitud de la proyección de Mercator. */
   const LAT_MAX_MERCATOR = 85;
+  /** Metros por píxel con los que PUBLICA la API su escala: 0,0254 / 72.
+   *
+   * Ojo: la API mide el píxel a 72 dpi cuando publica la escala, no a los 96 dpi
+   * con los que este plugin calcula la de 3D. Comprobado a pelo:
+   * resolución = escala * 0,0254/72 en 1:5.000 (1,76389), 1:25.000 (8,81944),
+   * 1:100.000 (35,2778) y 1:500.000 (176,389). Con 96 dpi saldría un 33% mayor.
+   * De aquí sale la resolución a la que hay que ir para escribir una escala. */
+  const M_POR_PX_API = 0.0254 / 72;
+  /** Duración de la transición al escribir un valor, en ms. */
+  const DURACION_TRANSICION = 550;
   /** Campo de visión por defecto de la cámara de Cesium (rad). */
   const FOV_POR_DEFECTO = Math.PI / 3;
   /** Tope de espera (ms) para que aparezca la escena de Cesium. */
   const ESPERA_ESCENA = 12000;
+  /** Ancho en caracteres de los campos de texto, para que el ancho no baile. */
+  const ANCHO_CARACTERES = 8;
+  /** Rangos admitidos de la escala 1:n. Cubre de sobra los zooms 0-28. */
+  const ESCALA_MINIMA = 1;
+  const ESCALA_MAXIMA = 1e9;
+  /** Rango de altura de cámara admitido en 3D (m). */
+  const ALTURA_MINIMA = 1;
+  const ALTURA_MAXIMA = 2e7;
 
   /**
    * Resuelve el objeto global de la API cartográfica realmente cargada.
@@ -122,6 +176,17 @@
       this._listenersCesium = [];
       this._esperaEscena = null;
 
+      // Estado de la edición a mano: qué campo se está escribiendo y si el
+      // último cambio de foco debe descartarse en vez de aplicarse.
+      this._campoEditando = null;
+      this._descartar = null;
+      this._textoAlEntrar = null;
+      this._timerRechazo = null;
+      // Último número calculado para cada campo, para poder escalonar con las
+      // flechas partiendo del valor real y no del texto.
+      this._ultimoPrincipal = null;
+      this._ultimoEscala = null;
+
       // Configuración.
       this._visible = (options.visible !== undefined) ? Boolean(options.visible) : true;
       this._useArea = (options.useArea !== undefined) ? Boolean(options.useArea) : true;
@@ -143,7 +208,17 @@
             'de la cámara en la visualización 3D.</p>' +
             '<p>El valor se actualiza automáticamente al desplazarse o cambiar ' +
             'de zoom el mapa. En 3D la escala es la del punto mirado: al haber ' +
-            'perspectiva, no es una constante en toda la vista.</p></div>';
+            'perspectiva, no es una constante en toda la vista.</p>' +
+            '<p>Los dos valores se pueden escribir: pulse sobre el número, ' +
+            'escriba el nuevo nivel de zoom o la nueva escala (1:n) y pulse ' +
+            'Intro. La vista se desplaza con una transición suave, no de golpe. ' +
+            'Se admite la escala con o sin el 1: delante (25000, 1:25000 o ' +
+            '1 : 25.000) y con coma o punto decimal. Escape deshace. Con Alt y ' +
+            'las flechas se salta de diez en diez.</p>' +
+            '<p>La escala que se escribe es la del suelo, la misma que se ve: ' +
+            'en 2D se corrige por la latitud, porque en Mercator un metro del ' +
+            'plano son menos metros de suelo cuanto más al norte. Por eso la ' +
+            'que publica la API sale distinta.</p></div>';
           if (IDEE && IDEE.utils && typeof IDEE.utils.stringToHtml === 'function') {
             try {
               html = IDEE.utils.stringToHtml(html);
@@ -289,16 +364,16 @@
      * Crea el DOM de la lectura: una caja con el dato principal, un separador
      * y la escala. Se parezca lo que se parezca al control 'scale*true' de la
      * API, porque es su sustituto visual.
+     *
+     * Los dos valores son campos de texto, no cifras: hasta que no se pulse
+     * encima se comportan como texto plano (el CSS les quita fondo y borde),
+     * y entonces sirven para escribir el nivel de zoom o la escala a mano.
      * @returns {HTMLElement} Contenedor creado.
      */
     _construirUI() {
       const cont = document.createElement('div');
       cont.className = 'g-controlScale';
-      // Es una lectura: nunca debe robar el clic ni el arrastre al mapa.
-      cont.setAttribute('role', 'status');
-      cont.setAttribute('aria-live', 'polite');
-      cont.setAttribute('aria-label', 'Escala y nivel de vista');
-      cont.title = 'Escala y nivel de vista del mapa';
+      cont.title = 'Escala y nivel de vista del mapa. Púlsalo para escribirlos a mano.';
 
       const caja = document.createElement('div');
       caja.className = 'g-controlScale-caja';
@@ -312,9 +387,7 @@
       const etiqueta = document.createElement('span');
       etiqueta.className = 'g-controlScale-etiqueta';
       etiqueta.textContent = 'Nivel de zoom';
-      const valor = document.createElement('span');
-      valor.className = 'g-controlScale-valor';
-      valor.textContent = '-';
+      const valor = this._crearCampo('Nivel de zoom');
       principal.appendChild(etiqueta);
       principal.appendChild(valor);
 
@@ -328,9 +401,7 @@
       const unidad = document.createElement('span');
       unidad.className = 'g-controlScale-etiqueta';
       unidad.textContent = 'Escala = 1 :';
-      const valorEscala = document.createElement('span');
-      valorEscala.className = 'g-controlScale-valor';
-      valorEscala.textContent = '-';
+      const valorEscala = this._crearCampo('Escala');
       escala.appendChild(unidad);
       escala.appendChild(valorEscala);
 
@@ -347,6 +418,42 @@
     }
 
     /**
+     * Crea uno de los dos campos editables de la lectura.
+     *
+     * Se usa type="text" y no type="number" a propósito: el primero deja
+     * escribir lo que la API formatea en español ("44.248") y lo normaliza
+     * este plugin, mientras que el segundo descarta en silencio lo que no
+     * entiende y trae problemas con el separador decimal según el navegador.
+     * El teclado numérico en móvil lo aporta inputmode.
+     *
+     * El contenedor ya no es una región viva (aria-live): ahora contiene
+     * controles de formulario, y una región viva no debe anunciar en cada
+     * fotograma de un desplazamiento. Cada campo lleva su propia etiqueta.
+     * @param {string} nombre Etiqueta accesible del campo.
+     * @returns {HTMLInputElement} Campo creado.
+     */
+    _crearCampo(nombre) {
+      const campo = document.createElement('input');
+      campo.type = 'text';
+      campo.className = 'g-controlScale-valor g-controlScale-campo';
+      campo.inputMode = 'decimal';
+      campo.autocomplete = 'off';
+      campo.spellcheck = false;
+      campo.size = ANCHO_CARACTERES;
+      campo.value = '-';
+      campo.setAttribute('aria-label', nombre);
+      campo.title = 'Pulsa para escribirlo a mano. Intro aplica, Escape cancela.';
+
+      // Al pulsar se entra en edición; al perder el foco se aplica (o se
+      // descarta, si antes se pulsó Escape).
+      this._on(campo, 'focus', function () { this._alEntrarEnEdicion(campo); }.bind(this));
+      this._on(campo, 'blur', function () { this._alPerderFoco(campo); }.bind(this));
+      this._on(campo, 'keydown', function (ev) { this._alPulsarTecla(campo, ev); }.bind(this));
+
+      return campo;
+    }
+
+    /**
      * Escribe un valor en un nodo sin repetir el texto (evita reflows).
      * @param {HTMLElement} nodo Nodo destino.
      * @param {string} texto Texto a escribir.
@@ -357,13 +464,545 @@
     }
 
     /**
+     * Escribe el contenido de uno de los dos campos editables.
+     *
+     * Si el campo se está editando no se toca: si no, cada refresco del mapa
+     * (y hay uno por cada cambio de la vista) le borraría al usuario lo que
+     * acaba de teclear, con la sensación de que el campo no acepta el teclado.
+     * @param {HTMLInputElement} campo Campo destino.
+     * @param {string} texto Texto a escribir.
+     */
+    _pintarCampo(campo, texto) {
+      if (!campo) return;
+      if (campo === this._campoEditando) return;
+      if (campo.value === texto) return;
+      campo.value = texto;
+    }
+
+    /**
+     * Convierte lo que ha escrito el usuario en un número.
+     *
+     * Tiene que deshacer dos cosas: el formato español con punto de millar
+     * ("44.248", que es lo que pinta este mismo plugin) y la costumbre de
+     * escribir la escala como cociente ("1:50000" o "1 : 50.000"). Con un
+     * punto delante puede ser un millar o un decimal, y se decide por la forma:
+     * si el texto encaja en d{1,3}(.d{3})+ son millares; si no, decimal.
+     * @param {string} texto Texto escrito por el usuario.
+     * @returns {number|null} El número, o null si no hay uno válido.
+     */
+    _parsearNumero(texto) {
+      if (typeof texto !== 'string') return null;
+      let t = texto.trim();
+      if (!t) return null;
+
+      // "1 : 50.000", que es como la propia lectura presenta la escala.
+      const cociente = /^1\s*[:/]\s*(\d.*)$/.exec(t);
+      if (cociente) t = cociente[1];
+
+      // Se quitan espacios (tb. los finos) y apóstrofos de millar.
+      t = t.replace(/[\s\u00a0\u202f']/g, '');
+
+      // "50000:1" también vale.
+      const reves = /^(\d[\d.]*):1$/.exec(t);
+      if (reves) t = reves[1];
+
+      // La unidad que la lectura escribe en 3D ("5200 m"): si el usuario
+      // selecciona el valor y pulsa Intro sin más, tiene que contar como válido.
+      t = t.replace(/m$/i, '');
+
+      const millares = /^\d{1,3}(\.\d{3})+$/.test(t);
+      const decimal = /^\d+([.,]\d+)?$/.test(t);
+
+      let n;
+      if (millares) {
+        n = Number(t.replace(/\./g, ''));
+      } else if (decimal) {
+        n = Number(t.replace(',', '.'));
+      } else {
+        // 'abc', '-', '1e12': aquí no se admiten notaciones raras.
+        return null;
+      }
+      return isFinite(n) ? n : null;
+    }
+
+    /**
+     * Rango de zoom con el que se acota lo que se escribe.
+     *
+     * Se pregunta primero a la vista de OL y después al facade de la API, que
+     * es el que se usa de reserva. El tope de arriba sí es de fiar en los dos
+     * sitios (28 en estos mapas), y es donde está el riesgo real de escribir
+     * 999999.
+     *
+     * El de abajo NO lo es, y conviene saberlo: getMinZoom() devuelve 0 tanto
+     * en la vista como en el facade, pero escribir 0 no deja el mapa en 0, lo
+     * deja en 2,32, que es su mínimo real y lo impone la lista de resoluciones
+     * por dentro, no el atributo. Como getResolutions() tampoco está publicado,
+     * ese suelo no se puede leer de antemano. No pasa nada: se acota a lo que
+     * diga el atributo, la vista corrige sola y, como el refresco escucha a la
+     * vista, el campo acaba enseñando el 2,32 de verdad.
+     * @returns {{min: number, max: number}} Rango leído de la vista o de la API.
+     */
+    _rangoZoom() {
+      let min = null;
+      let max = null;
+      const mapa = this._map;
+
+      try {
+        const vista = this._vistaOL();
+        if (vista) {
+          if (typeof vista.getMinZoom === 'function') {
+            const v = Number(vista.getMinZoom());
+            if (isFinite(v)) min = v;
+          }
+          if (typeof vista.getMaxZoom === 'function') {
+            const v = Number(vista.getMaxZoom());
+            if (isFinite(v)) max = v;
+          }
+        }
+      } catch (e) {
+        /* se prueba con la API */
+      }
+
+      if (min === null || max === null) {
+        try {
+          if (min === null && mapa && typeof mapa.getMinZoom === 'function') {
+            const v = Number(mapa.getMinZoom());
+            if (isFinite(v)) min = v;
+          }
+          if (max === null && mapa && typeof mapa.getMaxZoom === 'function') {
+            const v = Number(mapa.getMaxZoom());
+            if (isFinite(v)) max = v;
+          }
+        } catch (e) {
+          /* valores por defecto */
+        }
+      }
+
+      return {
+        min: (min === null) ? 0 : min,
+        max: (max === null) ? 28 : max,
+      };
+    }
+
+    /**
+     * Acota un valor a un rango.
+     * @param {number} valor Valor pedido.
+     * @param {number} min Mínimo admitido.
+     * @param {number} max Máximo admitido.
+     * @returns {number|null} El valor acotado, o null si no es un número.
+     */
+    _acotar(valor, min, max) {
+      if (!isFinite(valor)) return null;
+      let n = valor;
+      if (isFinite(min) && n < min) n = min;
+      if (isFinite(max) && n > max) n = max;
+      return n;
+    }
+
+    /**
+     * Último número que el plugin ha calculado para un campo, para poder
+     * escalonar con las flechas partiendo de él.
+     * @param {HTMLInputElement} campo Campo de la lectura.
+     * @returns {number|null} El número, o null si no se sabe.
+     */
+    _valorNumerico(campo) {
+      if (campo === this._elValor) return this._ultimoPrincipal;
+      if (campo === this._elUnidad) return this._ultimoEscala;
+      return null;
+    }
+
+    // ---------------------------------------------------------------------
+    // EDICIÓN A MANO
+    // ---------------------------------------------------------------------
+
+    /**
+     * El usuario ha pulsado dentro de un campo: se selecciona todo el texto
+     * para que al escribir se sustituya la lectura en lugar de añadirse.
+     * @param {HTMLInputElement} campo Campo enfocado.
+     */
+    _alEntrarEnEdicion(campo) {
+      if (!campo || this._campoEditando === campo) return;
+      this._campoEditando = campo;
+      // Se apunta con qué texto se entra, porque la lectura que se pinta es la
+      // escala YA CORREGIDA por la latitud y setToClosestScale() espera la
+      // nominal: si alguien selecciona el valor y pulsa Intro sin escribir
+      // nada, aplicarlo cambiaría la escala sin que nadie hubiera tocado nada.
+      this._textoAlEntrar = campo.value;
+      campo.classList.add('g-controlScale-campo--editando');
+      try {
+        campo.select();
+      } catch (e) {
+        /* silencioso */
+      }
+    }
+
+    /**
+     * Teclado dentro de un campo: Intro aplica, Escape deshace y las flechas
+     * escalonan de valor en valor (con Alt, de diez en diez).
+     * @param {HTMLInputElement} campo Campo enfocado.
+     * @param {KeyboardEvent} ev Evento de teclado.
+     */
+    _alPulsarTecla(campo, ev) {
+      if (!campo || !ev) return;
+      const tecla = ev.key;
+      if (tecla === 'Escape') {
+        ev.preventDefault();
+        this._descartar = campo;
+        try { campo.blur(); } catch (e) { /* silencioso */ }
+        return;
+      }
+      if (tecla === 'Enter') {
+        ev.preventDefault();
+        // Quitar el foco es lo que dispara la confirmación; se centraliza ahí
+        // para no tener dos caminos distintos al mismo sitio.
+        try { campo.blur(); } catch (e) { /* silencioso */ }
+        return;
+      }
+      if (tecla === 'ArrowUp' || tecla === 'ArrowDown') {
+        const salto = ev.altKey ? 10 : 1;
+        const escrito = this._parsearNumero(campo.value);
+        const base = (escrito === null) ? this._valorNumerico(campo) : escrito;
+        if (base === null) return;
+        ev.preventDefault();
+        campo.value = String(base + ((tecla === 'ArrowUp') ? salto : -salto));
+        try {
+          const fin = campo.value.length;
+          campo.setSelectionRange(fin, fin);
+        } catch (e) {
+          /* silencioso */
+        }
+      }
+    }
+
+    /**
+     * El campo ha perdido el foco: se aplica lo escrito, salvo que el usuario
+     * haya pulsado Escape antes.
+     * @param {HTMLInputElement} campo Campo que pierde el foco.
+     */
+    _alPerderFoco(campo) {
+      if (!campo) return;
+      const descartado = (this._descartar === campo);
+      this._descartar = null;
+      this._cerrarEdicion(campo, !descartado);
+    }
+
+    /**
+     * Termina la edición de un campo y repinta la lectura.
+     * @param {HTMLInputElement} campo Campo editado.
+     * @param {boolean} aplicar true para aplicar lo escrito, false para
+     *   dejarlo como estaba.
+     */
+    _cerrarEdicion(campo, aplicar) {
+      if (!campo) return;
+      const sinCambiar = (campo.value === this._textoAlEntrar);
+      if (aplicar && !sinCambiar) this._aplicarTexto(campo, campo.value);
+      if (this._campoEditando === campo) {
+        this._campoEditando = null;
+        this._textoAlEntrar = null;
+        campo.classList.remove('g-controlScale-campo--editando');
+      }
+      this._actualizar();
+    }
+
+    /**
+     * Traduce el texto de un campo a la acción que corresponde sobre el mapa.
+     * @param {HTMLInputElement} campo Campo editado.
+     * @param {string} texto Texto escrito por el usuario.
+     */
+    _aplicarTexto(campo, texto) {
+      const numero = this._parsearNumero(texto);
+      if (numero === null) {
+        this._rechazar(campo);
+        return;
+      }
+      if (campo === this._elValor) {
+        this._aplicarPrincipal(numero);
+      } else if (campo === this._elUnidad) {
+        this._aplicarEscala(numero);
+      }
+    }
+
+    /**
+     * Aplica el dato principal: el nivel de zoom en 2D, la altura de la
+     * cámara en 3D.
+     * @param {number} numero Valor pedido.
+     */
+    _aplicarPrincipal(numero) {
+      if (this._es3D(this._map)) {
+        const metros = this._acotar(numero, ALTURA_MINIMA, ALTURA_MAXIMA);
+        if (metros === null) {
+          this._rechazar(this._elValor);
+          return;
+        }
+        this._fijarAlturaCamara(metros);
+        return;
+      }
+      const rango = this._rangoZoom();
+      const nivel = this._acotar(numero, rango.min, rango.max);
+      if (nivel === null) {
+        this._rechazar(this._elValor);
+        return;
+      }
+      this._irAZoom(nivel);
+    }
+
+    /**
+     * Lleva la escala 1:n a la que se le escriba.
+     * @param {number} numero Denominador pedido.
+     */
+    _aplicarEscala(numero) {
+      const escala = this._acotar(numero, ESCALA_MINIMA, ESCALA_MAXIMA);
+      if (escala === null) {
+        this._rechazar(this._elUnidad);
+        return;
+      }
+      this._irAEscala(escala);
+    }
+
+    /**
+     * Lleva la vista a un nivel de zoom con transición.
+     *
+     * Un salto de golpe al escribir un número queda muy brusco, así que se
+     * anima con la propia vista de OpenLayers (view.animate), que trae una
+     * curva easeOut suave y además cancela la animación anterior si el usuario
+     * escribe otra cosa mientras corre.
+     *
+     * map.setZoom() se deja como recurso: si no hay vista (3D) o si animate()
+     * no existe en esta versión de la API, se va directo a él.
+     * @param {number} nivel Nivel de zoom pedido.
+     */
+    _irAZoom(nivel) {
+      const vista = this._vistaOL();
+      if (!vista || typeof vista.animate !== 'function') {
+        try {
+          if (this._map && typeof this._map.setZoom === 'function') {
+            this._map.setZoom(nivel);
+          }
+        } catch (e) {
+          this._rechazar(this._elValor);
+        }
+        return;
+      }
+      try {
+        vista.animate({ zoom: nivel, duration: DURACION_TRANSICION });
+      } catch (e) {
+        try {
+          if (this._map && typeof this._map.setZoom === 'function') {
+            this._map.setZoom(nivel);
+          }
+        } catch (e2) {
+          this._rechazar(this._elValor);
+        }
+      }
+    }
+
+    /**
+     * Lleva la vista a una escala 1:n con transición.
+     *
+     * No se usa map.setToClosestScale() porque salta y no devuelve nada, y
+     * porque aquí ya está el dato: la resolución equivalente a una escala
+     * nominal es escala * 0,0254/72 (ver M_POR_PX_API). Con eso se anima la
+     * resolución, que es lo que la vista sabe interpolar.
+     *
+     * El número que se escribe es la escala sobre el suelo, la misma que se
+     * pinta, así que en 2D se deshace antes la corrección por latitud. En 3D no
+     * hay vista que animar y la escala es una distancia real, así que se
+     * convierte a altura de cámara (_alturaParaEscala3D) y se aplica por la
+     * misma vía que la altura.
+     * @param {number} escala Denominador pedido, sobre el suelo.
+     */
+    _irAEscala(escala) {
+      // En 3D no hay vista de OL que animar: se cambia la altura de la cámara,
+      // que es el equivalente de la escala ahí.
+      if (this._es3D(this._map)) {
+        const altura = this._alturaParaEscala3D(escala);
+        if (altura === null) {
+          this._rechazar(this._elUnidad);
+          return;
+        }
+        this._fijarAlturaCamara(this._acotar(altura, ALTURA_MINIMA, ALTURA_MAXIMA));
+        return;
+      }
+      // Lo que se escribe es la escala sobre el suelo, la misma que se pinta,
+      // así que se deshace antes la corrección por latitud.
+      const resolucion = this._descorregirPorLatitud(escala) * M_POR_PX_API;
+      const vista = this._vistaOL();
+      if (!vista || typeof vista.animate !== 'function') {
+        try {
+          if (this._map && typeof this._map.setToClosestScale === 'function') {
+            this._map.setToClosestScale(this._descorregirPorLatitud(escala));
+          }
+        } catch (e) {
+          this._rechazar(this._elUnidad);
+        }
+        return;
+      }
+      if (!isFinite(resolucion) || resolucion <= 0) {
+        this._rechazar(this._elUnidad);
+        return;
+      }
+      try {
+        vista.animate({ resolution: resolucion, duration: DURACION_TRANSICION });
+      } catch (e) {
+        try {
+          if (this._map && typeof this._map.setToClosestScale === 'function') {
+            this._map.setToClosestScale(this._descorregirPorLatitud(escala));
+          }
+        } catch (e2) {
+          this._rechazar(this._elUnidad);
+        }
+      }
+    }
+
+    /**
+     * Altura de la cámara que corresponde a una escala 1:n en 3D.
+     *
+     * Se deduce de la propia fórmula que usa _escala3D(): metros por píxel =
+     * escala * M_POR_PX, y a la vez = 2 * altura * tan(fov/2) / alto_del_lienzo.
+     * Despejando la altura queda lo de abajo. Se invierte así, y no llamando a
+     * setToClosestScale(), porque la fórmula de lectura es nuestra y es la que
+     * garantiza que escribir lo que se lee deja lo que se lee.
+     * @param {number} escala Denominador 1:n sobre el suelo.
+     * @returns {number|null} Altura en metros, o null si falta la escena.
+     */
+    _alturaParaEscala3D(escala) {
+      try {
+        const escena = this._escenaCesium();
+        if (!escena || !escena.camera) return null;
+        let fov = FOV_POR_DEFECTO;
+        if (escena.camera.frustum && isFinite(escena.camera.frustum.fov)) {
+          fov = escena.camera.frustum.fov;
+        }
+        const lienzo = escena.canvas;
+        let alto = (lienzo && lienzo.clientHeight) ? lienzo.clientHeight : 0;
+        if (!alto && escena.container && escena.container.clientHeight) {
+          alto = escena.container.clientHeight;
+        }
+        if (!alto || !isFinite(alto) || alto <= 0) return null;
+        const altura = (escala * M_POR_PX * alto) / (2 * Math.tan(fov / 2));
+        return (isFinite(altura) && altura > 0) ? altura : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Lleva la cámara de Cesium a una altura sobre el elipsoide.
+     *
+     * Conserva el rumbo y la inclinación: se relee la posición geodésica actual,
+     * se cambia solo la altura y se vuelve a montar la cámara con la misma
+     * orientación. Eso es lo que quiere quien escribe una altura (acercar o
+     * alejar sin perder de vista a dónde mira), y no que la cámara se gire de
+     * golpe al norte. Por eso se usa camera.setView() con orientation en vez
+     * de tocar camera.position: setView() trabaja en coordenadas de mundo,
+     * que es donde están las coordenadas geodésicas, y respeta el marco de
+     * referencia que pueda tener la escena.
+     *
+     * OJO con la firma de Cesium: Cartesian3.fromRadians() NO admite un
+     * Cartographic entero, sino longitud, latitud y altura sueltas. Pasándole
+     * el objeto entero revienta con "Expected longitude to be typeof number,
+     * actual typeof was object", el try se traga el error y la cámara se queda
+     * donde estaba sin decir nada, que es como se vio el fallo.
+     * @param {number} metros Altura pedida sobre el elipsoide.
+     */
+    _fijarAlturaCamara(metros) {
+      const camara = this._camaraCesium();
+      if (!camara) return;
+      const Cesium = window.Cesium;
+      if (!Cesium || !Cesium.Cartographic || !Cesium.Cartesian3 || !Cesium.Ellipsoid) {
+        this._rechazar(this._elValor);
+        return;
+      }
+      try {
+        const elipsoide = this._elipsoideCesium(camara);
+        const carto = Cesium.Cartographic.fromCartesian(camara.positionWC, elipsoide);
+        if (!carto) {
+          this._rechazar(this._elValor);
+          return;
+        }
+        const destino = Cesium.Cartesian3.fromRadians(
+          carto.longitude, carto.latitude, metros, elipsoide, new Cesium.Cartesian3()
+        );
+        camara.setView({
+          destination: destino,
+          orientation: { heading: camara.heading, pitch: camara.pitch, roll: camara.roll }
+        });
+      } catch (e) {
+        this._rechazar(this._elValor);
+      }
+    }
+
+    /**
+     * Elipsoide con el que anda la escena de Cesium.
+     *
+     * Ni la cámara ni su frustum lo tienen (comprobado), así que se busca en el
+     * globo y en la proyección del mapa antes de recurrir al WGS84, que es lo
+     * que se usa siempre aquí.
+     * @param {Object} camara Cámara de Cesium.
+     * @returns {Object} Elipsoide de Cesium.
+     */
+    _elipsoideCesium(camara) {
+      const Cesium = window.Cesium;
+      const candidatas = [
+        (camara && camara.frustum) ? camara.frustum.ellipsoid : null,
+        (this._escenaCesium() || {}).globe,
+        (this._escenaCesium() || {}).mapProjection,
+        Cesium.Ellipsoid.WGS84
+      ];
+      for (let i = 0; i < candidatas.length; i++) {
+        const elipsoide = candidatas[i] && candidatas[i].ellipsoid
+          ? candidatas[i].ellipsoid : candidatas[i];
+        if (elipsoide && typeof elipsoide.cartographicToCartesian === 'function') {
+          return elipsoide;
+        }
+      }
+      return Cesium.Ellipsoid.WGS84;
+    }
+
+    /**
+     * Avisa de que lo escrito no vale y deja el campo como estaba.
+     *
+     * El mapa no se toca nunca en este camino, y es a propósito: la API no
+     * valida y setToClosestScale('abc') deja el mapa con getZoom() === NaN,
+     * es decir, sin resolución y sin manera de volver.
+     * @param {HTMLInputElement} campo Campo con un valor no válido.
+     */
+    _rechazar(campo) {
+      if (!campo) return;
+      campo.classList.remove('g-controlScale-campo--rechazado');
+      // Hay que forzar un reflow para que al volver a añadir la clase la
+      // animación se ejecute otra vez en vez de no hacer nada.
+      try { void campo.offsetWidth; } catch (e) { /* silencioso */ }
+      campo.classList.add('g-controlScale-campo--rechazado');
+      // Y un temporizador para quitar elAviso, que si se queda puesto parece
+      // un resaltado permanente.
+      if (this._timerRechazo) window.clearTimeout(this._timerRechazo);
+      this._timerRechazo = window.setTimeout(function () {
+        campo.classList.remove('g-controlScale-campo--rechazado');
+      }, 700);
+    }
+
+    /**
+     * Vista de OpenLayers, que es la que avisa de los cambios y la que sabe
+     * animar el zoom. En Cesium no existe (getView() da undefined).
+     * @returns {Object|null} Instancia de ol.View, o null en 3D.
+     */
+    _vistaOL() {
+      try {
+        const impl = this._impl();
+        return (impl && typeof impl.getView === 'function') ? impl.getView() : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
      * Proyección en la que está el mapa.
      * @returns {string} Código de la proyección ('EPSG:3857', 'EPSG:4326'...).
      */
     _proyeccion() {
       try {
-        const impl = this._impl();
-        const vista = impl && typeof impl.getView === 'function' ? impl.getView() : null;
+        const vista = this._vistaOL();
         if (vista && typeof vista.getProjection === 'function') {
           const proyeccion = vista.getProjection();
           if (proyeccion && typeof proyeccion.getCode === 'function') {
@@ -433,6 +1072,28 @@
     }
 
     /**
+     * Operación inversa de _corregirPorLatitud(): de la escala sobre el suelo
+     * a la escala nominal con la que publica la API.
+     *
+     * Hace falta al escribir una escala, para que el número que se ve en el
+     * campo y el número que se escribe coincidan. Sin esta corrección, a 15
+     * grados de latitud el campo enseña 25.900 tras escribir 25.000, y
+     * reescribir ese 25.900 se iba a 26.826: el control se contradecía a sí
+     * mismo y no era idempotente. Con ella, escribir lo que se lee deja lo que
+     * se lee.
+     * @param {number} escala Escala 1:n sobre el suelo, tal y como se pinta.
+     * @returns {number} Escala nominal 1:n que espera la API.
+     */
+    _descorregirPorLatitud(escala) {
+      const latitud = this._latitudCentro();
+      if (latitud === null) return escala;
+      const coseno = Math.cos(latitud * Math.PI / 180);
+      if (!isFinite(coseno) || coseno <= 0.05) return escala;
+      const nominal = escala * coseno;
+      return (isFinite(nominal) && nominal > 0) ? nominal : escala;
+    }
+
+    /**
      * Refresca la lectura cuando cambia la vista de OpenLayers.
      *
      * Los eventos de la API (evt.MOVE) solo avisan de los gestos del usuario:
@@ -444,8 +1105,7 @@
      */
     _vigilarVistaOL() {
       try {
-        const impl = this._impl();
-        const vista = impl && typeof impl.getView === 'function' ? impl.getView() : null;
+        const vista = this._vistaOL();
         if (!vista || typeof vista.addEventListener !== 'function') return;
         const self = this;
         const alCambiar = function () { self._actualizar(); };
@@ -557,7 +1217,9 @@
       if (es3D) {
         this._pintar(this._elEtiqueta, 'Altura de la vista');
         const altura = this._altura3D();
-        this._pintar(this._elValor, (altura === null) ? '-'
+        this._ultimoPrincipal = altura;
+        this._etiquetarCampo(this._elValor, 'Altura de la cámara en metros');
+        this._pintarCampo(this._elValor, (altura === null) ? '-'
           : this._formatear(altura) + ' m');
       } else {
         this._pintar(this._elEtiqueta, 'Nivel de zoom');
@@ -569,14 +1231,30 @@
         } catch (e) {
           nivel = null;
         }
+        if (nivel !== null && !isFinite(nivel)) nivel = null;
+        this._ultimoPrincipal = nivel;
+        this._etiquetarCampo(this._elValor, 'Nivel de zoom');
         // Con punto decimal, como el control 'scale*true' de la API, para que
         // el nivel se lea igual que en los visizadores originales.
-        this._pintar(this._elValor, (nivel === null || !isFinite(nivel))
+        this._pintarCampo(this._elValor, (nivel === null)
           ? '-' : Number(nivel).toFixed(2));
       }
 
       const escala = es3D ? this._escala3D() : this._escala2D();
-      this._pintar(this._elUnidad, (escala === null) ? '-' : this._formatear(escala));
+      this._ultimoEscala = escala;
+      this._etiquetarCampo(this._elUnidad, 'Denominador de la escala, 1 : n');
+      this._pintarCampo(this._elUnidad, (escala === null) ? '-' : this._formatear(escala));
+    }
+
+    /**
+     * Cambia la etiqueta accesible de un campo si ha cambiado de significado.
+     * @param {HTMLInputElement} campo Campo a etiquetar.
+     * @param {string} texto Etiqueta a poner.
+     */
+    _etiquetarCampo(campo, texto) {
+      if (!campo) return;
+      if (campo.getAttribute('aria-label') === texto) return;
+      campo.setAttribute('aria-label', texto);
     }
 
     /**
@@ -744,6 +1422,11 @@
         if (window.clearTimeout) window.clearTimeout(this._esperaEscena);
         this._esperaEscena = null;
       }
+
+      if (this._timerRechazo) {
+        if (window.clearTimeout) window.clearTimeout(this._timerRechazo);
+        this._timerRechazo = null;
+      }
     }
 
     // =====================================================================
@@ -833,6 +1516,12 @@
       this._elEtiqueta = null;
       this._elValor = null;
       this._elUnidad = null;
+      this._campoEditando = null;
+      this._descartar = null;
+      this._textoAlEntrar = null;
+      this._timerRechazo = null;
+      this._ultimoPrincipal = null;
+      this._ultimoEscala = null;
       this._area = null;
       this._host = null;
       this._map = null;

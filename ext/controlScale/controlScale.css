@@ -66,6 +66,85 @@
 }
 
 /* ---------------------------------------------------------------------
+   Los dos campos editables.
+
+   El contenedor tiene `pointer-events: none` y `user-select: none` para no
+   robarle el clic ni el arrastre al mapa, así que hay que devolvérselos aquí
+   a los campos: sin esto no serían clicables y la edición a mano no existiría.
+
+   En reposo el campo tiene que verse como una cifra más de la lectura, así que
+   va sin fondo, sin borde y con la misma fuente. El atributo `size` del input
+   fija un ancho constante (ANCHO_CARACTERES en el JS) para que el control no
+   baile de lado cuando el valor pasa de "13.34" a "2.652.520".
+
+   OJO con el !important de aquí abajo: es necesario, no descuidado. El CSS de
+   la API (apiidee.ol.min.css) da borde a los input y gana a estas reglas, y
+   además esa hoja no se puede leer con cssRules desde la consola, así que no
+   hay forma de saber con qué selector lo hace ni de dejarle de ganar.
+   Comprobado: sin !important el campo se ve con un recuadro negro de 1 px.
+
+   --------------------------------------------------------------------- */
+.g-controlScale-caja .g-controlScale-campo {
+  box-sizing: border-box;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: 400 !important;
+  line-height: inherit !important;
+  color: inherit !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0 !important;
+  padding: 0 1px !important;
+  min-width: 3.5em;
+  text-align: left;
+  /* Sin esto el navegador no deja copiar el valor con el ratón. */
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+/* Pista de que el número se puede escribir: subrayado al pasar por encima.
+   Se usa text-decoration y no un borde porque un borde desplazaría el texto
+   respecto de la etiqueta al aparecer. */
+.g-controlScale-caja .g-controlScale-campo:hover {
+  text-decoration: underline dotted rgba(255, 255, 255, 0.65);
+  text-underline-offset: 3px;
+}
+
+/* Editando: fondo claro y sin subrayado. */
+.g-controlScale-caja .g-controlScale-campo--editando {
+  background: rgba(255, 255, 255, 0.22);
+  text-decoration: none;
+  outline: none;
+}
+
+/* El foco de teclado se marca, para no perder la accesibilidad al quitar el
+   marco por defecto. */
+.g-controlScale-caja .g-controlScale-campo:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 1px;
+}
+
+/* Valor no válido: una sacudida y un fondo breve. La clase la quita el
+   temporizador de _rechazar(). */
+@keyframes g-controlScale-rechazo {
+  0%   { transform: translateX(0); }
+  25%  { transform: translateX(-3px); }
+  75%  { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}
+
+.g-controlScale-caja .g-controlScale-campo--rechazado {
+  animation: g-controlScale-rechazo 220ms ease-in-out 1;
+  background: rgba(255, 255, 255, 0.4);
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------------------
    Oculto por visibilidad desactivada.
    --------------------------------------------------------------------- */
 .g-controlScale[aria-hidden="true"] {
