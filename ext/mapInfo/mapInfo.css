@@ -148,8 +148,18 @@
    Dibujándola con el alto del texto (9 px) queda casi, pero `align-self: center`
    la deja en las filas 733..741 y el texto en las 732..740, así que con un
    píxel hacia arriba caen en las mismas filas exactas. */
+/* Las barras llevan un margen propio, y es a propósito: son la marca que
+   divide, y con el mismo aire que entre los datos se leían como un pegote más
+   del texto en vez de como una separación (que es lo que pasaba con las dos
+   secciones que vienen detrás de una barra, Coordenadas y Proyección: el aire de
+   5,04 px del `column-gap` se quedaba corto al lado de una barra tan fina).
+   El resto de la tira sigue con un único `column-gap`. */
 .g-mapInfo-separador {
-  margin: 0;
+  /* 0,45em a cada lado, no el 0,42em del column-gap: medido, con el aire del
+     `gap` las etiquetas largas ("Nivel de zoom", "Escala") quedaban pegadas a la
+     barra y la tira se leía como un bloque. Con este margen el aire alrededor de
+     cada barra es de 10,5 px por lado, frente a los 5,04 px entre datos. */
+  margin: 0 0.45em;
   width: 1px;
   height: 9px;
   align-self: center;
@@ -178,9 +188,13 @@
    Comprobado: sin !important el campo se ve con un recuadro negro de 1 px.
 
    --------------------------------------------------------------------- */
-/* Los campos de texto, igual que el desplegable: misma altura y el mismo
-   line-height que la caja, porque la hoja de la API también les pone
-   `line-height: normal`. */
+/* Los números van CENTRADOS en su campo, no pegados a la izquierda. El ancho del
+   campo es fijo (lo fija el atributo `size`, ANCHO_CARACTERES en el JS) para que
+   el control no baile de lado cuando el valor pasa de "13.34" a "2.652.520"; con
+   el texto a la izquierda, la cifra se quedaba pegada a su etiqueta y el aire
+   sobrante caía todo a la derecha, y así la pareja se veía descuadrada (que es lo
+   que pasaba con las dos primeras secciones, las del nivel de zoom y la escala,
+   que son las únicas que llevan un campo). */
 .g-mapInfo-caja .g-mapInfo-campo {
   box-sizing: border-box;
   height: 1.25em;
@@ -198,7 +212,8 @@
   margin: 0 !important;
   padding: 0 1px !important;
   min-width: 3.5em;
-  text-align: left;
+  /* El número va centrado en su campo (mira el comentario de arriba). */
+  text-align: center;
   /* Sin esto el navegador no deja copiar el valor con el ratón. */
   pointer-events: auto;
   user-select: text;
