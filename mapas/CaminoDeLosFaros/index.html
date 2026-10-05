@@ -160,8 +160,15 @@
     </div>
     </div>
 
-    <script src="../../bootstrap/bootstrap.bundle.min.js"></script>
-    <script src="./js/main.js"></script>
+    <!-- El bundle se llama bootstrap.bundle.min.js.js en el repo (doble
+         extension, tal cual esta en bootstrap/ y como ya lo carga el index.html
+         de la galeria); sin la segunda .js la peticion daba 404 y el bundle no
+         llegaba a ejecutarse. -->
+    <script src="../../bootstrap/bootstrap.bundle.min.js.js"></script>
+    <!-- No hay <script src="./js/main.js">: era el fichero de arranque que
+         trae la plantilla de Bootstrap y se limitaba a buscar un getElementById('map')
+         que esta pagina no tiene (las 8 tarjetas van en HTML plano, sin JS), por lo
+         que lanzaba "TypeError: Cannot set properties of null" en cada carga. -->
 </body>
 
 </html>
