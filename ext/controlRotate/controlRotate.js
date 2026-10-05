@@ -6,14 +6,25 @@
    MOTIVACIÓN:
    El control de rotación ('rotate') del constructor IDEE.map({controls})
    lo dibuja la propia API como un panel de las areas de esquina
-   (.m-area .m-top .m-left), pero Cesium (3D) NO sabe construirlo al
-   construir el mapa: lanza "La implementación usada no puede crear
-   controles Rotate" y aborta la creación del mapa al conmutar 2D/3D.
+   (.m-area .m-top .m-left). Este plugin NO dibuja un dial propio: reutiliza
+   ese control nativo (IDEE.control.Rotate) y lo cuelga en el mapa en
+   caliente, que es lo que permite decidir la implementación antes de
+   crearlo y retocarlo después.
 
-   Este plugin NO dibuja un dial propio: reutiliza el control nativo de la
-   API (IDEE.control.Rotate) y lo cuelga en el mapa en tiempo de ejecución,
-   que es lo que permite decidir la implementación antes de crearlo. En 3D
-   no se añade, porque Cesium ya trae su propia brújula.
+   POR QUÉ NO SE MONTA EN 3D (medido sobre el bundle de Cesium):
+   El motivo NO es que Cesium no sepa crear este control. Sí lo sabe: con el
+   guard de 3D saltado, IDEE.control.Rotate se crea, se añade con addControls
+   y pinta su panel sin lanzar nada. El motivo real es que el impl de Cesium
+   no expone getView(), de modo que no hay vista a la que aplicar la
+   rotación: el dial se dibujaría decorado y visible, pero inerte, porque la
+   cámara no se mueve (mismo heading y mismo cuaternión antes y después de
+   pedirle 90 grados). En 3D lo que hay para orientar la cámara es
+   impl.scene.camera.heading, que este plugin no toca.
+
+   Conviene no justificar el guard por la brújula de Cesium: el visor se crea
+   sin sus widgets por defecto y no trae ninguna (no existe .cesium-compass
+   en el DOM). No hay duplicación que evitar, simplemente no hay vista que
+   gobernar.
 
    Lo que añade sobre el control nativo:
      - Lo deja con el tamaño y el aspecto de los botones de plugin
@@ -266,9 +277,12 @@
 
     /**
      * Crea el control Rotate de la API y lo añade al mapa en caliente.
-     * Añadirlo en caliente (y no en IDEE.map({controls})) es justamente lo que
-     * permiteSaltarse el fallo de Cesium: si el mapa es 3D, no se llega a
-     * construir el control.
+     * Añadirlo en caliente (y no en IDEE.map({controls})) es lo que permite
+     * decidir la implementación antes de crearlo y retocarlo después.
+     * Ojo: este método funciona igual en 3D que en 2D y, al menos en esta
+     * versión de la API, IDEE.map({controls: [Rotate]}) tampoco aborta la
+     * creación del mapa en Cesium. Quien decide no montar en 3D es el guard
+     * de addTo(), por lo de la vista; vease la MOTIVACIÓN de la cabecera.
      * @returns {boolean} true si se ha añadido el control.
      */
     _anadirControl() {
@@ -583,8 +597,11 @@
       const evt = (IDEE && IDEE.evt) ? IDEE.evt : {};
       this._host = this._resolveHost(map);
 
-      // En 3D no se monta: Cesium trae su propia brújula y, además, es la
-      // implementación que no sabe crear este control.
+      // En 3D no se monta, y no porque Cesium no sepa crear el control
+      // (sí lo sabe: _anadirControl() funciona igual en ambas
+      // implementaciones), sino porque su impl no expone getView() y no hay
+      // vista sobre la que aplicar la rotación: el dial saldría visible y
+      // decorado, pero inerte. Vease la MOTIVACIÓN de la cabecera.
       if (this._es3D(map)) return;
 
       if (!this._anadirControl()) return;
