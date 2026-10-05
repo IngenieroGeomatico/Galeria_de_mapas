@@ -510,11 +510,28 @@
      * @param {boolean} [options.useArea=true] Colgar la lectura en la banda
      * reservada de controles (miPlugin_areaControls). Si la banda no está
      * cargada, la lectura se ancla abajo a la izquierda del mapa.
+     * @param {string|Object} [options.color1] Color de fondo. Un color o un
+     * objeto {active, deactive}.
+     * @param {string|Object} [options.color2] Color de borde. Un color o un
+     * objeto {active, deactive}.
+     * @param {string|Object} [options.color3] Color de icono y texto. Un color o
+     * un objeto {active, deactive}.
      */
     constructor(options = {}) {
       // Identificador obligatorio del plugin (gestor de plugins y cambioImpl).
       this.name = 'miPlugin_mapInfo';
       this.options = options || {};
+
+      // Colores configurables, con los mismos valores por defecto y el mismo
+      // reparto que en el resto de plugins del repositorio (ver
+      // ext/CalidadAireMadridTiempoReal, que es el que fija el patrón):
+      //   color1 = fondo, color2 = borde, color3 = icono y texto.
+      // Cada uno puede ser un color suelto o un objeto {active, deactive}, y lo
+      // que se pinta es el estado de reposo (el "deactive"), que es como se ve
+      // la lectura siempre: no es un botón que se abra y se cierre.
+      this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
+      this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+      this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
 
       // Referencia al mapa y a los elementos de interfaz.
       this._map = null;
@@ -569,6 +586,55 @@
       this._openPosition = (options.openPosition === 'top') ? 'top' : 'bottom';
       this.order = (options.order !== undefined && !Number.isNaN(Number(options.order)))
         ? Number(options.order) : 0;
+    }
+
+    /**
+     * Devuelve {active, deactive} a partir de un color simple o de un objeto.
+     *
+     *  Es el mismo traductor que usan los plugins que ya tenían esquema de
+     *  colores (ext/CalidadAireMadridTiempoReal, ext/cambioImpl,
+     *  ext/plantilla_plugin, ...), para que un color se pueda pasar como '#fff'
+     *  o como {active: '#fff', deactive: '#eee'} indistintamente.
+     * @param {string|Object} c Color u objeto de colores.
+     * @returns {{active: string, deactive: string}} Los dos estados.
+     */
+    resolveColor(c) {
+      return (typeof c === 'object' && c !== null)
+        ? { active: c.active, deactive: c.deactive }
+        : { active: c, deactive: c };
+    }
+
+    /**
+     * Vuelca los colores configurados a variables CSS del contenedor.
+     *
+     *  Se inyectan las seis variables del esquema (los estados de reposo y
+     *  activo de fondo, borde e icono), igual que hace
+     *  ext/CalidadAireMadridTiempoReal, y el CSS las consume con
+     *  `var(--g-plugin-bg-color, orangered)` y compañía. Así el color se cambia
+     *  desde el visualizador sin tocar la hoja de estilos, y si las variables no
+     *  están el CSS conserva su color de reserva.
+     *
+     *  La lectura solo se pinta en un estado (no es un botón que se abra y se
+     *  cierre), así que el estado que se ve es el de reposo, el "deactive".
+     * @returns {boolean} true si se pudieron poner las variables.
+     */
+    _aplicarColores() {
+      try {
+        if (!this._container || !this._container.style) return false;
+        const c1 = this.resolveColor(this.color1);
+        const c2 = this.resolveColor(this.color2);
+        const c3 = this.resolveColor(this.color3);
+        this._container.style.setProperty('--g-plugin-bg-color', c1.deactive);
+        this._container.style.setProperty('--g-plugin-bg-color-active', c1.active);
+        this._container.style.setProperty('--g-plugin-border-color', c2.deactive);
+        this._container.style.setProperty('--g-plugin-border-color-active', c2.active);
+        this._container.style.setProperty('--g-plugin-icon-color', c3.deactive);
+        this._container.style.setProperty('--g-plugin-icon-color-active', c3.active);
+        return true;
+      } catch (e) {
+        console.warn(`${this.name}: no se pudieron aplicar los colores.`, e);
+        return false;
+      }
     }
 
     /**
@@ -3654,6 +3720,7 @@
           this._host.appendChild(ui);
         }
         this._container = ui;
+        this._aplicarColores();
       }
 
       // 2) Refresco: en 2D con los eventos de la API y con la vista de OL (que

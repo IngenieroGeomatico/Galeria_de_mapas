@@ -67,9 +67,15 @@
   row-gap: 2px;
   font-family: Muli, "sans-serif";
   font-size: 12px;
-  color: #ffffff;
-  background: rgb(113, 167, 211);
-  border: 1.6px solid rgb(255, 255, 255);
+  /* El texto va en el color de icono del esquema, y el fondo y el borde en los
+     suyos. La lectura solo tiene un estado (no es un botón que se abra), así que
+     usa el de reposo; el "active" queda declarado por si un visualizador quiere
+     distinguirlo. Los valores de reserva son los que tenía la caja antes de que
+     existiera el esquema, para que sin _aplicarColores() se siga viendo igual.
+     Ver _aplicarColores() en mapInfo.js. */
+  color: var(--g-plugin-icon-color, #ffffff);
+  background: var(--g-plugin-bg-color, rgb(113, 167, 211));
+  border: 1.6px solid var(--g-plugin-border-color, #ffffff);
   border-radius: 20px;
   box-shadow: rgba(0, 0, 0, 0.2) 0 2px 4px 0, rgba(0, 0, 0, 0.02) 0 -1px 0 0;
   padding: 4px 10px 3px;
@@ -90,14 +96,17 @@
 
 /* La etiqueta va un punto más apagada que el número: separa lo que se lee de lo
    que se está midiendo sin gastar un color nuevo ni un separador más. */
+/* La etiqueta se apaga con opacidad y no con un blanco a medias: así lo que se ve
+   en la caja sigue siendo el color configurado (el de icono) en vez de un blanco
+   fijo que se desmiente en cuanto se cambia el esquema. */
 .g-mapInfo-etiqueta {
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.88);
+  opacity: 0.85;
 }
 
 .g-mapInfo-valor {
   font-weight: 400;
-  color: #ffffff;
+  color: inherit;
 }
 
 /* Por lo mismo, la barra vertical necesita sus huecos como margen: un
@@ -209,10 +218,11 @@
 /* La flecha del navegador se ve sobre fondo transparente con el mismo
    problema que los input, y aquí el !important es por el mismo motivo que en
    los campos: la hoja de la API no se puede leer con cssRules para saber qué
-   selector gana. */
+   selector gana. El desplegable se pinta con el fondo y el color del esquema,
+   que si no se vería el texto claro sobre la opción blanca del navegador. */
 .g-mapInfo-caja .g-mapInfo-selector option {
-  background: rgb(113, 167, 211);
-  color: #ffffff;
+  background: var(--g-plugin-bg-color, rgb(113, 167, 211));
+  color: var(--g-plugin-icon-color, #ffffff);
 }
 
 .g-mapInfo-caja .g-mapInfo-selector:focus-visible {
@@ -283,9 +293,12 @@
   margin-left: 0.5em;
 }
 
+/* Al marcar, la casilla se pinta con el fondo del esquema y se le abre un hueco
+   del color de la caja, que es el mismo: por eso el `inset` usa la variable del
+   fondo y no un color fijo. */
 .g-mapInfo-caja .g-mapInfo-casilla:checked {
   background: rgba(255, 255, 255, 0.22);
-  box-shadow: inset 0 0 0 2px rgb(113, 167, 211);
+  box-shadow: inset 0 0 0 2px var(--g-plugin-bg-color, rgb(113, 167, 211));
 }
 
 /* Al pasar por encima se enciende un poco: es la única pista de que la casilla
