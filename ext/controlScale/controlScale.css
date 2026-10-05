@@ -41,9 +41,14 @@
   padding: 6px 12px 3px;
 }
 
+/* El hueco va aquí y no en el texto. Los hijos de una caja flex colapsan el
+   espacio final de su contenido (CSS Text 3, 4.1.1), así que poner "Nivel de
+   zoom " con un espacio detrás no dibuja nada: el navegador se lo come y la
+   etiqueta queda pegada a su número. Con `gap` el espacio se pinta siempre. */
 .g-controlScale-dato {
   display: inline-flex;
   align-items: baseline;
+  gap: 0.3em;
 }
 
 .g-controlScale-etiqueta {
@@ -52,6 +57,12 @@
 
 .g-controlScale-valor {
   font-weight: 400;
+}
+
+/* Por lo mismo, la barra vertical necesita sus huecos como margen: un
+   separador con " | " se vería como "|" pegado a los dos lados. */
+.g-controlScale-separador {
+  margin: 0 0.3em;
 }
 
 /* ---------------------------------------------------------------------

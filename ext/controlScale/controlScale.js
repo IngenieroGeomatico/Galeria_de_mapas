@@ -20,14 +20,25 @@
    ancho donde este tipo de lecturas sí encaja.
 
    CONTENIDO:
-     - 2D (OpenLayers): nivel de zoom del mapa y su escala 1:nnnnnn, con los
-       valores que publica la propia API (map.getZoom() y map.getExactScale(),
-       con map.getScale() como reserva).
+     - 2D (OpenLayers): nivel de zoom del mapa y su escala 1:nnnnnn. La escala
+       se toma de la API (map.getExactScale(), con map.getScale() como
+       reserva) y se corrige por la latitud del punto mirado: el valor de la
+       API mide metros de plano y no cambia al desplazarse, cuando la escala de
+       un mapa es sobre el suelo (ver _corregirPorLatitud).
      - 3D (Cesium): no hay nivel de zoom, así que en su lugar se muestra la
        altura de la cámara sobre el elipsoide, y la escala se calcula a partir
        del campo de visión y del tamaño del lienzo. La escala de un mapa en
        perspectiva no es constante (depende de la distancia a la que esté el
-       punto mirado), de modo que el valor es el del centro de la vista.
+       punto mirado), de modo que el valor es el del centro de la vista. Esta
+       vía no necesita corrección por latitud: ya sale de la geometría de la
+       cámara.
+
+   ESPACIOS:
+     Los huecos entre etiqueta, valor y separador los pone el CSS (`gap` en
+     .g-controlScale-dato y margen en .g-controlScale-separador), nunca el
+     texto. Un espacio final dentro de un hijo flex se colapsa (CSS Text 3,
+     4.1.1) y no se dibuja, así que "Nivel de zoom " se vería pegado al
+     número.
 
    CONVENCIONES:
    1. Resolvedor dual de la API (window.IDEE || window.M) mediante api(),
@@ -50,6 +61,10 @@
   const PPI = 96;
   /** Metros que mide un píxel a 96 dpi: 0,0254 / 96. */
   const M_POR_PX = 0.0254 / PPI;
+  /** Semieje mayor de la esfera de Mercator (EPSG:3857). */
+  const SEMI_MAYOR_3857 = 20037508.342789244;
+  /** Límite de latitud de la proyección de Mercator. */
+  const LAT_MAX_MERCATOR = 85;
   /** Campo de visión por defecto de la cámara de Cesium (rad). */
   const FOV_POR_DEFECTO = Math.PI / 3;
   /** Tope de espera (ms) para que aparezca la escena de Cesium. */
@@ -289,11 +304,14 @@
       caja.className = 'g-controlScale-caja';
 
       // Dato principal: nivel de zoom en 2D, altura de la cámara en 3D.
+      // Los textos van SIN espacios de relleno: los aporta el `gap` de
+      // .g-controlScale-dato y el margen del separador, porque un espacio
+      // final dentro de un hijo flex se colapsa y no se vería.
       const principal = document.createElement('span');
       principal.className = 'g-controlScale-dato';
       const etiqueta = document.createElement('span');
       etiqueta.className = 'g-controlScale-etiqueta';
-      etiqueta.textContent = 'Nivel de zoom ';
+      etiqueta.textContent = 'Nivel de zoom';
       const valor = document.createElement('span');
       valor.className = 'g-controlScale-valor';
       valor.textContent = '-';
@@ -302,14 +320,14 @@
 
       const separador = document.createElement('span');
       separador.className = 'g-controlScale-separador';
-      separador.textContent = ' | ';
+      separador.textContent = '|';
 
       // Escala 1 : n, común a las dos implementaciones.
       const escala = document.createElement('span');
       escala.className = 'g-controlScale-dato';
       const unidad = document.createElement('span');
       unidad.className = 'g-controlScale-etiqueta';
-      unidad.textContent = 'Escala = 1 : ';
+      unidad.textContent = 'Escala = 1 :';
       const valorEscala = document.createElement('span');
       valorEscala.className = 'g-controlScale-valor';
       valorEscala.textContent = '-';
@@ -339,29 +357,139 @@
     }
 
     /**
-     * Escala 1:n del mapa en 2D, con los valores que publica la API.
+     * Proyección en la que está el mapa.
+     * @returns {string} Código de la proyección ('EPSG:3857', 'EPSG:4326'...).
+     */
+    _proyeccion() {
+      try {
+        const impl = this._impl();
+        const vista = impl && typeof impl.getView === 'function' ? impl.getView() : null;
+        if (vista && typeof vista.getProjection === 'function') {
+          const proyeccion = vista.getProjection();
+          if (proyeccion && typeof proyeccion.getCode === 'function') {
+            return String(proyeccion.getCode());
+          }
+        }
+      } catch (e) {
+        /* se usa la de por defecto */
+      }
+      return 'EPSG:3857';
+    }
+
+    /**
+     * Latitud del punto que se está mirando, en grados.
+     *
+     * Es el dato que hace falta para corregir la escala: la proyección de
+     * Mercator estira el mapa hacia los polos, de modo que un metro del plano
+     * son menos metros de suelo cuanto más al norte.
+     * @returns {number|null} Latitud en grados, o null si no se puede saber.
+     */
+    _latitudCentro() {
+      try {
+        const mapa = this._map;
+        if (!mapa || typeof mapa.getCenter !== 'function') return null;
+        const centro = mapa.getCenter();
+        if (!centro || !isFinite(centro.x) || !isFinite(centro.y)) return null;
+
+        let latitud;
+        if (this._proyeccion() === 'EPSG:4326') {
+          latitud = centro.y;
+        } else {
+          // Inversa de Web Mercator: y = R * ln(tan(pi/4 + lat*pi/360)).
+          latitud = (2 * Math.atan(Math.exp(centro.y / SEMI_MAYOR_3857)) - Math.PI / 2) * 180 / Math.PI;
+        }
+        if (!isFinite(latitud)) return null;
+        // Mercator no llega a los polos y ahí el factor se dispara.
+        return Math.max(-LAT_MAX_MERCATOR, Math.min(LAT_MAX_MERCATOR, latitud));
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Corrige la escala nominal por la latitud del punto mirado.
+     *
+     * La API publica una escala nominal (map.getExactScale(), con map.getScale()
+     * como reserva) que mide metros de PLANO por píxel, y por eso sale el mismo
+     * número con el mapa en el ecuador y a 60 grados. La escala de un mapa es
+     * sobre el suelo, y en Mercator el suelo se encoge con el factor
+     * 1 / cos(latitud), así que la nominal hay que dividirla por ese coseno.
+     * Es lo mismo que hace el control Scale de OpenLayers al apoyarse en
+     * getPointResolution, que en la versión de la API no está disponible.
+     *
+     * En 3D no hace falta: la escala se calcula con la geometría de la cámara,
+     * que ya es una distancia real sobre el terreno.
+     * @param {number} escala Escala nominal 1:n.
+     * @returns {number} Escala 1:n corregida por la latitud.
+     */
+    _corregirPorLatitud(escala) {
+      const latitud = this._latitudCentro();
+      if (latitud === null) return escala;
+      const coseno = Math.cos(latitud * Math.PI / 180);
+      // El tope de latitud ya acota el factor a ~11,5; esto es solo el cinturón.
+      if (!isFinite(coseno) || coseno <= 0.05) return escala;
+      const corregida = escala / coseno;
+      return (isFinite(corregida) && corregida > 0) ? corregida : escala;
+    }
+
+    /**
+     * Refresca la lectura cuando cambia la vista de OpenLayers.
+     *
+     * Los eventos de la API (evt.MOVE) solo avisan de los gestos del usuario:
+     * con map.setCenter() o map.setZoom() la lectura se queda obsoleta, y eso
+     * se nota al volver de 3D, porque el cambio de implementación recentra el
+     * mapa por código. La vista de OL sí notifica cualquier cambio de su
+     * estado, venga de donde venga, así que se escucha directamente a ella.
+     * En 3D no hay vista que escuchar (eso lo cubre la cámara).
+     */
+    _vigilarVistaOL() {
+      try {
+        const impl = this._impl();
+        const vista = impl && typeof impl.getView === 'function' ? impl.getView() : null;
+        if (!vista || typeof vista.addEventListener !== 'function') return;
+        const self = this;
+        const alCambiar = function () { self._actualizar(); };
+        ['change:center', 'change:resolution', 'change:rotation'].forEach(function (tipo) {
+          self._on(vista, tipo, alCambiar);
+        });
+      } catch (e) {
+        /* los eventos de la API siguen vigilando; ver _onApi en addTo() */
+      }
+    }
+
+    /**
+     * Escala 1:n del punto mirado en 2D.
+     *
+     * Se toma el valor nominal que publica la API y se corrige por la latitud,
+     * para que la lectura cambie al desplazarse por el mapa (en Mercator, un
+     * metro del plano son menos metros de suelo cuanto más nos alejamos del
+     * ecuador). La razón está explicada en _corregirPorLatitud().
      * @returns {number|null} Denominador de la escala, o null si no hay dato.
      */
     _escala2D() {
       const map = this._map;
       if (!map) return null;
+      let nominal = null;
       try {
         if (typeof map.getExactScale === 'function') {
           const exacto = Number(map.getExactScale());
-          if (isFinite(exacto) && exacto > 0) return exacto;
+          if (isFinite(exacto) && exacto > 0) nominal = exacto;
         }
       } catch (e) {
         /* se prueba el otro */
       }
-      try {
-        if (typeof map.getScale === 'function') {
-          const escala = Number(map.getScale());
-          if (isFinite(escala) && escala > 0) return escala;
+      if (nominal === null) {
+        try {
+          if (typeof map.getScale === 'function') {
+            const escala = Number(map.getScale());
+            if (isFinite(escala) && escala > 0) nominal = escala;
+          }
+        } catch (e) {
+          /* sin dato */
         }
-      } catch (e) {
-        /* sin dato */
       }
-      return null;
+      if (nominal === null) return null;
+      return this._corregirPorLatitud(nominal);
     }
 
     /**
@@ -427,12 +555,12 @@
       const es3D = this._es3D(this._map);
 
       if (es3D) {
-        this._pintar(this._elEtiqueta, 'Altura de la vista ');
+        this._pintar(this._elEtiqueta, 'Altura de la vista');
         const altura = this._altura3D();
         this._pintar(this._elValor, (altura === null) ? '-'
           : this._formatear(altura) + ' m');
       } else {
-        this._pintar(this._elEtiqueta, 'Nivel de zoom ');
+        this._pintar(this._elEtiqueta, 'Nivel de zoom');
         let nivel = null;
         try {
           if (this._map && typeof this._map.getZoom === 'function') {
@@ -650,7 +778,9 @@
         this._container = ui;
       }
 
-      // 2) Refresco: en 2D con los eventos de la API, en 3D con la cámara.
+      // 2) Refresco: en 2D con los eventos de la API y con la vista de OL (que
+      //    es la que avisa de los movimientos hechos por código), en 3D con la
+      //    cámara.
       this._onApi(evt.CHANGE_ZOOM, function () { self._actualizar(); });
       this._onApi(evt.MOVE, function () { self._actualizar(); });
       this._onApi(evt.COMPLETED, function () { self._actualizar(); });
@@ -658,6 +788,8 @@
 
       if (this._es3D(map)) {
         this._vigilarCamara();
+      } else {
+        this._vigilarVistaOL();
       }
 
       // 3) Primer pintado.
