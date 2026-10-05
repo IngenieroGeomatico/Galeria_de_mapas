@@ -422,6 +422,31 @@
       const dial = panel.querySelector('#m-rotate-slider, #m-rotate-slider-container')
         || panel.querySelector('.m-rotate-container') || panel;
       this._dial = dial;
+
+      // La rosa de los vientos en el centro del disco.
+      //
+      // POR QUÉ HAY QUE AÑADIRLA: el control nativo de la API solo pinta UN PUNTO
+      // blanco que orbita cerca del borde (medido: el DOM del dial son el
+      // contenedor, el área de arrastre, el botón de norte y el <svg> del punto;
+      // no hay aguja ni rosa en ninguna parte, y el resto de las reglas de la API
+      // para el dial, como `.m-rotate-rotation-maker`, son de la otra variante del
+      // control, que esta instancia no construye). Con eso el dial se ve como un
+      // disco de color liso, y no dice de qué va.
+      //
+      // Se pinta con la fuente de iconos de la propia API
+      // (`.g-cartografia-brujula`, que es la brújula de la misma hoja que el
+      // resto de iconos), en vez de con un SVG propio, para que el trazo y el
+      // grosor sean los de la API y no los de este plugin.
+      const sitio = panel.querySelector('#m-rotate-slider-container') || dial;
+      if (sitio) {
+        const rosa = document.createElement('span');
+        rosa.className = 'm-rotate-rosa g-controlRotate-rosa g-cartografia-brujula';
+        rosa.setAttribute('aria-hidden', 'true');
+        sitio.appendChild(rosa);
+        this._rosa = rosa;
+      }
+      this._pintarRosa();
+
       if (dial) {
         const self = this;
         this._on(dial, 'dblclick', function (evento) {
@@ -445,6 +470,9 @@
      */
     _aplicarRotacion(radianes) {
       this._rotacion = this._normalizar(radianes);
+      // La rosa va antes del guard de 3D: es adorno del dial, que es de 2D, pero
+      // pintarla siempre deja el elemento al día aunque el mapa cambie mientras.
+      this._pintarRosa();
       if (this._es3D(this._map)) return;
       const vista = this._vista2D();
       if (vista && typeof vista.setRotation === 'function') {
@@ -478,7 +506,25 @@
       } catch (e) {
         return;
       }
-      if (isFinite(rotacion)) this._rotacion = this._normalizar(rotacion);
+      if (isFinite(rotacion)) {
+        this._rotacion = this._normalizar(rotacion);
+        this._pintarRosa();
+      }
+    }
+
+    /**
+     * Gira la rosa de los vientos del disco para que apunte al norte.
+     *
+     * El signo es el contrario al de la vista, y es lo importante: cuando el mapa
+     * gira 45° en sentido horario, el norte se ve arriba a la izquierda, así que la
+     * rosa tiene que girar 45° en sentido ANTIHORARIO. Con el mismo signo que la
+     // vista la rosa apuntaría al sur (medido: con la vista en +45 la rosa queda
+     * abajo a la derecha, que es justo lo contrario de lo que indica).
+     */
+    _pintarRosa() {
+      if (!this._rosa) return;
+      const grados = -(this._rotacion * 180 / Math.PI);
+      this._rosa.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
     }
 
     /**

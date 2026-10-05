@@ -86,6 +86,43 @@
 }
 
 /* ---------------------------------------------------------------------
+   La rosa de los vientos, en el centro del disco.
+
+   El glifo lo pone la API (`.g-cartografia-brujula`), así que aquí solo se sitúa
+   y se pinta con el color de icono del esquema.
+
+   Va en el FLUJO, no con `position: absolute`: dentro de
+   #m-rotate-slider-container no hay ningún ancestro posicionado que sea del
+   tamaño del disco, y los hijos absolutos que la API mete ahí (el punto del
+   marcador y el botón de norte) están colocados respecto de otro, así que
+   añadir un `position` aquí los movería de sitio. Como el resto de los hijos del
+   contenedor son absolutos, esta caja flex es lo único que da altura al flujo y
+   por eso basta para que ocupe el disco entero y deje el glifo en el centro.
+
+   El `pointer-events: none` es para que la rosa no se coma el arrastre, que es
+   del contenedor.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--g-plugin-icon-color, #ffffff);
+  /* El glifo de la fuente de la API ocupa solo una parte del em (medido: con
+     1,1 rem, o sea 17,6 px de letra, el dibujo sale de unos 12 px dentro de un
+     disco de 40 px y se lee como un punto, no como una brújula). Con 1,8 rem el
+     dibujo queda alrededor de 25 px, que es lo que cabe justo dentro del borde. */
+  font-size: 1.8rem;
+  opacity: 0.95;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  /* La transición suaviza el giro y hace que se lea como una aguja que se mueve y
+     no como un icono que aparece en otro sitio. */
+  transition: transform 120ms ease-out;
+}
+
+/* ---------------------------------------------------------------------
    El dial es un control: el cursor debe decir que se puede arrastrar, y no
    debe robar el arrastre al mapa.
    --------------------------------------------------------------------- */
