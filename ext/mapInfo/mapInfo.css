@@ -261,38 +261,55 @@
 }
 
 /* ---------------------------------------------------------------------
-   El selector de proyección.
+   El botón de proyección.
+
+   Antes era un <select> y ahora es un <button> que abre la ventana modal
+   (._crearModal en mapInfo.js). Se le deja el mismo aspecto que tenía el
+   desplegable para que la tira no cambie: fondo transparente, sin borde, el
+   texto en el color de icono de la caja y un subrayado punteado que es lo
+   único que dice que ahí se abre algo.
 
    El contenedor tiene pointer-events: none para no robarle el clic al mapa,
    así que hay que devolvérselo aquí como se hace con los campos: sin esto el
-   desplegable no se abriría nunca.
+   botón no se pulsaría nunca.
 
-   El fondo transparente y el color heredado son para que se lea como una
-   cifra más de la lectura, igual que los campos. En 3D se ve grisado, que
-   es la forma de decir que ahí no se puede cambiar sin tener que escribir un
-   párrafo.
+   Y el ancho: los nombres son largos ("ETRS89 / UTM zone 30N (EPSG:25830)") y
+   el botón no lo puede recortar como hace el desplegable, así que se le da un
+   tope en em, no en píxeles, para que siga siendo proporcional si cambia el
+   tamaño de letra. Medido: la sección de la proyección pasa de 317 px (el
+   desplegable, con su `max-width: 26em`) a 305.
    --------------------------------------------------------------------- */
-/* El desplegable mide lo mismo que la línea de texto (1,25em: medido, el
-   desplegableaba 19 px frente a los 15 del texto) y su `line-height` es el
-   MISMO que el de la caja, 1.25. No puede aquí "heredarlo sin más": la hoja de
-   la API pone `line-height: normal` a los controles de formulario (medido), que
-   es justo lo que dejaba el texto de la proyección en otra línea base que el de
-   las etiquetas. */
 .g-mapInfo-caja .g-mapInfo-selector {
   box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  /* El texto y la flecha van juntos con el aire del `gap` de .g-mapInfo-dato, así
+     que aquí no hay margen: el que se ve entre el rótulo y "Proyección" es el
+     del dato. */
+  gap: 0.25em;
   height: 1.25em;
+  /* La altura de línea es la MISMA que la de la caja, 1.25, y no puede
+     heredarla sin más: la hoja de la API pone `line-height: normal` a los
+     controles de formulario (medido), que es justo lo que dejaba el texto de la
+     proyección en otra línea base que el de las etiquetas. */
   line-height: 1.25;
   font-family: inherit !important;
   font-size: inherit !important;
+  font-weight: 400 !important;
   color: inherit !important;
   background: transparent !important;
+  /* El !important es necesario, no descuidado: la hoja de la API (apiidee.ol.min.css)
+     da borde a los button y gana a estas reglas, y además no se puede leer con
+     cssRules desde la consola, así que no hay forma de saber con qué selector lo
+     hace ni de dejarle de ganar. Comprobado: sin !important el botón sale con el
+     recuadre gris del navegador. */
   border: 0 !important;
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.5) !important;
   box-shadow: none !important;
+  appearance: none;
+  -webkit-appearance: none;
   margin: 0 !important;
-  padding: 0 1px !important;
-  /* Los nombres oficiales son largos ("ETRS89 / UTM zone 30N (EPSG:25830)"), así
-     que se les da sitio. Y un tope en em, no en píxeles, para que la casilla
-     siga siendo proporcional si cambia el tamaño de letra. */
+  padding: 0 1px 1px !important;
   max-width: 26em;
   pointer-events: auto;
   user-select: none;
@@ -300,14 +317,24 @@
   cursor: pointer;
 }
 
-/* La flecha del navegador se ve sobre fondo transparente con el mismo
-   problema que los input, y aquí el !important es por el mismo motivo que en
-   los campos: la hoja de la API no se puede leer con cssRules para saber qué
-   selector gana. El desplegable se pinta con el fondo y el color del esquema,
-   que si no se vería el texto claro sobre la opción blanca del navegador. */
-.g-mapInfo-caja .g-mapInfo-selector option {
-  background: var(--g-plugin-bg-color, rgb(113, 167, 211));
-  color: var(--g-plugin-icon-color, #ffffff);
+/* El texto puede ser largo, y el botón no lo parte: si no cabe entero, sale con
+   puntos suspensivos y el nombre entero está en la ventana. */
+.g-mapInfo-caja .g-mapInfo-selector-codigo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La flecha del desplegable. Con un glifo y no con un borde dibujado: es una
+   pista de que se abre una lista, y un triangulo de CSS cuesta más de lo que
+   aporta en algo de 8 px. */
+.g-mapInfo-caja .g-mapInfo-selector-flecha {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+.g-mapInfo-caja .g-mapInfo-selector:hover .g-mapInfo-selector-flecha {
+  opacity: 1;
 }
 
 .g-mapInfo-caja .g-mapInfo-selector:focus-visible {
@@ -321,35 +348,27 @@
   opacity: 1;
 }
 
-/* El desplegable lleva un subrayado fino para que se lea como un control y no
-   como una cifra más de la lectura: con el fondo transparente no queda nada más
-   que diga que ahí se abre una lista. El `!important` es por el mismo motivo que
-   en los campos: la hoja de la API no se puede leer con cssRules para saber qué
-   selector le da borde a los input y gana a estas reglas. */
-.g-mapInfo-caja .g-mapInfo-selector {
-  border-bottom: 1px dotted rgba(255, 255, 255, 0.5) !important;
-  padding: 0 1px 1px !important;
-}
-
-.g-mapInfo-caja .g-mapInfo-selector:hover {
+.g-mapInfo-caja .g-mapInfo-selector:hover:not(:disabled) {
   border-bottom-color: rgba(255, 255, 255, 0.9) !important;
 }
 
 /* ---------------------------------------------------------------------
    La casilla de recorte.
 
-   Mismo tratamiento que los campos y el desplegable, y por el mismo motivo: el
-   contenedor tiene `pointer-events: none`, así que sin devolvérselo aquí la
-   casilla no se podría marcar. El fondo transparente y `appearance: none` la
-   dejan como una cifra más de la lectura, y la marca se dibuja a mano con dos
-   `box-shadow`, que es lo único que queda visible en un input al que se le ha
-   quitado la apariencia nativa.
+   Ya no está en la tira: vive en la ventana modal, con la proyección a la que
+   pertenece (ver _crearModal en mapInfo.js). Por eso las reglas de aquí son
+   del modal y no de la caja, y por eso ya no hace falta devolverle los
+   `pointer-events`: dentro de la ventana se puede tocar todo.
+
+   El fondo transparente y `appearance: none` la dejan como una cifra más de la
+   lectura, y la marca se dibuja a mano con dos `box-shadow`, que es lo único
+   que queda visible en un input al que se le ha quitado la apariencia nativa.
 
    La casilla es de verdad un input[type=checkbox] y no un adorno con
    `aria-hidden`, para que conserve el papel, el foco de teclado y el espacio que
    la activa.
    --------------------------------------------------------------------- */
-.g-mapInfo-caja .g-mapInfo-casilla {
+.g-mapInfo-modal .g-mapInfo-casilla {
   box-sizing: border-box;
   appearance: none;
   -webkit-appearance: none;
@@ -362,41 +381,498 @@
   border: 1px solid rgba(255, 255, 255, 0.9);
   border-radius: 2px;
   cursor: pointer;
-  pointer-events: auto;
-  /* Sin margen ni `vertical-align`: la caja centra sus datos (align-items:
-     center), así que la casilla ya queda a media altura con el texto y no hace
-     falta empujarla a mano. */
 }
 
-.g-mapInfo-caja .g-mapInfo-alcance {
-  /* Sin margen: el aire le llega del column-gap de la caja, que es el mismo que
-     separa cualquier otro dato. Poner un margen aquí era lo que hacía que esta
-     sección se viera con más aire que las demás. */
-  margin: 0;
-}
-
-/* Al marcar, la casilla se pinta con el fondo del esquema y se le abre un hueco
-   del color de la caja, que es el mismo: por eso el `inset` usa la variable del
+/* Al marcar, la casilla se pinta con un fondo claro y se le abre un hueco del
+   color de la ventana, que es el mismo: por eso el `inset` usa la variable del
    fondo y no un color fijo. */
-.g-mapInfo-caja .g-mapInfo-casilla:checked {
+.g-mapInfo-modal .g-mapInfo-casilla:checked {
   background: rgba(255, 255, 255, 0.22);
-  box-shadow: inset 0 0 0 2px var(--g-plugin-bg-color, rgb(113, 167, 211));
+  box-shadow: inset 0 0 0 2px var(--g-plugin-bg-color, orangered);
 }
 
 /* Al pasar por encima se enciende un poco: es la única pista de que la casilla
    es pulsable, porque está dibujada a mano y no lleva la pista nativa. */
-.g-mapInfo-caja .g-mapInfo-casilla:hover {
+.g-mapInfo-modal .g-mapInfo-casilla:hover {
   background: rgba(255, 255, 255, 0.18);
 }
 
-.g-mapInfo-caja .g-mapInfo-casilla:focus-visible {
+.g-mapInfo-modal .g-mapInfo-casilla:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.9);
   outline-offset: 1px;
 }
 
-.g-mapInfo-caja .g-mapInfo-casilla:disabled {
+.g-mapInfo-modal .g-mapInfo-casilla:disabled {
   border-color: rgba(255, 255, 255, 0.45);
   cursor: default;
+}
+
+/* ---------------------------------------------------------------------
+   LA VENTANA MODAL DE PROYECCIÓN.
+
+   Va colgada del body (no de la caja de la tira) para poder ser `fixed` y
+   centrarse en el mapa entero, y usa las mismas variables de color que la tira,
+   que se las pone _aplicarColores() por los dos sitios.
+
+   El aspecto es el del plugin: fondo de color1, texto de color3 y borde de
+   color2, con el mismo redondeo grande que la caja (20 px) para que se lean como
+   la misma familia. Aquí el fondo de la ventana es el del esquema y el de la
+   pantalla detrás se apaga con un velo negro, que es lo que hace que el mapa no
+   compita con la ventana.
+   --------------------------------------------------------------------- */
+.g-mapInfo-modal-capa {
+  position: fixed;
+  inset: 0;
+  /* Por encima de los paneles de la API (que llegan a 1000) y del canvas. */
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  font-family: Muli, "sans-serif";
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--g-plugin-icon-color, #ffffff);
+}
+
+.g-mapInfo-modal-capa[hidden] {
+  display: none;
+}
+
+/* El velo. Se pone aparte del fondo de la ventana y no en la capa porque es lo
+   que hace el "fuera" al pulsar: la capa entera no es pulsable porque está detrás
+   de la ventana. */
+.g-mapInfo-modal-fondo {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.g-mapInfo-modal {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  /* Tope en alto y en ancho con scroll dentro: en una pantalla estrecha la lista
+     es la que cede, no la cabecera ni el alta, que son las que hay que leer. */
+  width: 480px;
+  max-width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--g-plugin-bg-color, orangered);
+  border: 1.6px solid var(--g-plugin-border-color, #ffffff);
+  border-radius: 20px;
+  box-shadow: rgba(0, 0, 0, 0.35) 0 8px 24px 0;
+  padding: 12px 16px 14px;
+}
+
+/* Aparición: escala y opacidad. Sin transición al cerrar, porque el `hidden`
+   quita el elemento de golpe y una transición de salida no llegaría a verse
+   (medido: con transición de salida el elemento desaparece de un salto). */
+.g-mapInfo-modal-capa {
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+}
+
+.g-mapInfo-modal-capa--visible {
+  opacity: 1;
+}
+
+@keyframes g-mapInfo-modal-entra {
+  from { transform: translateY(6px) scale(0.985); }
+  to   { transform: translateY(0) scale(1); }
+}
+
+.g-mapInfo-modal-capa--visible .g-mapInfo-modal {
+  animation: g-mapInfo-modal-entra 140ms ease-out 1;
+}
+
+/* Cabecera: el título y la X. */
+.g-mapInfo-modal-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.g-mapInfo-modal-titulo {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.g-mapInfo-modal-cerrar {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin: 0 !important;
+  padding: 0;
+  font-family: inherit !important;
+  font-size: 18px !important;
+  line-height: 1;
+  color: inherit !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 50%;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.g-mapInfo-modal-cerrar:hover {
+  background: rgba(255, 255, 255, 0.18) !important;
+}
+
+.g-mapInfo-modal-cerrar:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------
+   La lista de proyecciones: una fila por código, con un radio al principio, el
+   nombre en medio y el código al final a la derecha.
+
+   La fila entera es un <label>, así que el radio se marca pulsando en el
+   nombre, que es donde se apunta. Y el código va con `tabular-nums` porque son
+   cifras que se comparan entre sí de un vistazo.
+   --------------------------------------------------------------------- */
+.g-mapInfo-modal-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 -6px;
+  padding: 0 6px;
+  /* La lista se desliza sola, con un tope en `em` (y no en píxeles) para que siga
+     siendo proporcional si cambia el tamaño de letra. Sin este tope la ventana
+     crece con cada EPSG que se registra y hay que arrastrar la ventana entera
+     para llegar al alta. Con el tope lo que desliza es la lista, que es lo que
+     tiene sentido: el resto de la ventana (cabecera, buscador, casilla y alta) se
+     ve siempre. Medido: 17 em son unas ocho filas. */
+  max-height: 17em;
+  overflow-y: auto;
+  /* `scrollbar-gutter` deja reservado el hueco de la barra, así el texto no baila
+     de lado al aparecerla. En navegadores que no lo/entiendan no hace nada. */
+  scrollbar-gutter: stable;
+}
+
+/* El buscador, encima de la lista: el campo y, a su derecha, el contador de lo
+   que hay filtrado. */
+.g-mapInfo-modal-buscador {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.g-mapInfo-modal-buscar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.g-mapInfo-modal-cuenta {
+  flex: 0 0 auto;
+  font-size: 0.92em;
+  /* Reserva el ancho de un contador ("12 de 15") aunque esté vacío, para que la
+     lista no se mueva de sitio al empezar a escribir. */
+  min-width: 5.2em;
+  text-align: right;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-mapInfo-modal-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.g-mapInfo-modal-fila:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.g-mapInfo-modal-fila--casilla {
+  /* La fila de la casilla va fuera de la lista pero con el mismo aire, para que
+     se lea como una más y no como un añadido de última hora. */
+  margin-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0;
+  padding-top: 9px;
+}
+
+.g-mapInfo-modal-fila--casilla:hover {
+  background: transparent;
+}
+
+.g-mapInfo-modal-radio {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1em;
+  height: 1em;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.g-mapInfo-modal-radio:checked {
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 0 0 3px var(--g-plugin-icon-color, #ffffff);
+}
+
+.g-mapInfo-modal-radio:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 1px;
+}
+
+.g-mapInfo-modal-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g-mapInfo-modal-codigo {
+  flex: 0 0 auto;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-mapInfo-modal-etiqueta {
+  flex: 1 1 auto;
+}
+
+.g-mapInfo-modal-vacio {
+  padding: 8px 6px;
+  opacity: 0.8;
+}
+
+/* ---------------------------------------------------------------------
+   El alta de un EPSG nuevo: título, explicación, los dos campos, el botón y el
+   aviso.
+
+   Los campos van con la misma altura y el mismo `line-height` que el resto, y
+   con `box-sizing: border-box`, para que su texto caiga en la misma línea base
+   que el de los botones y no bailen entre sí. La explicación va en `em` de su
+   propio tamaño, que es como se lee bien un texto de apoyo.
+   --------------------------------------------------------------------- */
+.g-mapInfo-modal-alta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.g-mapInfo-modal-subtitulo {
+  font-weight: 700;
+}
+
+.g-mapInfo-modal-explicacion {
+  font-size: 0.92em;
+  opacity: 0.8;
+}
+
+.g-mapInfo-modal-campos {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* Una fila con el campo y el botón: el "Buscar y usar" va al lado del código, que
+   es el único dato que hay que escribir ahí. */
+.g-mapInfo-modal-linea {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.g-mapInfo-modal-linea .g-mapInfo-modal-campo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Las dos pestañas del alta. El botón activo se hunde (el fondo se aclara y se
+   quita el borde de arriba) para que se lea como el que está puesto, como una
+   pestaña de verdad. */
+.g-mapInfo-modal-pestanas {
+  display: flex;
+  gap: 4px;
+}
+
+.g-mapInfo-modal-pestana {
+  box-sizing: border-box;
+  font-family: inherit !important;
+  font-size: 0.94em !important;
+  line-height: 1.2;
+  color: inherit !important;
+  background: rgba(0, 0, 0, 0.16) !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 5px 10px !important;
+  cursor: pointer;
+}
+
+.g-mapInfo-modal-pestana:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+}
+
+.g-mapInfo-modal-pestana--activa {
+  background: rgba(255, 255, 255, 0.26) !important;
+  border-color: rgba(255, 255, 255, 0.8) !important;
+  font-weight: 700 !important;
+}
+
+.g-mapInfo-modal-pestana:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 1px;
+}
+
+/* Los paneles de las pestañas: solo se ve el activo, y el hueco del oculto se
+   quita con `display: none` (lo pone el atributo hidden) para que no empuje. */
+.g-mapInfo-modal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.g-mapInfo-modal-panel[hidden] {
+  display: none;
+}
+
+.g-mapInfo-modal-campo,
+.g-mapInfo-modal-definicion {
+  box-sizing: border-box;
+  width: 100%;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  /* El `line-height` explícito porque la hoja de la API pone `normal` a los
+     controles de formulario, igual que en los campos de la tira. */
+  line-height: 1.35;
+  /* El texto de dentro es oscuro y no el color de icono: el campo tiene fondo
+     claro translúcido sobre el naranja y el blanco no se leía (medido: 1,9:1 de
+     contraste con el naranja de fondo, por debajo del 4,5:1 que pide WCAG AA).
+     Aquí el color de esquema se usa para el fondo del campo, que es lo que
+     hace de marco. */
+  color: #1b1b1b !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 5px 7px !important;
+}
+
+.g-mapInfo-modal-campo::placeholder,
+.g-mapInfo-modal-definicion::placeholder {
+  color: rgba(27, 27, 27, 0.55) !important;
+}
+
+.g-mapInfo-modal-definicion {
+  /* La definición de un WKT es lo más largo que se pega aquí, así que el
+     textarea se estira: con `rows` fijo se quedaba en tres líneas de 40
+     caracteres y había que-scroll para leer lo que se había pegado. */
+  min-height: 4.6em;
+  resize: vertical;
+}
+
+.g-mapInfo-modal-campo:focus-visible,
+.g-mapInfo-modal-definicion:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 1px;
+}
+
+/* Los botones de la ventana: fondo claro y texto del color del esquema, que es
+   el inverso de la ventana. Así el principal ("Añadir y usar") destaca sin
+   necesidad de un color nuevo. */
+.g-mapInfo-modal-boton {
+  box-sizing: border-box;
+  align-self: flex-start;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 1.2;
+  color: var(--g-plugin-bg-color, orangered) !important;
+  background: var(--g-plugin-icon-color, #ffffff) !important;
+  border: 0 !important;
+  border-radius: 16px !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 6px 14px !important;
+  cursor: pointer;
+}
+
+.g-mapInfo-modal-boton:hover {
+  background: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Mientras está la búsqueda por código el botón se apaga, que es además lo que
+   impide que se pulse veinte veces y se acumulen veinte peticiones. */
+.g-mapInfo-modal-boton:disabled {
+  background: rgba(255, 255, 255, 0.45) !important;
+  cursor: default;
+}
+
+.g-mapInfo-modal-boton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.g-mapInfo-modal-boton--anadir {
+  font-weight: 700 !important;
+}
+
+/* El aviso del alta. Es un bloque con reserva de altura para que el botón no
+   salte al aparecer el mensaje, que es lo que pasaba con un alert encima. */
+.g-mapInfo-modal-aviso {
+  min-height: 1.35em;
+  font-size: 0.92em;
+}
+
+.g-mapInfo-modal-aviso--error {
+  color: #fff3cd;
+}
+
+.g-mapInfo-modal-aviso--error::before {
+  content: '⚠ ';
+}
+
+.g-mapInfo-modal-aviso--ok {
+  opacity: 0.9;
+}
+
+.g-mapInfo-modal-aviso--ok::before {
+  content: '✔ ';
+}
+
+/* El pie con el botón de cerrar, a la derecha. */
+.g-mapInfo-modal-pie {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+/* Pantallas estrechas: la ventana al ancho y sin bordes redondeados, que con 16
+   px de margen a cada lado solo quedarían como un arco raro. */
+@media (max-width: 520px) {
+  .g-mapInfo-modal {
+    width: 100%;
+    border-radius: 14px;
+  }
 }
 
 /* Valor no válido: una sacudida y un fondo breve. La clase la quita el

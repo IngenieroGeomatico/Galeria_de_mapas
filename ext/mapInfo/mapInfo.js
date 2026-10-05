@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
    PLUGIN DE INFORMACIÓN DEL MAPA PARA API-IDEE / API-CNIG
    Repositorio: Galeria_de_mapas
    =====================================================================
@@ -190,8 +190,16 @@
      dato, y entonces se muestra la del elipsoide.
 
    PROYECCIÓN DEL VISUALIZADOR:
-     Selector para cambiar el EPSG del mapa. Lo que hay detrás, y por qué está
-     limitado a lo que está:
+     Botón "Proyección EPSG:n" en la tira, que abre una VENTANA MODAL con la
+     lista de los sistemas de coordenadas utilizables, la casilla de recorte y
+     el alta de uno nuevo. Es modal, y no un desplegable, por dos razones
+     medidas: el desplegable tenía que ser de 26 em para que cupieran los
+     nombres largos ("ETRS89 / UTM zone 30N (EPSG:25830)") y con eso se comía
+     317 de los 780 px de la tira, y en una lista de doce códigos el desplegable
+     del navegador acaba abriéndose hacia arriba, por encima del botón, que es
+     justo donde está el resto del mapa.
+
+     Lo que hay detrás, y por qué la lista está limitada a lo que está:
 
        - La API TIENE método: `map.setProjection(codigo)`. Funciona y no lanza.
 
@@ -208,7 +216,7 @@
          "No transform available between EPSG:2154 and EPSG:3857". Las capas
          no saben reproyectarse a un sistema que no conocen.
 
-         Por eso el selector no ofrece la base de datos EPSG entera, sino los
+         Por eso la lista no ofrece la base de datos EPSG entera, sino los
          códigos que cumplen DOS condiciones, ambas comprobadas al montar:
          que `ol.proj.get()` devuelva la proyección, y que exista transform
          entre ella y EPSG:3857 (la que usan las capas de la API). En la etapa
@@ -223,8 +231,12 @@
          del <gml:name> del servicio de definiciones del OGC. Ver
          _nombreProyeccion.
 
-       Y hay una casilla al lado, "cortar", que decide si el visor se recorta a
-       la extensión de la proyección o se deja en global:
+       Y en la misma ventana está la casilla de "recortar", que decide si el
+       visor se recorta a la extensión de la proyección o se deja en global.
+       Dentro del modal y no en la tira porque va con la proyección: las dos
+       cosas son la misma pregunta (qué sistema de coordenadas y de qué
+       tamaño), y fuera de la tira la casilla quedaba como un adorno suelto
+       al que no se sabía con qué proyección estaba relacionada:
 
          - De la extensión se ocupa la propia proyección, que es lo que hace que
            el mapa base se vea en una bolsita: la fuente de teselas pide su
@@ -248,8 +260,9 @@
            impida mirar.
 
        - En 3D no hay nada que cambiar: el globo es geodésico y siempre es
-         EPSG:4979. El selector se muestra pero deshabilitado, con la
-         explicación en el título, en vez de fingir que hace algo.
+         EPSG:4979. El botón se muestra deshabilitado, con la explicación en
+         el título, en vez de fingir que hace algo. La casilla de recorte se
+         deshabilita con él.
 
        - `ol.proj.proj4.register()` de la API parece el método para registrar
          un EPSG nuevo, pero NO funciona en este bundle: con nueve firmas
@@ -258,8 +271,15 @@
          red (comprobado). Por eso la vía de registro es la de abajo.
 
    REGISTRAR UN EPSG NUEVO:
-     Cuando el código que se quiere no está en la lista, se pega su WKT y el
-     plugin lo registra. El método de la API es el que da el nombre:
+     En la parte de abajo de la ventana hay dos campos, el código y la
+     definición, y un botón "Añadir y usar". Antes esto se pedía con
+     `window.prompt`, que no admite pegar un WKT largo con comodidad ni
+     avisa de nada mientras se escribe; con los dos campos en el modal el WKT
+     se pega en un textarea y se lee entero. El código y la definición también
+     se admiten juntos en el campo de la definición separados por una barra
+     vertical, que es como se daba antes.
+
+     El método de la API es el que da el nombre:
      `IDEE.utils.parseCRSWKTtoJSON(wkt)` devuelve `PROJCS.name` y los
      `PARAMETER` de la proyección. Con eso se construye la transformación a
      mano (ver _registrarDesdeWKT) y se registra en OpenLayers con
@@ -277,6 +297,13 @@
      externo: se registra un código NUEVO con la MISMA definición que una
      proyección que la API ya trae (ETRS89 / UTM 30N, EPSG:25830) y se exige
      que dé los mismos números. Está en la batería de pruebas.
+
+      Y ahora además, cada alta hace su propia comprobación de ida y vuelta
+      antes de darse por buena: un punto pasa y vuelve y tiene que salir como
+      entró. Eso es lo que descubrió el error de signo de la inversa de Lambert,
+      que estaba escrita al revés (π/2 − 2·atan(...) en vez de
+      2·atan(...) − π/2) y ponía el hemisferio norte en negativo sin que nada se
+      enterara (medido: Madrid a -40,64°).
 
    CONVENCIONES:
    1. Resolvedor dual de la API (window.IDEE || window.M) mediante api(),
@@ -402,6 +429,15 @@
   /** Servicio de definiciones del OGC: resuelve el `coordRefSys` de un código
    *  y devuelve su <gml:name>. Solo se usa como mejora del rótulo. */
   const SERVICIO_DEFINICIONES = 'https://www.opengis.net/def/crs/EPSG/0/';
+  /** Servicio de definiciones que SÍ se puede leer desde el navegador: pide el
+   *  código y devuelve la cadena proj4.
+   *
+   *  Medido: https://epsg.io/2154.proj4 contesta 200 con "+proj=lcc +lat_0=46.5
+   *  +lon_0=3 ..." y con la cabecera que permite leerlo. El servicio de
+   *  definiciones del OGC (SERVICIO_DEFINICIONES) y api.proj4.org NO la mandan y
+   *  la petición se muere de CORS, que es por lo que el alta automática se hace
+   *  contra este y no contra aquel. */
+  const SERVICIO_DEFINICIONES_PROJ4 = 'https://epsg.io/';
   /** El código CRS:84 no es del EPSG y tiene su propio sitio en el servicio. */
   const DEFINICION_CRS84 = 'https://www.opengis.net/def/crs/OGC/1.3/CRS84';
   /** Pausa entre consultas al servicio de definiciones (ms). Se van una a una
@@ -542,15 +578,37 @@
       this._elUnidad = null;
       this._area = null;
 
-      // Segunda línea de la lectura: coordenadas del puntero y selector de
-      // proyección.
+      // Segunda línea de la lectura: coordenadas del puntero y botón de
+      // proyección (que abre la ventana modal con la lista y la casilla de
+      // recorte).
       this._elCoordenadas = null;
       this._etiquetaCoordenadas = null;
       this._selector = null;
+      this._codigoSelector = null;
       this._etiquetaSelector = null;
+      // La casilla de recorte y su etiqueta viven en la ventana modal, no en la
+      // tira. `_cajaAlcance` es la fila entera, que es la que lleva el título.
       this._cajaAlcance = null;
       this._casillaAlcance = null;
       this._etiquetaAlcance = null;
+      // Ventana modal de proyección. Va colgada del body y se crea una sola vez
+      // en _construirUI(), cerrada; `_abrirModal()` la muestra.
+      this._modal = null;
+      this._modalVentana = null;
+      this._modalFondo = null;
+      this._modalLista = null;
+      this._modalCampoBuscar = null;
+      this._modalCuenta = null;
+      this._modalCampoCodigo = null;
+      this._modalCampoCodigoBusqueda = null;
+      this._modalCampoDefinicion = null;
+      this._modalAviso = null;
+      this._modalPanelCodigo = null;
+      this._modalPanelDef = null;
+      this._modalPestanaCodigo = null;
+      this._modalPestanaDef = null;
+      this._modalBotonBuscar = null;
+      this._focoAlAbrir = null;
       this._proyecciones = [];
       this._epsgActivo = null;
       this._registrando = false;
@@ -624,12 +682,19 @@
         const c1 = this.resolveColor(this.color1);
         const c2 = this.resolveColor(this.color2);
         const c3 = this.resolveColor(this.color3);
-        this._container.style.setProperty('--g-plugin-bg-color', c1.deactive);
-        this._container.style.setProperty('--g-plugin-bg-color-active', c1.active);
-        this._container.style.setProperty('--g-plugin-border-color', c2.deactive);
-        this._container.style.setProperty('--g-plugin-border-color-active', c2.active);
-        this._container.style.setProperty('--g-plugin-icon-color', c3.deactive);
-        this._container.style.setProperty('--g-plugin-icon-color-active', c3.active);
+        const escribir = function (raiz) {
+          raiz.style.setProperty('--g-plugin-bg-color', c1.deactive);
+          raiz.style.setProperty('--g-plugin-bg-color-active', c1.active);
+          raiz.style.setProperty('--g-plugin-border-color', c2.deactive);
+          raiz.style.setProperty('--g-plugin-border-color-active', c2.active);
+          raiz.style.setProperty('--g-plugin-icon-color', c3.deactive);
+          raiz.style.setProperty('--g-plugin-icon-color-active', c3.active);
+        };
+        escribir(this._container);
+        // La ventana va colgada del body (ver _crearModal), así que no hereda
+        // las variables de la tira y hay que ponérselas también: si no, abrirla
+        // se vería con los colores de reserva del CSS.
+        if (this._modal) escribir(this._modal);
         return true;
       } catch (e) {
         console.warn(`${this.name}: no se pudieron aplicar los colores.`, e);
@@ -882,34 +947,38 @@
       separador2.className = 'g-mapInfo-separador';
       const separador3 = separador2.cloneNode(true);
 
-      // Selector de proyección del visor.
+      // Botón de proyección del visor. Antes era un <select> con el desplegable
+      // de la API, y ahora es un <button> que abre la ventana modal (ver
+      // _crearModal). El rótulo se queda tal cual estaba, "Nombre (EPSG:n)": lo
+      // que cambia es dónde se elige, no lo que se ve. La casilla de recorte se
+      // va con él a la ventana, y con ella y con la etiqueta del desplegable se
+      // recuperan los 52 px de la casilla.
       const bloqueProj = document.createElement('span');
       bloqueProj.className = 'g-mapInfo-dato';
       const etiquetaSelector = document.createElement('span');
       etiquetaSelector.className = 'g-mapInfo-etiqueta';
       etiquetaSelector.textContent = 'Proyección';
-      const selector = document.createElement('select');
+      const selector = document.createElement('button');
       selector.className = 'g-mapInfo-selector';
+      selector.type = 'button';
+      // El texto va en un <span> aparte y no directamente en el botón: el botón
+      // es un inline-flex y sin el span su ancho lo fija el navegador, que le
+      // da el ancho por defecto de button más un margen heredado de la API
+      // (medido en el panel de la brújula: 40 px de botón dentro de 44 px de caja).
+      const codigoSelector = document.createElement('span');
+      codigoSelector.className = 'g-mapInfo-selector-codigo';
+      const flechaSelector = document.createElement('span');
+      flechaSelector.className = 'g-mapInfo-selector-flecha';
+      flechaSelector.setAttribute('aria-hidden', 'true');
+      flechaSelector.textContent = '▾';
+      selector.appendChild(codigoSelector);
+      selector.appendChild(flechaSelector);
       bloqueProj.appendChild(etiquetaSelector);
       bloqueProj.appendChild(selector);
 
-      // Casilla de recorte. Va siempre visible al lado del desplegable, y no
-      // escondida en un diálogo al elegir la proyección: es una manera de ver
-      // el mapa, no un paso de un asistente, y hay que poder desmarcarla en
-      // cualquier momento, también con la proyección ya puesta. Marcada recorta
-      // el visor a la extensión de la proyección (que es lo que hace por su
-      // cuenta una UTM: se ve su franja y nada más); desmarcada, en global.
-      const cajaAlcance = document.createElement('span');
-      cajaAlcance.className = 'g-mapInfo-dato g-mapInfo-alcance';
-      const casillaAlcance = document.createElement('input');
-      casillaAlcance.type = 'checkbox';
-      casillaAlcance.className = 'g-mapInfo-casilla';
-      casillaAlcance.checked = this._recortar;
-      const etiquetaAlcance = document.createElement('span');
-      etiquetaAlcance.className = 'g-mapInfo-etiqueta';
-      etiquetaAlcance.textContent = 'cortar';
-      cajaAlcance.appendChild(casillaAlcance);
-      cajaAlcance.appendChild(etiquetaAlcance);
+      // La casilla de recorte NO se construye aquí: vive en la ventana modal, con la
+      // proyección a la que pertenece (ver _crearModal). Lo que queda en la tira
+      // es el botón, que es lo que abre la ventana.
 
       // El orden de la tira, de izquierda a derecha. Cada separador va en medio
       // de los dos datos que separa, y no se usa el `gap` de la caja para el
@@ -922,7 +991,6 @@
       caja.appendChild(coordenadas);
       caja.appendChild(separador3);
       caja.appendChild(bloqueProj);
-      caja.appendChild(cajaAlcance);
 
       cont.appendChild(caja);
 
@@ -933,20 +1001,578 @@
       this._elCoordenadas = valorCoordenadas;
       this._etiquetaCoordenadas = etiquetaCoordenadas;
       this._selector = selector;
+      this._codigoSelector = codigoSelector;
       this._etiquetaSelector = etiquetaSelector;
-      this._cajaAlcance = cajaAlcance;
+
+      // El botón abre la ventana. Se construye aquí y no al vuelo porque el
+      // modal tiene que existir ya para que su casilla de recorte reciba el
+      // estado (setState la pone antes de cambiar la proyección) y para que
+      //.destroy() pueda quitarlo.
+      this._crearModal();
+      this._on(selector, 'click', function () {
+        this._alternarModal();
+      }.bind(this));
+
+      return cont;
+    }
+
+    /**
+     * Crea la ventana modal de proyección, una sola vez, y la deja cerrada.
+     *
+     * Va colgada de `document.body` y no dentro de `.g-mapInfo` a propósito: la
+     * ventana es `position: fixed` para poder centrarse en el mapa entero, y si
+     * colgara de la caja de la tira heredaría sus `transform` (la animación de
+     * la sacudida de _rechazar y la de apertura), que convierten al ancestro en
+     * bloque contenedor y romperían el `fixed` (medido: con el modal dentro, el
+     * `fixed` se midió respecto de la caja y la ventana se iba al borde
+     * equivocado). Al colgarla del body hay que volver a ponerle las variables
+     * de color, que se inyectan en el contenedor; de eso se encarga
+     * _aplicarColores(), que escribe en los dos sitios.
+     *
+     * @returns {HTMLElement|null} Raíz de la ventana, o null si no se pudo crear.
+     */
+    _crearModal() {
+      if (this._modal) return this._modal;
+      const self = this;
+
+      const fondo = document.createElement('div');
+      fondo.className = 'g-mapInfo-modal-fondo';
+
+      const ventana = document.createElement('div');
+      ventana.className = 'g-mapInfo-modal';
+      ventana.setAttribute('role', 'dialog');
+      ventana.setAttribute('aria-modal', 'true');
+      ventana.setAttribute('aria-label', 'Proyección del visualizador');
+
+      // Cabecera con el título y la X de cerrar.
+      const cabecera = document.createElement('div');
+      cabecera.className = 'g-mapInfo-modal-cabecera';
+      const titulo = document.createElement('span');
+      titulo.className = 'g-mapInfo-modal-titulo';
+      titulo.textContent = 'Proyección del visualizador';
+      const cerrarX = document.createElement('button');
+      cerrarX.className = 'g-mapInfo-modal-cerrar';
+      cerrarX.type = 'button';
+      cerrarX.title = 'Cerrar';
+      cerrarX.setAttribute('aria-label', 'Cerrar');
+      cerrarX.textContent = '×';
+      cabecera.appendChild(titulo);
+      cabecera.appendChild(cerrarX);
+
+      // Buscador, encima de la lista. Filtra por nombre o por código, que es
+      // como se busca un sistema de coordenadas: por nombre ("UTM 30N") o por
+      // número ("25830"). Con quince filas y todas a la vista no hacia falta,
+      // pero en cuanto haya registradas unas cuantas por el alta automática, sí.
+      const buscador = document.createElement('div');
+      buscador.className = 'g-mapInfo-modal-buscador';
+      const campoBuscar = document.createElement('input');
+      campoBuscar.className = 'g-mapInfo-modal-campo g-mapInfo-modal-buscar';
+      campoBuscar.type = 'search';
+      campoBuscar.placeholder = 'Buscar por nombre o por código';
+      campoBuscar.title = 'Escribe parte del nombre o el código del sistema de coordenadas';
+      const cuenta = document.createElement('span');
+      cuenta.className = 'g-mapInfo-modal-cuenta';
+      buscador.appendChild(campoBuscar);
+      buscador.appendChild(cuenta);
+
+      // Lista de los sistemas de coordenadas utilizables, uno por fila, con un
+      // radio por fila. Radio y no casilla porque solo puede haber uno en uso, y
+      // el radio lo dice solo, sin ninguna línea que lo explique.
+      const lista = document.createElement('div');
+      lista.className = 'g-mapInfo-modal-lista';
+
+      // La casilla de recorte, que estaba en la tira y ahora viene aquí con la
+      // proyección a la que pertenece.
+      const filaAlcance = document.createElement('label');
+      filaAlcance.className = 'g-mapInfo-modal-fila g-mapInfo-modal-fila--casilla';
+      const casillaAlcance = document.createElement('input');
+      casillaAlcance.type = 'checkbox';
+      casillaAlcance.className = 'g-mapInfo-casilla';
+      casillaAlcance.checked = Boolean(this._recortar);
+      const etiquetaAlcance = document.createElement('span');
+      etiquetaAlcance.className = 'g-mapInfo-modal-etiqueta';
+      etiquetaAlcance.textContent = 'Recortar el visualizador a la extensión de la proyección';
+      filaAlcance.appendChild(casillaAlcance);
+      filaAlcance.appendChild(etiquetaAlcance);
+
+      // Alta de un EPSG que no está en la lista, en DOS pestañas:
+      //
+      //   - "Por código": se escribe el número y se busca la definición por red.
+      //   - "Con proj4 o WKT": se pega la definición a mano.
+      //
+      // Antes esto era un window.prompt con el código y la definición en la misma
+      // línea. Lo de las dos pestañas es porque son dos cosas distintas: una se
+      // escribe un número y no hay que saber nada más; la otra la usa quien ya
+      // tiene la definición, y para esa el prompt era especialmente incómodo
+      // porque un WKT son varias líneas y no había dónde pegarlas.
+      const alta = document.createElement('div');
+      alta.className = 'g-mapInfo-modal-alta';
+      const tituloAlta = document.createElement('span');
+      tituloAlta.className = 'g-mapInfo-modal-subtitulo';
+      tituloAlta.textContent = 'Añadir un EPSG que no esté en la lista';
+
+      const pestanas = document.createElement('div');
+      pestanas.className = 'g-mapInfo-modal-pestanas';
+      pestanas.setAttribute('role', 'tablist');
+      const botonPestanaCodigo = document.createElement('button');
+      botonPestanaCodigo.className = 'g-mapInfo-modal-pestana g-mapInfo-modal-pestana--activa';
+      botonPestanaCodigo.type = 'button';
+      botonPestanaCodigo.setAttribute('role', 'tab');
+      botonPestanaCodigo.textContent = 'Por código';
+      const botonPestanaDef = document.createElement('button');
+      botonPestanaDef.className = 'g-mapInfo-modal-pestana';
+      botonPestanaDef.type = 'button';
+      botonPestanaDef.setAttribute('role', 'tab');
+      botonPestanaDef.textContent = 'Con proj4 o WKT';
+      pestanas.appendChild(botonPestanaCodigo);
+      pestanas.appendChild(botonPestanaDef);
+
+      // --- Pestaña 1: buscar la definición por código.
+      const panelCodigo = document.createElement('div');
+      panelCodigo.className = 'g-mapInfo-modal-panel g-mapInfo-modal-panel--activo';
+      panelCodigo.setAttribute('role', 'tabpanel');
+      const explicacionCodigo = document.createElement('span');
+      explicacionCodigo.className = 'g-mapInfo-modal-explicacion';
+      explicacionCodigo.textContent = 'Se busca la definición del código en epsg.io y se registra sola. ' +
+        'Hace falta conexión: si no la hay, o el código no existe, se avisa y no se registra nada.';
+      const lineaCodigo = document.createElement('div');
+      lineaCodigo.className = 'g-mapInfo-modal-linea';
+      const campoCodigo = document.createElement('input');
+      campoCodigo.className = 'g-mapInfo-modal-campo';
+      campoCodigo.type = 'text';
+      campoCodigo.placeholder = '2154 o EPSG:2154';
+      campoCodigo.title = 'Código del sistema de coordenadas';
+      const botonBuscar = document.createElement('button');
+      botonBuscar.className = 'g-mapInfo-modal-boton g-mapInfo-modal-boton--anadir';
+      botonBuscar.type = 'button';
+      botonBuscar.textContent = 'Buscar y usar';
+      lineaCodigo.appendChild(campoCodigo);
+      lineaCodigo.appendChild(botonBuscar);
+      panelCodigo.appendChild(explicacionCodigo);
+      panelCodigo.appendChild(lineaCodigo);
+
+      // --- Pestaña 2: pegar la definición a mano.
+      const panelDef = document.createElement('div');
+      panelDef.className = 'g-mapInfo-modal-panel';
+      panelDef.setAttribute('role', 'tabpanel');
+      panelDef.hidden = true;
+      const explicacionAlta = document.createElement('span');
+      explicacionAlta.className = 'g-mapInfo-modal-explicacion';
+      explicacionAlta.textContent = 'Se admiten las proyecciones que se pueden calcular aquí ' +
+        '(Mercator, Mercator Auxiliar, Transversal de Mercator y Cónica Conforme de Lambert). ' +
+        'La definición puede ser una cadena proj4 o un WKT, y también puede ir con el código delante, separado por una barra vertical.';
+      const camposAlta = document.createElement('div');
+      camposAlta.className = 'g-mapInfo-modal-campos';
+      const campoCodigoManual = document.createElement('input');
+      campoCodigoManual.className = 'g-mapInfo-modal-campo';
+      campoCodigoManual.type = 'text';
+      campoCodigoManual.placeholder = 'EPSG:2154';
+      campoCodigoManual.title = 'Código del sistema de coordenadas';
+      const campoDefinicion = document.createElement('textarea');
+      campoDefinicion.className = 'g-mapInfo-modal-definicion';
+      campoDefinicion.rows = 3;
+      campoDefinicion.placeholder = '+proj=lcc +lat_1=49 +lat_2=44 +lat_0=46.5 +lon_0=3 +x_0=700000 +y_0=6600000 +ellps=GRS80 +units=m +no_defs';
+      campoDefinicion.title = 'Definición: cadena proj4 o WKT';
+      camposAlta.appendChild(campoCodigoManual);
+      camposAlta.appendChild(campoDefinicion);
+      const botonAnadir = document.createElement('button');
+      botonAnadir.className = 'g-mapInfo-modal-boton g-mapInfo-modal-boton--anadir';
+      botonAnadir.type = 'button';
+      botonAnadir.textContent = 'Añadir y usar';
+      panelDef.appendChild(explicacionAlta);
+      panelDef.appendChild(camposAlta);
+      panelDef.appendChild(botonAnadir);
+
+      // El aviso del alta (por qué no se ha registrado, o que ya está) va aquí, no
+      // en un alert: la ventana ya está abierta y un alert encima tapa el campo
+      // que hay que corregir.
+      const avisoAlta = document.createElement('div');
+      avisoAlta.className = 'g-mapInfo-modal-aviso';
+      avisoAlta.setAttribute('role', 'status');
+
+      alta.appendChild(tituloAlta);
+      alta.appendChild(pestanas);
+      alta.appendChild(panelCodigo);
+      alta.appendChild(panelDef);
+      alta.appendChild(avisoAlta);
+
+      // Pie con el botón de cerrar.
+      const pie = document.createElement('div');
+      pie.className = 'g-mapInfo-modal-pie';
+      const botonCerrar = document.createElement('button');
+      botonCerrar.className = 'g-mapInfo-modal-boton';
+      botonCerrar.type = 'button';
+      botonCerrar.textContent = 'Cerrar';
+      pie.appendChild(botonCerrar);
+
+      ventana.appendChild(cabecera);
+      ventana.appendChild(buscador);
+      ventana.appendChild(lista);
+      ventana.appendChild(filaAlcance);
+      ventana.appendChild(alta);
+      ventana.appendChild(pie);
+
+      const raiz = document.createElement('div');
+      raiz.className = 'g-mapInfo-modal-capa';
+      raiz.hidden = true;
+      raiz.appendChild(fondo);
+      raiz.appendChild(ventana);
+
+      this._modal = raiz;
+      this._modalVentana = ventana;
+      this._modalFondo = fondo;
+      this._modalCampoBuscar = campoBuscar;
+      this._modalCuenta = cuenta;
+      this._modalLista = lista;
+      this._modalCampoCodigo = campoCodigoManual;
+      this._modalCampoDefinicion = campoDefinicion;
+      this._modalAviso = avisoAlta;
+      this._modalCampoCodigoBusqueda = campoCodigo;
+      this._modalPanelCodigo = panelCodigo;
+      this._modalPanelDef = panelDef;
+      this._modalPestanaCodigo = botonPestanaCodigo;
+      this._modalPestanaDef = botonPestanaDef;
+      this._modalBotonBuscar = botonBuscar;
+      this._modalCampoCodigoBusqueda = campoCodigo;
       this._casillaAlcance = casillaAlcance;
       this._etiquetaAlcance = etiquetaAlcance;
+      this._cajaAlcance = filaAlcance;
+      this._focoAlAbrir = botonAnadir;
 
-      // La casilla actúa sobre la proyección que ya esté puesta, sin esperar a
-      // que se elija otra: es un conmutador del alcance, no del sistema de
-      // coordenadas.
+      // Los tres caminos de cerrar: la X, el pie y el fondo. Y Escape, que se
+      // escucha en la ventana porque se cierra con el teclado sin tener que
+      // punzar nada.
+      this._on(cerrarX, 'click', function () { this._cerrarModal(); }.bind(this));
+      this._on(botonCerrar, 'click', function () { this._cerrarModal(); }.bind(this));
+      this._on(fondo, 'click', function () { this._cerrarModal(); }.bind(this));
+      this._on(document, 'keydown', function (ev) {
+        if (ev.key !== 'Escape') return;
+        if (!this._modal || this._modal.hidden) return;
+        ev.preventDefault();
+        this._cerrarModal();
+      }.bind(this));
+
+      // La lista: un change en la lista (delegado, no uno por fila) es lo que
+      // aplica el cambio, porque las filas se rehacen cada vez que se registra
+      // uno nuevo y con un listener por fila habría que volver a colgarlo todo.
+      this._on(lista, 'change', function (ev) {
+        const elegido = ev.target;
+        if (!elegido || !elegido.value) return;
+        self._cambiarProyeccion(elegido.value);
+      });
+
       this._on(casillaAlcance, 'change', function () {
         this._recortar = Boolean(this._casillaAlcance.checked);
         this._aplicarAlcance(this._epsgActivo || this._crsDelVisor().codigo);
       }.bind(this));
 
-      return cont;
+      this._on(botonAnadir, 'click', function () {
+        this._altaEPSGDesdeModal();
+      }.bind(this));
+
+      // Las dos pestañas del alta. Se cambian con un solo método para que el
+      // marcado y el panel no se puedan desincronizar, que es lo que pasa si cada
+      // pestaña escribe en las dos cosas por su cuenta.
+      this._on(botonPestanaCodigo, 'click', function () {
+        this._verPestanaAlta('codigo');
+      }.bind(this));
+      this._on(botonPestanaDef, 'click', function () {
+        this._verPestanaAlta('definicion');
+      }.bind(this));
+
+      // El buscador filtra mientras se escribe. Con `input`, no con `change`:
+      // filtrar es de leer, no de confirmar.
+      this._on(campoBuscar, 'input', function () {
+        this._filtrarProyecciones();
+      }.bind(this));
+
+      this._on(botonBuscar, 'click', function () {
+        this._buscarEPSGPorCodigo();
+      }.bind(this));
+
+      // El campo de la definición manda con Enter, que es lo que se espera de un
+      // campo de texto; el textarea lo reserva para los saltos de línea, que en
+      // un WKT pueden ser necesarios.
+      this._on(campoCodigoManual, 'keydown', function (ev) {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          this._altaEPSGDesdeModal();
+        }
+      }.bind(this));
+      this._on(campoCodigo, 'keydown', function (ev) {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          this._buscarEPSGPorCodigo();
+        }
+      }.bind(this));
+
+      try {
+        document.body.appendChild(raiz);
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo colgar la ventana modal.`, e);
+        this._modal = null;
+        return null;
+      }
+
+      // La ventana nace con los mismos colores que la lectura, aunque todavía no
+      // se haya llamado a _aplicarColores() (si no, abrirla antes de que el
+      // contenedor existiera la dejaría con los colores de reserva).
+      this._aplicarColores();
+      this._rellenarProyecciones();
+      return raiz;
+    }
+
+    /**
+     * Abre o cierra la ventana modal, según esté.
+     *
+     * El alternar y no dos métodos separados es porque el caso real es el del
+     * segundo toque: la acción de abrir es el botón y la de cerrar es todo lo
+     * demás, y un solo camino para la condición "está abierta o no" evita que se
+     * queden desincronizados.
+     */
+    _alternarModal() {
+      if (!this._modal) return;
+      if (this._modal.hidden) this._abrirModal();
+      else this._cerrarModal();
+    }
+
+    /**
+     * Abre la ventana, con la lista al día y el foco dentro.
+     */
+    _abrirModal() {
+      if (!this._modal) return;
+      this._rellenarProyecciones();
+      this._modal.hidden = false;
+      // Sin esta clase la ventana aparece ya en su sitio y el cambio se ve como
+      // un parpadeo; con ella se pinta desde la escala y la opacidad de 0 (ver
+      // .g-mapInfo-modal-capa en el CSS).
+      this._modal.classList.add('g-mapInfo-modal-capa--visible');
+      // El foco va a la lista, que es lo que se viene a cambiar, y no al primer
+      // campo: si fuera el alta, con solo pulsar Enter no se registraría nada
+      // porque no hay nada escrito.
+      const activo = this._modal.querySelector('.g-mapInfo-modal-lista input:checked');
+      if (activo) activo.focus();
+      else if (this._modalCampoCodigo) this._modalCampoCodigo.focus();
+    }
+
+    /**
+     * Cierra la ventana y devuelve el foco al botón, que es lo que la abrió.
+     */
+    _cerrarModal() {
+      if (!this._modal || this._modal.hidden) return;
+      this._modal.hidden = true;
+      this._modal.classList.remove('g-mapInfo-modal-capa--visible');
+      if (this._selector && typeof this._selector.focus === 'function') {
+        try { this._selector.focus(); } catch (e) { /* silencioso */ }
+      }
+    }
+
+    /**
+     * Muestra una de las dos pestañas del alta.
+     * @param {string} cual 'codigo' o 'definicion'.
+     */
+    _verPestanaAlta(cual) {
+      if (!this._modal) return;
+      const codigo = (cual !== 'definicion');
+      this._modalPanelCodigo.hidden = !codigo;
+      this._modalPanelCodigo.classList.toggle('g-mapInfo-modal-panel--activo', codigo);
+      this._modalPanelDef.hidden = codigo;
+      this._modalPanelDef.classList.toggle('g-mapInfo-modal-panel--activo', !codigo);
+      this._modalPestanaCodigo.classList.toggle('g-mapInfo-modal-pestana--activa', codigo);
+      this._modalPestanaDef.classList.toggle('g-mapInfo-modal-pestana--activa', !codigo);
+      this._modalPestanaCodigo.setAttribute('aria-selected', codigo ? 'true' : 'false');
+      this._modalPestanaDef.setAttribute('aria-selected', codigo ? 'false' : 'true');
+      this._avisoAlta('', '');
+    }
+
+    /**
+     * Filtra la lista de proyecciones por lo que haya en el buscador.
+     *
+     * Se filtran las filas ya pintadas en vez de volver a hacer la lista: la lista
+     * sale de _leerProyecciones(), que es una comprobación cara (pregunta por
+     * transformaciones), y no tiene sentido repetirla con cada tecla. Las filas
+     * que no salen se esconden con la propiedad `hidden` en vez de quitarse del
+     * DOM, para que al borrar el texto vuelvan a aparecer sin más.
+     */
+    _filtrarProyecciones() {
+      if (!this._modalLista) return;
+      const texto = this._modalCampoBuscar
+        ? String(this._modalCampoBuscar.value || '').trim().toLowerCase()
+        : '';
+      const filas = this._modalLista.querySelectorAll('.g-mapInfo-modal-fila');
+      let visibles = 0;
+      let total = 0;
+      Array.prototype.slice.call(filas).forEach(function (fila) {
+        // La fila de la casilla no cuenta: no es una proyección, y si contara el
+        // contador decía "7 de 14" con catorce en la lista.
+        if (fila.classList.contains('g-mapInfo-modal-fila--casilla')) return;
+        total++;
+        const coincide = !texto || fila.textContent.toLowerCase().indexOf(texto) !== -1;
+        fila.hidden = !coincide;
+        if (coincide) visibles++;
+      });
+      // El contador es lo que hace que se entienda que la lista se está filtrando:
+      // sin él, con "UTM" escrito y dos filas, no se sabe si es eso todo.
+      if (this._modalCuenta) {
+        this._modalCuenta.textContent = texto ? visibles + ' de ' + total : '';
+      }
+    }
+
+    /**
+     * Busca la definición de un EPSG por su código y lo registra.
+     *
+     * Pide la definición a epsg.io, que es el único sitio de los medidos que
+     * sirve la cadena proj4 con la cabecera que permite leerla desde el navegador
+     * (medido: https://epsg.io/2154.proj4 contesta 200 con
+     * "+proj=lcc +lat_0=46.5 +lon_0=3 ..." y con CORS; en cambio el servicio de
+     * definiciones del OGC y api.proj4.org no lo hacen y la petición se muere).
+     *
+     * Con la definición en la mano el camino es el de siempre, _registrarEPSG(), y
+     * pasa por las mismas cuentas y la misma comprobación de ida y vuelta.
+     *
+     * El botón se deshabilita mientras está la petición para que no se pueda
+     * pulsar veinte veces y veinte respuestas.
+     */
+    _buscarEPSGPorCodigo() {
+      const self = this;
+      const bruto = this._modalCampoCodigoBusqueda
+        ? String(this._modalCampoCodigoBusqueda.value || '').trim()
+        : '';
+      const codigo = this._normalizarCodigoEPSG(bruto);
+      if (!codigo) {
+        this._avisoAlta('Escribe un código, por ejemplo 2154 o EPSG:2154.', 'error');
+        return;
+      }
+      // Si el código ya está en la lista no hace falta ir a por la definición: se
+      // aplica directamente, que es lo que quiere quien escribe uno que ya sale.
+      const enLista = this._proyecciones.some(function (p) { return p.codigo === codigo; });
+      if (enLista) {
+        // El aviso se limpia antes de aplicar: si el cambio va bien no hay nada
+        // que avisar, y si falla `_cambiarProyeccion` pone el suyo.
+        this._avisoAlta('', '');
+        this._cambiarProyeccion(codigo);
+        this._rellenarProyecciones();
+        return;
+      }
+
+      const numero = codigo.replace('EPSG:', '');
+      const boton = this._modalBotonBuscar;
+      if (boton) boton.disabled = true;
+      this._avisoAlta('Buscando ' + numero + '…');
+
+      if (typeof window.fetch !== 'function') {
+        if (boton) boton.disabled = false;
+        this._avisoAlta('Este navegador no tiene fetch, así que no se puede buscar. ' +
+          'Se puede pegar la definición en la otra pestaña.', 'error');
+        return;
+      }
+
+      window.fetch(SERVICIO_DEFINICIONES_PROJ4 + numero + '.proj4')
+        .then(function (r) {
+          if (!r.ok) throw new Error('el servicio ha contestado ' + r.status);
+          return r.text();
+        })
+        .then(function (texto) {
+          const definicion = String(texto || '').trim();
+          if (!definicion) throw new Error('definición vacía');
+          if (boton) boton.disabled = false;
+          if (self._modalCampoCodigoBusqueda) self._modalCampoCodigoBusqueda.value = '';
+          self._registrarEPSG(codigo, definicion);
+        })
+        .catch(function (e) {
+          if (boton) boton.disabled = false;
+          self._avisoAlta('No se ha podido buscar ' + numero + ': ' +
+            ((e && e.message) ? e.message : 'sin conexión') +
+            '. Se puede pegar la definición en la otra pestaña.', 'error');
+        });
+    }
+
+    /**
+     * Normaliza lo que se escribe en el campo del código a "EPSG:n".
+     * @param {string} texto Texto escrito.
+     * @returns {string} Código normalizado, o '' si no parece un código.
+     */
+    _normalizarCodigoEPSG(texto) {
+      const limpio = String(texto || '').trim()
+        .replace(/^(epsg\s*:?\s*|urn:ogc:def:crs:epsg::?)/i, '');
+      if (!/^\d+$/.test(limpio)) return '';
+      return 'EPSG:' + limpio;
+    }
+
+    /**
+     * Nombre de un sistema a partir de su definición, para el rótulo de la lista.
+     *
+     * Del WKT sale el nombre, que es lo que se usa (`PROJCS.name`, y el método de
+     * la API es justo el que lo da). De una cadena proj4 no hay nombre, así que
+     * se compone con lo que sí aparece: el código y el método. Es más útil en la
+     * lista que el número pelado, y sobre todo evita que dos filas se lean igual.
+     * @param {string} definicion Cadena proj4 o WKT.
+     * @param {string} numero Código sin el prefijo ("2154").
+     * @returns {string} Nombre, o el código si no hay nada mejor.
+     */
+    _nombreDeLaDefinicion(definicion, numero) {
+      if (definicion.indexOf('PROJCS') === 0 || definicion.indexOf('GEOGCS') === 0) {
+        try {
+          const IDEE = api();
+          if (IDEE && IDEE.utils && typeof IDEE.utils.parseCRSWKTtoJSON === 'function') {
+            const json = IDEE.utils.parseCRSWKTtoJSON(definicion);
+            if (json && json.PROJCS && json.PROJCS.name) return String(json.PROJCS.name);
+            if (json && json.GEOGCS && json.GEOGCS.name) return String(json.GEOGCS.name);
+          }
+        } catch (e) {
+          /* sin nombre: se cae al código con el método */
+        }
+      }
+      const metodo = /\+proj=([a-z0-9_]+)/i.exec(definicion);
+      if (metodo) return 'EPSG:' + numero + ' (' + metodo[1] + ')';
+      return 'EPSG:' + numero;
+    }
+
+    /**
+     * Alta de un EPSG desde la ventana, con los dos campos.
+     *
+     * Acepta las dos formas: código en su campo y definición en el textarea, o
+     * las dos cosas juntas en el textarea separadas por una barra vertical, que
+     * es como se daba antes con el window.prompt. Se admiten las dos porque un
+     * WKT copiado de un sitio cualquiera ya viene con el código dentro del
+     * nombre, y obligar a separarlo a mano era un paso que no hacía falta.
+     */
+    _altaEPSGDesdeModal() {
+      if (!this._modalCampoCodigo || !this._modalCampoDefinicion) return;
+      let codigo = String(this._modalCampoCodigo.value || '').trim();
+      let definicion = String(this._modalCampoDefinicion.value || '').trim();
+
+      // Código y definición juntos en el campo de la definición. La barra tiene que
+      // estar en algún sitio del texto (no solo al principio): un WKT copiado de
+      // un sitio cualquiera viene con el código detrás del nombre, y quien pega
+      // solo tiene que cambiar el separador.
+      const barra = definicion.indexOf('|');
+      if (barra > 0) {
+        const posibleCodigo = definicion.slice(0, barra).trim();
+        if (posibleCodigo && !codigo) {
+          codigo = posibleCodigo;
+          definicion = definicion.slice(barra + 1).trim();
+        }
+      }
+
+      if (!codigo || !definicion) {
+        this._avisoAlta('Falta el código o la definición.', 'error');
+        return;
+      }
+      this._avisoAlta('', '');
+      this._registrarEPSG(codigo, definicion);
+    }
+
+    /**
+     * Escribe un aviso en el alta, y deja el modal como estaba si el alta va bien.
+     * @param {string} texto Texto del aviso ('' lo borra).
+     * @param {string} [tipo] 'error' o 'ok'.
+     */
+    _avisoAlta(texto, tipo) {
+      if (!this._modalAviso) return;
+      this._modalAviso.textContent = texto || '';
+      this._modalAviso.className = 'g-mapInfo-modal-aviso'
+        + (tipo ? ' g-mapInfo-modal-aviso--' + tipo : '');
     }
 
     /**
@@ -2072,7 +2698,16 @@
           try {
             if (typeof this._map.getProjection === 'function') {
               const declarado = this._map.getProjection();
-              if (declarado) codigo = String(declarado);
+              // En 3D `map.getProjection()` NO devuelve un código sino el objeto de
+              // proyección (el de Cesium), y hacer String() de eso da
+              // "[object Object]" (medido). Ese texto se colaba en dos sitios y
+              // rompía los dos: se pintaba en el botón de la tira y, peor, se
+              // guardaba en getState() como si fuera un código, así que al
+              // volver a 2D se intentaba aplicar "[object Object]" y la UTM que
+              // tenía el usuario se perdía.
+              // Por eso solo se acepta algo que tenga forma de código.
+              const texto = declarado ? String(declarado) : '';
+              if (/^(EPSG|CRS|urn:ogc):/i.test(texto)) codigo = texto;
             }
           } catch (e) {
             /* se queda el de por defecto */
@@ -2336,7 +2971,13 @@
       } catch (e) {
         proyeccion = null;
       }
-      if (proyeccion && proyeccion.name) return proyeccion.name;
+      // OJO con `proyeccion.name`: no siempre es una cadena. En la 4979 (la que
+      // declara la API en 3D) es un objeto, y al pintarlo tal cual el botón de la
+      // tira decía "Proyección [object Object]" (medido). Se exige que sea texto
+      // antes de fiarse, como aquí.
+      if (proyeccion && typeof proyeccion.name === 'string' && proyeccion.name) {
+        return proyeccion.name;
+      }
 
       let nombre = null;
       if (this._nombresRegistrados && this._nombresRegistrados[codigo]) {
@@ -2860,14 +3501,51 @@
         const ol = window.ol;
         if (!ol || !ol.proj || !a || !b) return false;
         if (a === b) return true;
-        const directa = ol.proj.getTransform(a, b);
-        const inversa = ol.proj.getTransform(b, a);
-        const identidadA = ol.proj.getTransform(a, a);
-        const identidadB = ol.proj.getTransform(b, b);
-        return (directa !== identidadA && directa !== identidadB)
-          || (inversa !== identidadA && inversa !== identidadB);
+        // OJO con cómo se pregunta, que es donde estaban los dos fallos:
+        //
+        //  - Comparar la transformación con la identidad POR REFERENCIA no vale.
+        //    Cuando no hay par, `getTransform` devuelve null (medido en este
+        //    bundle, que no devuelve la identidad), y null !== función es
+        //    `true`, así que la comprobación decía que había transformación
+        //    entre dos proyecciones que no la tenían. Con eso, el emparejamiento
+        //    de las projections nuevas se saltaba justo los pares que faltaban
+        //    y el mapa se quedaba con la proyección a medias.
+        //
+        //  - Y la identidad de OpenLayers tampoco se puede reconocer por
+        //    referencia (la devuelve envuelta en un try/catch en unas versiones),
+        //    así que se reconoce probándola con un punto.
+        //
+        // Con lo que hay: null no es transformación, y la identidad tampoco.
+        return this._transformacionUsable(ol.proj.getTransform(a, b))
+          || this._transformacionUsable(ol.proj.getTransform(b, a));
       } catch (e) {
         return false;
+      }
+    }
+
+    /**
+     * Indica si lo que devuelve `getTransform` sirve como transformación.
+     * @param {*} t Valor devuelto por `ol.proj.getTransform`.
+     * @returns {boolean} true si es una función y no es la identidad.
+     */
+    _transformacionUsable(t) {
+      return (typeof t === 'function') && !this._esIdentidad(t);
+    }
+
+    /**
+     * Indica si una transformación es la identidad, probándola con un punto.
+     * @param {Function} transform Transformación a probar.
+     * @returns {boolean} true si el punto sale igual.
+     */
+    _esIdentidad(transform) {
+      try {
+        if (typeof transform !== 'function') return true;
+        const sonda = [1e6, 1e6];
+        const salida = transform(sonda);
+        if (!salida || salida.length < 2) return true;
+        return salida[0] === sonda[0] && salida[1] === sonda[1];
+      } catch (e) {
+        return true;
       }
     }
 
@@ -2917,69 +3595,109 @@
     }
 
     /**
-     * Llena el selector con las proyecciones utilizables y deja marcada la
-     * que está en uso.
+     * Llena la lista de la ventana con las proyecciones utilizables y deja
+     * marcada la que está en uso, y actualiza el código del botón de la tira.
      *
-     * Se llama al montar y también después de registrar una nueva, para que
-     * aparezca sin haber que recargar.
+     * Se llama al montar, al abrir la ventana y también después de registrar
+     * una nueva, para que aparezca sin haber que recargar.
      */
-    _rellenarSelector() {
-      if (!this._selector) return;
-      const selector = this._selector;
+    _rellenarProyecciones() {
       const self = this;
       try {
         this._proyecciones = this._leerProyecciones();
-        selector.textContent = '';
-        this._proyecciones.forEach(function (item) {
-          const opcion = document.createElement('option');
-          opcion.value = item.codigo;
-          // "Nombre (EPSG:n)", que es como seBUSCA un sistema de coordenadas:
-          // por nombre o por número, pero con los dos a la vista.
-          opcion.textContent = item.nombre + ' (' + item.codigo + ')';
-          selector.appendChild(opcion);
-        });
-
-        // La entrada de registro va al final y NO es un código: es la acción de
-        // pegar el WKT de uno que falte.
-        const registrar = document.createElement('option');
-        registrar.value = '';
-        registrar.textContent = '+ Registrar un EPSG nuevo…';
-        selector.appendChild(registrar);
-
-        const activo = this._epsgActivo || this._crsDelVisor().codigo;
-        selector.value = activo;
-        if (selector.value !== activo) {
-          // El código activo no está en la lista (será el 4979 de 3D): se deja
-          // el selector en la primera opción real.
-          selector.value = (this._proyecciones.length) ? this._proyecciones[0].codigo : '';
-        }
-
-        selector.onchange = function () {
-          const elegido = selector.value;
-          if (elegido === '') {
-            self._solicitarRegistroEPSG();
-            return;
-          }
-          self._cambiarProyeccion(elegido);
-        };
-
-        // Los nombres oficiales por red NO se piden aquí: es una mejora sobre los
-        // de NOMBRES_EPSG (que ya son los mismos) y el servicio de opengis.net no
-        // manda Access-Control-Allow-Origin, así que el navegador lo bloquea y
-        // cada intento deja un error CORS en la consola. Queda a mano con
-        // _resolverNombresOficiales() para cuando lo sirva con esa cabecera.
       } catch (e) {
-        console.warn(`${this.name}: no se pudo llenar el selector de proyección.`, e);
+        console.warn(`${this.name}: no se pudo leer la lista de proyecciones.`, e);
+        return;
+      }
+
+      // El botón de la tira enseña el rótulo entero (nombre y código), que es como
+      // estaba antes; la ventana es la que amplía la lista.
+      this._pintarCodigo(this._epsgActivo || this._crsDelVisor().codigo);
+
+      if (!this._modalLista) return;
+      const lista = this._modalLista;
+      lista.textContent = '';
+
+      const activo = this._epsgActivo || this._crsDelVisor().codigo;
+      this._proyecciones.forEach(function (item) {
+        const fila = document.createElement('label');
+        fila.className = 'g-mapInfo-modal-fila';
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.className = 'g-mapInfo-modal-radio';
+        radio.name = 'g-mapInfo-proyeccion';
+        radio.value = item.codigo;
+        if (item.codigo === activo) radio.checked = true;
+        const nombre = document.createElement('span');
+        nombre.className = 'g-mapInfo-modal-nombre';
+        // "Nombre (EPSG:n)", que es como seBUSCA un sistema de coordenadas:
+        // por nombre o por número, pero con los dos a la vista.
+        nombre.textContent = item.nombre;
+        const codigo = document.createElement('span');
+        codigo.className = 'g-mapInfo-modal-codigo';
+        codigo.textContent = item.codigo;
+        fila.appendChild(radio);
+        fila.appendChild(nombre);
+        fila.appendChild(codigo);
+        lista.appendChild(fila);
+      });
+
+      if (!this._proyecciones.length) {
+        const vacio = document.createElement('div');
+        vacio.className = 'g-mapInfo-modal-vacio';
+        vacio.textContent = 'No hay ninguna proyección utilizable en este visualizador.';
+        lista.appendChild(vacio);
+      }
+
+      // La casilla de recorte se sincroniza con el estado, que es la fuente de
+      // verdad: puede venir marcada de un getState()/setState() o de una
+      // casilla marcada antes de que la ventana se abriera.
+      if (this._casillaAlcance) this._casillaAlcance.checked = Boolean(this._recortar);
+      // Y se vuelve a aplicar el filtro del buscador: al registrar uno nuevo la
+      // lista se rehace entera, y sin esto las filas saldrían todas aunque el
+      // buscador tuviera algo escrito.
+      this._filtrarProyecciones();
+
+      // Los nombres oficiales por red NO se piden aquí: es una mejora sobre los
+      // de NOMBRES_EPSG (que ya son los mismos) y el servicio de opengis.net no
+      // manda Access-Control-Allow-Origin, así que el navegador lo bloquea y
+      // cada intento deja un error CORS en la consola. Queda a mano con
+      // _resolverNombresOficiales() para cuando lo sirva con esa cabecera.
+      void self;
+    }
+
+    /**
+     * Escribe en el botón de la tira el rótulo de la proyección activa.
+     *
+     * El rótulo es "Nombre (EPSG:n)", el mismo que tenía cada opción del
+     * desplegable: un sistema de coordenadas se busca por nombre o por número y
+     * lo que se busca está aquí. La ventana modal no sustituye a este texto, lo
+     * complementa: aquí se ve cuál está puesto y allí se elige o se añade otro.
+     * @param {string} codigo Código de la proyección (puede ser null).
+     */
+    _pintarCodigo(codigo) {
+      if (!this._codigoSelector) return;
+      const nombre = codigo ? this._nombreProyeccion(codigo) : '';
+      // "Nombre (EPSG:n)", y el código no se repite detrás si el nombre ya lo
+      // trae: con lo que se registra desde una cadena proj4, donde no hay nombre
+      // y se compone uno, salía "EPSG:2154 (lcc) (EPSG:2154)".
+      const texto = (nombre && nombre !== codigo && nombre.indexOf(codigo) === -1)
+        ? nombre + ' (' + codigo + ')'
+        : (nombre || codigo || '-');
+      this._codigoSelector.textContent = texto;
+      if (this._selector) {
+        this._selector.title = 'Pulsa para cambiar el sistema de coordenadas';
       }
     }
 
     /**
-     * Habilita o deshabilita el selector según la implementación activa.
+     * Habilita o deshabilita el botón de proyección según la implementación
+     * activa.
      *
      * En 3D no hay nada que cambiar: el globo es geodésico y la proyección la
-     * declara la propia API como EPSG:4979. Dejar el selector vivo ahí sería
-     * prometer algo que no ocurre, así que se deshabilita y se explica por
-     * qué en el título y en la etiqueta.
+     * declara la propia API como EPSG:4979. Dejarlo vivo ahí sería prometer algo
+     * que no ocurre, así que se deshabilita y se explica por qué en el título y
+     * en la etiqueta.
      *
      * La casilla de recorte se deshabilita además cuando la proyección activa no
      * tiene extensión propia (la 4269, que viene con extent null), porque entonces
@@ -2993,25 +3711,28 @@
       if (this._casillaAlcance) {
         // En 3D el recorte lo pone el propio globo (la escena se dibuja en el
         // geodésico y no hay proyección que recortar), así que la casilla no
-        // tiene nada que mandar y se deshabilita con el desplegable.
+        // tiene nada que mandar y se deshabilita con el botón.
         this._casillaAlcance.disabled = es3D || !recortable;
         this._casillaAlcance.checked = Boolean(this._recortar);
       }
       const explicacion = es3D
         ? 'En la visualización 3D el globo es geodésico: la proyección la declara la propia API como EPSG:4979 (longitud, latitud y altura) y no se puede cambiar.'
-        : 'Cambia el sistema de coordenadas del visor, manteniendo la extensión que se está viendo.';
-      this._selector.title = explicacion;
+        : 'Cambia el sistema de coordenadas del visualizador, manteniendo la extensión que se está viendo.';
       this._etiquetaSelector.title = explicacion;
+      // El título del botón lo pone _pintarCodigo(), que le añade el nombre de la
+      // proyección activa; aquí solo se le añade la explicación cuando no hay
+      // nombre que poner (3D), para que el aviso de 3D no se pierda.
+      if (this._selector && es3D) this._selector.title = explicacion;
       const explicacionAlcance = es3D
         ? 'En 3D no hay nada que recortar: el globo se ve entero.'
         : (recortable
-          ? 'Marcada, el visor se recorta a la extensión de la proyección (una UTM solo enseña su franja). Desmarcada, se ve en global y se repite hacia los lados.'
+          ? 'Marcada, el visualizador se recorta a la extensión de la proyección (una UTM solo enseña su franja). Desmarcada, se ve en global y se repite hacia los lados.'
           : 'Esta proyección no viene con extensión propia, así que no hay nada que recortar: se ve siempre en global.');
       if (this._cajaAlcance) this._cajaAlcance.title = explicacionAlcance;
       if (this._etiquetaAlcance) this._etiquetaAlcance.title = explicacionAlcance;
-      if (es3D) {
-        this._selector.value = this._crsDelVisor().codigo;
-      }
+      // En 3D el botón enseña el código que declara la API, no el último elegido,
+      // porque aquel ya no es el del visor.
+      if (es3D) this._pintarCodigo(this._crsDelVisor().codigo);
     }
 
     /**
@@ -3113,7 +3834,68 @@
     }
 
     /**
-     * Cambia el sistema de coordenadas del visor conservando lo que se ve.
+     * Dice si un punto en coordenadas de la proyección actual cae fuera de la zona
+     * de otra proyección, o si no se puede saber.
+     *
+     * Se calcula en la proyección de DESTINO, que es donde importa: un punto al
+     * que le faltan mil millones de metros de ordenada es lo que rompe la rejilla
+     * de las capas, y eso no lo dice la transformación (que siempre devuelve
+     * números) sino la extensión de la proyección.
+     * @param {Array<number>} punto Punto en la proyección actual [x, y].
+     * @param {string} codigo Código de la proyección de destino.
+     * @returns {string} Descripción de lo que pasa, o '' si el punto cae dentro.
+     */
+    _fueraDeLaZona(punto, codigo) {
+      try {
+        const ol = window.ol;
+        if (!ol || !ol.proj) return '';
+        const actual = this._vistaOL() ? this._vistaOL().getProjection() : null;
+        const destino = ol.proj.get(codigo);
+        if (!actual || !destino) return '';
+        const enDestino = ol.proj.transform(punto, actual, destino);
+        if (!enDestino || !isFinite(enDestino[0]) || !isFinite(enDestino[1])) {
+          return 'el punto no tiene coordenadas finitas';
+        }
+        const extension = (typeof destino.getExtent === 'function') ? destino.getExtent() : null;
+        if (!extension || extension.length < 4) return '';
+        // Media banda de margen: lo que está justo en el borde es un caso límite
+        // en el que la rejilla puede seguir fallando.
+        const margenX = (extension[2] - extension[0]) * 0.05;
+        const margenY = (extension[3] - extension[1]) * 0.05;
+        if (enDestino[0] < extension[0] - margenX || enDestino[0] > extension[2] + margenX
+          || enDestino[1] < extension[1] - margenY || enDestino[1] > extension[3] + margenY) {
+          return 'el punto cae en ' + Math.round(enDestino[0]) + ', ' + Math.round(enDestino[1]);
+        }
+        return '';
+      } catch (e) {
+        return '';
+      }
+    }
+
+    /**
+     * Vuelve a la proyección por defecto (EPSG:3857) tras un fallo.
+     *
+     * Es lo que se hace cuando un código de la lista no se puede usar: en vez de
+     * dejar el visualizador a medias, con la proyección a medio cambiar y el mapa
+     * sin saber dónde está, se aplica la de por defecto, que es la misma que usan
+     * las capas de la API y la que siempre funciona. Si ya se estaba en ella no
+     * hay nada que hacer, pero la lista y el botón se repintan igual, para que la
+     * ventana no se quede marcando un código que no es el del mapa.
+     */
+    _volverAProyeccionPorDefecto(aviso) {
+      const actual = this._epsgActivo || this._crsDelVisor().codigo;
+      if (actual !== PROYECCION_BASE) {
+        this._cambiarProyeccion(PROYECCION_BASE);
+      }
+      // El relleno va antes del aviso a propósito: _rellenarProyecciones()
+      // limpia el hueco de mensajes, así que si el aviso se pusiera antes se
+      // perdería justo en el camino de volver a la buena.
+      this._rellenarProyecciones();
+      if (aviso) this._avisoAlta(aviso, 'error');
+    }
+
+    /**
+     * Cambia el sistema de coordenadas del visualizador conservando lo que se ve.
      *
      * La API tiene el método (map.setProjection) y funciona, pero al cambiar
      * la proyección deja la vista en (0,0), que es el golfo de Guinea. Aquí se
@@ -3129,10 +3911,13 @@
      * @param {string} codigo Código EPSG destino.
      * @returns {boolean} true si el cambio se llegó a hacer.
      */
-    _cambiarProyeccion(codigo) {
+    _cambiarProyeccion(codigo, forzar) {
       if (this._registrando) return false;
       if (!this._puedeUsarProyeccion(codigo)) {
         this._rechazar(this._selector);
+        this._volverAProyeccionPorDefecto(codigo + ' no se puede usar en este visualizador: no se sabe ' +
+          'transformar a ' + PROYECCION_BASE + ', que es la de las capas. ' +
+          'Se ha vuelto a la de por defecto.');
         return false;
       }
 
@@ -3142,6 +3927,28 @@
         centro: this._centroVista(vista),
         sueloPorPx: this._metrosDeSueloPorPx(vista),
       };
+
+      // ¿Cae lo que se está viendo dentro de la zona de la proyección que se
+      // pide? Es una pregunta tonta de hacer y evita un desastre: si se elige la
+      // UTM de la zona 9 con el mapa centrado en Madrid, el centro cae a 579 km
+      // del meridiano, la rejilla de las capas se sale de rango y la API peta con
+      // "TypeError: coordinates must be finite numbers" (medido), con su diálogo
+      // de error encima. El aviso llega al modal, no a una consola que nadie ve.
+      //
+      // La comprobación se salta cuando se está RESTAURANDO una proyección que el
+      // usuario ya tenía: en ese momento el mapa es nuevo y su centro es el que
+      // le haya dado la API (el golfo de Guinea), así que el centro no dice nada
+      // de la zona y la comprobación saltaba siempre (medido: al volver de 3D a
+      // 2D no se recuperaba la UTM y se quedaba en la 3857).
+      if (antes.centro && !forzar) {
+        const fuera = this._fueraDeLaZona(antes.centro, codigo);
+        if (fuera) {
+          this._rechazar(this._selector);
+          this._volverAProyeccionPorDefecto(codigo + ' no cubre la zona que se está viendo (' +
+            fuera + '), así que no se ha aplicado y se ha vuelto a la de por defecto.');
+          return false;
+        }
+      }
       let proyeccionVieja = null;
       try {
         proyeccionVieja = vista ? vista.getProjection() : null;
@@ -3159,6 +3966,9 @@
       } catch (e) {
         console.warn(`${this.name}: no se pudo cambiar a ${codigo}.`, e);
         this._rechazar(this._selector);
+        this._volverAProyeccionPorDefecto(codigo + ' ha dado error al aplicarse: ' +
+          ((e && e.message) ? e.message : 'error desconocido') +
+          '. Se ha vuelto a la de por defecto.');
         return false;
       }
 
@@ -3197,7 +4007,14 @@
       this._epsgActivo = codigo;
       this._registrando = true;
       try {
-        if (this._selector) this._selector.value = codigo;
+        // Se repinta el botón y la lista, para que el código nuevo se vea tanto en
+        // la tira como dentro de la ventana (que es lo que ha elegido el usuario).
+        this._pintarCodigo(codigo);
+        if (this._modalLista) {
+          Array.prototype.slice.call(this._modalLista.querySelectorAll('input[type="radio"]')).forEach(function (r) {
+            r.checked = (r.value === codigo);
+          });
+        }
       } finally {
         this._registrando = false;
       }
@@ -3209,42 +4026,6 @@
         console.info(`${this.name}: proyección cambiada de ${anterior} a ${codigo}.`);
       }
       return true;
-    }
-
-    /**
-     * Pide por pantalla un EPSG que no esté en la lista y lo registra.
-     *
-     * Se pide el código y la definición en el mismo texto, separados por una
-     * barra vertical, porque pedirlo en dos diálogos seguidos es peor: la
-     * definición es larga y pegarla dos veces es una forma segura de
-     * equivocarse.
-     */
-    _solicitarRegistroEPSG() {
-      const anterior = this._selector ? this._selector.value : '';
-      let respuesta = null;
-      try {
-        respuesta = window.prompt(
-          'EPSG que quieres añadir y su definición, separados por una barra vertical (|).\n' +
-          'La definición puede ser una cadena proj4 o un WKT.\n\n' +
-          'Por ejemplo:\n' +
-          'EPSG:2154 | +proj=lcc +lat_1=49 +lat_2=44 +lat_0=46.5 +lon_0=3 ' +
-          '+x_0=700000 +y_0=6600000 +ellps=GRS80 +units=m +no_defs',
-          ''
-        );
-      } catch (e) {
-        respuesta = null;
-      }
-      // Cancelar o vaciar deja el selector donde estaba: no es un error.
-      if (respuesta === null || !String(respuesta).trim()) {
-        if (this._selector) this._selector.value = anterior;
-        return;
-      }
-
-      const corte = String(respuesta).split('|');
-      const codigo = corte[0].trim();
-      const definicion = (corte.length > 1) ? corte.slice(1).join('|').trim() : '';
-      const exito = this._registrarEPSG(codigo, definicion);
-      if (this._selector && !exito) this._selector.value = anterior;
     }
 
     /**
@@ -3261,40 +4042,106 @@
      * @returns {boolean} true si el código queda registrado y utilizable.
      */
     _registrarEPSG(codigo, definicion) {
+      // El aviso va al hueco de la ventana, no a una sacudida del desplegable: la
+      // ventana está abierta y es donde está el campo que hay que corregir. Con
+      // el <select> de antes no había dónde decirlo sin cerrar el desplegable.
       if (!codigo || !definicion) {
-        this._rechazar(this._selector);
+        this._avisoAlta('Falta el código o la definición.', 'error');
         return false;
       }
       try {
         const ol = window.ol;
         if (!ol || !ol.proj) {
-          this._rechazar(this._selector);
+          this._avisoAlta('OpenLayers no está disponible, así que no se puede registrar nada.', 'error');
           return false;
         }
         const yaEsta = !!ol.proj.get(codigo);
         const nombre = this._registrarDefinicion(codigo, definicion);
-        // El nombre se guarda antes de usarlo, para que el rótulo del selector
-        // salga de PROJCS.name en vez de del código pelado.
-        this._nombresRegistrados = this._nombresRegistrados || {};
-        this._nombresRegistrados[codigo] = nombre;
-        if (!yaEsta) this._proyecciones.push({ codigo: codigo, nombre: nombre });
-        this._rellenarSelector();
-        // Se elige: si el visor puede representarlo, se aplica; si no, el
-        // selector se queda en su valor anterior y se avisa.
-        if (this._puedeUsarProyeccion(codigo)) {
-          this._cambiarProyeccion(codigo);
-        } else {
-          this._rechazar(this._selector);
-          if (this._selector) this._selector.value = this._epsgActivo || '';
-          console.warn(`${this.name}: ${codigo} se ha registrado pero el visor no sabe representarlo ` +
-            '(no hay transform con ' + PROYECCION_BASE + '), así que no se ha aplicado.');
+        if (!nombre) {
+          // _registrarDefinicion() devuelve null cuando la proyección no está
+          // entre las que este plugin sabe calcular, y en ese caso no ha
+          // declarado nada: aquí solo se dice por qué.
+          this._avisoAlta(codigo + ' no se ha registrado: esta proyección no está entre las que ' +
+            'el visualizador sabe calcular (Mercator, Mercator Auxiliar, Transversal de Mercator ' +
+            'y Cónica Conforme de Lambert).', 'error');
           return false;
         }
-        return true;
-      } catch (e) {
-        console.warn(`${this.name}: no se pudo registrar ${codigo}.`, e);
-        this._rechazar(this._selector);
+        // El nombre se guarda antes de usarlo, para que el rótulo salga de
+        // PROJCS.name en vez de del código pelado. Y si la definición no traía
+        // nombre (una cadena proj4 no lo tiene), se compone uno con el código y
+        // el método, que es más útil en la lista que el número pelado.
+        this._nombresRegistrados = this._nombresRegistrados || {};
+        this._nombresRegistrados[codigo] = (nombre && nombre !== codigo)
+          ? nombre
+          : this._nombreDeLaDefinicion(definicion, codigo.replace('EPSG:', ''));
+        if (!yaEsta) this._proyecciones.push({ codigo: codigo, nombre: nombre });
+        this._rellenarProyecciones();
+        // Se elige: si el visor puede representarlo, se aplica; si no, se avisa y
+        // la lista se queda con la proyección que había.
+        if (this._puedeUsarProyeccion(codigo)) {
+          this._cambiarProyeccion(codigo);
+          this._avisoAlta(codigo + ' añadido y en uso.', 'ok');
+          // Los campos se vacían para que el siguiente alta empiece limpio.
+          if (this._modalCampoCodigo) this._modalCampoCodigo.value = '';
+          if (this._modalCampoDefinicion) this._modalCampoDefinicion.value = '';
+          return true;
+        }
+        this._avisoAlta(codigo + ' se ha registrado pero el visualizador no sabe representarlo ' +
+          '(no hay transform con ' + PROYECCION_BASE + '), así que no se ha aplicado.', 'error');
+        console.warn(`${this.name}: ${codigo} se ha registrado pero el visor no sabe representarlo ` +
+          '(no hay transform con ' + PROYECCION_BASE + '), así que no se ha aplicado.');
         return false;
+      } catch (e) {
+        const motivo = (e && e.message) ? e.message : String(e);
+        this._avisoAlta('No se pudo registrar ' + codigo + ': ' + motivo, 'error');
+        console.warn(`${this.name}: no se pudo registrar ${codigo}.`, e);
+        return false;
+      }
+    }
+
+    /**
+     * Empareja una proyección recién registrada con todas las demás utilizables.
+     *
+     * Hace falta porque OpenLayers NO encadena transformaciones: `getTransform`
+     * busca un par registrado tal cual y, si no lo hay, devuelve la identidad
+     * (que es un par de números que no son de la Tierra, y con él la API se
+     * queda). Con solo registrar 4326↔nueva y 3857↔nueva, pasar de una UTM a la
+     * nueva no encuentra 25830↔2154 y peta: medido, al elegir la 2154 desde la
+     * 25830 salía el diálogo de error de la propia API con "TypeError: t is not a
+     * function", y no pasaba al aplicarla desde la 3857, que sí tenía par.
+     *
+     * El par se compone por la geográfica: otra↔nueva es otra↔4326 seguido de
+     * 4326↔nueva. Solo se registra si no lo hay ya, para no pisar las
+     * transformaciones que trae la propia API.
+     *
+     * @param {Object} proyeccion Proyección nueva, ya declarada.
+     * @param {{adelante: Function, atras: Function}} transformacion Con 4326.
+     * @param {Object} geo Proyección geográfica EPSG:4326.
+     */
+    _emparejarConLasDemas(proyeccion, transformacion, geo) {
+      try {
+        const ol = window.ol;
+        if (!ol || !ol.proj) return;
+        const codigo = proyeccion.getCode();
+        const otras = this._leerProyecciones();
+        for (let i = 0; i < otras.length; i++) {
+          const otra = otras[i].codigo;
+          if (otra === codigo) continue;
+          let p = null;
+          try { p = ol.proj.get(otra); } catch (e) { p = null; }
+          if (!p) continue;
+          // Si ya hay un par, no se toca: el de la API es mejor que uno hecho aquí.
+          if (this._hayTransform(p, proyeccion)) continue;
+          const deOtra = ol.proj.getTransform(p, geo);
+          const aOtra = ol.proj.getTransform(geo, p);
+          ol.proj.addCoordinateTransforms(p, proyeccion,
+            function (c) { return transformacion.adelante(deOtra(c)); },
+            function (c) { return aOtra(transformacion.atras(c)); });
+        }
+      } catch (e) {
+        // Que no se pueda emparejar con todo el mundo no invalida el alta: solo
+        // afecta a los cambios de proyección que no estén emparejados.
+        console.warn(`${this.name}: no se pudieron emparejar todas las proyecciones con ${codigo}.`, e);
       }
     }
 
@@ -3307,7 +4154,9 @@
      * `addCoordinateTransforms`.
      * @param {string} codigo Código EPSG.
      * @param {string} definicion Cadena proj4 o WKT.
-     * @returns {string} Nombre del sistema de coordenadas.
+     * @returns {string|null} Nombre del sistema de coordenadas, o null si la
+     *   proyección no está entre las que este plugin sabe calcular (en cuyo caso
+     *   no se registra nada).
      */
     _registrarDefinicion(codigo, definicion) {
       const ol = window.ol;
@@ -3356,21 +4205,95 @@
         ? 'm'
         : (parametros.units === 'deg' ? 'd' : 'm');
 
+      // La transformación se calcula ANTES de declarar la proyección, y si no
+      // sale no se declara nada. Es lo que dice la cabecera de este fichero
+      // ("en vez de registrar una proyección que miente") y hace falta de verdad:
+      // medido que si se declara sin transformación, `ol.proj.get()` la devuelve,
+      // la comprobación de _puedeUsarProyeccion() la da por buena y el visor se
+      // queda EN EPSG:9999 sin capas y en blanco. Con "+proj=robin", por ejemplo,
+      // que no está entre las cuatro que este plugin sabe calcular.
+      const transformacion = this._crearTransformacion(tipo, parametros);
+      if (!transformacion) {
+        return null;
+      }
+
+      // Comprobación de ida y vuelta ANTES de declarar nada: se pasa un punto,
+      // se vuelve y los dos números tienen que salir como entraron. Es lo que
+      // descubre los errores de las inversas, que son de los que no se entera
+      // nadie porque la ida está bien: el signo de Lambert (0,38°), el /a que
+      // faltaba en la Transversal de Mercator (que devolvía -13 593°) y la
+      // derivada mala del Newton de Mercator (que no convergía).
+      //
+      // El punto de sondeo NO es siempre el mismo, sino el de la propia
+      // proyección (su meridiano y su latitud de origen). Sondear siempre Madrid
+      // salía mal por el motivo contrario: una UTM de la zona 28 tiene su
+      // meridiano en 15° O, así que Madrid está a 11° de él y la serie de
+      // Mercator, que está cortada en D⁶, ya no es exacta ni para ida ni para
+      // vuelta (medido: 0,0014° de desvío, o sea 150 m), y una proyección
+      // perfectamente buena se rechazaba. Lo que se comprueba aquí es que la
+      // cuenta esté bien hecha, no que la proyección sirva en todas partes, y
+      // para eso el punto tiene que estar donde la proyección es buena.
+      //
+      // El umbral es de 1e-5 grados, unos 1,1 m en el suelo, y no de 1e-6 porque
+      // la serie está cortada en D⁶: su inversa devuelve el punto con medio metro
+      // de diferencia (medido: 4,5e-6 grados) y eso no es un fallo, es lo que
+      // tiene la serie. Lo que se quiere cazar aquí son los errores de grados, de
+      // kilómetros y de NaN.
+      const sondeo = this._puntoDeSondeo(parametros);
+      const ida = transformacion.adelante(sondeo);
+      const vuelta = transformacion.atras(ida);
+      const desviacion = Math.max(
+        Math.abs(vuelta[0] - sondeo[0]),
+        Math.abs(vuelta[1] - sondeo[1])
+      );
+      if (!isFinite(ida[0]) || !isFinite(ida[1]) || !isFinite(vuelta[0]) || !isFinite(vuelta[1]) || !(desviacion <= 1e-5)) {
+        // El `!(desviacion <= 1e-5)` y no `desviacion > 1e-5` es a propósito: con
+        // NaN la comparación es falsa en las dos formas, así que la versión
+        // corriente dejaría pasar una transformación que devuelve NaN (medido:
+        // con la fórmula de Lambert equivocada, la ida salía finita y la vuelta
+        // NaN, y el alta se daba por buena).
+        console.warn(`${this.name}: la transformación de ${codigo} no vuelve al punto de partida ` +
+          `(desviación ${desviacion} grados), así que no se registra.`);
+        return null;
+      }
+
       const proyeccion = new ol.proj.Projection({
         code: codigo,
         units: unidades,
-        extent: this._extentDeProyeccion(parametros),
+        extent: this._extentDeProyeccion(parametros, tipo),
       });
-      ol.proj.addProjection(proyeccion);
 
-      const transformacion = this._crearTransformacion(tipo, parametros);
-      if (transformacion) {
-        ol.proj.addCoordinateTransforms(geo, proyeccion, transformacion.adelante, transformacion.atras);
-      } else {
-        console.warn(`${this.name}: la proyección "${tipo || definicion}" no está entre las que ` +
-          'sabe calcular este plugin, así que ${codigo} queda declarada pero sin transformación.');
-      }
+      // Las transformaciones se enganchan con la geográfica (EPSG:4326) Y con la
+      // que usan las capas de la API (EPSG:3857), y no solo con la primera.
+      //
+      // Con solo la de 4326 el registro parecía bueno pero el mapa se quedaba
+      // en blanco al aplicarlo: la API, al cambiar la proyección de la vista,
+      // pide la transformación 2154→3857 y no la encuentra (con el aviso "No
+      // transform available between EPSG:2154 and EPSG:3857"), y la API peta con
+      // "TypeError: t is not a function" (medido). Las de 3857 son la composición
+      // de la que ya hay (3857→4326) con la que se acaba de calcular
+      // (4326→la nueva), y _emparejarConLasDemas() las hace con el resto.
+      ol.proj.addProjection(proyeccion);
+      ol.proj.addCoordinateTransforms(geo, proyeccion, transformacion.adelante, transformacion.atras);
+      this._emparejarConLasDemas(proyeccion, transformacion, geo);
       return nombre;
+    }
+
+    /**
+     * Punto de sondeo para comprobar una transformación, en grados.
+     *
+     * Es el de la propia proyección (su meridiano y su latitud de origen), que es
+     * donde cualquier proyección está buena. Si la definición no trae esos
+     * parámetros se cae a un punto de referencia, que para estas proyecciones es
+     * el de la cadena de ejemplo del propio EPSG.
+     * @param {Object} p Parámetros de la proyección.
+     * @returns {Array<number>} [longitud, latitud] en grados.
+     */
+    _puntoDeSondeo(p) {
+      const lat0 = Number(p.lat_0);
+      const lon0 = Number(p.lon_0);
+      if (isFinite(lon0) && isFinite(lat0)) return [lon0, lat0];
+      return [-3.7038, 40.4168];
     }
 
     /**
@@ -3401,11 +4324,32 @@
      * @param {Object} p Parámetros de la proyección.
      * @returns {Array<number>} Extent [minx, miny, maxx, maxy].
      */
-    _extentDeProyeccion(p) {
+    _extentDeProyeccion(p, tipo) {
       if (p.units === 'deg' || p.units === 'd') return [-180, -90, 180, 90];
-      if (p.proj === 'lcc') {
+      // El método va en `tipo`, no en los parámetros: una cadena proj4 trae
+      // "+proj=tmerc", pero eso se lee aparte y en `p` solo quedan los
+      // parámetros con su "=". Con la comprobación sobre `p.proj` (que no existe)
+      // salía siempre el rectángulo de reserva y la comprobación de "cubre la
+      // zona" no llegaba a activarse nunca (medido: la extensión de una UTM
+      // registrada salía de 40 000 x 40 000 km).
+      const metodo = (tipo === 'Transverse_Mercator') ? 'tmerc'
+        : (tipo === 'Lambert_Conformal_Conic_2SP') ? 'lcc'
+          : (tipo === 'Mercator' || tipo === 'Mercator_Auxiliary_Sphere') ? 'merc'
+            : (p.proj || '');
+      if (metodo === 'lcc') {
         const centro = Number(p.lon_0) || 0;
         return [centro - 2.5e6, -5e6, centro + 2.5e6, 5e6];
+      }
+      if (metodo === 'tmerc') {
+        // La zona de una UTM son 6° de longitud, o sea unos 667 km de ancho, y
+        // va centrada en el FALSO ESTE (no en el meridiano: eso son grados, no
+        // metros, y con el meridiano el rectángulo salía desplazado 500 km, que
+        // es justo lo que hacía que la comprobación de "cubre la zona" no viera
+        // que Madrid cae fuera de la zona 9).
+        const falsoEste = Number(p.x_0 !== undefined ? p.x_0 : p.false_easting) || 0;
+        const falsoNorte = Number(p.y_0 !== undefined ? p.y_0 : p.false_northing) || 0;
+        const medioAncho = 3.2 * 111320 * Math.cos(((Number(p.lat_0) || 0) * Math.PI) / 180) || 3.2e5;
+        return [falsoEste - medioAncho, falsoNorte - 1e7, falsoEste + medioAncho, falsoNorte + 1.2e7];
       }
       return [-2e7, -2e7, 2e7, 2e7];
     }
@@ -3486,7 +4430,16 @@
                 - (3 * e2 / 8 + 3 * Math.pow(e2, 2) / 32 + 45 * Math.pow(e2, 3) / 1024) * Math.sin(2 * lat)
                 + (15 * Math.pow(e2, 2) / 256 + 45 * Math.pow(e2, 3) / 1024) * Math.sin(4 * lat)
                 - (35 * Math.pow(e2, 3) / 3072) * Math.sin(6 * lat)) - M;
-              const dF = a * (1 - e2 - 3 * Math.pow(e2, 2) / 64 - 5 * Math.pow(e2, 3) / 256) * Math.cos(lat);
+              // La derivada del arco meridiano es la cuenta CLARA, no la
+              // serie de arriba diferenciada a mano:
+              //   dM/dφ = a(1 − e²)/(1 − e²sin²φ)^(3/2)
+              // Estaba mal puesta y por eso el Newton no convergía: multiplicaba
+              // por cos(φ) en vez de dividir por (1 − e²sin²φ)^(3/2), y cerca del
+              // ecuador las dos cosas valen casi lo mismo, así que a 40° el paso
+              // sale 1,3 veces corto y la iteración se va (medido: Madrid
+              // volvía a -13 593° de latitud).
+              const sinLatNewton = Math.sin(lat);
+              const dF = a * (1 - e2) / Math.pow(1 - e2 * sinLatNewton * sinLatNewton, 1.5);
               if (Math.abs(dF) < 1e-12) break;
               const paso = F / dF;
               lat -= paso;
@@ -3499,7 +4452,14 @@
             const T = tanLat * tanLat;
             const C = e1 * cosLat * cosLat;
             const D = x / (N * k0);
-            const latR = lat - (N * tanLat / k0) * (Math.pow(D, 2) / 2
+            // OJO con el /a de la corrección de la latitud: en el EPSG 9807 al revés la
+            // fórmula es (N₁·tanφ₁/R)·(D²/2 − ...), y ese cociente SIN
+            // DIMENSIONES es lo que convierte un D en radianes de latitud. Sin
+            // el /a el término sale en metros y se le resta a una latitud que
+            // está en radianes: el error es de a lo ancho de la Tierra, y el
+            // punto volvía a -13 593° de latitud (medido). La ida estaba bien,
+            // que es por lo que no se veía.
+            const latR = lat - (N * tanLat / k0 / a) * (Math.pow(D, 2) / 2
               - (5 + 3 * T + 10 * C - 4 * Math.pow(C, 2) - 9 * e1) * Math.pow(D, 4) / 24
               + (61 + 90 * T + 298 * C + 45 * Math.pow(T, 2) - 252 * e1 - 3 * Math.pow(C, 2)) * Math.pow(D, 6) / 720);
             const lonR = lon0 + (D - (1 + 2 * T + C) * Math.pow(D, 3) / 6
@@ -3511,26 +4471,48 @@
 
         if (tipo === 'Lambert_Conformal_Conic_2SP') {
           const lat1 = (Number(p.lat_1) || 0) * RAD;
-          const lat2 = (Number(p.lat_2) || 0) * RAD;
+          const lat2 = (Number(p.lat_2) !== undefined ? Number(p.lat_2) : Number(p.lat_1) || 0) * RAD;
           const lat0 = (Number(p.lat_0) || 0) * RAD;
           const lon0 = (Number(p.lon_0) || 0) * RAD;
           const x0 = Number(p.x_0 !== undefined ? p.x_0 : p.false_easting) || 0;
           const y0 = Number(p.y_0 !== undefined ? p.y_0 : p.false_northing) || 0;
-          // Las latitudes de los paralelos estándar, en radianes, y el radio del
-          // cono. Con los dos paralelos sale n = sin(lat1), que es lo que hace
-          // falta para el 2SP.
-          const n = Math.sin(lat1);
-          const F = a * Math.pow(1 - e2 * n * n, 0.5) / n;
-          const rho = function (lat) {
-            return F / Math.pow(Math.tan(Math.PI / 4 + lat / 2), n);
+          const e = Math.sqrt(e2);
+
+          // Las fórmulas son las del EPSG 9807 (Guidance Note 7-2). Lo que hay
+          // aquí estaba mal en dos sitios, y los dos se compensaban de lejos:
+          // la auxiliar t era tan(π/4 + φ/2) en vez de la del EPSG, y la m era el
+          // radio de curvatura en vez de la meridiana. Medido con el ejemplo
+          // publicado del propio EPSG (NAD27 / Texas South Central): con las
+          // fórmulas erróneas daba X 2 293 677 en vez de 2 963 504, y en
+          // Lambert-93 Paris salía a 12 km y 472 km de desvío.
+          //
+          // Las dos auxiliares que hacen falta:
+          //   m(φ) = cos φ / √(1 − e²sin²φ)                (la meridiana)
+          //   t(φ) = tan(π/4 − φ/2) · [(1 + e·sin φ)/(1 − e·sin φ)]^(e/2)
+          // El cociente de t va CON el + en el numerador: al revés sale un 0,2%
+          // de error en cada t, que es poco pero se acumula en n y en F.
+          // Comprobado contra los valores intermedios que publica el EPSG para
+          // su ejemplo (m1, m2, t1, t2, tF, t, n y F): los ocho salen iguales
+          // hasta el octavo decimal, y ρ sale 11 449 846,97 m, que son los
+          // 37 565 039,86 pies que publica.
+          const mDe = function (x) { return Math.cos(x) / Math.sqrt(1 - e2 * Math.sin(x) * Math.sin(x)); };
+          const tDe = function (x) {
+            const s = Math.sin(x);
+            return Math.tan(Math.PI / 4 - x / 2) * Math.pow((1 + e * s) / (1 - e * s), e / 2);
           };
+          // Con dos paralelos, n sale de ellos; con uno solo (los dos iguales),
+          // n = sin(φ) del paralelo, que es el caso que el EPSG recoge aparte.
+          const n = (Math.abs(lat1 - lat2) < 1e-9)
+            ? Math.sin(lat1)
+            : (Math.log(mDe(lat1)) - Math.log(mDe(lat2))) / (Math.log(tDe(lat1)) - Math.log(tDe(lat2)));
+          const F = mDe(lat1) / (n * Math.pow(tDe(lat1), n));
+          const rho = function (x) { return a * F * Math.pow(tDe(x), n); };
           const rho0 = rho(lat0);
+          if (!isFinite(F) || !isFinite(rho0)) return null;
 
           const adelante = function (c) {
-            const lat = c[1] * RAD;
-            const dl = c[0] * RAD - lon0;
-            const r = rho(lat);
-            const theta = n * dl;
+            const r = rho(c[1] * RAD);
+            const theta = n * (c[0] * RAD - lon0);
             return [
               x0 + r * Math.sin(theta),
               y0 + rho0 - r * Math.cos(theta),
@@ -3538,12 +4520,34 @@
             ];
           };
 
+          // La inversa del EPSG lleva la corrección del elipsoide con la propia
+          // latitud dentro del término, así que no se puede despejar de una vez:
+          // se itera, y con dos o tres vueltas sale. El EPSG avisa de lo mismo en
+          // su variante (2SP Belgium), donde lo dice "the formula for lat
+          // requires iteration".
+          //
+          // Y la corrección va DIVIDIENDO, no multiplicando: t(φ) es
+          // tan(π/4 − φ/2) POR la corrección, así que para despejar el
+          // tangente hay que dividir por ella. Al revés salen 0,38° de error en
+          // la latitud (medido: Madrid volvía a 40,04° en vez de a 40,42°), que
+          // es poco y por eso no se veía: solo lo caza la comprobación de ida y
+          // vuelta.
           const atras = function (c) {
-            const r = rho0 - (c[1] - y0);
-            const theta = Math.atan2(c[0] - x0, r);
-            const lat = Math.PI / 2 - 2 * Math.atan(Math.pow(F / r, 1 / n));
-            const lon = lon0 + theta / n;
-            return [lon / RAD, lat / RAD, c.length > 2 ? c[2] : 0];
+            const dx = c[0] - x0;
+            const dy = rho0 - (c[1] - y0);
+            const theta = Math.atan2(dx, dy);
+            // El signo de ρ lo pone el hemisferio: en el sur, n es negativo.
+            const rhoPrima = (n < 0 ? -1 : 1) * Math.sqrt(dx * dx + dy * dy);
+            const t = Math.pow(rhoPrima / (a * F), 1 / n);
+            let lat = Math.PI / 2 - 2 * Math.atan(t);
+            for (let vuelta = 0; vuelta < 6; vuelta++) {
+              const s = Math.sin(lat);
+              const correccion = Math.pow((1 + e * s) / (1 - e * s), e / 2);
+              const nuevo = Math.PI / 2 - 2 * Math.atan(t / correccion);
+              if (Math.abs(nuevo - lat) < 1e-12) { lat = nuevo; break; }
+              lat = nuevo;
+            }
+            return [(theta / n + lon0) / RAD, lat / RAD, c.length > 2 ? c[2] : 0];
           };
           return { adelante: adelante, atras: atras };
         }
@@ -3741,9 +4745,9 @@
         this._vigilarVistaOL();
         this._vigilarCapas();
       }
-      // El puntero y el selector de proyección.
+      // El puntero y el botón de proyección.
       this._vigilarPuntero();
-      this._rellenarSelector();
+      this._rellenarProyecciones();
       this._ajustarSelector();
 
       // 3) La repetición lateral, también al arrancar. La capa base de la API
@@ -3795,6 +4799,31 @@
           /* silencioso */
         }
       }
+      // La ventana va colgada del body, no del contenedor, así que hay que
+      // quitarla aparte: si no se queda en la pantalla al desmontar el plugin.
+      if (this._modal) {
+        try {
+          if (this._modal.parentNode) this._modal.parentNode.removeChild(this._modal);
+        } catch (e) {
+          /* silencioso */
+        }
+      }
+      this._modal = null;
+      this._modalVentana = null;
+      this._modalFondo = null;
+      this._modalLista = null;
+      this._modalCampoBuscar = null;
+      this._modalCuenta = null;
+      this._modalCampoCodigo = null;
+      this._modalCampoCodigoBusqueda = null;
+      this._modalCampoDefinicion = null;
+      this._modalAviso = null;
+      this._modalPanelCodigo = null;
+      this._modalPanelDef = null;
+      this._modalPestanaCodigo = null;
+      this._modalPestanaDef = null;
+      this._modalBotonBuscar = null;
+      this._codigoSelector = null;
       this._container = null;
       this._elEtiqueta = null;
       this._elValor = null;
@@ -3802,6 +4831,7 @@
       this._elCoordenadas = null;
       this._etiquetaCoordenadas = null;
       this._selector = null;
+      this._codigoSelector = null;
       this._etiquetaSelector = null;
       this._cajaAlcance = null;
       this._casillaAlcance = null;
@@ -3883,10 +4913,17 @@
         // elegida. Se hace por _cambiarProyeccion(), que además conserva la
         // extensión, para que el mapa no aparezca en otro sitio.
         this._epsgActivo = null;
-        if (!this._cambiarProyeccion(state.epsg)) {
+        if (!this._cambiarProyeccion(state.epsg, true)) {
           // Si ya es la de por defecto no hay nada que hacer y no es un fallo.
           this._epsgActivo = null;
         }
+      } else if (this._es3D(this._map) && state && typeof state === 'object' && state.epsg) {
+        // En 3D la proyección del mapa es el EPSG:4979 del globo y no hay nada que
+        // aplicar, pero la que eligió el usuario se guarda igualmente, porque es
+        // lo único que sabe cuál era. Sin esto el viaje de ida llevaba la
+        // proyección y el de vuelta no la llevaba, y el usuario se encontraba el
+        // visualizador en la 3857 al volver de 3D (medido).
+        this._epsgActivo = state.epsg;
       }
 
       if (this._es3D(this._map)) {
@@ -3896,6 +4933,12 @@
       } else {
         this._actualizar();
       }
+      // El botón y la casilla se reajustan en los dos casos, porque su estado
+      // depende de la implementación (en 3D no hay proyección que cambiar ni nada
+      // que recortar) y esta instancia se acaba de montar con lo que tuviera la
+      // anterior. Sin esto el botón se quedaba deshabilitado después de venir de
+      // 3D y la ventana no se abría.
+      this._ajustarSelector();
     }
 
     /**
