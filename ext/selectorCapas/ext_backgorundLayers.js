@@ -260,14 +260,20 @@ class miPlugin_baseLayer {
         '--g-plugin-border-color:' + c2.deactive + ';' +
         '--g-plugin-border-color-active:' + c2.active + ';' +
         '--g-plugin-icon-color:' + c3.deactive + ';' +
-        '--g-plugin-icon-color-active:' + c3.active + ';}' +
+        '--g-plugin-icon-color-active:' + c3.active + ';' +
+        // El acento con el que se marca el fondo elegido (borde y anillo de
+        // foco): es el color3 en su estado activo, el mismo azul de la casa. Antes
+        // lo llevaba escrito en el CSS (#0078d4), que no era el de ningún otro
+        // plugin. Ver .bl-item:has(.bl-radio:checked) en ext_backgorundLayers.css.
+        '--g-plugin-accent-color:' + c3.active + ';}' +
         '.m-panel.g-herramienta_baseLayer.opened{' +
         '--g-plugin-bg-color:' + c1.active + ';' +
         '--g-plugin-bg-color-active:' + c1.active + ';' +
         '--g-plugin-border-color:' + c2.active + ';' +
         '--g-plugin-border-color-active:' + c2.active + ';' +
         '--g-plugin-icon-color:' + c3.active + ';' +
-        '--g-plugin-icon-color-active:' + c3.active + ';}'
+        '--g-plugin-icon-color-active:' + c3.active + ';' +
+        '--g-plugin-accent-color:' + c3.active + ';}'
       ));
       (document.head || document.documentElement).appendChild(styleEl);
     }

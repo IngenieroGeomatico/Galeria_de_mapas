@@ -55,7 +55,8 @@
   font-weight: 700;
   font-size: 14px;
   white-space: nowrap;
-  color: #db4938; /* color de marca del repo */
+  /* El título es el color de icono del esquema (era el rojo de marca del repo). */
+  color: var(--g-plugin-icon-color, #db4938);
 }
 
 .supra-bar__items {
@@ -70,10 +71,12 @@
   align-items: center;
 }
 
+/* El botón de plegado lleva el borde y el texto del esquema. */
 .supra-bar__toggle {
   margin-left: auto;
-  border: 1px solid #ccc;
+  border: 1px solid var(--g-plugin-border-color-active, #ccc);
   background: #f7f7f7;
+  color: var(--g-plugin-icon-color, inherit);
   border-radius: 4px;
   cursor: pointer;
   width: 26px;

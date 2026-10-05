@@ -100,6 +100,16 @@
       this.items = [];            // lista de items registrados {item, opts, mountedEl}
       this._collapsed = false;
 
+      // Colores configurables, con el mismo reparto y los mismos valores por
+      // defecto que el resto de plugins del repositorio (color1 = fondo,
+      // color2 = borde, color3 = icono y texto; ver
+      // ext/CalidadAireMadridTiempoReal). La barra los expone a sus items: quien
+      // no declare color1/color2/color3 propios hereda los de la barra, para que
+      // la barra y sus botones no seseen cada uno de un color.
+      this.color1 = (this.options.color1 !== undefined) ? this.options.color1 : { active: '#ffffff', deactive: 'orangered' };
+      this.color2 = (this.options.color2 !== undefined) ? this.options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
+      this.color3 = (this.options.color3 !== undefined) ? this.options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+
       // Adopta items iniciales (aún sin montar: se montan en addTo).
       // Cada entrada puede ser el item tal cual, o { item, order } para
       // colocarlo en una posición concreta de la barra.
@@ -244,9 +254,51 @@
 
       this.container = bar;
       this.itemsContainer = itemsEl;
+      this._aplicarColores();
 
       // Reajusta el tamaño del mapa cuando la barra cambia el alto disponible.
       this._notifyMapResize();
+    }
+
+    /**
+     * Devuelve {active, deactive} a partir de un color simple o de un objeto.
+     * @param {string|Object} c Color u objeto de colores.
+     * @returns {{active: string, deactive: string}} Los dos estados.
+     */
+    resolveColor(c) {
+      return (typeof c === "object" && c !== null)
+        ? { active: c.active, deactive: c.deactive }
+        : { active: c, deactive: c };
+    }
+
+    /**
+     * Vuelca los colores configurados a variables CSS de la barra.
+     *
+     *  Las seis variables del esquema (reposo y activo de fondo, borde e icono) se
+     *  ponen en línea sobre la barra, y supraplugin.css las consume con
+     *  `var(--g-plugin-bg-color, orangered)` y compañía. Como se ponen en la barra
+     *  y no en cada item, los items que no declaren color1/color2/color3 propios
+     *  los heredan de aquí por herencia de CSS, que es justo lo que se quiere: una
+     *  barra con un solo color.
+     * @returns {boolean} true si se pudieron poner las variables.
+     */
+    _aplicarColores() {
+      try {
+        if (!this.container || !this.container.style) return false;
+        var c1 = this.resolveColor(this.color1);
+        var c2 = this.resolveColor(this.color2);
+        var c3 = this.resolveColor(this.color3);
+        this.container.style.setProperty("--g-plugin-bg-color", c1.deactive);
+        this.container.style.setProperty("--g-plugin-bg-color-active", c1.active);
+        this.container.style.setProperty("--g-plugin-border-color", c2.deactive);
+        this.container.style.setProperty("--g-plugin-border-color-active", c2.active);
+        this.container.style.setProperty("--g-plugin-icon-color", c3.deactive);
+        this.container.style.setProperty("--g-plugin-icon-color-active", c3.active);
+        return true;
+      } catch (e) {
+        console.warn("[" + this.name + "] no se pudieron aplicar los colores.", e);
+        return false;
+      }
     }
 
     // Resuelve el contenedor raíz del visualizador. En API-IDEE el div que se

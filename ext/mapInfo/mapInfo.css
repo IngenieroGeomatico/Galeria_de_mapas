@@ -61,10 +61,21 @@
   box-sizing: border-box;
   display: flex;
   flex-flow: row wrap;
-  align-items: baseline;
+  /* Centrado, no por la base: el desplegable mide más que el texto (19 frente a
+     15 px) y con `baseline` los datos quedaban a distinto nivel (medido: cotas
+     superiores de 727,5 / 727,0 / 723,6 px), que es lo que hacía que la tira
+     pareciese torcida. Centrando da igual el alto de cada dato. */
+  align-items: center;
   justify-content: flex-start;
   max-width: 100%;
   row-gap: 2px;
+  /* TODO el aire entre datos sale de aquí, y es el MISMO en todos los sitios:
+     entre dato y dato, y también delante de la casilla de recorte. Antes cada
+     barra llevaba su propio margen y la casilla otro, y se notaba: medido, 2,6 px
+     alrededor de cada barra y 6 px delante de "cortar". Con un solo `column-gap`
+     no hay tres cifras que cuadrar. Las barras dejan de tener margen y se quedan
+     como lo que son: la marca que divide. */
+  column-gap: 0.42em;
   font-family: Muli, "sans-serif";
   font-size: 12px;
   /* El texto va en el color de icono del esquema, y el fondo y el borde en los
@@ -115,7 +126,7 @@
    con aire alrededor la caja parecía más suelta de lo que está. La barra va
    también atenuada para que el ojo vaya a los números. */
 .g-mapInfo-separador {
-  margin: 0 0.22em;
+  margin: 0;
   color: rgba(255, 255, 255, 0.55);
 }
 
@@ -278,19 +289,16 @@
   border-radius: 2px;
   cursor: pointer;
   pointer-events: auto;
-  /* La casilla es un cuadrado y su línea de base es el borde de abajo, así que
-     con `align-items: baseline` se queda asomando por encima de las mayúsculas.
-     `vertical-align` no sirve aquí: dentro de una caja flex no manda. Con este
-     píxel de margen se apoya donde debe. */
-  margin-top: 0.12em !important;
+  /* Sin margen ni `vertical-align`: la caja centra sus datos (align-items:
+     center), así que la casilla ya queda a media altura con el texto y no hace
+     falta empujarla a mano. */
 }
 
-/* La casilla y su etiqueta no llevan barra delante (no separan dos lecturas, sino
-   que activan una cosa), pero sí necesitan un poco de aire: el desplegable acaba
-   en su propia flecha y sin este margen la palabra "cortar" se le pegaba. Poco,
-   para no volver a ensanchar la tira. */
+/* La casilla y su etiqueta no llevan barra delante (no separan dos lecturas,
+   sino que activan una cosa), pero el aire les llega igual desde el `column-gap`
+   de la caja, que es el mismo que el de cualquier otro dato. */
 .g-mapInfo-caja .g-mapInfo-alcance {
-  margin-left: 0.5em;
+  margin-left: 0;
 }
 
 /* Al marcar, la casilla se pinta con el fondo del esquema y se le abre un hueco

@@ -17,13 +17,21 @@
   user-select: none;
 }
 
-/* Botón principal del item */
+/* Botón principal del item.
+   Colores del esquema (color1/color2/color3), los mismos que usa el resto de
+   plugins del repositorio: fondo = color1, borde = color2, icono/texto = color3.
+   Las variables las escribe el item en línea (ver _aplicarColores) y los valores
+   de reserva son los del esquema por defecto.
+
+   En reposo el botón es blanco (el color1 "active"), que es como se ve el resto
+   de la barra, y el color de marca entra cuando el item está ACTIVO, que es
+   donde el ojo tiene que ir. */
 .plantillaItem__boton {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
-  background-color: #ffffff;
+  background-color: var(--g-plugin-bg-color-active, #ffffff);
   color: #333333;
   border: 1px solid #cccccc;
   border-radius: 4px;
@@ -41,9 +49,10 @@
   color: #111111;
 }
 
+/* El anillo de foco lleva el color de marca del esquema. */
 .plantillaItem__boton:focus-visible {
   box-shadow: 0 0 0 2px rgba(219, 73, 56, 0.35);
-  border-color: #db4938;
+  border-color: var(--g-plugin-bg-color, orangered);
 }
 
 .plantillaItem__boton:active {
@@ -51,22 +60,27 @@
   transform: translateY(1px);
 }
 
-/* Estado activo del botón */
+/* Estado activo del botón: aquí entra el color de fondo, borde y texto del
+   esquema. */
 .plantillaItem__boton--activo {
-  background-color: #db4938;
-  border-color: #c73e2e;
-  color: #ffffff;
+  background-color: var(--g-plugin-bg-color, orangered);
+  border-color: var(--g-plugin-border-color, #ffffff);
+  color: var(--g-plugin-icon-color, #ffffff);
 }
 
+/* Al pasar por encima se oscurece un poco con filter y no con un color fijo: así
+   el tono depende del color configurado y no hay que mantener una versión
+   oscura de cada uno. */
 .plantillaItem__boton--activo:hover {
-  background-color: #c73e2e;
-  border-color: #b33425;
-  color: #ffffff;
+  background-color: var(--g-plugin-bg-color, orangered);
+  border-color: var(--g-plugin-border-color, #ffffff);
+  color: var(--g-plugin-icon-color, #ffffff);
+  filter: brightness(0.9);
 }
 
 .plantillaItem__boton--activo .plantillaItem__contador {
   background-color: rgba(255, 255, 255, 0.25);
-  color: #ffffff;
+  color: var(--g-plugin-icon-color, #ffffff);
 }
 
 /* Icono dentro del botón */

@@ -1,8 +1,21 @@
 .g-herramienta_layerSwitcher {
-  /* Scoped variables for base layer selector styling */
-  --bl-bg: #f9f9f9;
+  /* Variables propias del interruptor. Los colores no se escriben aquí sino que
+     salen del esquema del repositorio (color1/color2/color3, el mismo que usan
+     el resto de plugins; ver ext/CalidadAireMadridTiempoReal): así el interruptor
+     se colorea entero desde el visualizador sin tocar esta hoja, y se mantienen
+     las variables intermedias para no reescribir todas las reglas.
+
+     El ACCENT (casillas, deslizadores, enlaces y el anillo de foco) es el color
+     que pedía atención aquí: iba por su cuenta con un #0078d4 que no era el azul
+     de ningún otro plugin. Pasa a ser --g-plugin-accent-color, que el plugin
+     escribe con el color3 en su estado activo, el azul de la casa.
+
+     Los grises (--bl-border, --bl-color, --bl-heading) se quedan fijos a
+     propósito: son neutros de lectura, y atarlos al color de icono los volvería
+     blancos sobre fondo blanco. */
+  --bl-bg: var(--g-plugin-bg-color-active, #f9f9f9);
   --bl-border: #ddd;
-  --bl-accent: #0078d4;
+  --bl-accent: var(--g-plugin-accent-color, #0078d4);
   --bl-radius: 6px;
   --bl-color: #222;
   --bl-heading: #333;

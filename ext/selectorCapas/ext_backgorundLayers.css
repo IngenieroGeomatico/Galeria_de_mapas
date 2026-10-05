@@ -113,10 +113,19 @@
   pointer-events: none;
 }
 
-/* ── Selección activa: borde azul ───────────────────────────────── */
+/* ── Selección activa: el color de acento del esquema ────────────────
+   El acento (la marca que señala qué fondo está puesto) es --g-plugin-accent-color,
+   que el plugin escribe con el color3 en su estado activo: el mismo azul de la
+   casa que el resto de plugins. Antes iba por su cuenta con un #0078d4 que no
+   era el de ningún otro plugin.
+
+   El halo que rodea el borde NO sale de esa variable, porque en CSS no se puede
+   pasar un color a transparente: es un gris translúcido, que se ve bien con
+   cualquier acento. Y el fondo claro se deja como estaba, para no inventar un
+   color que el esquema no define. */
 .bl-item:has(.bl-radio:checked) {
-  border-color: #0078d4;
-  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.35), 0 2px 6px rgba(0, 0, 0, 0.12);
+  border-color: var(--g-plugin-accent-color, #0078d4);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
   background: #eaf3fc;
 }
 
