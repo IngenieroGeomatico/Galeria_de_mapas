@@ -263,6 +263,18 @@ ruta.on(IDEE.evt.LOAD, (features) => {
   mapjs.addPlugin(new IDEE.plugin.miPlugin_controlLocation());
   mapjs.addPlugin(new IDEE.plugin.miPlugin_controlRotate({ order: -1 }));
 
+  // En 3D los puntos de indicaciones se ven mas pequenos que en 2D, asi que su
+  // radio sube solo con Cesium. Se ajusta aqui, dentro de mapa(), y no en la
+  // definicion del estilo, porque mapa() se vuelve a ejecutar en cada cambio de
+  // implementacion y para entonces la capa ya existe. IDEE.impl.cesium es como
+  // lo mira la propia API.
+  const en3D = !!(window.IDEE && window.IDEE.impl && window.IDEE.impl.cesium);
+  if (estilo_indicacion && estilo_indicacion.point) {
+    estilo_indicacion.point.radius = en3D ? 9 : 5;
+    if (estilo_indicacion.point.icon) estilo_indicacion.point.icon.radius = en3D ? 19 : 11;
+    indicaciones.setStyle(estilo_indicacion);
+  }
+
   return mapjs
 
 }
