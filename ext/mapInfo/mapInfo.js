@@ -1553,7 +1553,18 @@
         }
       }
       const metodo = /\+proj=([a-z0-9_]+)/i.exec(definicion);
-      if (metodo) return 'EPSG:' + numero + ' (' + metodo[1] + ')';
+      if (metodo) {
+        // La UTM trae el nombre dentro de sus propios parámetros (la zona y el
+        // hemisferio), que dicen mucho más que el código con el método entre
+        // paréntesis: "UTM zone 28N" se entiende a la primera y
+        // "EPSG:25828 (utm)" no (medido).
+        if (metodo[1].toLowerCase() === 'utm') {
+          const zona = /\+zone=(\d+)/i.exec(definicion);
+          const sur = /\+south=1/i.test(definicion);
+          if (zona) return 'UTM zone ' + zona[1] + (sur ? 'S' : 'N');
+        }
+        return 'EPSG:' + numero + ' (' + metodo[1] + ')';
+      }
       return 'EPSG:' + numero;
     }
 
@@ -4270,7 +4281,12 @@
         // Se elige: si el visor puede representarlo, se aplica; si no, se avisa y
         // la lista se queda con la proyección que había.
         if (this._puedeUsarProyeccion(codigo)) {
-          this._cambiarProyeccion(codigo);
+          // El valor que devuelve el cambio es el que manda: si la vista no ha
+          // podido moverse, `_cambiarProyeccion` ya ha puesto su aviso (y ha
+          // vuelto a la proyección de por defecto), así que decir "y en uso"
+          // después era mentir (medido: el 25828 quedaba registrado y el
+          // visualizador se quedaba en 3857, con un "añadido y en uso" debajo).
+          if (!this._cambiarProyeccion(codigo)) return false;
           this._avisoAlta(codigo + ' añadido y en uso.', 'ok');
           // Los campos se vacían para que el siguiente alta empiece limpio.
           if (this._modalCampoCodigo) this._modalCampoCodigo.value = '';
@@ -4390,6 +4406,33 @@
           const valor = Number(par.slice(igual + 1));
           if (isFinite(valor)) parametros[clave] = valor;
         });
+      }
+
+      // La UTM es una transversal de Mercator con los parámetros deducidos de la
+      // zona, así que se deja reducida a eso antes de seguir: ni el punto de
+      // sondeo, ni el alcance aproximado, ni la transformación saben de "utm"
+      // (medido: sin esta reducción, el botón de "Buscar y usar" rechaza el
+      // 25828 con "este S.C.R. no está entre los que el visualizador sabe
+      // calcular", y lo hace con la definición buena en la mano: la que trae
+      // epsg.io para el 25828 es "+proj=utm +zone=28 +ellps=GRS80", que es
+      // exactamente la misma proyección que su WKT declara como
+      // Transverse_Mercator).
+      if (tipo === 'utm') {
+        const zona = Math.round(Number(parametros.zone));
+        if (!(zona >= 1 && zona <= 60)) {
+          // Una zona que no existe no se arregla inventándola: se deja el tipo
+          // vacío, que es lo que hace que no se registre nada.
+          tipo = '';
+        } else {
+          const sur = parametros.south !== undefined && Number(parametros.south) !== 0;
+          tipo = 'Transverse_Mercator';
+          parametros.lat_0 = 0;
+          parametros.lon_0 = -183 + 6 * zona;
+          parametros.k_0 = parametros.k_0 !== undefined ? Number(parametros.k_0) : 0.9996;
+          parametros.x_0 = 500000;
+          parametros.y_0 = sur ? 10000000 : 0;
+          parametros.units = 'm';
+        }
       }
 
       const unidades = (parametros.units === 'm' || parametros.units === undefined)
