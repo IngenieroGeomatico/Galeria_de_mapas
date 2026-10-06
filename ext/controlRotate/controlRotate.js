@@ -787,34 +787,6 @@
       }
       this._pintarRosa();
 
-      // La flechita que orbita. La bolita blanca del control nativo (que es el
-      // marcador que la API mueve al girar) se esconde y se sustituye por una
-      // flecha, que se lee mejor que un punto cuando dice hacia dónde has girado.
-      // Giran las dos cosas con el mismo ángulo, en _pintarFlecha2D().
-      if (!this._es3D(this._map)) {
-        const sitioFlecha = panel.querySelector('#m-rotate-slider-container') || dial;
-        // La flecha va dentro de un envoltorio que ocupa el disco entero y es
-        // el que gira. Como el envoltorio tiene su centro en el centro del
-        // disco, al rotarlo la flecha da la vuelta POR EL PERÍMETRO, que es lo
-        // que hacía la bolita del control nativo. Si se girase la flecha
-        // directamente, que es lo más fácil, se quedaría clavada arriba girando
-        // sobre sí misma sin salir de su sitio.
-        const giro = document.createElement('span');
-        giro.className = 'g-controlRotate-flecha-giro';
-        const flecha = document.createElement('span');
-        flecha.className = 'g-controlRotate-flecha';
-        flecha.title = 'Girar el mapa';
-        flecha.setAttribute('aria-hidden', 'true');
-        giro.appendChild(flecha);
-        sitioFlecha.appendChild(giro);
-        this._flecha = flecha;
-        this._flechaGiro = giro;
-        this._on(flecha, 'click', function (evento) {
-          evento.stopPropagation();
-          self._aplicarRotacion(0);
-        });
-      }
-      this._pintarFlecha2D();
 
       if (dial) {
         this._on(dial, 'dblclick', function (evento) {
@@ -841,7 +813,6 @@
       // La rosa va antes del guard de 3D: es adorno del dial, que es de 2D, pero
       // pintarla siempre deja el elemento al día aunque el mapa cambie mientras.
       this._pintarRosa();
-      this._pintarFlecha2D();
       if (this._es3D(this._map)) return;
       const vista = this._vista2D();
       if (vista && typeof vista.setRotation === 'function') {
@@ -878,20 +849,9 @@
       if (isFinite(rotacion)) {
         this._rotacion = this._normalizar(rotacion);
         this._pintarRosa();
-        this._pintarFlecha2D();
       }
     }
 
-    /**
-     * Gira la flecha que orbita por el borde del disco, a la misma velocidad que
-     * la vista. Es el marcador de giro: el puntero del dial nativo (una bolita
-     * blanca) queda escondido y en su lugar está esta flecha.
-     */
-    _pintarFlecha2D() {
-      if (!this._flechaGiro) return;
-      const grados = (this._rotacion * 180 / Math.PI);
-      this._flechaGiro.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
-    }
 
     /**
      * Gira la rosa de los vientos del disco para que apunte al norte.
@@ -1171,8 +1131,6 @@
       this._panel = null;
       this._dial = null;
       this._rosa = null;
-      this._flecha = null;
-      this._flechaGiro = null;
       this._aguja = null;
       this._giroscopio = null;
       this._rosaBoton = null;
