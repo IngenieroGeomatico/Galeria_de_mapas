@@ -604,7 +604,7 @@
   cursor: grabbing;
 }
 /* ---------------------------------------------------------------------
-   EL ICONO AL PASAR EL RATÓN.
+   EL ICONO AL PASAR EL RATÓN (SOLO EN 3D).
 
    Los dos iconos del disco (la rosa, que se ve siempre, y el átomo, que sale al
    pasar el ratón) están los dos en el DOM desde el principio y aquí se cambia solo
@@ -616,7 +616,7 @@
    El átomo es en línea y con `currentColor`, así que el color sale del esquema
    por la variable del constructor y no hay que escribir ningún color aquí.
    --------------------------------------------------------------------- */
-.m-panel.m-rotate.g-controlRotate .g-controlRotate-atom {
+.m-panel.m-rotate.g-controlRotate--3D .g-controlRotate-atom {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -631,7 +631,7 @@
   transition: opacity 120ms ease-out;
 }
 
-.m-panel.m-rotate.g-controlRotate:hover .g-controlRotate-atom {
+.m-panel.m-rotate.g-controlRotate--3D:hover .g-controlRotate-atom {
   opacity: 1;
 }
 /* Y la rosa se va, que si no los dos iconos se ven a la vez (medido). Se esconde
@@ -639,11 +639,11 @@
    `transform` con el rumbo, y si se quitara del DOM ese estado se perdería.
    Al ser un fundido de los dos, el sitio lo sigue mandando el átomo, que va
    centrado. */
-.m-panel.m-rotate.g-controlRotate:hover .g-controlRotate-rosa {
+.m-panel.m-rotate.g-controlRotate--3D:hover .g-controlRotate-rosa {
   opacity: 0;
 }
 
-.m-panel.m-rotate.g-controlRotate .g-controlRotate-atom svg {
+.m-panel.m-rotate.g-controlRotate--3D .g-controlRotate-atom svg {
   display: block;
   width: 100%;
   height: 100%;

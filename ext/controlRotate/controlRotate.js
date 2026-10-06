@@ -908,11 +908,6 @@
         // el DOM y el CSS los cambia de opacidad al pasar el ratón. Así el mismo
         // marcado sirve en línea (aquí) y como máscara en `mask-image`, y en
         // línea un elemento que aparece y desaparece al vuelo no se puede leer.
-        const atom = document.createElement('span');
-        atom.className = 'g-controlRotate-atom';
-        atom.setAttribute('aria-hidden', 'true');
-        atom.innerHTML = SVG_ATOM;
-        sitio.appendChild(atom);
         this._rosa = rosa;
         // Púlsala para volver al norte, que es lo que se espera de una brújula.
         this._on(rosa, 'click', function (evento) {
