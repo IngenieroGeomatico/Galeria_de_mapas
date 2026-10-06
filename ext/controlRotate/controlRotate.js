@@ -62,6 +62,26 @@
    * .ui y .map (patrón de api_clampToGround() en controlClampToGroundLayers).
    * @returns {Object} Espacio de nombres de la API-IDEE / API-CNIG.
    */
+  /**
+   * La rosa de los vientos del dial: dos triángulos cruzados.
+   *
+   * SVG de https://www.svgrepo.com/svg/480720/compass, descargado de
+   * https://www.svgrepo.com/download/480720/compass.svg y copiado también en
+   * img/iconos/compass.svg.
+   *
+   * Va aquí en línea, y no como `<img>` ni como url de máscara, por dos cosas:
+   * la rosa GIRA con la vista (va dentro de un elemento al que se le cambia el
+   * `transform`) y tiene que tomar el color de `--g-plugin-icon-color`, cosa que
+   * un `<img>` no puede hacer. El `viewBox` es el del original y el tamaño lo
+   * pone el CSS.
+   */
+  const SVG_ROSA = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"'
+    + ' fill="currentColor" aria-hidden="true" focusable="false">'
+    + '<path d="M359.328,257.563l-1.953-5.75l-5.656-16.719l-74.5-219.891v-0.047C274.109,6.094,265.625,0,256.031,0'
+    + ' c-9.609,0-18.141,6.094-21.219,15.219v-0.047l-82.141,242.469l82.25,239.234l0.016,0.109c3.063,8.844,'
+    + '11.594,15.063,21.156,15.016 c9.453,0.047,18.125-6.078,21.188-15.156l-0.031,0.031L359.328,257.563z'
+    + ' M256.25,424.875l-0.156-0.484l-0.156,0.484 l-57.453-167.266h115.203L256.25,424.875z"/></svg>';
+
   function api() {
     const IDEE = window.IDEE;
     if (IDEE && IDEE.ui && IDEE.map) return IDEE;
@@ -750,8 +770,13 @@
       const sitio = panel.querySelector('#m-rotate-slider-container') || dial;
       if (sitio) {
         const rosa = document.createElement('span');
-        rosa.className = 'm-rotate-rosa g-controlRotate-rosa g-cartografia-brujula';
+        rosa.className = 'm-rotate-rosa g-controlRotate-rosa';
         rosa.setAttribute('aria-hidden', 'true');
+        // El dibujo es el SVG_ROSA de arriba (svgrepo), en línea y con
+        // currentColor: así el color lo pone el CSS desde
+        // --g-plugin-icon-color y la rosa puede girar sin que la fuente de la
+        // API tenga ese glifo.
+        rosa.innerHTML = SVG_ROSA;
         sitio.appendChild(rosa);
         this._rosa = rosa;
         // Púlsala para volver al norte, que es lo que se espera de una brújula.

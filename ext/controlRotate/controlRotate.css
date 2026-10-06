@@ -102,17 +102,25 @@
    El `pointer-events: none` es para que la rosa no se coma el arrastre, que es
    del contenedor.
    --------------------------------------------------------------------- */
+/* El SVG de la rosa, dentro del disco. 26 px es lo que cabe justos dentro del
+   borde del disco de 40 px (medido con el glifo de la API, que ocupa menos). */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa > svg {
+  display: block;
+  width: 26px;
+  height: 26px;
+  fill: var(--g-plugin-icon-color, #ffffff);
+}
+
 .m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
   color: var(--g-plugin-icon-color, #ffffff);
-  /* El glifo de la fuente de la API ocupa solo una parte del em (medido: con
-     1,1 rem, o sea 17,6 px de letra, el dibujo sale de unos 12 px dentro de un
-     disco de 40 px y se lee como un punto, no como una brújula). Con 1,8 rem el
-     dibujo queda alrededor de 25 px, que es lo que cabe justo dentro del borde. */
-  font-size: 1.8rem;
+  /* La rosa ya no es un glifo de la fuente de la API, sino el SVG de svgrepo
+     (compass.svg): su tamaño lo pone la regla de abajo y no el `font-size` de
+     este contenedor. El color sí sale de aquí, y lo coge el SVG con
+     `currentColor`. */
   opacity: 0.95;
   pointer-events: none;
   -webkit-user-select: none;

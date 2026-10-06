@@ -285,16 +285,32 @@ Es la primera opción cuando el icono representa algo que la API ya tiene (bruju
 
 Para iconos que la API no tiene, o cuando el usuario traiga una URL de ahí. Es un buscador de SVG gratuitos, organizados en packs, y es la fuente que se ha pedido usar para los iconos nuevos.
 
-**Cómo sacar el SVG (el sitio va detrás de un checkpoint de Vercel):**
+**Cómo sacar el SVG a partir del ejemplo que da el usuario.**
+
+Si el usuario pasa una URL de la **ficha**, `https://www.svgrepo.com/svg/<id>/<nombre>` (por ejemplo `.../svg/480720/compass`), el SVG de verdad está en la **de descarga**, que se obtiene cambiando `/svg/` por `/download/` y añadiendo `.svg`:
+
+```
+Ficha:    https://www.svgrepo.com/svg/480720/compass
+Descarga: https://www.svgrepo.com/download/480720/compass.svg
+```
+
+Esa de descarga **sí** se puede pedir por automation. Tabla de lo medido:
 
 | Vía | Resultado medido |
 |---|---|
-| `webfetch` o `fetch` directo a `www.svgrepo.com` | **HTTP 429** "Vercel Security Checkpoint". No sirve. |
-| Chrome headless (Playwright) a la misma URL | **Checkpoint** ("No se pudo verificar tu navegador, código 21", 0 SVG en el DOM). No sirve. |
-| Proxy de texto `https://r.jina.ai/https://www.svgrepo.com/svg/<id>/<nombre>` | **Sí sirve**: da la descripción del icono y el **nombre del pack** (ej. "Orchid Line Interface Icons", "Transportation Icooon Mono"), que es lo que permite buscar el mismo dibujo en su origen. A veces da 429: reintentar. |
-| Imagen original `https://www.svgrepo.com/show/<id>/<nombre>.svg` | Es la URL que usa la propia página; puede seguir detrás del checkpoint. |
+| `https://www.svgrepo.com/download/<id>/<nombre>.svg` | **LA QUE FUNCIONA**: 200, `content-type: image/svg+xml`, el SVG completo (compass 480720: 913 car.). Es la que hay que usar. |
+| La ficha `https://www.svgrepo.com/svg/<id>/<nombre>` con `webfetch` o `fetch` | **HTTP 429**, "Vercel Security Checkpoint". |
+| La ficha con Chrome headless (Playwright) | **Checkpoint**: "No se pudo verificar tu navegador", código 21, y 0 `<svg>` en el DOM. |
+| La de descarga, pero devuelve 429 | Hay límite de peticiones. Medido con `globe-alt` (509123): falló 3 veces seguidas, con 45 s de espera entre medias y desde dos clientes distintos (el `fetch` del sandbox e `Invoke-WebRequest`). Reintentar pasado un rato y, si sigue, **pedírselo al usuario**. |
+| Proxy de texto `https://r.jina.ai/https://www.svgrepo.com/svg/<id>/<nombre>` | Sirve para leer la **descripción** del icono y el **nombre del pack** (ej. "Orchid Line Interface Icons", "Transportation Icooon Mono"), que es lo que permite buscar el mismo dibujo en su origen. |
 
-Si no se consigue el `path`/`d` del SVG: pedir al usuario que lo pegue, o buscar el mismo icono en el **pack de origen** que ha dicho el proxy, o en otro repositorio de iconos libres del mismo estilo.
+Pasos una vez descargado:
+
+1. Guardarlo en `img/iconos/<nombre>.svg` y dejar en un comentario el **origen** (la ficha), la **URL de descarga** y el **pack**.
+2. Limpiarlo: quitar el `<?xml ...?>`, el `<!DOCTYPE ...>` y el bloque `<style>` con las clases de color (`.st0{fill:#000000;}`); dejar el `viewBox` y el `path` tal cual, y poner `fill="currentColor"` para que el mismo fichero valga en línea (hereda de `color`) y como máscara (donde solo cuenta el alfa).
+3. Usarlo según el caso: con el parámetro `icon` de la plantilla si es el icono de un botón; en línea en el DOM si además tiene que girar o moverse.
+
+Si aun así no se consigue el `path`/`d`: pedir al usuario que lo pegue, o buscar el mismo icono en el **pack de origen** que ha dicho el proxy, o en otro repositorio de iconos libres del mismo estilo.
 
 **Reglas al usar un SVG de ahí:**
 
