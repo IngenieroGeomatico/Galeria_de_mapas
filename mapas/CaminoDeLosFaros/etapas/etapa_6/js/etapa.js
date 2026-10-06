@@ -119,6 +119,119 @@ function pegaAlTerrenoSiCesium(capa) {
   }, 2000);
 }
 
+
+/*
+ * Pega al terreno los puntos en los modos planos de Cesium (el plano del EPSG:3857
+ * y el 2D), donde el CLAMP_TO_GROUND no hace nada.
+ *
+ * En el globo (modo 3) el clampeo que pone pegaAlTerrenoSiCesium() vale, pero
+ * Cesium lo ignora en cuanto la escena deja de ser 3D: el punto se queda en la
+ * altura que trae, que aqui es 0 sobre el elipsoide, y se queda debajo del
+ * terreno. Medido: al pasar el selector del mapInfo a 3857 los marcadores se
+ * sueltan de la ruta y se ven a cientos de pixeles del suelo; doles la altura
+ * que da el terreno en ese punto vuelven a quedar pegados, y al volver al globo
+ * se les devuelve su posicion y el clampeo.
+ *
+ * El cambio de modo lo hace el mapInfo poniendo escena.mode = 1 a pelo, sin
+ * morphTo2D y por tanto sin ningun evento al que engancharse, asi que aqui se
+ * vigila el modo una vez por segundo. Poner la altura no se repite: cada punto
+ * se toca una sola vez mientras siga en modo plano, y si el MDT todavia no esta
+ * cargado se vuelve a intentarlo en la siguiente vuelta.
+ */
+const MODOS_PLANOS_CESIUM = [1, 2]; // Columbus y 2D; el 3 es el globo
+const vigilantePlano = { capas: [], intervalo: null };
+
+function pegaAlTerrenoEnPlanoSiCesium(capa) {
+  if (typeof window.Cesium === 'undefined') return; // 2D: no hace nada
+  if (vigilantePlano.capas.indexOf(capa) < 0) vigilantePlano.capas.push(capa);
+  if (vigilantePlano.intervalo === null) {
+    vigilantePlano.intervalo = setInterval(revisaAlturasEnPlanoSiCesium, 1000);
+  }
+}
+
+/**
+ * Una vuelta del vigilante: si la escena ya no es 3D, les da a los puntos la
+ * altura del terreno; si vuelve a ser 3D, les devuelve la posicion de partida y
+ * el clampeo.
+ */
+function revisaAlturasEnPlanoSiCesium() {
+  let escena = null;
+  try {
+    escena = mapjs.getMapImpl().scene;
+  } catch (e) {
+    escena = null;
+  }
+  if (!escena) return; // aun no hay escena, o ya no es Cesium
+  const plano = MODOS_PLANOS_CESIUM.indexOf(escena.mode) >= 0;
+  vigilantePlano.capas.forEach((capa) => {
+    aplicaAlturaSegunModo(capa, escena, plano);
+  });
+}
+
+/**
+ * Aplica o retira la altura explicita de una capa, entidad a entidad.
+ * @param {Object} capa Capa IDEE de la que se saca la fuente de datos de Cesium.
+ * @param {Object} escena Escena de Cesium.
+ * @param {boolean} plano true si la escena no es 3D.
+ */
+function aplicaAlturaSegunModo(capa, escena, plano) {
+  const C = window.Cesium;
+  let fuente = null;
+  try {
+    const lista = (mapjs.getMapImpl().dataSources._dataSources) || [];
+    for (const d of lista) {
+      if (d && d.name === capa.name) {
+        fuente = d;
+        break;
+      }
+    }
+  } catch (e) {
+    return;
+  }
+  if (!fuente || !fuente.entities) return;
+  const ahora = C.JulianDate.now();
+  fuente.entities.values.forEach((e) => {
+    const g = e.point || e.billboard;
+    if (!g) return; // las lineas ya llevan su propio clampeo
+    if (plano) {
+      if (e.alturaPlana !== undefined) return; // ya pegada, no se vuelve a tocar
+      const bruto = g.position || e.position;
+      const pos = bruto && bruto.getValue ? bruto.getValue(ahora) : bruto;
+      if (!pos) return;
+      let cg = null;
+      try {
+        cg = C.Cartographic.fromCartesian(pos);
+      } catch (e2) {
+        cg = null;
+      }
+      if (!cg) return;
+      let altura = null;
+      try {
+        altura = escena.globe.getHeight(cg);
+      } catch (e3) {
+        altura = null;
+      }
+      if (altura === null || altura === undefined) return; // el MDT aun no esta
+      e.posicionEnGlobo = [cg.longitude, cg.latitude, cg.height];
+      e.alturaPlana = altura;
+      g.heightReference = new C.ConstantProperty(C.HeightReference.NONE);
+      g.position = new C.ConstantPositionProperty(
+        C.Cartesian3.fromRadians(cg.longitude, cg.latitude, altura)
+      );
+    } else if (e.alturaPlana !== undefined) {
+      const origen = e.posicionEnGlobo;
+      e.alturaPlana = undefined;
+      e.posicionEnGlobo = undefined;
+      if (origen) {
+        g.position = new C.ConstantPositionProperty(
+          C.Cartesian3.fromRadians(origen[0], origen[1], origen[2])
+        );
+      }
+      g.heightReference = new C.ConstantProperty(C.HeightReference.CLAMP_TO_GROUND);
+    }
+  });
+}
+
 function mapa() {
 
 updateConfigBaseLayer()
@@ -303,7 +416,11 @@ mapjs.addLayers([indicaciones]);
 pegaAlTerrenoSiCesium(ruta);
 pegaAlTerrenoSiCesium(atajos);
 pegaAlTerrenoSiCesium(PuntosInteres);
+// En los modos planos de Cesium hace falta una altura real: ahi el clampeo no se aplica.
+pegaAlTerrenoEnPlanoSiCesium(PuntosInteres);
 pegaAlTerrenoSiCesium(indicaciones);
+// En los modos planos de Cesium hace falta una altura real: ahi el clampeo no se aplica.
+pegaAlTerrenoEnPlanoSiCesium(indicaciones);
 
 
 ruta.on(IDEE.evt.LOAD, (features) => {
