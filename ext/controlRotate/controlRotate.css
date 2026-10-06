@@ -272,6 +272,16 @@
   opacity: 1 !important;
 }
 
+/* El borde de la bolita, en el color primario del plugin: el mismo que el
+   fondo del boton, `--g-plugin-bg-color` (orangered por defecto). La bolita la
+   pinta el control nativo en un `<circle>` propio, asi que el borde es su
+   `stroke`; no hay que tocar el `fill` ni el tamano, y el color entra por la
+   variable del constructor igual que el resto. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-marker-circle {
+  stroke: var(--g-plugin-bg-color, orangered) !important;
+  stroke-width: 2 !important;
+}
+
 /* La rosa es pulsable (vuelve al norte), asi que necesita las rayas de la mano y
    el puntero, que el contenedor del dial tiene apagados. */
 .m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa {
