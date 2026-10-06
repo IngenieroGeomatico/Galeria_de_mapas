@@ -359,6 +359,103 @@
   height: 40px !important;
 }
 
+/* El disco de 44x44 dentro de un panel de 40x40 se sale 4 px, igual que el dial
+   de 2D, y con la bolita encima se sale un poco más. El panel de la API recorta,
+   así que hay que quitarle el recorte a este panel para que no se corten (medido:
+   con el recorte puesto, la bolita salía cortada por arriba). En 2D no hace
+   falta porque el dial de la API ya vive en un contenedor de 44. */
+.m-panel.m-rotate.g-controlRotate {
+  overflow: visible !important;
+}
+
+/* ---------------------------------------------------------------------
+   EL DIAL EN 3D: el mismo de 2D, copiado dentro del panel.
+
+   En 3D la API construye otra variante del control, la brújula grande de
+   150x150, y su contenedor (`.m-control.m-rotate-container`, 150x190) lo coloca
+   en (-100, -140) de la pantalla, o sea 110 px a la izquierda y 150 px arriba de
+   este panel: medido, y por eso el botón salía vacío. Ni `top`, ni `left`, ni
+   `margin`, ni `transform: scale()` lo mueven. Así que en vez de pelear con su
+   colocación, el JS pinta aquí dentro el mismo dial de 2D y oculta el de la API.
+
+   These reglas are a copy of the 2D dial, with the colours coming from the
+   variables the constructor sets, so both buttons look identical.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-3D-disco {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* `flex: none` es lo que impide que el disco se encoja. El panel de la API es
+     un flex column de altura justa, y como dentro hay además el contenedor
+   oculto de la brújula, el disco se encogía en vertical (medido: 40x36) y con
+     `border-radius: 50%` eso se ve como una elipse en vez de un círculo. */
+  flex: none;
+  position: relative;
+  box-sizing: border-box;
+  /* 44x44, que es lo que mide el dial de 2D (`#m-rotate-slider-container`,
+     medido) y no 40: con 40 el disco se veía 4 px más pequeño que el de 2D y la
+     bolita, que es la misma, parecía más grande en proportion. El panel sigue
+     siendo de 40, igual que en 2D, donde el dial de 44 se sale 4 px. */
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  color: var(--g-plugin-icon-color, #ffffff);
+  background: var(--g-plugin-bg-color, orangered) !important;
+  border: 2px solid var(--g-plugin-border-color, #ffffff) !important;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 2px 4px 0 !important;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* La rosa, a 40x40 como en 2D. Sin esto, como elemento flex del disco se queda
+   con el ancho del SVG (26 px) y con el alto del disco: 26x40 (medido). */
+/* La rosa se queda con `flex: none`, para que el flex del disco no la encoja. Con
+   el borde de 2 px del disco, el interior son 36x36 y una pieza flex se encoge a
+   36x40 (medido), y eso descentra el dibujo. Con `width/height` al 100% ocupa el
+   interior y el SVG de 26 px queda centrado igual que en 2D. */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-3D-disco .g-controlRotate-rosa {
+  flex: none;
+  width: 100%;
+  height: 100%;
+}
+
+/* La bolita de giro: la misma marca que en 2D (blanca con el borde del color
+   primario que lleva el `stroke` del `.m-rotate-marker-circle` del control
+   nativo) y con la misma regla: solo se ve al pasar el ratón por encima.
+
+   LAS MEDIDAS: la bolita de 2D es un `<circle>` de SVG con `stroke-width: 2` y
+   el trazo se pinta CENTRADO sobre el contorno, así que su caja mide 17x17 pero
+   lo que se ve son 19 px. Aquí, con `box-sizing: border-box`, el borde va
+   dentro: para que lo pintado sean 19 px el elemento ha de medir 19, y el núcleo
+   blanco queda en 15, igual que en 2D.
+
+   El `top` negativo es para que asome por fuera del disco, como en 2D: la bola
+   de 2D orbita a 22,6 px del centro y el disco de 44 tiene radio 22, o sea que
+   queda 0,6 px por fuera. Por eso el disco lleva `overflow: hidden` a propósito:
+   se ve la mitad de la bola, como en 2D. */
+.g-controlRotate-3D-bola {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  box-sizing: border-box;
+  width: 19px;
+  height: 19px;
+  margin-left: -9.5px;
+  border-radius: 50%;
+  background: var(--g-plugin-icon-color, #ffffff);
+  border: 2px solid var(--g-plugin-bg-color, orangered);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+
+.m-panel.m-rotate.g-controlRotate:hover .g-controlRotate-3D-bola {
+  opacity: 1;
+}
+
 /* ---------------------------------------------------------------------
    El dial es un control: el cursor debe decir que se puede arrastrar, y no
    debe robar el arrastre al mapa.

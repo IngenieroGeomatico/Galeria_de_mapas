@@ -494,6 +494,62 @@
      * @returns {boolean} true si se ha montado.
      */
     /**
+     * Pinta dentro del panel de 3D el mismo dial que en 2D: el disco de 40x40 con
+     * el color del plugin y la rosa de svgrepo en el centro, y oculta la brújula
+     * grande de la API, que es la que se colocaba fuera de la pantalla (ver el
+     * comentario en _adaptarPanel).
+     *
+     * Lo que NO hace todavía es el gesto: el que gira y el que inclina son los de
+     * la brújula de la API, que está oculta. La cámara va con lookAt y su
+     * lookAtTransform, y está medido que rotateUp, rotateLeft y lookAt no la
+     * mueven, y que un setView con orientation aplica la inclinación en el marco
+     * equivocado (pedir -89 grados devuelve -20). Ese es el siguiente pendiente.
+     *
+     * @param {HTMLElement} panel Panel donde se pinta el dial.
+     */
+    _pintarDial3D(panel) {
+      try {
+        // La brújula de la API, fuera de en medio: se oculta el contenedor entero,
+        // que es lo que la coloca lejos del botón.
+        const nativo = panel.querySelector('.m-rotate-container, .m-rotate-compass');
+        if (nativo) {
+          nativo.style.display = 'none';
+          this._nativo3D = nativo;
+        }
+
+        const disco = document.createElement('div');
+        disco.className = 'g-controlRotate-3D-disco';
+        disco.title = 'Arrastra para girar la vista';
+
+        const rosa = document.createElement('span');
+        rosa.className = 'm-rotate-rosa g-controlRotate-rosa';
+        rosa.setAttribute('aria-hidden', 'true');
+        rosa.innerHTML = SVG_ROSA;
+        disco.appendChild(rosa);
+
+        // La bolita de giro, la misma marca que en 2D: blanca con el borde del
+        // color primario, sobre el borde del disco, y solo visible al pasar el
+        // ratón. En 2D la pone el control nativo (`#m-rotate-marker`, que la
+        // variante de Cesium no trae) y la API la mueve; aquí es nuestra y de
+        // momento se queda arriba, que es como se ve en 2D con el mapa al norte.
+        const bola = document.createElement('span');
+        bola.className = 'g-controlRotate-3D-bola';
+        disco.appendChild(bola);
+        this._bola3D = bola;
+
+        panel.appendChild(disco);
+
+        this._dial3D = disco;
+        this._rosa = rosa;
+        this._pintarRosa();
+        if (this.order !== undefined) panel.style.order = String(this.order);
+        this._aplicarVisibilidad();
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo pintar el dial de 3D.`, e);
+      }
+    }
+
+    /**
      * Localiza el panel que la API acaba de crear para el control y lo deja
      * con el aspecto de un botón de herramienta.
      * El panel se crea de forma síncrona al añadir el control, pero se espera
@@ -546,6 +602,20 @@
       if (!this._conNorte) panel.classList.add('g-controlRotate--sinNorte');
       // Y los colores configurados, como variables CSS sobre el panel.
       this._aplicarColores();
+
+      // En 3D se pinta el MISMO dial que en 2D, copiado aquí dentro del panel, y
+      // se oculta el de la API. Motivo, todo medido: la variante de Cesium del
+      // control construye otra cosa, la brujula grande de 150x150, y su contenedor
+      // (`.m-control.m-rotate-container`, 150x190) la API lo coloca en (-100, -140)
+      // de la pantalla, o sea 110 px a la izquierda y 150 px arriba de este panel
+      // (medido con getBoundingClientRect). Por eso el botón salía vacío. Ni con
+      // `top`/`left`/`margin` ni con `transform: scale()` se mueve, así que en vez
+      // de pelear con su colocación se copia la nuestra, que es la que sabemos
+      // dónde cae.
+      if (this._es3D(this._map)) {
+        this._pintarDial3D(panel);
+        return;
+      }
       // La API no lleva el `order` del control al panel, de modo que se
       // escribe aquí: en la columna (flex column) es lo que decide si el
       // dial va primero o al final.
