@@ -286,10 +286,11 @@
   font-size: 12px;
   line-height: 12px;
   text-align: center;
+  /* Sin fondo: solo el glifo de la flecha, en el color del icono del plugin. */
   color: var(--g-plugin-icon-color, #ffffff);
-  background: var(--g-plugin-bg-color, orangered);
-    /* Circular, como la bolita a la que sustituye. */
-  border-radius: 50%;
+  /* Como media flecha queda fuera del disco, sobre el mapa, la sombra es lo
+     que la separa del fondo (sin ella desaparece sobre el mapa claro). */
+  text-shadow: 0 0 2px var(--g-plugin-bg-color, orangered), 0 0 1px var(--g-plugin-bg-color, orangered);
   pointer-events: auto;
   cursor: pointer;
 }
