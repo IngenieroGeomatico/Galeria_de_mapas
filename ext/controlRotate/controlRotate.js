@@ -707,8 +707,15 @@
 
     /**
      * Gira la vista de Cesium un ángulo, alrededor del punto al que mira la
-     * cámara. El signo sale medido: `rotateRight` con ángulo positivo BAJA el
-     * rumbo ese mismo ángulo (medido: +0,5 rad pasa el rumbo de 360 a 331,4).
+     * cámara.
+     *
+     * EL SIGNO VA NEGADO, y no es casualidad (medido): `rotateRight` con ángulo
+     * positivo BAJA el rumbo ese mismo ángulo (+0,5 rad lleva el rumbo de 360 a
+     * 331,4), pero en una cámara que mira hacia abajo subir el rumbo hace que el
+     `terreno` gire en sentido ANTIHORARIO en pantalla. Como el dial de 2D gira
+     * el mapa en el mismo sentido en que se mueve la bolita, aquí se aplica el
+     * ángulo del puntero cambiado de signo: bolita en sentido horario, mapa en
+     * sentido horario, igual que en 2D.
      * @param {number} delta Ángulo en radianes, en el sentido del puntero.
      */
     _girarCamara3D(delta) {
@@ -719,7 +726,7 @@
       try {
         Cesium.Matrix4.clone(camara.transform, this._marcoGuardado);
         camara.lookAtTransform(this._marco);
-        camara.rotateRight(delta);
+        camara.rotateRight(-delta);
         camara.lookAtTransform(this._marcoGuardado);
       } catch (e) {
         /* la cámara puede estar en medio de un vuelo */
