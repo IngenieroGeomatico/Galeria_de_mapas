@@ -1483,6 +1483,53 @@ class miPlugin_layerSwitcher {
     // vista en su geometria y lo resalta. Marca siempre su fila como activa,
     // tanto si la peticion viene de la tabla (clic en fila) como del mapa
     // (clic en el feature), manteniendo la sincronia bidireccional.
+    /**
+     * Lleva la camara de Cesium hasta el feature (implementacion 3D).
+     *
+     * POR QUE HACE FALTA UNA RAMA PROPIA: en 3D la geometria no es un objeto de
+     * OpenLayers, asi que no tiene `getExtent()`, y `impl.getView()` tampoco
+     * existe. Medido: sin esto, al pulsar una fila de la tabla de atributos en 3D
+     * la camara no iba al feature y se quedaba haciendo un zoom atras.
+     *
+     * De donde sale el punto: `feature.getGeoJSON()`, que en 3D devuelve las
+     * coordenadas YA en 4326 con la altura (medido: [-8.903, 43.294, 0]),
+     * mientras que en 2D las devuelve en 3857. Como aqui solo se usa la rama 3D,
+     * no hay que reproyectar nada.
+     *
+     * Se conservan el rumbo y la inclinacion que tuviera la camara (igual que
+     * haria un `setCenter` de OpenLayers), pero con una altura minima: si el
+     * usuario esta casi a ras de suelo, moverse a la altura actual lo dejaria
+     * dentro del terreno y se veria en negro.
+     *
+     * @param {Object} item Elemento de `sheetCtx.features` (con .feature).
+     * @param {Object} escena Escena de Cesium.
+     */
+    function irAFeatureEn3D(item, escena) {
+      const C = window.Cesium;
+      const camara = escena && escena.camera;
+      if (!C || !C.Cartesian3 || !C.Math || !camara) return;
+      let coord = null;
+      try {
+        const gj = (item && item.feature && typeof item.feature.getGeoJSON === 'function')
+          ? item.feature.getGeoJSON()
+          : null;
+        if (gj && gj.geometry && gj.geometry.coordinates) coord = gj.geometry.coordinates;
+      } catch (e) { coord = null; }
+      // Un Point viene como [lon, lat, alt]; una linea o un poligono, anidados.
+      while (Array.isArray(coord) && Array.isArray(coord[0])) coord = coord[0];
+      if (!coord || !isFinite(coord[0]) || !isFinite(coord[1])) return;
+      const ALTURA_MINIMA = 1500;
+      let altura = 0;
+      try { altura = camara.positionCartographic ? camara.positionCartographic.height : 0; } catch (e) { altura = 0; }
+      if (!isFinite(altura) || altura < ALTURA_MINIMA) altura = ALTURA_MINIMA;
+      try {
+        camara.setView({
+          destination: C.Cartesian3.fromDegrees(coord[0], coord[1], altura),
+          orientation: { heading: camara.heading, pitch: camara.pitch, roll: 0 },
+        });
+      } catch (e) { /* la camara puede no estar lista todavia */ }
+    }
+
     function locateFeatureByIdx(idx) {
       if (!sheetCtx || !sheetCtx.features.length) return;
       const item = sheetCtx.features[idx];
@@ -1496,8 +1543,13 @@ class miPlugin_layerSwitcher {
       try { if (extent) center = [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2]; } catch (e) { /* ignorar */ }
 
       const impl = map.getMapImpl ? map.getMapImpl() : null;
+      // El impl de Cesium tiene `scene` y no `getView()`: es lo que distingue una
+      // implementacion de otra sin preguntar por la version de la API.
+      const escena = (impl && impl.scene) ? impl.scene : null;
       const view = (impl && typeof impl.getView === 'function') ? impl.getView() : null;
-      if (view && typeof view.fit === 'function' && extent) {
+      if (escena && escena.camera) {
+        irAFeatureEn3D(item, escena);
+      } else if (view && typeof view.fit === 'function' && extent) {
         try { view.fit(extent, { padding: [40, 40, 40, 40], maxZoom: 14 }); } catch (e) { /* ignorar */ }
       } else if (view && center) {
         try { view.setCenter(center); } catch (e) { /* ignorar */ }
