@@ -589,24 +589,11 @@
 
         // El gesto de girar: en este dial no lo trae la API, hay que ponerlo.
         this._arrastrarDial3D(panel);
-        // El gesto del átomo, que inclina la vista. También es solo de 3D.
+        // El gesto del átomo, que inclina y gira la vista. También es solo de 3D.
         this._arrastrarAtomo3D(panel);
-        // La rosa tiene que seguir a la cámara, que también se gira con el
-        // ratón sobre el mapa, no solo con la bolita. Se escucha en
-        // `postRender` y no en `camera.changed` porque es lo que hace la API con
-        // su brújula, y porque `changed` va retardado: con él la rosa se
-        // quedaba con un rumbo intermedio al terminar el arrastre (medido).
-        const escena = this._escenaCesium();
-        if (escena && escena.postRender && typeof escena.postRender.addEventListener === 'function') {
-          // Se repinta la rosa y se recoloca la bolita. La bolita es la marca
-          // de giro, así que tiene que ir detrás del rumbo de verdad:
-          // medido, con la bolita a la derecha el rumbo es -90 grados.
-          this._alCambiarCamara = () => {
-            this._pintarRosa();
-            this._sincronizarBolita3D();
-          };
-          escena.postRender.addEventListener(this._alCambiarCamara);
-        }
+        // La rosa y la bolita tienen que ir detrás de la cámara, que también se
+        // gira con el ratón sobre el mapa o con un vuelo.
+        this._escucharCamara3D();
       } catch (e) {
         console.warn(`${this.name}: no se pudo pintar el dial de 3D.`, e);
       }
@@ -691,7 +678,7 @@
       // (medido: en 3D no había ningún manejador de doble clic en el dial).
       dial.addEventListener('dblclick', function (evento) {
         if (typeof evento.preventDefault === 'function') evento.preventDefault();
-        self._irAlNorte3D();
+        self._volverAlOrigen();
       });
     }
 
@@ -826,9 +813,18 @@
         document.addEventListener('pointerup', alSoltar, false);
         document.addEventListener('pointercancel', alSoltar, false);
         self._arrancarBucleAtomo3D();
+
+      // El doble clic sobre el átomo, a diferencia del del dial (que solo pone
+      // el norte), lleva los dos giros al origen: rumbo e inclinación.
+      const alDoble = function (evento) {
+        if (typeof evento.stopPropagation === 'function') evento.stopPropagation();
+        if (typeof evento.preventDefault === 'function') evento.preventDefault();
+        self._volverAlOrigen();
+      };
       };
 
       atom.addEventListener('pointerdown', alPulsar, false);
+      atom.addEventListener('dblclick', alDoble, false);
       this._gestoAtomo = { atom: atom, alPulsar: alPulsar, alSoltar: alSoltar };
     }
 
@@ -963,31 +959,68 @@
       }
     }
     /**
-     * Recoloca la bolita de giro según el rumbo de la cámara, para que no se
-     * descompase cuando la vista gira por otra vía (el gesto propio de Cesium, un
-     * vuelo del storymap, un `setView`).
-     *
-     * Mismo signo que el del gesto, porque es el mismo sitio: arrastrar la bolita
-     * en sentido horario baja el rumbo, y el `transform` que se le pone crece.
-     * Mientras se arrastra ella no se toca, que si no las dos cosas se pelean.
+    /**
+    /**
+     * Escucha `postRender` para que la rosa y la bolita vayan con el rumbo de la
+     * cámara. Idempotente: se puede llamar las veces que haga falta, que es lo que
+     * hace falta porque el mapa se recrea al cambiar de implementación y el mismo
+     * plugin puede quedarse sin escuchar (medido: la rosa se quedaba clavada en
+     * `rotate(0deg)` con la vista girada).
      */
-    _sincronizarBolita3D() {
-      if (!this._bola3D || !this._bola3D.style) return;
-      if (this._girando3D) return;
+    _escucharCamara3D() {
+      const escena = this._escenaCesium();
+      if (!escena || !escena.postRender) return;
+      if (typeof escena.postRender.addEventListener !== 'function') return;
+      // Si ya está escuchando esta misma escena, no se duplica.
+      if (this._escenaEscuchada === escena && this._alCambiarCamara) return;
+      this._quitarEscuchaCamara3D();
+      this._alCambiarCamara = () => { this._sincronizarGiro3D(); };
+      this._escenaEscuchada = escena;
+      escena.postRender.addEventListener(this._alCambiarCamara);
+      this._sincronizarGiro3D();
+    }
+
+    /**
+     * Suelta la escucha de `postRender`, si la hay.
+     */
+    _quitarEscuchaCamara3D() {
+      if (this._alCambiarCamara && this._escenaEscuchada && this._escenaEscuchada.postRender) {
+        try {
+          this._escenaEscuchada.postRender.removeEventListener(this._alCambiarCamara);
+        } catch (e) {
+          /* la escena puede estar ya destruida */
+        }
+      }
+      this._alCambiarCamara = null;
+      this._escenaEscuchada = null;
+    }
+
+    /**
+     * Deja la rosa y la bolita de giro con el rumbo de verdad, las dos con el
+     * mismo número y en grados. Es el único sitio donde se pintan, y se llama en
+     * cada frame por `postRender`, así que van tan sincronizadas con la vista como
+     * la propia vista: no hay offsets ni atajos por si se está arrastrando.
+     *
+     * El signo sale medido: con la bolita a la derecha el rumbo es -90 grados, y
+     * la rosa gira lo mismo que ella. Al ser el mismo valor, si las dos se miran
+     * de reojo no pueden ser lo mismo (medido antes: la bolita llevaba un -0,5 de
+     *EJEMPLO』 y eso las separaba).
+     */
+    _sincronizarGiro3D() {
       const camara = this._camaraCesium();
       if (!camara) return;
-      // El -0,5 es el mismo medio píxel que deja la bolita centrada en 2D.
-      // El -0,5 es el mismo medio píxel que deja la bolita centrada en 2D, y el
-      // ángulo se normaliza a [-180, 180] para que con el rumbo en 360 salga
-      // -0,5 y no -360,5 (medido: los dos son el mismo sitio, pero el segundo
-      // parece un error).
-      const grados = this._normalizar(-camara.heading) * 180 / Math.PI - 0.5;
-      const texto = 'rotate(' + grados.toFixed(1) + 'deg)';
-      if (this._bola3DGrados !== grados) {
+      const grados = this._normalizar(-camara.heading) * 180 / Math.PI;
+      const texto = 'rotate(' + grados.toFixed(2) + 'deg)';
+      if (this._rosa && this._rosa.style && this._rosaGiro3D !== texto) {
+        this._rosaGiro3D = texto;
+        this._rosa.style.transform = texto;
+      }
+      if (this._bola3D && this._bola3D.style && this._bola3DGrados !== grados) {
         this._bola3DGrados = grados;
         this._bola3D.style.transform = texto;
       }
     }
+
 
     /**
      * Lleva la bolita al punto del dial donde está el puntero. El dial está en
@@ -1030,6 +1063,162 @@
       this._pintarRosa();
       return true;
     }
+    /**
+     * Lleva los dos giros al origen con una transición, no de un salto: en 3D
+     * girando la cámara a trozos con el temporizador de la propia API, y en 2D
+     * animando la vista de OpenLayers.
+     *
+     * POR QUÉ NO `camera.flyTo`: la cámara va montada con `lookAt` y su
+     * `lookAtTransform`, que es justo lo que no se deja Governar bien desde fuera
+     * (medido antes: un `setView` con `orientation` mete la inclinación en el
+     * marco equivocado, y `rotateUp` da la vuelta si se le pide todo de golpe,
+     * desde -40° un salto de -49,8° acaba mirando al cenit). Con la misma receta
+     * del gesto, a trozos y con el tiempo del frame, el vuelo es seguro y se ve
+     igual que el resto del dial.
+     *
+     * @param {number} [duracionMs=900]Duración del vuelo, en milisegundos.
+     */
+    _volverAlOrigen(duracionMs) {
+      if (this._es3D(this._map)) return this._volarAlOrigen3D(duracionMs);
+      return this._animarVistaAlNorte2D(duracionMs);
+    }
+
+    /**
+     * Vuelo de la cámara al origen: rumbo a 0 e inclinación a -90 grados.
+     * @param {number} [duracionMs=900] Duración del vuelo.
+     * @returns {boolean} true si se ha podido arrancar el vuelo.
+     */
+    _volarAlOrigen3D(duracionMs) {
+      if (typeof Cesium === 'undefined') return false;
+      const camara = this._camaraCesium();
+      if (!camara) return false;
+      if (this._vuelo3D && window.cancelAnimationFrame) window.cancelAnimationFrame(this._vuelo3D);
+      const duracion = duracionMs || 900;
+      // De dónde sale y a dónde va. El rumbo va por el camino corto, y la
+      // inclinación también (los dos normalizados).
+      const desdeRumbo = this._normalizar(camara.heading);
+      const desdeInclinacion = this._normalizar(-Math.PI / 2 - camara.pitch);
+      const inicio = (window.performance && window.performance.now) ? window.performance.now() : Date.now();
+      const self = this;
+      const paso = function () {
+        self._vuelo3D = null;
+        const cam = self._camaraCesium();
+        if (!cam || !self._marcoGiro3D()) return;
+        const ahora = (window.performance && window.performance.now) ? window.performance.now() : Date.now();
+        let t = (ahora - inicio) / duracion;
+        if (t < 0) t = 0;
+        if (t > 1) t = 1;
+        // Suavizado: arranca y acaba despacio, que es lo que hace un vuelo.
+        const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        const rumboObjetivo = desdeRumbo * (1 - e);
+        const inclinacionObjetivo = desdeInclinacion * (1 - e);
+        // El rumbo, que es el giro del anillo.
+        const giro = self._normalizar(rumboObjetivo - cam.heading);
+        if (Math.abs(giro) > 1e-5) self._girarCamara3D(giro);
+        // Y la inclinación, a trozos: `rotateUp` da la vuelta si se le pide de
+        // Y la inclinación, siguiendo la misma curva que el rumbo: se calcula
+        // cuánto falta por corregir en este frame y se mete ese tanto, con un tope
+        // por frame. Sin ese tope `rotateUp` da la vuelta y acaba mirando al
+        // cenit (medido: desde -40 un salto de -49,8 grados deja la cámara en
+        // +90 en vez de en -90). Con el tope son unos 5 frames.
+        const falta = (-Math.PI / 2 - cam.pitch);
+        const error = falta - inclinacionObjetivo;
+        if (Math.abs(error) > 1e-5) {
+          self._girarCamara3DInclinacion(Math.max(-0.08, Math.min(0.08, error)));
+        }
+        if (t < 1) {
+          self._vuelo3D = window.requestAnimationFrame
+            ? window.requestAnimationFrame(paso)
+            : window.setTimeout(paso, 16);
+        } else {
+          self._pintarAtomo3D(0, 0);
+          self._pintarRosa();
+        }
+      };
+      this._vuelo3D = window.requestAnimationFrame
+        ? window.requestAnimationFrame(paso)
+        : window.setTimeout(paso, 16);
+      return true;
+    }
+
+    /**
+     * Vuelo de la vista de OpenLayers al norte, con la animación propia de la
+     * vista, que es la que sabe interpolar bien el giro.
+     * @param {number} [duracionMs=900] Duración del vuelo.
+     * @returns {boolean} true si se ha podido arrancar la animación.
+     */
+    _animarVistaAlNorte2D(duracionMs) {
+      const vista = this._vista2D();
+      if (!vista) return false;
+      const destino = 0;
+      const desde = this._normalizar(this._rotacion || 0);
+      // El camino corto: si la vista está a 270, al norte se llega con -90 y no
+      // con +270 (medido: el sentido se decide en el norte, no en los radianes).
+      const corto = desde > Math.PI ? desde - 2 * Math.PI : (desde < -Math.PI ? desde + 2 * Math.PI : desde);
+      if (vista && typeof vista.animate === 'function') {
+        try {
+          vista.animate({
+            rotation: destino,
+            duration: duracionMs || 900,
+          });
+          return true;
+        } catch (e) {
+          /* La vista puede no admitir animación: se aplica de golpe */
+        }
+      }
+      if (typeof vista.setRotation === 'function') {
+        this._aplicarRotacion(this._normalizar(desde - corto));
+        return true;
+      }
+      return false;
+    }
+
+    /**
+     * Doble clic sobre el átomo: los dos giros al origen, el rumbo a 0 (norte
+     * arriba) y la inclinación a la de partida, mirando al suelo (pitch -90).
+     *
+     * Es el gesto de la palanca (_irAlNorte3D) llevandolo al final: primero el
+     * rumbo, que es el giro del anillo, y luego la inclinación, que es el del
+     * átomo. El orden importa porque `rotateUp` se mide con el rumbo ya
+     * despejado; y los dos ángulos se normalizan para ir por el camino corto.
+     *
+     * @returns {boolean} true si se ha podido girar la cámara.
+     */
+    _irAlOrigen3D() {
+      if (typeof Cesium === 'undefined') return false;
+      const camara = this._camaraCesium();
+      if (!camara || !this._marcoGiro3D()) return false;
+      if (!this._marcoGuardado) this._marcoGuardado = new Cesium.Matrix4();
+      try {
+        Cesium.Matrix4.clone(camara.transform, this._marcoGuardado);
+        camara.lookAtTransform(this._marco);
+        // El rumbo a 0: `rotateRight` con ángulo positivo lo baja (medido), así
+        // que el ángulo que lo deja en 0 es el propio rumbo.
+        camara.rotateRight(this._normalizar(camara.heading));
+        // Y la inclinación a -90 grados, mirando al suelo, que es de donde parte
+        // el visualizador (medido: el mapa entra en pitch -90).
+        // Y la inclinación a -90 grados, mirando al suelo, que es de donde parte
+        // el visualizador (medido: el mapa entra en pitch -90). A trozos, porque
+        // `rotateUp` da la vuelta si se le pide todo de golpe: medido, desde
+        // -40,2 un solo `rotateUp` de -49,8 grados deja la cámara mirando al
+        // cenit (+90) en vez de al nadir (-90).
+        let restante = -Math.PI / 2 - camara.pitch;
+        while (Math.abs(restante) > 0.005) {
+          const paso = Math.max(-0.08, Math.min(0.08, restante));
+          camara.rotateUp(paso);
+          // Se recalcula por si Cesium lo ha clavado en el suelo o en el cenit.
+          restante = -Math.PI / 2 - camara.pitch;
+        }
+        camara.lookAtTransform(this._marcoGuardado);
+      } catch (e) {
+        return false;
+      }
+      // El átomo al centro, que es lo que para el bucle de la palanca.
+      this._pintarAtomo3D(0, 0);
+      this._pintarRosa();
+      return true;
+    }
+
 
     /**
      * Localiza el panel que la API acaba de crear para el control y lo deja
@@ -1096,6 +1285,9 @@
       // dónde cae.
       if (this._es3D(this._map)) {
         this._pintarDial3D(panel);
+        // Por si el dial se ha pintado antes de que la escena estuviera lista,
+        // que es cuando la escucha se quedaba sin poner (medido).
+        this._escucharCamara3D();
         return;
       }
       // La API no lleva el `order` del control al panel, de modo que se
@@ -1143,7 +1335,22 @@
         // Púlsala para volver al norte, que es lo que se espera de una brújula.
         this._on(rosa, 'click', function (evento) {
           evento.stopPropagation();
-          self._aplicarRotacion(0);
+          // El clic espera un momento a ver si viene un doble clic: la rosa esta
+          // en el centro del disco, que es donde cae el doble clic, y si fuera al
+          // norte de golpe se comería el vuelo al origen (medido: la vista saltaba
+          // a 0 en el primer clic).
+          //
+          // UN temporizador y no uno por clic: el doble clic son dos clics, y con
+          // dos temporizadores el primero gastaba el aviso y el segundo sí se iba
+          // al norte (medido).
+          if (self._temporalizadorRosa) {
+            window.clearTimeout(self._temporalizadorRosa);
+            self._temporalizadorRosa = null;
+          }
+          self._temporalizadorRosa = window.setTimeout(function () {
+            self._temporalizadorRosa = null;
+            self._aplicarRotacion(0);
+          }, 260);
         });
       }
       this._pintarRosa();
@@ -1151,11 +1358,17 @@
 
       if (dial) {
         this._on(dial, 'dblclick', function (evento) {
+          // Se cancela el "al norte" de la rosa, que esta justo debajo en el
+          // centro del disco, o el vuelo se come un salto al principio.
+          if (self._temporalizadorRosa) {
+            window.clearTimeout(self._temporalizadorRosa);
+            self._temporalizadorRosa = null;
+          }
           evento.preventDefault();
           // En 3D el norte arriba es el rumbo de la cámara a 0; en 2D la
           // rotación de la vista a 0. Se prueba primero la cámara, que en 2D
           // devuelve false y no hace nada.
-          if (self._irAlNorte3D()) return;
+          if (self._volverAlOrigen()) return;
           self._aplicarRotacion(0);
         });
         this._on(dial, 'wheel', function (evento) {
@@ -1237,7 +1450,7 @@
       if (es3D) {
         const camara = this._camaraCesium();
         if (!camara) return;
-        this._rosa.style.transform = 'rotate(' + (-camara.heading).toFixed(6) + 'rad)';
+        this._sincronizarGiro3D();
         return;
       }
       const grados = (this._rotacion * 180 / Math.PI);
@@ -1517,6 +1730,7 @@
       if (this._gesto3D) {
         if (typeof this._gesto3D.alSoltar === 'function') this._gesto3D.alSoltar();
         if (this._gesto3D.dial && typeof this._gesto3D.dial.removeEventListener === 'function') {
+          this._gestoAtomo.atom.removeEventListener('dblclick', this._gestoAtomo.alDoble, false);
           this._gesto3D.dial.removeEventListener('pointerdown', this._gesto3D.alPulsar, false);
         }
         this._gesto3D = null;
@@ -1532,6 +1746,15 @@
         else window.clearTimeout(this._frameAtomo);
         this._frameAtomo = null;
       }
+      if (this._vuelo3D) {
+        if (window.cancelAnimationFrame) window.cancelAnimationFrame(this._vuelo3D);
+        else window.clearTimeout(this._vuelo3D);
+        this._vuelo3D = null;
+      }
+      if (this._temporalizadorRosa) {
+        window.clearTimeout(this._temporalizadorRosa);
+        this._temporalizadorRosa = null;
+      }
       this._inclinando3D = false;
       this._atomDX = 0;
       this._atomDY = 0;
@@ -1539,9 +1762,7 @@
       }
       const camara = this._camaraCesium();
       const escena = this._escenaCesium();
-      if (this._alCambiarCamara && escena && escena.postRender) {
-        escena.postRender.removeEventListener(this._alCambiarCamara);
-      }
+      this._quitarEscuchaCamara3D();
       this._alCambiarCamara = null;
       this._girando3D = false;
       this._anguloGiro3D = null;
