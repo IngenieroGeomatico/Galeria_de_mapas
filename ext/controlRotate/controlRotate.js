@@ -509,17 +509,49 @@
      */
     _pintarDial3D(panel) {
       try {
-        // La brújula de la API, fuera de en medio: se oculta el contenedor entero,
-        // que es lo que la coloca lejos del botón.
-        const nativo = panel.querySelector('.m-rotate-container, .m-rotate-compass');
-        if (nativo) {
-          nativo.style.display = 'none';
+        // Se marca el panel como el de 3D. Lo que se pinta dentro es una copia
+        // del dial de 2D, y hay reglas de CSS que solo deben tocar a esa copia.
+        panel.classList.add('g-controlRotate--3D');
+
+        // La brújula grande de la API se borra en vez de ocultarse: el dial de
+        // abajo lleva sus mismas clases (`m-control m-rotate-container`), y con un
+        // `display: none` sobre lo que devuelva el selector, el selector a veces
+        // cogía el nuestro y salía de 0x0 (medido). Borrando el suyo no hay
+        // ambigüedad.
+        const nativo = panel.querySelector('.m-control.m-rotate-container, .m-rotate-compass');
+        if (nativo && nativo.parentNode) {
+          nativo.parentNode.removeChild(nativo);
           this._nativo3D = nativo;
         }
 
+        // La MISMA estructura que el dial de 2D, elemento por elemento:
+        //   div.m-control.m-rotate-container
+        //     > div#m-rotate-slider-container
+        //         > svg#m-rotate-marker > circle#m-rotate-marker-circle
+        //         > span.m-rotate-rosa.g-controlRotate-rosa
+        // Lo único que NO se copia es `#m-rotate-slider`, que es el área de
+        // arrastre de la variante de OpenLayers (medido: en 3D no existe), ni el
+        // botón de norte, que en 2D ya se oculta con la clase --sinNorte.
+        // Al ser los mismos id y clases, lo pinta el CSS de 2D tal cual.
+        const NS = 'http://www.w3.org/2000/svg';
+        const contenedor = document.createElement('div');
+        contenedor.className = 'm-control m-rotate-container';
+        contenedor.setAttribute('tabindex', '-1');
+
         const disco = document.createElement('div');
-        disco.className = 'g-controlRotate-3D-disco';
-        disco.title = 'Arrastra para girar la vista';
+        disco.id = 'm-rotate-slider-container';
+
+        // La bolita, tal cual en 2D: un svg con el circle dentro.
+        const marcador = document.createElementNS(NS, 'svg');
+        marcador.id = 'm-rotate-marker';
+        const circulo = document.createElementNS(NS, 'circle');
+        circulo.id = 'm-rotate-marker-circle';
+        circulo.setAttribute('cx', '8');
+        circulo.setAttribute('cy', '8');
+        circulo.setAttribute('r', '6');
+        marcador.appendChild(circulo);
+        disco.appendChild(marcador);
+        this._bola3D = marcador;
 
         const rosa = document.createElement('span');
         rosa.className = 'm-rotate-rosa g-controlRotate-rosa';
@@ -527,30 +559,10 @@
         rosa.innerHTML = SVG_ROSA;
         disco.appendChild(rosa);
 
-        // La bolita de giro: el MISMO elemento que en 2D, que es un `<svg>` con
-        // dentro un `<circle cx="8" cy="8" r="6">` (`#m-rotate-marker` y
-        // `#m-rotate-marker-circle` del control nativo). Se copia tal cual en vez de
-        // rehacerla con un `span` y un borde de CSS: así es exactamente la misma
-        // pieza y las reglas del CSS sirven para las dos. En 2D la mueve la API al
-        // girar; aquí se queda arriba, que es como se ve en 2D con el mapa al norte.
-        const NS = 'http://www.w3.org/2000/svg';
-        const marcador = document.createElementNS(NS, 'svg');
-        marcador.setAttribute('class', 'g-controlRotate-marker');
-        marcador.setAttribute('viewBox', '0 0 16 16');
-        marcador.setAttribute('width', '19');
-        marcador.setAttribute('height', '19');
-        marcador.setAttribute('aria-hidden', 'true');
-        const circulo = document.createElementNS(NS, 'circle');
-        circulo.setAttribute('cx', '8');
-        circulo.setAttribute('cy', '8');
-        circulo.setAttribute('r', '6');
-        circulo.setAttribute('class', 'g-controlRotate-marker-circle');
-        marcador.appendChild(circulo);
-        disco.appendChild(marcador);
-        this._bola3D = marcador;
+        contenedor.appendChild(disco);
+        panel.appendChild(contenedor);
 
-        panel.appendChild(disco);
-
+        this._dial = disco;
         this._dial3D = disco;
         this._rosa = rosa;
         this._pintarRosa();

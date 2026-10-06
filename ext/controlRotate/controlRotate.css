@@ -368,6 +368,376 @@
   overflow: visible !important;
 }
 
+/* =====================================================================
+   ESTILOS DEL PLUGIN DIAL DE ROTACIÓN (miPlugin_controlRotate)
+   =====================================================================
+   El dial es el control Rotate de la propia API (IDEE.control.Rotate), que
+   la API dibuja como panel .m-panel.m-rotate dentro de las areas de esquina
+   (.m-area .m-top .m-left). Aquí solo se ajusta para que se vea como uno más
+   de los botones de herramienta:
+
+     - el tamaño por defecto del control es 43,2 px (el panel) frente a los
+       40 px de los botones de las herramientas, así que se iguala a 40;
+     - el botón "Girar al norte" que trae dentro se quita, porque el norte se
+       orienta con doble clic (clase .g-controlRotate--sinNorte);
+     - se oculta la flecha de plegado, que en los paneles no plegables no
+       aporta nada y la API ya deja oculta... salvo al sacarlo de su area, de
+       modo que se reaffirma aquí.
+
+   El tamaño se fija con la variable --g-controlRotate-lado, que escribe el
+   plugin en línea (opción `size`), con 40 px por defecto.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Colores del esquema (color1/color2/color3), los mismos que usan el resto de
+   plugins del repositorio: fondo = color1, borde = color2, icono = color3. Las
+   variables las escribe el plugin en línea (ver _aplicarColores) y los valores
+   de reserva son los del esquema por defecto (naranja de fondo), de modo que el
+   dial se ve igual aunque no se pase nada.
+
+   El dial no se abre ni se cierra, así que solo hay estado de reposo; el
+   "active" queda declarado por si un visualizador quiere distinguirlo. El
+   !important es necesario porque la hoja de la API da estilo a .m-panel y no se
+   puede leer con cssRules para saber qué selector gana.
+   --------------------------------------------------------------------- */
+/* El disco azul que se ve no es el panel, que es transparente, sino el
+   contenedor del control que la API crea dentro (#m-rotate-slider-container,
+   medido: es lo único de 44x44 con fondo propio). Es en el que se pintan el
+   fondo y el color de los trazos del dial. Ese selector no necesita estructura
+   porque el contenedor interior no lo estiliza la API con selector estructural. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-slider-container {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* El borde del panel, que tampoco se ve si el selector no lleva la estructura:
+   el de la API es `.m-areas > div.m-area > div.m-panel`, más específico que
+   `.m-panel.m-rotate.g-controlRotate` (medido). */
+.m-areas > div.m-area > div.m-panel.m-rotate.g-controlRotate {
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* El trazo y la aguja del dial se pintan con el color de icono del esquema. Sin
+   esto el dial seguiría con el azul de la API por mucho que se cambiara el
+   fondo, que es justo lo que se quiere evitar al parameterizar el color. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-marker,
+.m-panel.m-rotate.g-controlRotate #m-rotate-marker * {
+  stroke: var(--g-plugin-icon-color, #ffffff) !important;
+}
+
+/* ---------------------------------------------------------------------
+   Tamaño: el panel, su contenedor de controles y el contenedor del control
+   se fuerzan al mismo lado que los botones de las herramientas.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate {
+  width: var(--g-controlRotate-lado, 40px);
+  height: var(--g-controlRotate-lado, 40px);
+}
+
+.m-panel.m-rotate.g-controlRotate .m-panel-controls,
+.m-panel.m-rotate.g-controlRotate .m-control {
+  width: var(--g-controlRotate-lado, 40px);
+  height: var(--g-controlRotate-lado, 40px);
+}
+
+/* ---------------------------------------------------------------------
+   Flecha de plegado: fuera. El dial nunca se pliega.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate .m-panel-btn {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------
+   Botón de norte: fuera. El doble clic sobre el dial lo hace.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate--sinNorte #m-rotate-button {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------
+   La rosa de los vientos, en el centro del disco.
+
+   El glifo lo pone la API (`.g-cartografia-brujula`), así que aquí solo se sitúa
+   y se pinta con el color de icono del esquema.
+
+   Va en el FLUJO, no con `position: absolute`: dentro de
+   #m-rotate-slider-container no hay ningún ancestro posicionado que sea del
+   tamaño del disco, y los hijos absolutos que la API mete ahí (el punto del
+   marcador y el botón de norte) están colocados respecto de otro, así que
+   añadir un `position` aquí los movería de sitio. Como el resto de los hijos del
+   contenedor son absolutos, esta caja flex es lo único que da altura al flujo y
+   por eso basta para que ocupe el disco entero y deje el glifo en el centro.
+
+   El `pointer-events: none` es para que la rosa no se coma el arrastre, que es
+   del contenedor.
+   --------------------------------------------------------------------- */
+/* El SVG de la rosa, dentro del disco. 26 px es lo que cabe justos dentro del
+   borde del disco de 40 px (medido con el glifo de la API, que ocupa menos). */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa > svg {
+  display: block;
+  width: 26px;
+  height: 26px;
+  fill: var(--g-plugin-icon-color, #ffffff);
+}
+
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--g-plugin-icon-color, #ffffff);
+  /* La rosa ya no es un glifo de la fuente de la API, sino el SVG de svgrepo
+     (compass.svg): su tamaño lo pone la regla de abajo y no el `font-size` de
+     este contenedor. El color sí sale de aquí, y lo coge el SVG con
+     `currentColor`. */
+  opacity: 0.95;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  /* La transición suaviza el giro y hace que se lea como una aguja que se mueve y
+     no como un icono que aparece en otro sitio. */
+  transition: transform 120ms ease-out;
+}
+
+/* ---------------------------------------------------------------------
+   El panel de 3D.
+
+   Lo pinta este plugin (el dial nativo no sirve ahí) pero reutiliza las clases
+   del panel de la API, `.m-panel .m-rotate`, para que herede el aspecto y el
+   sitio. Lo que se añade es la roseta, que aquí es un botón que devuelve la
+   cámara al norte, y la rejilla de 2x2 con los cuatro botones de movimiento.
+
+   La rejilla va DEBAJO de la roseta, como pidió quien lo pidió: el botón grande
+   arriba y un cuadrado de cuatro botones debajo, todo del mismo ancho (dos
+   botones de 40 px), para que la columna de esquina siga siendo una columna.
+
+   Cada botón es un <button> con la clase de glifo de la API
+   (`.g-cartografia-flecha-*`), que es la que trae la fuente de iconos, así que
+   las flechas son las de la API y no un dibujo nuestro.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate--3D {
+  width: auto !important;
+  height: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* El disco: 40x40, como un boton mas de la API. Es el anillo que se arrastra
+   para girar (en la brjula de la API el anillo exterior son 120 px de los 150
+   del panel; aqui, al no haber sitio, el anillo es el boton entero). */
+.g-controlRotate-3D {
+  position: relative;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  /* Sin `overflow: hidden`: la bolita sale del disco, igual que en 2D (2,6 px por
+     fuera), y con el recorte no se veia ni se podia pulsar. */
+  overflow: visible;
+  color: var(--g-plugin-icon-color, #ffffff);
+  background: var(--g-plugin-bg-color, orangered) !important;
+  border: 2px solid var(--g-plugin-border-color, #ffffff) !important;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 2px 4px 0 !important;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.g-controlRotate-3D:active {
+  cursor: grabbing;
+}
+
+/* La aguja con la N. Gira al reves que el mapa para que la N apunte al norte de
+   verdad; es el mismo criterio que la rosa del dial de 2D. Va centrada en el
+   disco y la N en el borde de arriba, como en la brujula de la API. */
+.g-controlRotate-3D-aguja {
+  position: absolute;
+  inset: 0;
+  /* La N es la zona de giro, asi que tiene que recibir el puntero. Con el
+     del padre apagado el arrastre no llegaba y la camara no se movia. */
+  pointer-events: auto;
+  cursor: grab;
+  transition: transform 120ms ease-out;
+}
+
+.g-controlRotate-3D-aguja:active {
+  cursor: grabbing;
+}
+
+/* La bolita de giro: la misma marca que en el dial de 2D (la blanca con el
+   borde del color primario que lleva el `stroke` del `.m-rotate-marker-circle`
+   del control nativo), y como allí, SOLO se ve al pasar el ratón por encima: en
+   reposo el botón es el disco con la brújula y nada más.
+   Va dentro del envoltorio que gira, con su centro en el del botón, así que
+   recorre el perímetro mientras gira la vista.
+   Las medidas son las de 2D, medidas: 17x17 px y orbitando a 22,6 px del centro,
+   o sea 2,6 px por fuera del borde (el disco de 40 tiene radio 20). Por eso el
+   `top` es negativo: para que la bolita se salga igual que en 2D en vez de
+   quedarse dentro. Por eso el disco lleva `overflow: visible`, que antes lo
+   recortaba. */
+.g-controlRotate-3D-bola {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
+  margin-left: -8.5px;
+  border-radius: 50%;
+  background: var(--g-plugin-icon-color, #ffffff);
+  border: 2px solid var(--g-plugin-bg-color, orangered);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+  cursor: grab;
+}
+
+.g-controlRotate--3D:hover .g-controlRotate-3D-bola {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.g-controlRotate-3D-bola:active {
+  cursor: grabbing;
+}
+
+.g-controlRotate-3D-bola:active {
+  cursor: grabbing;
+}
+
+/* El giroscopio del centro: lo que se arrastra para inclinar. Es el mismo
+   glifo que el de la API (.m-rotate-giroscopio-svg con .g-cartografia-giroscopio),
+   aqui a 16 px para que quepa dentro del boton. */
+.g-controlRotate-3D-giroscopio {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: g-cartografia !important;
+  font-size: 16px;
+  color: var(--g-plugin-bg-color, orangered);
+  background: var(--g-plugin-icon-color, #ffffff);
+  cursor: grab;
+  touch-action: none;
+}
+
+.g-controlRotate-3D-giroscopio::before {
+  content: "\e86e";
+}
+
+/* El glifo de la brjula de la API es el mismo (e950), pero puesto aqui y no con
+   su clase: `g-cartografia-flecha-izquierda` es la de la flecha de plegado del
+   panel y un boton con ella cogia los estilos del panel (medido: media 40x82 con
+   fondo blanco y se salia fuera). */
+/* La flecha que orbita por el borde del disco (2D). Sustituye a la bolita
+   blanca del control nativo, que se queda solo transparente (NO se quita del
+   DOM: puede ser la zona de arrastre de la API). Una bolita dice "algo se ha
+   movido" y una flecha dice hacia donde.
+   El glifo va aqui y no con una clase de la API, por el motivo de siempre:
+   `g-cartografia-flecha-arriba` la usa el botón de norte de la API y aqui
+   pinta el relleno del panel. */
+
+/* La bolita del control nativo se hace invisible pero sigue en su sitio. */
+/* La bolita de giro, que es la del propio control nativo (`#m-rotate-marker`, un
+   SVG de 64x64 con dentro el circle de 17). Sin el ratón encima no se ve nada
+   más que el disco con la rosa: la marca de giro aparece solo al pasar por
+   encima, que es justo cuando se esta pensando en girar. El `transition` la deja
+   entrar y salir en lugar de aparecer de golpe.
+   NO se quita del DOM ni se oculta con `display`: la API la mueve con su propio
+   `transform` al girar, y si desaparece se pierde el giro. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-marker,
+.m-panel.m-rotate.g-controlRotate .m-rotate-marker {
+  opacity: 0 !important;
+  transition: opacity 120ms ease-out;
+}
+
+.m-panel.m-rotate.g-controlRotate:hover #m-rotate-marker,
+.m-panel.m-rotate.g-controlRotate:hover .m-rotate-marker {
+  opacity: 1 !important;
+}
+
+/* El borde de la bolita, en el color primario del plugin: el mismo que el
+   fondo del boton, `--g-plugin-bg-color` (orangered por defecto). La bolita la
+   pinta el control nativo en un `<circle>` propio, asi que el borde es su
+   `stroke`; no hay que tocar el `fill` ni el tamano, y el color entra por la
+   variable del constructor igual que el resto. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-marker-circle {
+  stroke: var(--g-plugin-bg-color, orangered) !important;
+  stroke-width: 2 !important;
+}
+
+/* La rosa es pulsable (vuelve al norte), asi que necesita las rayas de la mano y
+   el puntero, que el contenedor del dial tiene apagados. */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa {
+  pointer-events: auto;
+  cursor: pointer;
+}
+/* ---------------------------------------------------------------------
+   LA BRÚJULA NATIVA EN 3D.
+
+   En 3D la API no construye el dial de 2D, sino OTRA variante del mismo
+   control: la brújula grande. Medido:
+     - `.m-rotate-compass` mide 150x150, contra los 44x44 del dial de 2D.
+     - dentro van `.m-rotate-background-exterior` (99x99), `.m-rotate-exterior-svg`
+       (120x120), `#m-rotate-giroscopio` (40x40) y `#m-rotate-help` (30x30), que
+       es el botón de ayuda.
+     - no hay `#m-rotate-marker`, o sea que la bolita de giro no la trae.
+
+   Por eso las reglas del dial de 2D (`--tam`, `--sinNorte`) no le hacen nada
+   aquí: son otros nombres. Con esto se le da el mismo aspecto que en 2D: del
+   tamaño de un botón, sin el botón de ayuda (lo mismo que hace `--sinNorte` en
+   2D con el botón de norte) y con la rosa de svgrepo en el centro, a 40x40 como
+   en 2D.
+
+   El gesto NO se toca: el que gira y el que inclina son los de la API, que ya
+   funcionan con su cámara.
+   --------------------------------------------------------------------- */
+
+/* 150 px del control nativo dentro de 40 px de botón: 40 / 150 = 0,2667. Se
+   escala la brújula entera en vez de ajustar cada pieza, para que conserve sus
+   proporciones (fondo, anillo y giroscopio) y para no tener que ir cambiando
+   números si la API cambia el tamaño. */
+.m-panel.m-rotate.g-controlRotate .m-rotate-compass {
+  transform: scale(0.2667);
+  transform-origin: center center;
+}
+
+/* El botón de ayuda fuera, igual que el de norte en 2D con --sinNorte: ocupa
+   30 de los 40 px del botón y no cabe. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-help,
+.m-panel.m-rotate.g-controlRotate .m-rotate-help-button {
+  display: none !important;
+}
+
+/* La rosa, a 40x40 como en 2D. Sin esto, dentro de la brújula de 150 px se
+   estiraba a 150x26 (medido). */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa {
+  width: 40px !important;
+  height: 40px !important;
+}
+
+/* El disco de 44x44 dentro de un panel de 40x40 se sale 4 px, igual que el dial
+   de 2D, y con la bolita encima se sale un poco más. El panel de la API recorta,
+   así que hay que quitarle el recorte a este panel para que no se corten (medido:
+   con el recorte puesto, la bolita salía cortada por arriba). En 2D no hace
+   falta porque el dial de la API ya vive en un contenedor de 44. */
+.m-panel.m-rotate.g-controlRotate {
+  overflow: visible !important;
+}
+
 /* ---------------------------------------------------------------------
    EL DIAL EN 3D: el mismo de 2D, copiado dentro del panel.
 
@@ -412,15 +782,6 @@
 
 /* La rosa, a 40x40 como en 2D. Sin esto, como elemento flex del disco se queda
    con el ancho del SVG (26 px) y con el alto del disco: 26x40 (medido). */
-/* La rosa se queda con `flex: none`, para que el flex del disco no la encoja. Con
-   el borde de 2 px del disco, el interior son 36x36 y una pieza flex se encoge a
-   36x40 (medido), y eso descentra el dibujo. Con `width/height` al 100% ocupa el
-   interior y el SVG de 26 px queda centrado igual que en 2D. */
-.m-panel.m-rotate.g-controlRotate .g-controlRotate-3D-disco .g-controlRotate-rosa {
-  flex: none;
-  width: 100%;
-  height: 100%;
-}
 
 /* La bolita de giro: la misma marca que en 2D (blanca con el borde del color
    primario que lleva el `stroke` del `.m-rotate-marker-circle` del control
@@ -487,6 +848,46 @@
 
 .m-panel.m-rotate.g-controlRotate:hover .g-controlRotate-marker {
   opacity: 1;
+}
+
+/* ---------------------------------------------------------------------
+   DÓNDE SE COLOCA EL DIAL DE 3D.
+
+   En 3D el contenedor del dial (`.m-control.m-rotate-container`) salía en
+   (612, 32), o sea en mitad del visualizador, mientras el panel que lo contiene
+   estaba en su sitio, en la columna, en (10, 10) (medido). En 2D el contenedor
+   cae encima del panel. La diferencia es que aquí el panel no es su referencia:
+   con `position: absolute` y `top/left` a 0 se coloca respecto de quien sea, y en
+   3D ese "quien sea" no es el panel. Se le dice que se sitúe en el origen del
+   panel, y el panel hace de referencia.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate {
+  position: relative !important;
+  overflow: visible !important;
+}
+
+.m-panel.m-rotate.g-controlRotate .m-control.m-rotate-container {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  margin: 0 !important;
+}
+
+/* La bolita de esta copia, en el borde de arriba del disco, que es donde se la
+   ve en 2D con el mapa al norte (medido: a 20 px del centro del disco, con 12 px
+   de bola). En 2D la API la coloca con un transform y la mueve al girar la
+   vista; aquí, que el gesto todavía no mueve la cámara, se coloca con la caja
+   del propio svg, que se deja al tamaño del círculo (16 px, los mismos 12 de
+   diámetro que en 2D) y centrada en el disco. */
+.m-panel.m-rotate.g-controlRotate--3D #m-rotate-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin-top: -28px;
+  margin-left: -8px;
+  overflow: visible;
 }
 
 /* ---------------------------------------------------------------------
