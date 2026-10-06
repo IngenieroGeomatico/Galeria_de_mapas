@@ -264,7 +264,55 @@ Para garantizar la estabilidad del proyecto tras la creación o modificación de
 
 ---
 
-## 8. Referencias Documentales del Repositorio
+## 8. Iconos de los Plugins
+
+Hay dos fuentes, y el orden de preferencia es este:
+
+### 8.1. La fuente de iconos de la propia API (`g-cartografia`)
+
+Es la primera opción cuando el icono representa algo que la API ya tiene (brujula, giroscopio, flechas, lupa...). Se pinta con `content` en el CSS del plugin:
+
+```css
+.mi-boton::before {
+  content: "\e950";
+  font-family: g-cartografia;
+}
+```
+
+**Aviso medido (no saltarse esto)**: NO pongas una clase `g-cartografia-*` en un botón propio dentro de `.m-areas > .m-area > .m-panel`. `g-cartografia-flecha-izquierda` es la clase de la flecha de plegado del panel y el botón se queda con los estilos del panel (medido: 40x82, fondo blanco, saliéndose del botón). El glifo va siempre con `content` en el CSS del plugin.
+
+### 8.2. SVG Repo (https://www.svgrepo.com/)
+
+Para iconos que la API no tiene, o cuando el usuario traiga una URL de ahí. Es un buscador de SVG gratuitos, organizados en packs, y es la fuente que se ha pedido usar para los iconos nuevos.
+
+**Cómo sacar el SVG (el sitio va detrás de un checkpoint de Vercel):**
+
+| Vía | Resultado medido |
+|---|---|
+| `webfetch` o `fetch` directo a `www.svgrepo.com` | **HTTP 429** "Vercel Security Checkpoint". No sirve. |
+| Chrome headless (Playwright) a la misma URL | **Checkpoint** ("No se pudo verificar tu navegador, código 21", 0 SVG en el DOM). No sirve. |
+| Proxy de texto `https://r.jina.ai/https://www.svgrepo.com/svg/<id>/<nombre>` | **Sí sirve**: da la descripción del icono y el **nombre del pack** (ej. "Orchid Line Interface Icons", "Transportation Icooon Mono"), que es lo que permite buscar el mismo dibujo en su origen. A veces da 429: reintentar. |
+| Imagen original `https://www.svgrepo.com/show/<id>/<nombre>.svg` | Es la URL que usa la propia página; puede seguir detrás del checkpoint. |
+
+Si no se consigue el `path`/`d` del SVG: pedir al usuario que lo pegue, o buscar el mismo icono en el **pack de origen** que ha dicho el proxy, o en otro repositorio de iconos libres del mismo estilo.
+
+**Reglas al usar un SVG de ahí:**
+
+- **En línea en el DOM**, nunca `<img>`: una `<img>` no puede tomar las variables CSS de color del plugin.
+  ```js
+  const icono = document.createElement('span');
+  icono.className = 'mi-boton-icono';
+  icono.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="..."/></svg>';
+  ```
+- **El color, solo de variables**: `fill: var(--g-plugin-icon-color)` o `currentColor`, y **ningún color escrito en el CSS** (los colores entran por el constructor como `color1/color2/color3`).
+- **Conservar el `viewBox`** del original y ajustar el tamaño en el CSS (un `viewBox="0 0 24 24"` va bien a 18-20 px dentro de un botón de 40x40).
+- **Dejar el SVG sea del color que sea el tema**: si trae `fill="#000"` fijo, pasarlo a `currentColor` para que siga la paleta del plugin.
+- **Licencia**: muchos packs son CC0/CC-BY/MIT; comprobar la ficha del pack y dejar el origen en un comentario.
+- Si el icono sustituye a otro que ya estaba (un glifo de la API), **quitar el anterior**: medido, al dejar los dos se ven los dos.
+
+---
+
+## 9. Referencias Documentales del Repositorio
 
 Consulta las guías técnicas detalladas en `.opencode/docs/` para profundizar en aspectos concretos de la API:
 - `.opencode/docs/API-IDEE.md`: Guía general de uso de la API-CNIG/IDEE, configuración de fondos, eventos y métodos globales.

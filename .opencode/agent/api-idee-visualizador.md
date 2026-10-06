@@ -68,6 +68,13 @@ function checkImpl() {
 - **No modificar** `ext/layergroup_cesium/` salvo encargo explícito (no es un plugin registrado en el mapa; solo capas Cesium).
 - Pruebas manuales con el servidor local (p. ej. `http://localhost:8765/mapas/LucesdeBohemia/index.html`) y Playwright; el botón real del cambio 2D/3D es `#APIIDEE-herramienta-button` (clase `buttonHerramienta_cambImpl activated`).
 
+## Iconos
+
+- **Primera opción: la fuente de la propia API** (`g-cartografia`, glifos `\e950`, `\e86e`...) pintada con `content` en el CSS del plugin, para que el trazo sea el de la API.
+- **Nunca pongas una clase `g-cartografia-*` en un botón propio** dentro de `.m-areas > .m-area > .m-panel`: `g-cartografia-flecha-izquierda` es la clase de la flecha de plegado del panel y el botón se queda con los estilos del panel (medido: 40x82, fondo blanco).
+- **Para iconos que no tiene la API: https://www.svgrepo.com/** (SVG gratuitos, por packs). Va detrás de un checkpoint de Vercel que responde 429 a cualquier petición automática y también a Chrome headless (medido: "No se pudo verificar tu navegador", código 21); lo que sí pasa es el proxy de texto `https://r.jina.ai/https://www.svgrepo.com/svg/<id>/<nombre>`, que devuelve la descripción y el nombre del pack para buscar el dibujo en su origen.
+- **Cómo se pinta un SVG de ahí**: en línea en el DOM (nunca `<img>`, que no toma variables CSS), con `fill="currentColor"` y desde el CSS con `fill: var(--g-plugin-icon-color)`. Nunca un color escrito en el CSS: los colores entran por el constructor (`color1/color2/color3`). Se conserva el `viewBox` original y el tamaño se ajusta en el CSS.
+
 ## Referencias de librería
 
 Consulta la documentación específica del repositorio en `.opencode/docs/`:
