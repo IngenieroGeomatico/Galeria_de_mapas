@@ -180,8 +180,15 @@
 .g-controlRotate-3D-aguja {
   position: absolute;
   inset: 0;
-  pointer-events: none;
+  /* La N es la zona de giro, asi que tiene que recibir el puntero. Con el
+     del padre apagado el arrastre no llegaba y la camara no se movia. */
+  pointer-events: auto;
+  cursor: grab;
   transition: transform 120ms ease-out;
+}
+
+.g-controlRotate-3D-aguja:active {
+  cursor: grabbing;
 }
 
 .g-controlRotate-3D-norte {
@@ -190,13 +197,14 @@
   left: 50%;
   transform: translateX(-50%);
   font-family: Muli, "sans-serif";
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 8px;
+  line-height: 8px;
   font-weight: 700;
   color: var(--g-plugin-bg-color, orangered);
   background: var(--g-plugin-icon-color, #ffffff);
   border-radius: 0 0 6px 6px;
-  padding: 0 3px;
+  padding: 0 2px;
+  cursor: grab;
 }
 
 /* El giroscopio del centro: lo que se arrastra para inclinar. Es el mismo
@@ -217,7 +225,7 @@
   font-size: 16px;
   color: var(--g-plugin-bg-color, orangered);
   background: var(--g-plugin-icon-color, #ffffff);
-  cursor: move;
+  cursor: grab;
   touch-action: none;
 }
 
@@ -229,6 +237,47 @@
    su clase: `g-cartografia-flecha-izquierda` es la de la flecha de plegado del
    panel y un boton con ella cogia los estilos del panel (medido: media 40x82 con
    fondo blanco y se salia fuera). */
+/* La flecha que orbita por el borde del disco (2D). Sustituye a la bolita
+   blanca del control nativo, que se queda solo transparente (NO se quita del
+   DOM: puede ser la zona de arrastre de la API). Una bolita dice "algo se ha
+   movido" y una flecha dice hacia donde.
+   El glifo va aqui y no con una clase de la API, por el motivo de siempre:
+   `g-cartografia-flecha-arriba` la usa el botón de norte de la API y aqui
+   pinta el relleno del panel. */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-flecha {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  font-family: g-cartografia !important;
+  font-size: 12px;
+  line-height: 12px;
+  text-align: center;
+  color: var(--g-plugin-icon-color, #ffffff);
+  background: var(--g-plugin-bg-color, orangered);
+  border-radius: 0 0 5px 5px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-flecha::before {
+  content: "\e906";
+}
+
+/* La bolita del control nativo se hace invisible pero sigue en su sitio. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-marker,
+.m-panel.m-rotate.g-controlRotate .m-rotate-marker {
+  opacity: 0 !important;
+}
+
+/* La rosa es pulsable (vuelve al norte), asi que necesita las rayas de la mano y
+   el puntero, que el contenedor del dial tiene apagados. */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa {
+  pointer-events: auto;
+  cursor: pointer;
+}
 /* ---------------------------------------------------------------------
    El dial es un control: el cursor debe decir que se puede arrastrar, y no
    debe robar el arrastre al mapa.

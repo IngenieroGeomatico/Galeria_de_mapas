@@ -431,6 +431,10 @@
         this._dial = disco;
         this._aguja = aguja;
         this._giroscopio = giroscopio;
+        // Rumbo que se toma como N arriba mientras no se pulse la N.
+        const camara = this._camaraCesium();
+        this._rumbo0 = camara ? Number(camara.heading) || 0 : 0;
+        this._pintarAguja3D();
 
         // Un puntero, dos gestos: sobre el centro inclina, sobre el resto gira.
         // Se hace con los eventos de puntero (que ya traen el id de puntero) y
@@ -444,10 +448,12 @@
         this._arrastrar(giroscopio, 'inclinar');
         this._on(aguja, 'click', function (ev) {
           ev.stopPropagation();
+          if (self._movido) return;
           self._alNorte3D();
         });
         this._on(giroscopio, 'click', function (ev) {
           ev.stopPropagation();
+          if (self._movido) return;
           self._inclinacionNormal3D();
         });
 
@@ -467,57 +473,140 @@
      * @param {string} que 'rumbo' para girar la vista o 'inclinar' para la
      *   inclinacion.
      */
-    _arrastrar(el, inclina) {
+    /**
+     * Conecta un arrastre de puntero sobre un elemento al movimiento de la
+     * camara de Cesium.
+     * @param {HTMLElement} el Elemento que arrastra.
+     * @param {string} que 'rumbo' para girar la vista (la N) o 'inclinar' para
+     *   la inclinacion (el icono del centro).
+     */
+    _arrastrar(el, que) {
       const self = this;
-      let x0 = 0, y0 = 0;
-      const RATIO_GIRO = 0.01;
-      const RATIO_INCLINAR = 0.008;
       const inclinando = (que === 'inclinar');
+      let x0 = 0, y0 = 0;
       this._on(el, 'pointerdown', function (ev) {
         if (ev.button !== undefined && ev.button !== 0) return;
         x0 = ev.clientX;
         y0 = ev.clientY;
+        self._movido = false;
         if (el.setPointerCapture && ev.pointerId !== undefined) {
           try { el.setPointerCapture(ev.pointerId); } catch (e) { /* no hace falta */ }
         }
         ev.preventDefault();
+        ev.stopPropagation();
       });
       this._on(el, 'pointermove', function (ev) {
-        const camara = self._camaraCesium();
-        if (!camara) return;
+        if (!ev.buttons) return;
         const dx = ev.clientX - x0;
         const dy = ev.clientY - y0;
         if (!dx && !dy) return;
         x0 = ev.clientX;
         y0 = ev.clientY;
-        try {
-          if (inclinando) {
-            // Abajo del centro se mira mas de lado y arriba mas de cenital: al
-            // arrastrar hacia abajo, el mapa se abate (mas cenital).
-            camara.rotateUp(dy * RATIO_INCLINAR);
-          } else {
-            camara.rotateLeft(-dx * RATIO_GIRO);
-          }
-          self._pintarAguja3D();
-        } catch (e) {
-          /* la camara puede no estar lista todavia */
+        self._movido = true;
+        ev.preventDefault();
+        if (inclinando) {
+          self._inclinarCon(ev.clientX, ev.clientY);
+        } else {
+          self._girarCon(dx);
         }
       });
+      // El clic que pone cada cosa en su sitio se come si ha habido arrastre: si
+      // no, cada vez que se suelta un giro se desharia acto seguido. Se limpia
+      // despues, porque el clic se dispara en la misma tanda que el puntero arriba.
+      const soltar = function () {
+        window.setTimeout(function () { self._movido = false; }, 0);
+      };
+      this._on(el, 'pointerup', soltar);
+      this._on(el, 'pointercancel', soltar);
     }
 
     /**
-     * Gira la N con el rumbo de la camara, al MISMO sentido que el mapa (como la
-     * rosa del dial de 2D): con el contrario la marca se iba en contra del gesto.
+     * Arrastre de la N: gira la vista en el sentido en que se lleva el dedo.
+     * El rumbo se cambia con `setView` y no con `rotateLeft`, porque este
+     * ultimo gira alrededor del centro de la pantalla y, con el control en una
+     * esquina, el efecto medido era que el mapa no se movia.
+     * @param {number} dx Desplazamiento horizontal del puntero en pixeles.
+     */
+    _girarCon(dx) {
+      const camara = this._camaraCesium();
+      if (!camara) return;
+      const RATIO_GIRO = 0.01;
+      try {
+        camara.setView({
+          destination: camara.positionWC,
+          orientation: {
+            heading: camara.heading - dx * RATIO_GIRO,
+            pitch: camara.pitch,
+            roll: 0,
+          },
+        });
+      } catch (e) {
+        /* la camara puede no estar lista todavia */
+      }
+      this._pintarAguja3D();
+    }
+
+    /**
+     * Arrastre del icono del centro: es una palanca. El icono se mueve dentro
+     * del boton hasta donde se lleva el dedo y, a la vez, la inclinacion de la
+     * camara sale de cuanto se ha desplazado en vertical: arriba se mira mas de
+     * lado y el centro es la vista normal (desde arriba). Abajo no hay mas
+     * recorrido, porque desde arriba no se puede mirar mas de abajo.
+     * @param {number} x Coordenada X del puntero.
+     * @param {number} y Coordenada Y del puntero.
+     */
+    _inclinarCon(x, y) {
+      const camara = this._camaraCesium();
+      const C = window.Cesium;
+      const icon = this._giroscopio;
+      const disco = this._dial;
+      if (!camara || !C || !C.Math || !icon || !disco) return;
+      const caja = disco.getBoundingClientRect();
+      // Recorrido del icono dentro del boton. Medido: a 11 el icono, al subirlo
+      // del todo, se solapaba con la N de arriba; a 9 hay hueco y sigue siendo
+      // un recorrido que se nota.
+      const RADIO = 9;
+      let dx = x - (caja.left + caja.width / 2);
+      let dy = y - (caja.top + caja.height / 2);
+      // La posicion del icono nunca se sale del boton.
+      const largo = Math.sqrt(dx * dx + dy * dy);
+      if (largo > RADIO) {
+        dx = dx / largo * RADIO;
+        dy = dy / largo * RADIO;
+      }
+      icon.style.transform = 'translate(' + dx.toFixed(1) + 'px, ' + dy.toFixed(1) + 'px)';
+      const GRADOS = 50;
+      let pitch = C.Math.toRadians(-90) - (dy / RADIO) * C.Math.toRadians(GRADOS);
+      if (pitch > C.Math.toRadians(-90)) pitch = C.Math.toRadians(-90);
+      if (pitch < C.Math.toRadians(-25)) pitch = C.Math.toRadians(-25);
+      try {
+        camara.setView({
+          destination: camara.positionWC,
+          orientation: { heading: camara.heading, pitch: pitch, roll: 0 },
+        });
+      } catch (e) {
+        /* la camara puede no estar lista todavia */
+      }
+    }
+
+    /**
+     * Situa la N segun el rumbo de la camara. Gira al mismo sentido que el
+     * gesto que cambia el rumbo (arrastrar a la derecha la lleva a la derecha),
+     * que es lo mismo que hace la rosa del dial de 2D. `_rumbo0` es el rumbo
+     * que se considera N arriba, y por eso al volver al norte pasa a ser el 0.
      */
     _pintarAguja3D() {
       const camara = this._camaraCesium();
       if (!camara || !this._aguja) return;
-      const grados = (Number(camara.heading) || 0) * 180 / Math.PI;
+      const base = this._rumbo0 || 0;
+      const grados = -(Number(camara.heading) - base) * 180 / Math.PI;
       this._aguja.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
     }
 
     /**
-     * Devuelve la vista al norte: rumbo cero, con la N del botón arriba.
+     * Devuelve la vista al norte: rumbo cero, con la N del boton arriba. Como el
+     * gesto de girar se mide desde un rumbo de partida, al volver al norte esa
+     * referencia pasa a ser el propio cero.
      */
     _alNorte3D() {
       const camara = this._camaraCesium();
@@ -527,6 +616,7 @@
           destination: camara.positionWC,
           orientation: { heading: 0, pitch: camara.pitch, roll: 0 },
         });
+        this._rumbo0 = 0;
         this._pintarAguja3D();
       } catch (e) {
         console.warn(`${this.name}: no se pudo volver al norte.`, e);
@@ -534,8 +624,8 @@
     }
 
     /**
-     * Devuelve la inclinación a la normal, que es mirar el mapa desde arriba
-     * (90 grados hacia abajo), que es la vista con la que se entra.
+     * Devuelve la inclinacion a la normal, que es mirar el mapa desde arriba, y
+     * el icono del centro al centro del boton, que es donde dice esa inclinacion.
      */
     _inclinacionNormal3D() {
       const C = window.Cesium;
@@ -544,13 +634,17 @@
       try {
         camara.setView({
           destination: camara.positionWC,
-          orientation: { heading: camara.heading, pitch: C.Math.toRadians(-90), roll: 0 },
+          orientation: {
+            heading: camara.heading,
+            pitch: C.Math.toRadians(-90),
+            roll: 0,
+          },
         });
       } catch (e) {
-        console.warn(`${this.name}: no se pudo volver a la inclinación normal.`, e);
+        console.warn(`${this.name}: no se pudo volver a la inclinacion normal.`, e);
       }
+      if (this._giroscopio) this._giroscopio.style.transform = 'translate(0px, 0px)';
     }
-
     /**
      * Vuelve la camara a la vista de partida: sobre el punto mirado, mirando
      * hacia abajo y con rumbo cero. Es lo que hace el doble clic en la brjula
@@ -616,6 +710,10 @@
     _adaptarPanel() {
       const panel = this._panel;
       if (!panel) return;
+      // Va aqui y no mas abajo porque los manejadores de la rosa y de la flecha,
+      // que estan antes, lo usan: en el navegador `self` es `window`, y sin esta
+      // linea `self._aplicarRotacion` daba "no es una funcion" (medido).
+      const self = this;
       panel.classList.add('g-controlRotate');
       if (this._lado && this._lado !== 43.2) {
         panel.classList.add('g-controlRotate--tam');
@@ -684,7 +782,6 @@
       this._pintarFlecha2D();
 
       if (dial) {
-        const self = this;
         this._on(dial, 'dblclick', function (evento) {
           evento.preventDefault();
           self._aplicarRotacion(0);
