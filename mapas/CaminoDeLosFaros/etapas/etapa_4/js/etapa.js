@@ -177,7 +177,7 @@ function estiloRuta() {
     // borde exterior de la linea
     'stroke': {
       color: 'red',
-      'width': en3D ? 10 : 5,
+      'width': en3D ? 15 : 5,
     },
   }
 });
