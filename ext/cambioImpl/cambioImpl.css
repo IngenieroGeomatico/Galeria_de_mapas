@@ -10,12 +10,30 @@
   background-color: var(--g-plugin-bg-color, orangered) !important;
 }
 
+/* El icono del botón.
+   Antes era un emoji (🌐) puesto con `content`. Ahora es el SVG de
+   img/iconos/globe-alt.svg (pack Orchid, MIT) pintado como MÁSCARA:
+   la forma la pone `mask-image` y el color el `background-color`, que es
+   `--g-plugin-icon-color`. Así el SVG puede traer sus propios colores (este
+   viene en negro) y se ve siempre con el del plugin, sin escribir ningún color
+   en el CSS.
+   La ruta es absoluta desde la raíz del repositorio porque en un `url()` de CSS
+   las rutas relativas se resuelven contra el fichero de estilos, no contra la
+   página. */
 .buttonHerramienta_cambImpl:before {
-  /*  icono a usar */
-  content: "🌐";
-  font-size: 22px;
-  font-family: none;
-  color: var(--g-plugin-icon-color, #FFF) !important;
+  content: "";
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  background-color: var(--g-plugin-icon-color, #FFF) !important;
+  -webkit-mask-image: url("/img/iconos/globe-alt.svg");
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-image: url("/img/iconos/globe-alt.svg");
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
 }
 
 
@@ -27,5 +45,7 @@
 }
 
 .buttonHerramienta_cambImpl.activated:before {
-  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
+  /* Con la máscara el color va en `background-color`; antes ponía el `color`,
+     que ya no pinta nada porque no hay texto. */
+  background-color: var(--g-plugin-icon-color-active, #71A7D3) !important;
 }
