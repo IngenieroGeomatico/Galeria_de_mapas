@@ -3936,16 +3936,14 @@
      * Cambia el modo de la vista de Cesium: globo o plano.
      *
      * En 3D el globo es geodésico y no admite más que dos formas de leerlo, así
-     * que "cambiar de proyección" aquí es cambiar el modo y lo que se muestra:
+     * que "cambiar de proyección" aquí es cambiar el modo de escena y lo que se
+     * muestra:
      *   - EPSG:4326, modo globo: se ve el globo entero con su relieve y las
      *     coordenadas van en grados (longitud, latitud) más la altura del terreno.
-     *   - EPSG:3857, modo plano: el globo se aplana, que es lo que más se parece
-     *     a la vista 2D, y las coordenadas van en metros de la Mercator (X, Y)
-     *     más la altura.
-     *
-     * El aplanado es `morphTo3D(0)`: Cesium interpola la geometría del globo
-     * hacia un plano. Con el botón deshabilitado no se nota; con el botón vivo
-     * (que es lo que hay ahora) se ve cómo el globo se aplasta.
+     *   - EPSG:3857, modo plano: la escena pasa a COLUMBUS_VIEW, que es el plano
+     *     de Cesium (el mismo del icono .cesium-sceneModePicker-iconColumbusView
+     *     de la propia API), y las coordenadas van en metros de la Mercator
+     *     (X, Y) más la altura.
      * @param {string} codigo Código de la proyección elegida.
      * @returns {boolean} true si el modo se aplicó.
      */
@@ -3975,22 +3973,39 @@
     _aplicarModo3D(modo) {
       const escena = this._escenaCesium();
       if (!escena) return false;
+      // El modo plano de verdad en Cesium es el COLUMBUS_VIEW, que es el mismo que
+      // usa el selector de modos de la propia API (el icono
+      // .cesium-sceneModePicker-iconColumbusView). No es lo mismo que
+      // `morphTo3D(0)`: eso aplana la geometría del globo pero la escena sigue
+      // siendo 3D, con su perspectiva de cámara, y no lee como un plano.
+      //
+      // El valor se saca de Cesium.SceneMode y no se escribe a pelo, porque en este
+      // bundle MORTH_3D no está declarado (viene a undefined y el 3D es el 3):
+      // medido, SceneMode = { COLUMBUS_VIEW: 1, SCENE2D: 2, ... }.
+      const plano = (modo === 'plano');
       try {
-        if (typeof escena.morphTo3D === 'function') {
-          // 0 es plano y 1 es globo. morphTo3D es instantáneo; para una
-          // transición se usaría scene.morphComplete.addEventListener con
-          // scene.morphTime, que aquí no hace falta: el cambio lo pide el usuario
-          // y se aplica ya.
-          escena.morphTo3D(modo === 'plano' ? 0 : 1);
-          return true;
-        }
-        // Sin morphTo3D (versiones antiguas) se recurre a esconder el globo, que
-        // es el otro modo de "verlo plano".
-        if (escena.globe) escena.globe.show = (modo !== 'plano');
+        const C = window.Cesium;
+        const SM = (C && C.SceneMode) ? C.SceneMode : null;
+        const valor = plano
+          ? (SM && SM.COLUMBUS_VIEW !== undefined ? SM.COLUMBUS_VIEW : 1)
+          : 3;
+        escena.mode = valor;
         return true;
       } catch (e) {
-        console.warn(`${this.name}: no se pudo cambiar el modo de la vista 3D.`, e);
-        return false;
+        // Si el modo de escena no se puede poner (versiones antiguas sin
+        // SceneMode), se recurre a aplanar la geometría, que es menos fiel pero
+        // deja el mapa plano.
+        try {
+          if (typeof escena.morphTo3D === 'function') {
+            escena.morphTo3D(plano ? 0 : 1);
+            return true;
+          }
+          if (escena.globe) escena.globe.show = !plano;
+          return true;
+        } catch (e2) {
+          console.warn(`${this.name}: no se pudo cambiar el modo de la vista 3D.`, e2);
+          return false;
+        }
       }
     }
 
