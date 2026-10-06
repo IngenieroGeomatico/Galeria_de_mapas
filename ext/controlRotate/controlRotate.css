@@ -255,6 +255,16 @@
 /* El envoltorio de la flecha: ocupa el disco entero y es el que gira. Al girar
    él (y no la flecha) la flecha recorre el perímetro, que es lo que hacía la
    bolita del control nativo. Sin puntero, porque a él no se le pulsa. */
+/* El contenedor del dial de la API (`.m-rotate-container`, 44x44) viene con
+   `overflow: hidden`, y eso parte la flecha: como va en el borde del disco de
+   40, medio círculo se salía del recorte y se veía cortado (medido: con la
+   flecha centrada en el borde se perdían 4 px por arriba). Se le quita el
+   recorte solo en este panel; el resto de hijos del dial están dentro de sus
+   límites, así que no cambia nada más. */
+.m-panel.m-rotate.g-controlRotate .m-rotate-container {
+  overflow: visible !important;
+}
+
 .m-panel.m-rotate.g-controlRotate .g-controlRotate-flecha-giro {
   position: absolute;
   inset: 0;
@@ -263,20 +273,23 @@
 
 .m-panel.m-rotate.g-controlRotate .g-controlRotate-flecha {
   position: absolute;
-  top: 0;
+  /* El borde, no el interior: el centro de la flecha va en el borde del disco,
+   y su `top` es -6 px, que son los 6 de la mitad de la flecha menos los 20
+   del semidisco. Con `top: 0` quedaba dentro, y eso es lo más cerca del
+   borde que puede estar una pieza de 12 px sin salirse del disco. */
+  top: -6px;
   left: 50%;
   width: 12px;
   height: 12px;
   margin-left: -6px;
-  /* El radio: del centro del disco al centro de la flecha hay 14 px, que es el
-     20 del semidisco menos los 6 de la mitad de la flecha. */
   font-family: g-cartografia !important;
   font-size: 12px;
   line-height: 12px;
   text-align: center;
   color: var(--g-plugin-icon-color, #ffffff);
   background: var(--g-plugin-bg-color, orangered);
-  border-radius: 0 0 5px 5px;
+    /* Circular, como la bolita a la que sustituye. */
+  border-radius: 50%;
   pointer-events: auto;
   cursor: pointer;
 }
