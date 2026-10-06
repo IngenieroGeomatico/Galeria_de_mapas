@@ -162,24 +162,35 @@ var indicaciones = new IDEE.layer.GeoJSON({
 
 
 
-let estilo_ruta = new IDEE.style.Generic({
+// La linea va mas gruesa en 3D: a ras de suelo el grosor de 2D casi no se ve.
+// El estilo ya creado no sirve, porque sus numeros no se leen del objeto de
+// entrada, asi que se crea uno nuevo cada vez que hace falta.
+function estiloRuta() {
+  const en3D = !!(window.IDEE && window.IDEE.impl && window.IDEE.impl.cesium);
+  return new IDEE.style.Generic({
   line: {
     'fill': {
       color: 'orange',
-      width: 3,
+      'width': en3D ? 6 : 3,
       opacity: 0.5,
     },
     // borde exterior de la linea
     'stroke': {
       color: 'red',
-      width: 5,
+      'width': en3D ? 10 : 5,
     },
   }
 });
+}
 
-let estilo_PDI = new IDEE.style.Generic({
+// Igual que las indicaciones, el radio de los puntos de interes depende de la
+// implementacion: en 3D se ven mas pequenos. El estilo ya creado no vale, porque
+// sus numeros no se leen del objeto de entrada, asi que se crea uno nuevo cada vez.
+function estiloPDI() {
+  const en3D = !!(window.IDEE && window.IDEE.impl && window.IDEE.impl.cesium);
+  return new IDEE.style.Generic({
   point: {
-    radius: 6, 
+    radius: en3D ? 11 : 6, 
     fill: {  
       color: 'green',
       opacity: 0.8
@@ -189,10 +200,18 @@ let estilo_PDI = new IDEE.style.Generic({
     }
   }
 });
+}
 
-let estilo_indicacion = new IDEE.style.Generic({
+// El radio de los puntos de indicaciones depende de la implementacion: en 3D se
+// ven mas pequenos y hay que agrandarlos. NO vale con cambiar el radio del
+// estilo ya creado, porque sus numeros no se leen del objeto de entrada (medido:
+// asignar estilo_indicacion.point.radius a mano y volver a pintar la capa no
+// cambtaba nada), asi que se crea un estilo nuevo cada vez que hace falta.
+function estiloIndicaciones() {
+  const en3D = !!(window.IDEE && window.IDEE.impl && window.IDEE.impl.cesium);
+  return new IDEE.style.Generic({
   point: {
-    radius: 5, 
+    radius: en3D ? 9 : 5, 
     fill: {  
       color: 'blue',
       opacity: 0.9
@@ -207,18 +226,19 @@ let estilo_indicacion = new IDEE.style.Generic({
       form: IDEE.style.form.LOZENGE,
       class: 'g-cartografia-alerta',
       fontsize: 0.5,
-      radius: 11,
+      radius: en3D ? 19 : 11,
       color: '#006CFF' || 'blue', // Hexadecimal, nominal
       fill: 'blue',
     }
   }
 });
+}
 
 
 
-ruta.setStyle(estilo_ruta);
-PuntosInteres.setStyle(estilo_PDI);
-indicaciones.setStyle(estilo_indicacion);
+ruta.setStyle(estiloRuta());
+PuntosInteres.setStyle(estiloPDI());
+indicaciones.setStyle(estiloIndicaciones());
 
 
 
@@ -269,10 +289,12 @@ ruta.on(IDEE.evt.LOAD, (features) => {
   // implementacion y para entonces la capa ya existe. IDEE.impl.cesium es como
   // lo mira la propia API.
   const en3D = !!(window.IDEE && window.IDEE.impl && window.IDEE.impl.cesium);
-  if (estilo_indicacion && estilo_indicacion.point) {
-    estilo_indicacion.point.radius = en3D ? 9 : 5;
-    if (estilo_indicacion.point.icon) estilo_indicacion.point.icon.radius = en3D ? 19 : 11;
-    indicaciones.setStyle(estilo_indicacion);
+  // Al volver a pintar el mapa (o al cambiar de implementacion) el radio de
+  // las indicaciones se recalcula, que en 3D es mayor.
+  if (typeof indicaciones !== 'undefined' && indicaciones && indicaciones.setStyle) {
+    indicaciones.setStyle(estiloIndicaciones());
+    PuntosInteres.setStyle(estiloPDI());
+    ruta.setStyle(estiloRuta());
   }
 
   return mapjs
