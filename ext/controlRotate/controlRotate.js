@@ -764,7 +764,15 @@
      */
     _pintarRosa() {
       if (!this._rosa) return;
-      const grados = (this._rotacion * 180 / Math.PI);
+      // En 3D la rosa no se gira. Lo que se gira es la vista, y el gesto todavía
+      // no mueve la cámara (ver el aviso de arriba), así que no hay rumbo que
+      // pintar. Y si se le dejara la rotación que trae del estado, al entrar en
+      // 3D con la vista girada la rosa salía inclinada, que ya no parece un icono
+      // centrado (medido: con la vista en 45 grados llegaba a 3D con
+      // `rotate(45deg)`, y una caja de 50,9 px en vez de 36).
+      const es3D = !!(this._map && typeof this._es3D === 'function' && this._es3D(this._map));
+      const rotacion = es3D ? 0 : this._rotacion;
+      const grados = (rotacion * 180 / Math.PI);
       this._rosa.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
     }
 
