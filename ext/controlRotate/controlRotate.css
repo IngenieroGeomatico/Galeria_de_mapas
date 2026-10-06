@@ -873,20 +873,28 @@
   margin: 0 !important;
 }
 
+/* El fondo del contenedor del dial, transparente como en 2D. La variante de
+   Cesium de la API lo pinta de blanco al 40% (medido: en 2D el `.m-control` va en
+   `hsla(0, 0%, 100%, 0)` y en 3D en `rgba(255, 255, 255, 0.4)`), y salía un
+   cuadrado claro detrás del disco que en 2D no está. */
+.m-panel.m-rotate.g-controlRotate--3D .m-control {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 /* La bolita de esta copia, en el borde de arriba del disco, que es donde se la
-   ve en 2D con el mapa al norte (medido: a 20 px del centro del disco, con 12 px
-   de bola). En 2D la API la coloca con un transform y la mueve al girar la
-   vista; aquí, que el gesto todavía no mueve la cámara, se coloca con la caja
-   del propio svg, que se deja al tamaño del círculo (16 px, los mismos 12 de
-   diámetro que en 2D) y centrada en el disco. */
+   ve en 2D con el mapa al norte. Medido en 2D: el centro de la bolita cae 20,5 px
+   por encima del centro del disco y medio pixel a su derecha. Aquí se coloca con
+   la caja del propio svg, al tamaño del círculo (16 px de caja, los mismos 12 de
+   diámetro que en 2D) y con el margen que deja la bolita en ese mismo sitio. */
 .m-panel.m-rotate.g-controlRotate--3D #m-rotate-marker {
   position: absolute;
   top: 50%;
   left: 50%;
   width: 16px;
   height: 16px;
-  margin-top: -28px;
-  margin-left: -8px;
+  margin-top: -26.5px;
+  margin-left: -5.5px;
   overflow: visible;
 }
 
