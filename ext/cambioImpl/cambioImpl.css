@@ -5,6 +5,9 @@
 
 
 .buttonHerramienta_cambImpl {
+  /* El icono se centra con posicion absoluta respecto de este boton, asi que
+     hace falta que sea su referencia. */
+  position: relative !important;
   border: 2px solid var(--g-plugin-border-color, #FFF) !important;
   border-radius: 50% !important;
   background-color: var(--g-plugin-bg-color, orangered) !important;
@@ -22,9 +25,17 @@
    página. */
 .buttonHerramienta_cambImpl:before {
   content: "";
-  display: inline-block;
+  /* POR QUÉ ESTO Y NO UN inline-block: medido, con `display: inline-block` el
+     icono se va hacia arriba, porque el boton de la API es `position: static`
+     con `line-height: 19px` y el inline-block se apoya en la linea base, que
+     empuja la caja hacia el hueco del texto que baja. Con posicion absoluta y
+     margen negativo, el centro cae justo en el del boton. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 22px;
   height: 22px;
+  margin: -11px 0 0 -11px;
   background-color: var(--g-plugin-icon-color, #FFF) !important;
   -webkit-mask-image: url("/img/iconos/globe-alt.svg");
   -webkit-mask-size: contain;
