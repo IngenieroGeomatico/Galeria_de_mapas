@@ -124,8 +124,10 @@ Acepta tres formas:
 |---|---|
 | `'<svg viewBox="0 0 24 24"><path d="..."/></svg>'` | Lo usa tal cual, con su `viewBox`. |
 | `'<path d="..."/>'` (solo contenido) | Lo envuelve en un `<svg>` de 24x24. |
-| `'data:...', 'https://...' o una ruta del repo` | Se usa como URL, sin codificar. |
+| `'/img/iconos/plane.svg'`, `'img/iconos/plane.svg'`, `'./icono.svg'`, `'data:...', 'https://...'` | Se usa como URL o ruta, tal cual. Medido: funcionan las cuatro, **incluido un dominio ajeno** (`https://upload.wikimedia.org/.../SVG_logo.svg`, respuesta 200). |
 | Nada, o algo que no sea un SVG | Se queda el **icono por defecto** de la plantilla (una rueda dentada), con un aviso por consola. |
+
+**Ojo con las rutas relativas**: se resuelven contra la URL de la **página que carga el mapa**, no contra el CSS del plugin. Desde `mapas/miVisor/index.html` hasta `img/iconos/plane.svg` hay que subir cinco niveles (`../../../../../img/...`), o mejor usar `/img/iconos/plane.svg`, que no depende de dónde esté la página.
 
 Iconos: primero la fuente de la propia API (`g-cartografia`) y, para lo que no esté en ella, <https://www.svgrepo.com/>. Ejemplo real:
 

@@ -131,8 +131,10 @@
    *   - el `<svg ...>...</svg>` completo, tal cual;
    *   - solo el contenido de dentro (`<path/>`, `<circle/>`, `<g>...</g>`, ...),
    *     y entonces se envuelve con un `<svg>` de 24x24;
-   *   - una URL (`data:...`, `http...` o una ruta del repositorio), que se usa
-   *     tal cual sin codificar.
+   *   - una URL o una ruta (`data:...`, `http...`, `/img/iconos/plane.svg`,
+   *     `img/iconos/plane.svg`, `./icono.svg`), que se usa tal cual sin codificar.
+   *     Las rutas relativas se resuelven contra la URL de la página que carga el
+   *     mapa, no contra el CSS del plugin.
    * En una máscara solo cuenta el alfa del dibujo, así que el SVG puede traer
    * cualquier color: el color lo pone `--g-plugin-icon-color`.
    * @param {string} icono Icono en cualquiera de las tres formas.
@@ -143,9 +145,19 @@
     const limpio = icono.trim();
     if (!limpio) return null;
 
-    // Es una URL: se respeta tal cual (sin codificar).
-    if (/^(data:|https?:|\/|\.\/|\.\/)/i.test(limpio)) {
-      return 'url("' + limpio.replace(/"/g, '%22') + '")';
+    // Es una URL o una ruta: se respeta tal cual (sin codificar el contenido).
+    // Se admiten los esquemas (data, http, blob, file), las rutas que empiezan
+    // por /, ./ o ../, y las que solo terminan en .svg (p. ej.
+    // `img/iconos/plane.svg`), que es como se escriben de verdad.
+    //
+    // OJO: una ruta relativa se resuelve contra la URL de la PAGINA que carga el
+    // mapa, no contra el CSS del plugin. Si el plugin vive en ext/miHerramienta/
+    // y el visualizador en mapas/miVisor/, desde la página hay que subir hasta
+    // la raíz del repositorio. Con /img/... o con una URL absoluta no hay lío.
+    const esUrl = /^(data:|https?:|blob:|file:|\/|\.\/|\.\.\/)/i.test(limpio)
+      || /\.svg(?:[?#].*)?$/i.test(limpio);
+    if (esUrl) {
+      return 'url("' + limpio.replace(/"/g, '%22').replace(/\s/g, '%20') + '")';
     }
 
     const traeSvg = /<svg[\s>]/i.test(limpio);
@@ -177,8 +189,10 @@
      * @param {Object|string} [options.color3] Color de icono/texto ({ active, deactive } o string).
      * @param {string} [options.icon] Icono del botón. Admite el `<svg>...</svg>`
      * completo, solo el contenido de dentro (`<path/>`, `<circle/>`, ...) o una
-     * URL (`data:`, `http` o una ruta del repositorio). Si no se pasa, se usa el
-     * icono por defecto de la hoja de estilos. Alias admitidos: `icono`, `svg`.
+     * URL o ruta (`data:`, `http`, `/img/iconos/plane.svg`, `./icono.svg`). Las
+     * rutas relativas se resuelven contra la página que carga el mapa. Si no se
+     * pasa nada, se usa el icono por defecto de la hoja de estilos.
+     * Alias admitidos: `icono`, `svg`.
      */
     constructor(options = {}) {
       // Identificador obligatorio del plugin (usado por el gestor de plugins y cambioImpl)
