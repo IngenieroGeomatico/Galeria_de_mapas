@@ -167,10 +167,12 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  overflow: hidden;
+  /* Sin `overflow: hidden`: la bolita sale del disco, igual que en 2D (2,6 px por
+     fuera), y con el recorte no se veia ni se podia pulsar. */
+  overflow: visible;
   color: var(--g-plugin-icon-color, #ffffff);
   background: var(--g-plugin-bg-color, orangered) !important;
-  border: 1.6px solid var(--g-plugin-border-color, #ffffff) !important;
+  border: 2px solid var(--g-plugin-border-color, #ffffff) !important;
   box-shadow: rgba(0, 0, 0, 0.2) 0 2px 4px 0 !important;
   cursor: grab;
   touch-action: none;
@@ -199,20 +201,45 @@
   cursor: grabbing;
 }
 
-.g-controlRotate-3D-norte {
+/* La bolita de giro: la misma marca que en el dial de 2D (la blanca con el
+   borde del color primario que lleva el `stroke` del `.m-rotate-marker-circle`
+   del control nativo), y como allí, SOLO se ve al pasar el ratón por encima: en
+   reposo el botón es el disco con la brújula y nada más.
+   Va dentro del envoltorio que gira, con su centro en el del botón, así que
+   recorre el perímetro mientras gira la vista.
+   Las medidas son las de 2D, medidas: 17x17 px y orbitando a 22,6 px del centro,
+   o sea 2,6 px por fuera del borde (el disco de 40 tiene radio 20). Por eso el
+   `top` es negativo: para que la bolita se salga igual que en 2D en vez de
+   quedarse dentro. Por eso el disco lleva `overflow: visible`, que antes lo
+   recortaba. */
+.g-controlRotate-3D-bola {
   position: absolute;
-  top: 0;
+  top: -11px;
   left: 50%;
-  transform: translateX(-50%);
-  font-family: Muli, "sans-serif";
-  font-size: 8px;
-  line-height: 8px;
-  font-weight: 700;
-  color: var(--g-plugin-bg-color, orangered);
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
+  margin-left: -8.5px;
+  border-radius: 50%;
   background: var(--g-plugin-icon-color, #ffffff);
-  border-radius: 0 0 6px 6px;
-  padding: 0 2px;
+  border: 2px solid var(--g-plugin-bg-color, orangered);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
   cursor: grab;
+}
+
+.g-controlRotate--3D:hover .g-controlRotate-3D-bola {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.g-controlRotate-3D-bola:active {
+  cursor: grabbing;
+}
+
+.g-controlRotate-3D-bola:active {
+  cursor: grabbing;
 }
 
 /* El giroscopio del centro: lo que se arrastra para inclinar. Es el mismo
