@@ -139,6 +139,11 @@
       const grados = (options.step !== undefined && !isNaN(Number(options.step))) ? Number(options.step) : 15;
       this._paso = Math.abs(grados) * Math.PI / 180;
 
+      // En 3D el panel es propio: la roseta (que devuelve la cámara al norte) y los
+      // cuatro botones de movimiento, que cuelgan de este y no del dial nativo.
+      this._rosaBoton = null;
+      this._cajaMovimiento = null;
+
       // Estado de la rotación (radianes, sentido horario como OpenLayers).
       this._rotacion = (options.rotation !== undefined && !isNaN(Number(options.rotation)))
         ? Number(options.rotation) : 0;
@@ -364,6 +369,165 @@
     }
 
     /**
+     * Monta, en 3D, el panel con la roseta y los cuatro botones de movimiento.
+     *
+     * El dial de 2D no sirve aquí (su rotación es la de la vista de OpenLayers y
+     * el impl de Cesium no la tiene), pero la roseta sí sirve como botón para
+     * volver al norte, porque en 3D el norte es un rumbo de cámara. Y debajo se
+     * ponen los cuatro botones que mueven la cámara, que es lo que no había:
+     *
+     *   ← →  giran sobre el punto mirado   (camera.rotateLeft / rotateRight)
+     *   ↑ ↓  inclinan la cámara            (camera.rotateUp / rotateDown)
+     *
+     * Se usan los métodos de la cámara de Cesium y no los de la escena a mano, que
+     * son los que ya saben moverse alrededor del punto mirado y no están atados a
+     * la resolución de la pantalla.
+     *
+     * El panel se pinta con las MISMAS clases que el de 2D (`.m-panel .m-rotate`)
+     * para que herede el aspecto y el sitio de la API, y se cuelga en la misma
+     * columna de esquina que usa el dial.
+     * @returns {boolean} true si se ha montado.
+     */
+    _crearPanel3D() {
+      const self = this;
+      try {
+        const panel = document.createElement('div');
+        panel.className = 'm-panel m-rotate opened no-collapsible g-controlRotate g-controlRotate--3D';
+        panel.setAttribute('role', 'group');
+        panel.setAttribute('aria-label', 'Control de movimiento de la vista en 3D');
+
+        // El disco: es a la vez el anillo que se arrastra para GIRAR y el
+        //(container unlike the native one) el sitio donde se ve hacia donde mira
+        // la camara. Con 40 px no hay anillo exterior e interior como en la
+        // brujula de la API (150 px), asi que el anillo es el boton entero.
+        const disco = document.createElement('div');
+        disco.className = 'g-controlRotate-3D';
+        disco.title = 'Arrastra para girar la vista';
+
+        // La aguja con la N: gira al CONTRARIO que el mapa, para que la N apunte
+        // siempre al norte de verdad (mismo truco que la rosa del dial de 2D).
+        const aguja = document.createElement('div');
+        aguja.className = 'g-controlRotate-3D-aguja';
+        const norte = document.createElement('span');
+        norte.className = 'g-controlRotate-3D-norte';
+        norte.textContent = 'N';
+        aguja.appendChild(norte);
+
+        // El giroscopio del centro: se arrastra para INCLINAR la camara.
+        const giroscopio = document.createElement('div');
+        giroscopio.className = 'g-controlRotate-3D-giroscopio';
+        giroscopio.title = 'Arrastra para inclinar la vista';
+
+        disco.appendChild(aguja);
+        disco.appendChild(giroscopio);
+        panel.appendChild(disco);
+
+        const area = this._host.querySelector('.m-area.m-top.m-left')
+          || this._host.querySelector('.m-area')
+          || this._host;
+        area.appendChild(panel);
+        this._panel = panel;
+        this._dial = disco;
+        this._aguja = aguja;
+        this._giroscopio = giroscopio;
+
+        // Un puntero, dos gestos: sobre el centro inclina, sobre el resto gira.
+        // Se hace con los eventos de puntero (que ya traen el id de puntero) y
+        // no con los del raton, porque el control tiene que funcionar tambien
+        // con el dedo.
+        this._arrastrar(disco, false);
+        this._arrastrar(giroscopio, true);
+        this._on(disco, 'dblclick', function () { self._vistaInicial3D(); });
+
+        this._aplicarColores();
+        if (this.order !== undefined) panel.style.order = String(this.order);
+        this._aplicarVisibilidad();
+        return true;
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo montar el panel de 3D.`, e);
+        return false;
+      }
+    }
+
+    /**
+     * Conecta un arrastre de puntero sobre un elemento al movimiento de la
+     * camara: en horizontal gira (rumbo) y en vertical inclina (pitch).
+     * @param {HTMLElement} el Elemento que arrastra.
+     * @param {boolean} inclina true si es el giroscopio (solo inclina).
+     */
+    _arrastrar(el, inclina) {
+      const self = this;
+      let x0 = 0, y0 = 0;
+      const RATIO_GIRO = 0.008;
+      const RATIO_INCLINAR = 0.006;
+      this._on(el, 'pointerdown', function (ev) {
+        if (ev.button !== undefined && ev.button !== 0) return;
+        x0 = ev.clientX;
+        y0 = ev.clientY;
+        if (el.setPointerCapture && ev.pointerId !== undefined) {
+          try { el.setPointerCapture(ev.pointerId); } catch (e) { /* no hace falta */ }
+        }
+        ev.preventDefault();
+      });
+      this._on(el, 'pointermove', function (ev) {
+        const camara = self._camaraCesium();
+        if (!camara) return;
+        const dx = ev.clientX - x0;
+        const dy = ev.clientY - y0;
+        if (!dx && !dy) return;
+        x0 = ev.clientX;
+        y0 = ev.clientY;
+        try {
+          if (inclina) {
+            // Arriba del centro se mira más de lado y abajo más de cenital.
+            camara.rotateUp(dy * RATIO_INCLINAR);
+          } else {
+            camara.rotateLeft(-dx * RATIO_GIRO);
+          }
+          self._pintarAguja3D();
+        } catch (e) {
+          /* la camara puede no estar lista todavia */
+        }
+      });
+    }
+
+    /**
+     * Gira la aguja para que la N apunte al norte, y deduce el rumbo de la
+     * camara. Como gira al reves que el mapa, es el mismo criterio que la rosa
+     * del dial de 2D.
+     */
+    _pintarAguja3D() {
+      const camara = this._camaraCesium();
+      if (!camara || !this._aguja) return;
+      const grados = -(Number(camara.heading) || 0) * 180 / Math.PI;
+      this._aguja.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
+    }
+
+    /**
+     * Vuelve la camara a la vista de partida: sobre el punto mirado, mirando
+     * hacia abajo y con rumbo cero. Es lo que hace el doble clic en la brjula
+     * de la API.
+     */
+    _vistaInicial3D() {
+      const escena = this._escenaCesium();
+      const camara = this._camaraCesium();
+      const C = window.Cesium;
+      if (!escena || !camara || !C || !C.Math) return;
+      try {
+        const centro = camara.pickEllipsoid(
+          new C.Cartesian2(escena.canvas.clientWidth / 2, escena.canvas.clientHeight / 2),
+          escena.globe ? escena.globe.ellipsoid : null
+        );
+        camara.setView({
+          destination: centro || camara.positionWC,
+          orientation: { heading: 0, pitch: C.Math.toRadians(-90), roll: 0 },
+        });
+        this._pintarAguja3D();
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo volver a la vista inicial.`, e);
+      }
+    }
+    /**
      * Localiza el panel que la API acaba de crear para el control y lo deja
      * con el aspecto de un botón de herramienta.
      * El panel se crea de forma síncrona al añadir el control, pero se espera
@@ -562,7 +726,31 @@
      */
     _aplicarVisibilidad() {
       if (!this._panel) return;
-      this._panel.style.display = (this._visible && !this._es3D(this._map)) ? '' : 'none';
+      // En 3D también se ve: lo que se monta es el panel de movimiento. Antes se
+      // escondía porque en 3D no se montaba nada, y ahora sí.
+      this._panel.style.display = this._visible ? '' : 'none';
+    }
+
+    /**
+     * Escena de Cesium, o null si el mapa no es de 3D.
+     * @returns {Object|null} Escena.
+     */
+    _escenaCesium() {
+      try {
+        const impl = this._impl();
+        return (impl && impl.scene) ? impl.scene : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Cámara de Cesium, o null si el mapa no es de 3D.
+     * @returns {Object|null} Cámara.
+     */
+    _camaraCesium() {
+      const escena = this._escenaCesium();
+      return escena ? escena.camera : null;
     }
 
     /**
@@ -703,13 +891,19 @@
       const evt = (IDEE && IDEE.evt) ? IDEE.evt : {};
       this._host = this._resolveHost(map);
 
-      // En 3D no se monta, y no porque Cesium no sepa crear el control
-      // (sí lo sabe: _anadirControl() funciona igual en ambas
-      // implementaciones), sino porque su impl no expone getView() y no hay
-      // vista sobre la que aplicar la rotación: el dial saldría visible y
-      // decorado, pero inerte. Vease la MOTIVACIÓN de la cabecera.
-      if (this._es3D(map)) return;
-
+      // En 3D se monta el control NATIVO, que si funciona (la variante que
+      // construye Cesium maneja la camara, no la vista de OpenLayers), pero es
+      // una brujula de 150x150 (medido) y aqui tiene que caber en un boton de 40.
+      //
+      // Con 40 no cabe la brujula de la API, asi que se conserva su LENGUAJE y se
+      // reducen las piezas: el disco entero es el anillo que gira y el giroscopio
+      // del centro es lo que inclina. La rueda de 150 px (anillo fuera, circulo
+      // dentro) se convierte en un boton con el circulo dentro, que es lo mismo
+      // en un boton. Si el nuestro no se puede montar, se cae al nativo, que se
+      // ve mas grande pero funciona.
+      if (this._es3D(map)) {
+        if (this._crearPanel3D()) return;
+      }
       if (!this._anadirControl()) return;
       this._prepararPanel();
 
@@ -747,9 +941,21 @@
           /* el mapa puede estar ya destruido */
         }
       }
+      // El panel de 3D es DOM propio (no lo gestiona la API), así que hay que
+      // quitarlo a mano; el de 2D se va solo con removeControls.
+      if (this._panel && !this._control && this._panel.parentNode) {
+        try {
+          this._panel.parentNode.removeChild(this._panel);
+        } catch (e) {
+          /* el mapa puede estar ya destruido */
+        }
+      }
       this._control = null;
       this._panel = null;
       this._dial = null;
+      this._rosa = null;
+      this._rosaBoton = null;
+      this._cajaMovimiento = null;
       this._host = null;
       this._map = null;
     }

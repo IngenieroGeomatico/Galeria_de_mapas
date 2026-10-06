@@ -123,6 +123,113 @@
 }
 
 /* ---------------------------------------------------------------------
+   El panel de 3D.
+
+   Lo pinta este plugin (el dial nativo no sirve ahí) pero reutiliza las clases
+   del panel de la API, `.m-panel .m-rotate`, para que herede el aspecto y el
+   sitio. Lo que se añade es la roseta, que aquí es un botón que devuelve la
+   cámara al norte, y la rejilla de 2x2 con los cuatro botones de movimiento.
+
+   La rejilla va DEBAJO de la roseta, como pidió quien lo pidió: el botón grande
+   arriba y un cuadrado de cuatro botones debajo, todo del mismo ancho (dos
+   botones de 40 px), para que la columna de esquina siga siendo una columna.
+
+   Cada botón es un <button> con la clase de glifo de la API
+   (`.g-cartografia-flecha-*`), que es la que trae la fuente de iconos, así que
+   las flechas son las de la API y no un dibujo nuestro.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate--3D {
+  width: auto !important;
+  height: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* El disco: 40x40, como un boton mas de la API. Es el anillo que se arrastra
+   para girar (en la brjula de la API el anillo exterior son 120 px de los 150
+   del panel; aqui, al no haber sitio, el anillo es el boton entero). */
+.g-controlRotate-3D {
+  position: relative;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  color: var(--g-plugin-icon-color, #ffffff);
+  background: var(--g-plugin-bg-color, orangered) !important;
+  border: 1.6px solid var(--g-plugin-border-color, #ffffff) !important;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 2px 4px 0 !important;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.g-controlRotate-3D:active {
+  cursor: grabbing;
+}
+
+/* La aguja con la N. Gira al reves que el mapa para que la N apunte al norte de
+   verdad; es el mismo criterio que la rosa del dial de 2D. Va centrada en el
+   disco y la N en el borde de arriba, como en la brujula de la API. */
+.g-controlRotate-3D-aguja {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: transform 120ms ease-out;
+}
+
+.g-controlRotate-3D-norte {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: Muli, "sans-serif";
+  font-size: 9px;
+  line-height: 11px;
+  font-weight: 700;
+  color: var(--g-plugin-bg-color, orangered);
+  background: var(--g-plugin-icon-color, #ffffff);
+  border-radius: 0 0 6px 6px;
+  padding: 0 3px;
+}
+
+/* El giroscopio del centro: lo que se arrastra para inclinar. Es el mismo
+   glifo que el de la API (.m-rotate-giroscopio-svg con .g-cartografia-giroscopio),
+   aqui a 16 px para que quepa dentro del boton. */
+.g-controlRotate-3D-giroscopio {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: g-cartografia !important;
+  font-size: 16px;
+  color: var(--g-plugin-bg-color, orangered);
+  background: var(--g-plugin-icon-color, #ffffff);
+  cursor: move;
+  touch-action: none;
+}
+
+.g-controlRotate-3D-giroscopio::before {
+  content: "\e86e";
+}
+
+/* El glifo de la brjula de la API es el mismo (e950), pero puesto aqui y no con
+   su clase: `g-cartografia-flecha-izquierda` es la de la flecha de plegado del
+   panel y un boton con ella cogia los estilos del panel (medido: media 40x82 con
+   fondo blanco y se salia fuera). */
+/* ---------------------------------------------------------------------
    El dial es un control: el cursor debe decir que se puede arrastrar, y no
    debe robar el arrastre al mapa.
    --------------------------------------------------------------------- */
