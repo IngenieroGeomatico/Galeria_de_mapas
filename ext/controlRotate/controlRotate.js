@@ -493,313 +493,6 @@
      * columna de esquina que usa el dial.
      * @returns {boolean} true si se ha montado.
      */
-    _crearPanel3D() {
-      const self = this;
-      try {
-        const panel = document.createElement('div');
-        panel.className = 'm-panel m-rotate opened no-collapsible g-controlRotate g-controlRotate--3D';
-        panel.setAttribute('role', 'group');
-        panel.setAttribute('aria-label', 'Control de movimiento de la vista en 3D');
-
-        // El disco: es a la vez el anillo que se arrastra para GIRAR y el
-        // sitio donde se ve hacia donde mira la camara. Con 40 px no hay anillo
-        // exterior e interior como en la brujula de la API (150 px), asi que el
-        // anillo es el boton entero.
-        const disco = document.createElement('div');
-        disco.className = 'g-controlRotate-3D';
-        disco.title = 'Arrastra para girar la vista';
-
-        // El envoltorio que gira. La bolita va dentro, en el borde de arriba, y
-        // al girar el envoltorio (cuyo centro es el del boton) recorre el
-        // perimetro, igual que la bolita del dial de 2D.
-        const aguja = document.createElement('div');
-        aguja.className = 'g-controlRotate-3D-aguja';
-        aguja.title = 'Arrastra para girar la vista';
-        const bola = document.createElement('span');
-        bola.className = 'g-controlRotate-3D-bola';
-        bola.title = 'Girar la vista';
-        aguja.appendChild(bola);
-
-        // El giroscopio del centro: se arrastra para INCLINAR la camara.
-        const giroscopio = document.createElement('div');
-        giroscopio.className = 'g-controlRotate-3D-giroscopio';
-        giroscopio.title = 'Arrastra para inclinar la vista';
-
-        disco.appendChild(aguja);
-        disco.appendChild(giroscopio);
-        panel.appendChild(disco);
-
-        const area = this._host.querySelector('.m-area.m-top.m-left')
-          || this._host.querySelector('.m-area')
-          || this._host;
-        area.appendChild(panel);
-        this._panel = panel;
-        this._dial = disco;
-        this._aguja = aguja;
-        this._giroscopio = giroscopio;
-        this._bola = bola;
-        // Rumbo que se toma como norte arriba mientras no se pulse la bolita.
-        const camara = this._camaraCesium();
-        this._rumbo0 = camara ? Number(camara.heading) || 0 : 0;
-        this._pintarAguja3D();
-
-        // Un puntero, dos gestos: sobre el centro inclina, sobre el resto gira.
-        // Se hace con los eventos de puntero (que ya traen el id de puntero) y
-        // no con los del raton, porque el control tiene que funcionar tambien
-        // con el dedo.
-        // La bolita del borde es la que gira (arrastrando) y el icono del centro
-        // es el que inclina. Cada uno, con un clic, vuelve a su sitio: la
-        // bolita arriba (rumbo cero) y la inclinacion normal. Es lo que se ha
-        // pedido: es mas comodo que buscar un doble clic.
-        this._arrastrar(aguja, 'rumbo');
-        this._arrastrar(giroscopio, 'inclinar');
-        // El clic al norte va en el ENVOLTORIO y no en la bolita: al pulsar,
-        // `_arrastrar` captura el puntero en el elemento al que esta enlazado (el
-        // envoltorio) y el clic que genera el navegador queda redirigido allí, no
-        // a la bolita (medido: puesto en la bolita no llegaba). El icono del
-        // centro es hermano del envoltorio, así que su clic no se ve afectado.
-        this._on(aguja, 'click', function (ev) {
-          ev.stopPropagation();
-          if (self._movido) return;
-          self._alNorte3D();
-        });
-        this._on(giroscopio, 'click', function (ev) {
-          ev.stopPropagation();
-          if (self._movido) return;
-          self._inclinacionNormal3D();
-        });
-
-        this._aplicarColores();
-        if (this.order !== undefined) panel.style.order = String(this.order);
-        this._aplicarVisibilidad();
-        return true;
-      } catch (e) {
-        console.warn(`${this.name}: no se pudo montar el panel de 3D.`, e);
-        return false;
-      }
-    }
-
-    /**
-     * Conecta un arrastre de puntero sobre un elemento al movimiento de la camara.
-     * @param {HTMLElement} el Elemento que arrastra.
-     * @param {string} que 'rumbo' para girar la vista o 'inclinar' para la
-     *   inclinacion.
-     */
-    /**
-     * Conecta un arrastre de puntero sobre un elemento al movimiento de la
-     * camara de Cesium.
-     * @param {HTMLElement} el Elemento que arrastra.
-     * @param {string} que 'rumbo' para girar la vista (la bolita) o 'inclinar' para
-     *   la inclinacion (el icono del centro).
-     */
-    _arrastrar(el, que) {
-      const self = this;
-      const inclinando = (que === 'inclinar');
-      let x0 = 0, y0 = 0;
-      this._on(el, 'pointerdown', function (ev) {
-        if (ev.button !== undefined && ev.button !== 0) return;
-        x0 = ev.clientX;
-        y0 = ev.clientY;
-        self._movido = false;
-        if (el.setPointerCapture && ev.pointerId !== undefined) {
-          try { el.setPointerCapture(ev.pointerId); } catch (e) { /* no hace falta */ }
-        }
-        ev.preventDefault();
-        ev.stopPropagation();
-      });
-      this._on(el, 'pointermove', function (ev) {
-        if (!ev.buttons) return;
-        const dx = ev.clientX - x0;
-        const dy = ev.clientY - y0;
-        if (!dx && !dy) return;
-        x0 = ev.clientX;
-        y0 = ev.clientY;
-        self._movido = true;
-        ev.preventDefault();
-        if (inclinando) {
-          self._inclinarCon(dy);
-        } else {
-          self._girarCon(dx);
-        }
-      });
-      // El clic que pone cada cosa en su sitio se come si ha habido arrastre: si
-      // no, cada vez que se suelta un giro se desharia acto seguido. Se limpia
-      // despues, porque el clic se dispara en la misma tanda que el puntero arriba.
-      const soltar = function () {
-        window.setTimeout(function () { self._movido = false; }, 0);
-      };
-      this._on(el, 'pointerup', soltar);
-      this._on(el, 'pointercancel', soltar);
-    }
-
-    /**
-     * Mueve la cámara de Cesium a un rumbo y una inclinación dados.
-     *
-     * POR QUÉ UN lookAt Y NO UN setView: la cámara de la API se construye con
-     * lookAt, o sea que lleva un lookAtTransform (medido) y Cesium la maneja con
-     * una matriz de referencia propia. Al darle a setView una orientation, esa
-     * orientación se aplica en el marco equivocado y el resultado no es el que se
-     * pide: medido, pedir -89,5° devolvía -20°, que era el tope del tope. Y los
-     * métodos rotateUp y rotateLeft no hacen nada con esta cámara (medido: 0,01
-     * rad tras 0,01 rad, sin cambio). La única vía que respeta el marco es
-     * lookAt con un HeadingPitchRange, que es justo como la API la tiene.
-     *
-     * El objetivo es la traslación de esa misma matriz y el alcance se conserva,
-     * de modo que el gesto mueve la vista sin cambiar el zoom: lo mismo que hace
-     * un view.setCenter de OpenLayers.
-     *
-     * @param {number} heading Rumbo deseado, en radianes.
-     * @param {number} pitch Inclinación deseada, en radianes (-90 = cenital).
-     */
-    _moverCamara3D(heading, pitch) {
-      const camara = this._camaraCesium();
-      if (!camara) return;
-      // MEDIDO, y por qué es setView y no otra cosa: la cámara de la API se
-      // construye con lookAt y lleva lookAtTransform, así que se probaron las dos
-      // vías. `rotateUp` y `rotateLeft` no hacen nada con ella (0,01 rad tras
-      // 0,01 rad, sin cambio) y `lookAt` tampoco la mueve. El `setView` sí mueve
-      // el rumbo (medido: de 360° a 325° arrastrando), que es lo que se usa.
-      // PENDIENTE: la inclinación con este mismo setView no es fiable, porque la
-      // orientación se aplica en el marco de la matriz y pedir -89° devuelve -20°
-      // (medido). Es lo que hace que el gesto de inclinar siga siendo brusco.
-      try {
-        camara.setView({
-          destination: camara.positionWC,
-          orientation: { heading: heading, pitch: pitch, roll: 0 },
-        });
-      } catch (e) {
-        /* la cámara puede no estar lista todavía */
-      }
-    }
-
-    /**
-     * Arrastre de la bolita (o del disco entero): gira la vista en el sentido en
-     * que se lleva el dedo.
-     * @param {number} dx Desplazamiento horizontal del puntero en pixeles.
-     */
-    _girarCon(dx) {
-      const camara = this._camaraCesium();
-      if (!camara) return;
-      // 0,57 grados por pixel de recorrido.
-      const RATIO_GIRO = 0.01;
-      this._moverCamara3D(Number(camara.heading) - dx * RATIO_GIRO, Number(camara.pitch));
-      this._pintarAguja3D();
-    }
-
-    /**
-     * Arrastre del icono del centro: inclina la camara.
-     *
-     * POR QUE INCREMENTAL Y NO ABSOLUTO: antes la inclinacion salia de DONDE
-     * estaba el puntero dentro del boton (unos 9 px de recorrido para 50 grados,
-     * casi 6 grados por pixel), y por eso el gesto era un tirón seco que ademas
-     * se comia el primer movimiento por completo. Ahora es un incremento: cada
-     * paso del dedo suma una proporcion de lo que se ha movido, asi que se puede
-     * bajar a poco y a poco, y el icono del centro se limita a mostrar por donde
-     * va.
-     *
-     * El tope de -90 grados es el cenital (la vista con la que se entra) y el de
-     * -20 el mas tendido que se permite: mas alla la camara se va bajo el
-     * horizonte y no se ve nada del mapa.
-     *
-     * @param {number} dy Desplazamiento vertical del puntero en este paso, en px.
-     */
-    _inclinarCon(dy) {
-      const camara = this._camaraCesium();
-      const C = window.Cesium;
-      if (!camara || !C || !C.Math) return;
-      // 0,26 grados por pixel: con un barrido normal del gesto (unos 60 px) se
-      // cubren los 50 grados completos sin aceleración.
-      const RATIO = 0.0045;
-      const MIN = C.Math.toRadians(-90);
-      const MAX = C.Math.toRadians(-20);
-      let pitch = Number(camara.pitch) - dy * RATIO;
-      if (!isFinite(pitch)) pitch = MIN;
-      if (pitch > MIN) pitch = MIN;
-      if (pitch < MAX) pitch = MAX;
-      this._moverCamara3D(Number(camara.heading), pitch);
-      this._pintarIcono3D();
-    }
-
-    /**
-     * Situa el icono del centro segun la inclinacion que tiene la camara, para
-     * que el boton diga por donde va: en el centro es la vista normal (desde
-     * arriba) y arriba del todo la mas tendida que se permite.
-     */
-    _pintarIcono3D() {
-      const camara = this._camaraCesium();
-      if (!camara || !this._giroscopio) return;
-      // 9 px es el recorrido: medido, con mas el icono se solapaba con la
-      // bolita del borde.
-      const RADIO = 9;
-      const RECORRIDO = this._radianes(50);
-      let t = (Number(camara.pitch) + Math.PI / 2) / RECORRIDO;
-      if (!isFinite(t) || t < 0) t = 0;
-      if (t > 1) t = 1;
-      this._giroscopio.style.transform = 'translate(0px, ' + (-t * RADIO).toFixed(1) + 'px)';
-    }
-
-    /**
-     * Grados a radianes, sin depender de que haya Cesium cargado.
-     * @param {number} g Grados.
-     * @returns {number} Radianes.
-     */
-    _radianes(g) {
-      return g * Math.PI / 180;
-    }
-    /**
-     * Situa la bolita segun el rumbo de la camara. Gira al mismo sentido que el
-     * gesto que cambia el rumbo (arrastrar a la derecha la lleva a la derecha),
-     * que es lo mismo que hace la rosa del dial de 2D. `_rumbo0` es el rumbo
-     * que se considera N arriba, y por eso al volver al norte pasa a ser el 0.
-     */
-    _pintarAguja3D() {
-      const camara = this._camaraCesium();
-      if (!camara || !this._aguja) return;
-      const base = this._rumbo0 || 0;
-      const grados = -(Number(camara.heading) - base) * 180 / Math.PI;
-      this._aguja.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
-    }
-
-    /**
-     * Devuelve la vista al norte: rumbo cero, con la bolita del boton arriba. Como el
-     * gesto de girar se mide desde un rumbo de partida, al volver al norte esa
-     * referencia pasa a ser el propio cero.
-     */
-    _alNorte3D() {
-      const camara = this._camaraCesium();
-      if (!camara) return;
-      this._moverCamara3D(0, Number(camara.pitch));
-      this._rumbo0 = 0;
-      this._pintarAguja3D();
-    }
-
-    /**
-     * Devuelve la inclinacion a la normal, que es mirar el mapa desde arriba, y
-     * el icono del centro al centro del boton, que es donde dice esa inclinacion.
-     */
-    _inclinacionNormal3D() {
-      const C = window.Cesium;
-      const camara = this._camaraCesium();
-      if (!camara || !C || !C.Math) return;
-      this._moverCamara3D(Number(camara.heading), C.Math.toRadians(-90));
-      this._pintarIcono3D();
-    }
-    /**
-     * Vuelve la camara a la vista de partida: sobre el punto mirado, mirando
-     * hacia abajo y con rumbo cero. Es lo que hace el doble clic en la brjula
-     * de la API.
-     */
-    _vistaInicial3D() {
-      const camara = this._camaraCesium();
-      const C = window.Cesium;
-      if (!camara || !C || !C.Math) return;
-      // Por el mismo camino que los gestos: la camara va con lookAt y un setView
-      // con orientation no respeuta su marco (ver _moverCamara3D).
-      this._moverCamara3D(0, C.Math.toRadians(-90));
-      this._pintarAguja3D();
-      this._pintarIcono3D();
-    }
-
     /**
      * Localiza el panel que la API acaba de crear para el control y lo deja
      * con el aspecto de un botón de herramienta.
@@ -1181,19 +874,23 @@
       const evt = (IDEE && IDEE.evt) ? IDEE.evt : {};
       this._host = this._resolveHost(map);
 
-      // En 3D se monta el control NATIVO, que si funciona (la variante que
-      // construye Cesium maneja la camara, no la vista de OpenLayers), pero es
-      // una brujula de 150x150 (medido) y aqui tiene que caber en un boton de 40.
+      // En 3D se monta TAMBIEN el control nativo, y es lo correcto por dos motivos.
       //
-      // Con 40 no cabe la brujula de la API, asi que se conserva su LENGUAJE y se
-      // reducen las piezas: el disco entero es el anillo que gira y el giroscopio
-      // del centro es lo que inclina. La rueda de 150 px (anillo fuera, circulo
-      // dentro) se convierte en un boton con el circulo dentro, que es lo mismo
-      // en un boton. Si el nuestro no se puede montar, se cae al nativo, que se
-      // ve mas grande pero funciona.
-      if (this._es3D(map)) {
-        if (this._crearPanel3D()) return;
-      }
+      // Uno: la variante que construye Cesium no maneja la vista de OpenLayers sino
+      // la camara, y su brujula si funciona: anillo exterior arrastrable para girar
+      // 360 grados, giroscopio interior para inclinar, doble clic para la vista
+      // inicial y Ctrl+arrastrar sobre el mapa.
+      //
+      // Dos: la camara de la API se construye con lookAt y lleva su
+      // lookAtTransform, asi que controlarla a mano es pelearse con su marco de
+      // referencia. Medido: rotateUp y rotateLeft no hacen nada, lookAt tampoco la
+      // mueve, y un setView con orientation mueve el rumbo pero aplica la
+      // inclinacion en el marco equivocado (pedir -89 grados devuelve -20). Quien
+      // sabe hacerlo bien es la propia API.
+      //
+      // Hubo aqui un panel propio (bola + giroscopio, del tamano de un boton) que
+      // sufria justo de lo segundo. Se retira: el camino es el mismo en 2D y en 3D,
+      // y el estilo se itera encima, igual que en 2D.
       if (!this._anadirControl()) return;
       this._prepararPanel();
 
@@ -1247,9 +944,6 @@
       this._marcadorGrados = undefined;
       this._marcadorRotacion = 0;
       this._frameBolita = null;
-      this._aguja = null;
-      this._bola = null;
-      this._giroscopio = null;
       this._rosaBoton = null;
       this._cajaMovimiento = null;
       this._host = null;
