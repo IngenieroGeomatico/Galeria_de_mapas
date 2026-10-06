@@ -209,7 +209,6 @@ let estilo_indicacion = new IDEE.style.Generic({
       fontsize: 0.5,
       radius: 11,
       color: '#006CFF' || 'blue', // Hexadecimal, nominal
-      offset: [0, 0],
       fill: 'blue',
     }
   }
