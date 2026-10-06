@@ -16,7 +16,8 @@ La plantilla incorpora de serie las mejores prácticas establecidas en el reposi
 6. **Colores Configurables (`resolveColor`)**: Normalización de colores simples (`'#fff'`) u objetos (`{ active, deactive }`) aplicados mediante variables CSS al panel.
 7. **Ayuda Integrada (`getHelp`)**: Devuelve `{ title, content }` encapsulado en una `Promise` usando `IDEE.utils.stringToHtml` con fallback defensivo.
 8. **Método `destroy()`**: Esqueleto para desuscribir eventos y liberar referencias en el ciclo de vida del componente.
-9. **Exposición Triple Global**: Registro simultáneo en `window.miPlugin_*`, `window.IDEE.plugin.miPlugin_*` y `window.M.plugin.miPlugin_*`. Esto asegura que la clase sobreviva cuando `cambioImpl` recarga dinámicamente el bundle de la API al alternar dimensiones.
+9. **Exposición Triple Global**: Registro simultáneo en `window.miPlugin_*`, `window.IDEE.plugin.miPlugin_*` e `window.M.plugin.miPlugin_*`. Esto asegurar que la clase sobreviva cuando `cambioImpl` recarga dinámicamente el bundle de la API al alternar dimensiones.
+10. **Icono Configurable (`icon`)**: El icono del botón se pasa como SVG en el constructor. Si no se pasa, se queda el icono por defecto de la hoja de estilos.
 
 ---
 
@@ -59,7 +60,7 @@ Abre `miHerramienta.js` y `miHerramienta.css` y sustituye los identificadores de
    - `window.miPlugin_miHerramienta = miPlugin_miHerramienta;`
    - `window.IDEE.plugin.miPlugin_miHerramienta = miPlugin_miHerramienta;`
    - `window.M.plugin.miPlugin_miHerramienta = miPlugin_miHerramienta;`
-6. **Selectores CSS**: Renombrar `.g-herramienta_plantilla` a `.g-herramienta_miHerramienta` en el fichero `.css` y actualizar el SVG de la propiedad `-webkit-mask-image` / `mask-image`.
+6. **Selectores CSS**: Renombrar `.g-herramienta_plantilla` a `.g-herramienta_miHerramienta` en el fichero `.css`. El SVG de la máscara **no hace falta cambiarlo**: es el icono por defecto y se sustituye pasando `icon` al constructor (ver sección 4).
 7. **Título y textos de ayuda**: Personalizar `getHelp()` con el nombre y descripción real de la herramienta.
 
 ### Paso 4: Diseñar la Interfaz de Usuario
@@ -98,10 +99,40 @@ const pluginHerramienta = new IDEE.plugin.miPlugin_miHerramienta({
   order: 1,
   color1: { active: '#ffffff', deactive: 'orangered' },
   color2: { active: '#71A7D3', deactive: '#ffffff' },
-  color3: { active: '#71A7D3', deactive: '#ffffff' }
+  color3: { active: '#71A7D3', deactive: '#ffffff' },
+  // Icono del botón. Admite el <svg> entero, solo su contenido interior
+  // (<path/>, <circle/>...) o una URL. Si se omite, se usa el icono por
+  // defecto de la hoja de estilos. También valen los alias `icono` y `svg`.
+  icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="..."/></svg>'
 });
 
 mapajs.addPlugin(pluginHerramienta);
+```
+
+---
+
+### 3. El icono del botón (`icon`)
+
+El icono del botón plegado se pinta como **máscara** (`mask-image`), y el color sale de `background-color`, que es `var(--g-plugin-icon-color)`. De ahí dos cosas prácticas:
+
+- El SVG puede traer los colores que quiera: en una máscara solo cuenta la parte opaca (el alfa), así que **siempre se ve con el color del plugin**.
+- El SVG se inyecta en la variable CSS `--g-plugin-icon-mask`, no se toca el DOM del botón (que es de la API) ni se escribe ningún color en el CSS.
+
+Acepta tres formas:
+
+| Qué se pasa | Qué hace |
+|---|---|
+| `'<svg viewBox="0 0 24 24"><path d="..."/></svg>'` | Lo usa tal cual, con su `viewBox`. |
+| `'<path d="..."/>'` (solo contenido) | Lo envuelve en un `<svg>` de 24x24. |
+| `'data:...', 'https://...' o una ruta del repo` | Se usa como URL, sin codificar. |
+| Nada, o algo que no sea un SVG | Se queda el **icono por defecto** de la plantilla (una rueda dentada), con un aviso por consola. |
+
+Iconos: primero la fuente de la propia API (`g-cartografia`) y, para lo que no esté en ella, <https://www.svgrepo.com/>. Ejemplo real:
+
+```js
+new IDEE.plugin.miPlugin_miHerramienta({
+  icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 15 9l7 3-7 3-3 7-3-7-7-3 7-3z"/></svg>',
+});
 ```
 
 ---

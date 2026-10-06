@@ -23,6 +23,9 @@
    9. Método destroy() para limpieza de recursos y ciclo de vida limpio.
    10. Exposición triple en window, window.IDEE.plugin y window.M.plugin para
        sobrevivir a la recarga del bundle de la API durante el swap 2D/3D.
+    11. Icono del botón configurable con el parámetro `icon`: se acepta el SVG
+        completo, solo su contenido interior, o una URL. Si no se pasa nada, se
+        queda el icono por defecto de la hoja de estilos (una rueda dentada).
 
    PARÁMETROS DE CONSTRUCCIÓN IMPORTANTES (todos en el constructor):
      - position : esquina donde se cuelga el panel ('TL', 'TR', 'BL', 'BR').
@@ -36,9 +39,29 @@
      - color1   : color de fondo del botón ({ active, deactive } o string).
      - color2   : color de borde ({ active, deactive } o string).
      - color3   : color de icono/texto ({ active, deactive } o string).
-     Estos cinco (position, order, collapsible, color1, color2, color3) son el
+     - icon     : icono del botón. Acepta el `<svg ...>...</svg>` entero, solo
+                   el contenido de dentro (`<path/>`, `<circle/>`, ...), o una
+                   URL (`data:`, `http`, o una ruta del repositorio). Sin este
+                   parámetro se usa el icono por defecto de plantilla_plugin.css.
+                   Alias admitidos: `icono` y `svg`.
+                   Ejemplo (icono sacado de https://www.svgrepo.com/):
+                     new miPlugin_x({
+                       icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="..."/></svg>',
+                     })
+
+     Estos (position, order, collapsible, color1, color2, color3, icon) son el
      mínimo que debe aceptar cualquier plugin con panel: son los que usa quien
      instancia el mapa para situar y pintar la herramienta.
+
+   CÓMO SE PINTA EL ICONO (y por qué así):
+     El icono va como MÁSCARA (`mask-image`) sobre el pseudo-elemento
+     `.m-tools:before`, y el color sale de `background-color`, que es
+     `var(--g-plugin-icon-color)`. De ahí dos cosas:
+       - El SVG puede traer los colores que quiera: en una máscara solo cuenta
+         la parte opaca (el alfa), así que siempre se ve con el color del plugin.
+       - No hay que tocar el DOM del botón, que es de la API, ni escribir un
+         color en el CSS: el SVG se inyecta en la variable
+         `--g-plugin-icon-mask`, que el CSS usa como valor por defecto.
 
    PASOS PARA CREAR UN PLUGIN NUEVO A PARTIR DE ESTA PLANTILLA:
    1. Copiar la carpeta completa:
@@ -76,6 +99,66 @@
   }
 
   /**
+   * Envuelve contenido suelto de un SVG en un `<svg>` de 24x24, que es la medida
+   * en la que vienen dibujados casi todos los iconos.
+   * @param {string} contenido Contenido interior del SVG.
+   * @returns {string} SVG completo.
+   */
+  function envolverSvg(contenido) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+      + contenido + '</svg>';
+  }
+
+  /**
+   * Prepara un SVG para meterlo en un data URI: codifica lo que
+   * `encodeURIComponent` deja fuera y que ahí rompe la URL.
+   * @param {string} svg SVG completo.
+   * @returns {string} SVG listo para el data URI.
+   */
+  function codificarSvg(svg) {
+    return encodeURIComponent(svg)
+      .replace(/\(/g, '%28')
+      .replace(/\)/g, '%29')
+      .replace(/\'/g, '%27')
+      .replace(/\+/g, '%20');
+  }
+
+  /**
+   * Convierte el icono que se pasa al constructor en algo que se pueda poner en
+   * un `mask-image` de CSS, que es como se pinta el icono del botón.
+   *
+   * Acepta tres formas:
+   *   - el `<svg ...>...</svg>` completo, tal cual;
+   *   - solo el contenido de dentro (`<path/>`, `<circle/>`, `<g>...</g>`, ...),
+   *     y entonces se envuelve con un `<svg>` de 24x24;
+   *   - una URL (`data:...`, `http...` o una ruta del repositorio), que se usa
+   *     tal cual sin codificar.
+   * En una máscara solo cuenta el alfa del dibujo, así que el SVG puede traer
+   * cualquier color: el color lo pone `--g-plugin-icon-color`.
+   * @param {string} icono Icono en cualquiera de las tres formas.
+   * @returns {string|null} `url("...")` listo para CSS, o null si no es válido.
+   */
+  function urlDeIcono(icono) {
+    if (typeof icono !== 'string') return null;
+    const limpio = icono.trim();
+    if (!limpio) return null;
+
+    // Es una URL: se respeta tal cual (sin codificar).
+    if (/^(data:|https?:|\/|\.\/|\.\/)/i.test(limpio)) {
+      return 'url("' + limpio.replace(/"/g, '%22') + '")';
+    }
+
+    const traeSvg = /<svg[\s>]/i.test(limpio);
+    const traeForma = /<(path|circle|rect|line|polyline|polygon|ellipse|g|use|symbol|text)\b/i.test(limpio);
+    if (!traeSvg && !traeForma) {
+      return null;
+    }
+
+    const svg = traeSvg ? limpio : envolverSvg(limpio);
+    return 'url("data:image/svg+xml,' + codificarSvg(svg) + '")';
+  }
+
+  /**
    * Clase principal del plugin estándar.
    * TODO: Renombrar "miPlugin_plantilla" por el nombre de tu plugin (ej. "miPlugin_miHerramienta").
    */
@@ -92,6 +175,10 @@
      * @param {Object|string} [options.color1] Color de fondo del botón ({ active, deactive } o string).
      * @param {Object|string} [options.color2] Color de borde ({ active, deactive } o string).
      * @param {Object|string} [options.color3] Color de icono/texto ({ active, deactive } o string).
+     * @param {string} [options.icon] Icono del botón. Admite el `<svg>...</svg>`
+     * completo, solo el contenido de dentro (`<path/>`, `<circle/>`, ...) o una
+     * URL (`data:`, `http` o una ruta del repositorio). Si no se pasa, se usa el
+     * icono por defecto de la hoja de estilos. Alias admitidos: `icono`, `svg`.
      */
     constructor(options = {}) {
       // Identificador obligatorio del plugin (usado por el gestor de plugins y cambioImpl)
@@ -126,6 +213,13 @@
       this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
       this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
       this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+
+      // Icono del botón. Null significa "usa el de la hoja de estilos", que es lo
+      // que se quiere: así el plugin nuevo trae ya un icono y solo hay que
+      // cambiarlo si la herramienta tiene uno propio. Se aceptan `icon`, `icono`
+      // y `svg` por alias, porque el mismo plugin se instancia desde mapas
+      // distintos y cada uno escribe el nombre como le suena mejor.
+      this.icon = options.icon || options.icono || options.svg || null;
 
       // TODO: Declarar aquí las variables de estado interno del plugin
       // Ejemplo: identificador de capa activa, filtros seleccionados, pestañas abiertas, etc.
@@ -371,6 +465,30 @@
      * Construye el panel, el control, monta la UI y aplica estilos y ordenación.
      * @param {Object} map Instancia del mapa (IDEE.Map / M.Map).
      */
+    /**
+     * Pinta el icono del botón de la herramienta.
+     *
+     * Se inyecta como variable CSS (`--g-plugin-icon-mask`) en vez de tocar el
+     * DOM del botón, que es de la API. La hoja de estilos la usa como valor por
+     * defecto, así que si este método no llega a pintarla se queda el icono de
+     * serie de la plantilla, que es justo el plan B.
+     * @param {HTMLElement} panelEl Elemento del panel donde se escribe la variable.
+     */
+    _aplicarIcono(panelEl) {
+      if (!panelEl || !panelEl.style) return;
+      if (!this.icon) return;
+      const url = urlDeIcono(this.icon);
+      if (!url) {
+        console.warn(`${this.name}: el icono no parece un SVG ni una URL, se deja el de por defecto.`);
+        return;
+      }
+      try {
+        panelEl.style.setProperty('--g-plugin-icon-mask', url);
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo aplicar el icono.`, e);
+      }
+    }
+
     addTo(map) {
       this._map = map;
       const IDEE = api();
@@ -497,6 +615,9 @@
           panelEl.style.setProperty('--g-plugin-border-color-active', c2.active);
           panelEl.style.setProperty('--g-plugin-icon-color', c3.deactive);
           panelEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
+
+          // Y el icono, si lo han pasado en el constructor.
+          this._aplicarIcono(panelEl);
         }
       } catch (e) {
         /* Ignorar si no está disponible el elemento en el DOM */
