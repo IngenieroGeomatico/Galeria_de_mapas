@@ -316,6 +316,50 @@
   cursor: pointer;
 }
 /* ---------------------------------------------------------------------
+   LA BRÚJULA NATIVA EN 3D.
+
+   En 3D la API no construye el dial de 2D, sino OTRA variante del mismo
+   control: la brújula grande. Medido:
+     - `.m-rotate-compass` mide 150x150, contra los 44x44 del dial de 2D.
+     - dentro van `.m-rotate-background-exterior` (99x99), `.m-rotate-exterior-svg`
+       (120x120), `#m-rotate-giroscopio` (40x40) y `#m-rotate-help` (30x30), que
+       es el botón de ayuda.
+     - no hay `#m-rotate-marker`, o sea que la bolita de giro no la trae.
+
+   Por eso las reglas del dial de 2D (`--tam`, `--sinNorte`) no le hacen nada
+   aquí: son otros nombres. Con esto se le da el mismo aspecto que en 2D: del
+   tamaño de un botón, sin el botón de ayuda (lo mismo que hace `--sinNorte` en
+   2D con el botón de norte) y con la rosa de svgrepo en el centro, a 40x40 como
+   en 2D.
+
+   El gesto NO se toca: el que gira y el que inclina son los de la API, que ya
+   funcionan con su cámara.
+   --------------------------------------------------------------------- */
+
+/* 150 px del control nativo dentro de 40 px de botón: 40 / 150 = 0,2667. Se
+   escala la brújula entera en vez de ajustar cada pieza, para que conserve sus
+   proporciones (fondo, anillo y giroscopio) y para no tener que ir cambiando
+   números si la API cambia el tamaño. */
+.m-panel.m-rotate.g-controlRotate .m-rotate-compass {
+  transform: scale(0.2667);
+  transform-origin: center center;
+}
+
+/* El botón de ayuda fuera, igual que el de norte en 2D con --sinNorte: ocupa
+   30 de los 40 px del botón y no cabe. */
+.m-panel.m-rotate.g-controlRotate #m-rotate-help,
+.m-panel.m-rotate.g-controlRotate .m-rotate-help-button {
+  display: none !important;
+}
+
+/* La rosa, a 40x40 como en 2D. Sin esto, dentro de la brújula de 150 px se
+   estiraba a 150x26 (medido). */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-rosa {
+  width: 40px !important;
+  height: 40px !important;
+}
+
+/* ---------------------------------------------------------------------
    El dial es un control: el cursor debe decir que se puede arrastrar, y no
    debe robar el arrastre al mapa.
    --------------------------------------------------------------------- */
