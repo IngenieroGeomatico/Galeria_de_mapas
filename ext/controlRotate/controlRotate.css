@@ -620,9 +620,12 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 26px;
-  height: 26px;
-  margin: -13px 0 0 -13px;
+  /* La mitad que el resto: 26 px de lado, medidos en la caja de la rosa y en el
+     svg que lleva dentro. Con 26 se comía la rosa entera y no parecía una palanca
+     sino el icono del botón. */
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
   pointer-events: none;
   opacity: 0;
   transition: opacity 120ms ease-out;
