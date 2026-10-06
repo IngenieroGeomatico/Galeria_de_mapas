@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
    ESTILOS DEL PLUGIN DIAL DE ROTACIÓN (miPlugin_controlRotate)
    =====================================================================
    El dial es el control Rotate de la propia API (IDEE.control.Rotate), que
@@ -602,4 +602,39 @@
 .m-panel.m-rotate.g-controlRotate #m-rotate-slider-container:active,
 .m-panel.m-rotate.g-controlRotate .m-rotate-container:active {
   cursor: grabbing;
+}
+/* ---------------------------------------------------------------------
+   EL ICONO AL PASAR EL RATÓN.
+
+   Los dos iconos del disco (la rosa, que se ve siempre, y el átomo, que sale al
+   pasar el ratón) están los dos en el DOM desde el principio y aquí se cambia solo
+   su opacidad. La rosa se queda en su sitio al pasar el ratón, sin salirse del
+   disco: el átomo va ENCIMA de ella y tapa su centro. Ese es el motivo de que el
+   átomo no lleve `opacity`: si la bearía el sitio es el suyo, que es el centro,
+   centro, que es justo donde tiene que estar.
+
+   El átomo es en línea y con `currentColor`, así que el color sale del esquema
+   por la variable del constructor y no hay que escribir ningún color aquí.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-atom {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.m-panel.m-rotate.g-controlRotate:hover .g-controlRotate-atom {
+  opacity: 1;
+}
+
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-atom svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: var(--g-plugin-icon-color, #ffffff);
 }
