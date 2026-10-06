@@ -355,6 +355,91 @@
     }
 
     // =====================================================================
+    // LA BOLITA DEL CONTROL NATIVO
+    // =====================================================================
+
+    /**
+     * Saca los grados de un `transform: rotate(Ndeg)`.
+     * @param {string} texto Valor de `style.transform`.
+     * @returns {number|null} Los grados, o null si no es un giro en grados.
+     */
+    _gradosDelTransform(texto) {
+      if (typeof texto !== 'string') return null;
+      const encontrado = /rotate\(\s*(-?[\d.]+)\s*deg\s*\)/.exec(texto);
+      return encontrado ? Number(encontrado[1]) : null;
+    }
+
+    /**
+     * Mantiene al día la bolita del control nativo (`#m-rotate-marker`), que es
+     * la que se ve al pasar el ratón por el botón.
+     *
+     * POR QUÉ HACE FALTA: la API mueve esa bolita con su propio `transform`
+     * SOLO mientras el arrastre es suyo. Medido: la bolita está en
+     * `rotate(45deg)` con la vista a 0, y al girar nosotros con `setRotation` el
+     * `rotate(45deg)` se queda clavado. Así que cuando se va al norte con el
+     * doble clic, o con la rueda, o con las teclas, la vista gira y la bolita se
+     * queda en la última posición: el botón miente.
+     *
+     * CÓMO SE ARREGLA: se aplica al `transform` de la bolita la misma variación
+     * que ha tenido la vista. Como solo se suman variaciones, el desfase que la
+     * API usa de base (los 45°) se respeta solo.
+     *
+     * Si el `transform` ha cambiado sin que lo cambiemos nosotros, es que lo ha
+     * movido la API, o sea que el arrastre es suyo: entonces solo se toma nota y
+     * no se toca, para no mover la bolita dos veces.
+     *
+     * @param {number} rotacion Rotación actual de la vista, en radianes.
+     */
+    _sincronizarMarcador(rotacion) {
+      // Se aplaza un frame a propósito. Con el arrastre de la API, su manejador
+      // actualiza el marcador DESPUÉS de que se dispare CHANGE_ROTATION, así que
+      // si se tocara aquí la bolita avanzaría dos veces.
+      if (this._frameBolita && window.cancelAnimationFrame) {
+        window.cancelAnimationFrame(this._frameBolita);
+      }
+      const self = this;
+      this._frameBolita = window.requestAnimationFrame
+        ? window.requestAnimationFrame(function () {
+            self._frameBolita = null;
+            self._moverMarcador(rotacion);
+          })
+        : window.setTimeout(function () {
+            self._frameBolita = null;
+            self._moverMarcador(rotacion);
+          }, 16);
+    }
+
+    /**
+     * Aplica a la bolita la variación de la vista desde la última vez que se
+     * vio. Trabaja en grados porque el `transform` de la API está en grados.
+     * @param {number} rotacion Rotación actual de la vista, en radianes.
+     */
+    _moverMarcador(rotacion) {
+      const marcador = (this._panel && this._panel.querySelector)
+        ? this._panel.querySelector('#m-rotate-marker')
+        : null;
+      if (!marcador || !marcador.style) return;
+      const grados = this._gradosDelTransform(marcador.style.transform);
+      if (this._marcadorGrados === undefined || grados === null) {
+        this._marcadorGrados = grados;
+        this._marcadorRotacion = rotacion;
+        return;
+      }
+      // Lo ha movido la API: solo se toma nota.
+      if (Math.abs(grados - this._marcadorGrados) > 0.05) {
+        this._marcadorGrados = grados;
+        this._marcadorRotacion = rotacion;
+        return;
+      }
+      const delta = this._normalizar(rotacion - this._marcadorRotacion);
+      if (!delta) return;
+      const nuevo = grados + delta * 180 / Math.PI;
+      marcador.style.transform = 'rotate(' + nuevo.toFixed(1) + 'deg)';
+      this._marcadorGrados = nuevo;
+      this._marcadorRotacion = rotacion;
+    }
+
+    // =====================================================================
     // MONTAJE DEL CONTROL NATIVO EN LA COLUMNA DE ESQUINA
     // =====================================================================
 
@@ -813,6 +898,7 @@
       // La rosa va antes del guard de 3D: es adorno del dial, que es de 2D, pero
       // pintarla siempre deja el elemento al día aunque el mapa cambie mientras.
       this._pintarRosa();
+      this._sincronizarMarcador(this._rotacion);
       if (this._es3D(this._map)) return;
       const vista = this._vista2D();
       if (vista && typeof vista.setRotation === 'function') {
@@ -849,6 +935,7 @@
       if (isFinite(rotacion)) {
         this._rotacion = this._normalizar(rotacion);
         this._pintarRosa();
+        this._sincronizarMarcador(this._rotacion);
       }
     }
 
@@ -1131,6 +1218,9 @@
       this._panel = null;
       this._dial = null;
       this._rosa = null;
+      this._marcadorGrados = undefined;
+      this._marcadorRotacion = 0;
+      this._frameBolita = null;
       this._aguja = null;
       this._giroscopio = null;
       this._rosaBoton = null;
