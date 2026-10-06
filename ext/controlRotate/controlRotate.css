@@ -135,7 +135,7 @@
   user-select: none;
   /* La transición suaviza el giro y hace que se lea como una aguja que se mueve y
      no como un icono que aparece en otro sitio. */
-  transition: transform 120ms ease-out;
+  transition: transform 120ms ease-out, opacity 120ms ease-out;
 }
 
 /* ---------------------------------------------------------------------
@@ -630,6 +630,14 @@
 
 .m-panel.m-rotate.g-controlRotate:hover .g-controlRotate-atom {
   opacity: 1;
+}
+/* Y la rosa se va, que si no los dos iconos se ven a la vez (medido). Se esconde
+   con `opacity` y no con `display`, a propósito: la rosa es la que lleva el
+   `transform` con el rumbo, y si se quitara del DOM ese estado se perdería.
+   Al ser un fundido de los dos, el sitio lo sigue mandando el átomo, que va
+   centrado. */
+.m-panel.m-rotate.g-controlRotate:hover .g-controlRotate-rosa {
+  opacity: 0;
 }
 
 .m-panel.m-rotate.g-controlRotate .g-controlRotate-atom svg {
