@@ -793,12 +793,22 @@
       // Giran las dos cosas con el mismo ángulo, en _pintarFlecha2D().
       if (!this._es3D(this._map)) {
         const sitioFlecha = panel.querySelector('#m-rotate-slider-container') || dial;
+        // La flecha va dentro de un envoltorio que ocupa el disco entero y es
+        // el que gira. Como el envoltorio tiene su centro en el centro del
+        // disco, al rotarlo la flecha da la vuelta POR EL PERÍMETRO, que es lo
+        // que hacía la bolita del control nativo. Si se girase la flecha
+        // directamente, que es lo más fácil, se quedaría clavada arriba girando
+        // sobre sí misma sin salir de su sitio.
+        const giro = document.createElement('span');
+        giro.className = 'g-controlRotate-flecha-giro';
         const flecha = document.createElement('span');
         flecha.className = 'g-controlRotate-flecha';
         flecha.title = 'Girar el mapa';
         flecha.setAttribute('aria-hidden', 'true');
-        sitioFlecha.appendChild(flecha);
+        giro.appendChild(flecha);
+        sitioFlecha.appendChild(giro);
         this._flecha = flecha;
+        this._flechaGiro = giro;
         this._on(flecha, 'click', function (evento) {
           evento.stopPropagation();
           self._aplicarRotacion(0);
@@ -878,9 +888,9 @@
      * blanca) queda escondido y en su lugar está esta flecha.
      */
     _pintarFlecha2D() {
-      if (!this._flecha) return;
+      if (!this._flechaGiro) return;
       const grados = (this._rotacion * 180 / Math.PI);
-      this._flecha.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
+      this._flechaGiro.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
     }
 
     /**
@@ -1162,6 +1172,7 @@
       this._dial = null;
       this._rosa = null;
       this._flecha = null;
+      this._flechaGiro = null;
       this._aguja = null;
       this._giroscopio = null;
       this._rosaBoton = null;

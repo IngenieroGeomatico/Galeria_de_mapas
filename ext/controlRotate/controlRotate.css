@@ -252,6 +252,15 @@
    El glifo va aqui y no con una clase de la API, por el motivo de siempre:
    `g-cartografia-flecha-arriba` la usa el botón de norte de la API y aqui
    pinta el relleno del panel. */
+/* El envoltorio de la flecha: ocupa el disco entero y es el que gira. Al girar
+   él (y no la flecha) la flecha recorre el perímetro, que es lo que hacía la
+   bolita del control nativo. Sin puntero, porque a él no se le pulsa. */
+.m-panel.m-rotate.g-controlRotate .g-controlRotate-flecha-giro {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .m-panel.m-rotate.g-controlRotate .g-controlRotate-flecha {
   position: absolute;
   top: 0;
@@ -259,6 +268,8 @@
   width: 12px;
   height: 12px;
   margin-left: -6px;
+  /* El radio: del centro del disco al centro de la flecha hay 14 px, que es el
+     20 del semidisco menos los 6 de la mitad de la flecha. */
   font-family: g-cartografia !important;
   font-size: 12px;
   line-height: 12px;
