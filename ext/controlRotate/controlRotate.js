@@ -568,11 +568,176 @@
         this._pintarRosa();
         if (this.order !== undefined) panel.style.order = String(this.order);
         this._aplicarVisibilidad();
+
+        // El gesto de girar: en este dial no lo trae la API, hay que ponerlo.
+        this._arrastrarDial3D(panel);
+        // La rosa tiene que seguir a la cámara, que también se gira con el
+        // ratón sobre el mapa, no solo con la bolita. Se escucha en
+        // `postRender` y no en `camera.changed` porque es lo que hace la API con
+        // su brújula, y porque `changed` va retardado: con él la rosa se
+        // quedaba con un rumbo intermedio al terminar el arrastre (medido).
+        const escena = this._escenaCesium();
+        if (escena && escena.postRender && typeof escena.postRender.addEventListener === 'function') {
+          this._alCambiarCamara = () => { this._pintarRosa(); };
+          escena.postRender.addEventListener(this._alCambiarCamara);
+        }
       } catch (e) {
         console.warn(`${this.name}: no se pudo pintar el dial de 3D.`, e);
       }
     }
 
+    /**
+     * Engancha el gesto de girar del dial de 3D: arrastrar la bolita gira la
+     * vista de Cesium.
+     *
+     * LA RECETA ES LA DE LA PROPIA API, no una inventada aquí. Medido en su
+     * bundle (control Rotate de la variante de Cesium): el gesto `rotate` de su
+     * brújula grande NO llama a la cámara tal cual, sino que envuelve la rotación
+     * en un marco ENU del punto al que mira la cámara y aplica `rotateRight`
+     * dentro, con `lookAtTransform` antes y después.
+     *
+     * POR QUÉ NO VALE LLAMAR A LA CÁMARA A PELO: porque la cámara va montada con
+     * `lookAt`, y entonces `rotateUp`, `rotateLeft` y un `setView` con
+     * `orientation` no la mueven (medido: `rotateRight` sin marco teletransporta
+     * la cámara en vez de girarla, y `setView` mete la inclinación en el marco
+     * equivocado: pedir -89 grados devuelve -20).
+     *
+     * El punto al que mira la cámara se saca como lo saca la API: un rayo desde
+     * la posición de la cámara en su dirección, cortado por el globo
+     * (`globe.pick`). Si ese punto no sale, se gira alrededor de la propia
+     * cámara, que es lo que hace la API en ese caso.
+     *
+     * @param {HTMLElement} panel Panel del dial de 3D.
+     */
+    _arrastrarDial3D(panel) {
+      const dial = this._dial3D || panel;
+      if (!dial || typeof dial.addEventListener !== 'function') return;
+      const self = this;
+
+      const alMover = function (evento) {
+        if (!self._girando3D) return;
+        const angulo = self._anguloSobreDial(evento, dial);
+        if (angulo === null) return;
+        const delta = self._normalizar(angulo - self._anguloGiro3D);
+        self._anguloGiro3D = angulo;
+        if (!delta) return;
+        self._girarCamara3D(delta);
+        self._moverBolita3D(angulo);
+      };
+
+      const alSoltar = function () {
+        self._girando3D = false;
+        self._anguloGiro3D = null;
+        if (self._panel && self._panel.classList) {
+          self._panel.classList.remove('g-controlRotate-girando');
+        }
+        document.removeEventListener('pointermove', alMover, false);
+        document.removeEventListener('pointerup', alSoltar, false);
+        document.removeEventListener('pointercancel', alSoltar, false);
+      };
+
+      const alPulsar = function (evento) {
+        if (!self._es3D(self._map)) return;
+        if (evento.button !== undefined && evento.button !== 0) return;
+        if (!self._marcoGiro3D()) return;
+        const angulo = self._anguloSobreDial(evento, dial);
+        if (angulo === null) return;
+        if (typeof evento.preventDefault === 'function') evento.preventDefault();
+        self._girando3D = true;
+        self._anguloGiro3D = angulo;
+        if (self._panel && self._panel.classList) {
+          self._panel.classList.add('g-controlRotate-girando');
+        }
+        // Con captura, el gesto sigue aunque el puntero se salga del botón.
+        if (evento.pointerId !== undefined && typeof dial.setPointerCapture === 'function') {
+          try { dial.setPointerCapture(evento.pointerId); } catch (e) { /* sin captura */ }
+        }
+        document.addEventListener('pointermove', alMover, false);
+        document.addEventListener('pointerup', alSoltar, false);
+        document.addEventListener('pointercancel', alSoltar, false);
+      };
+
+      dial.addEventListener('pointerdown', alPulsar, false);
+      this._gesto3D = { dial: dial, alPulsar: alPulsar, alSoltar: alSoltar };
+    }
+
+    /**
+     * Ángulo del puntero alrededor del centro del dial, medido como lo mide la
+     * API: con la Y del ratón cambiada de signo, para que crezca en sentido
+     * antihorario en pantalla.
+     * @param {Event} evento Evento del puntero.
+     * @param {HTMLElement} dial Dial de 3D.
+     * @returns {number|null} Ángulo en radianes, o null si no se puede calcular.
+     */
+    _anguloSobreDial(evento, dial) {
+      if (!dial || typeof dial.getBoundingClientRect !== 'function') return null;
+      const caja = dial.getBoundingClientRect();
+      if (!caja.width || !caja.height) return null;
+      const x = (evento.clientX !== undefined) ? evento.clientX : 0;
+      const y = (evento.clientY !== undefined) ? evento.clientY : 0;
+      return Math.atan2(-(y - caja.top - caja.height / 2), x - caja.left - caja.width / 2);
+    }
+
+    /**
+     * Monta el marco ENU alrededor del que se gira la cámara, que es lo que hace
+     * posible girar una cámara que va con `lookAt`.
+     * @returns {Object|null} Matriz del marco, o null si no se puede.
+     */
+    _marcoGiro3D() {
+      if (typeof Cesium === 'undefined' || !Cesium.Transforms) return null;
+      const camara = this._camaraCesium();
+      const escena = this._escenaCesium();
+      if (!camara || !escena) return null;
+      let pivote = null;
+      try {
+        const rayo = new Cesium.Ray(camara.positionWC, camara.directionWC);
+        pivote = escena.globe.pick(rayo, escena);
+      } catch (e) {
+        pivote = null;
+      }
+      const utilizable = pivote && isFinite(pivote.x) && isFinite(pivote.y) && isFinite(pivote.z);
+      const centro = utilizable ? pivote : camara.positionWC;
+      try {
+        this._marco = Cesium.Transforms.eastNorthUpToFixedFrame(centro, escena.globe.ellipsoid);
+      } catch (e) {
+        this._marco = null;
+      }
+      return this._marco;
+    }
+
+    /**
+     * Gira la vista de Cesium un ángulo, alrededor del punto al que mira la
+     * cámara. El signo sale medido: `rotateRight` con ángulo positivo BAJA el
+     * rumbo ese mismo ángulo (medido: +0,5 rad pasa el rumbo de 360 a 331,4).
+     * @param {number} delta Ángulo en radianes, en el sentido del puntero.
+     */
+    _girarCamara3D(delta) {
+      if (typeof Cesium === 'undefined') return;
+      const camara = this._camaraCesium();
+      if (!camara || !this._marco) return;
+      if (!this._marcoGuardado) this._marcoGuardado = new Cesium.Matrix4();
+      try {
+        Cesium.Matrix4.clone(camara.transform, this._marcoGuardado);
+        camara.lookAtTransform(this._marco);
+        camara.rotateRight(delta);
+        camara.lookAtTransform(this._marcoGuardado);
+      } catch (e) {
+        /* la cámara puede estar en medio de un vuelo */
+      }
+    }
+
+    /**
+     * Lleva la bolita al punto del dial donde está el puntero. El dial está en
+     * el norte, que es arriba, así que el ángulo de la bolita es el del puntero
+     * menos los 90 grados del norte.
+     * @param {number} angulo Ángulo del puntero, en radianes.
+     */
+    _moverBolita3D(angulo) {
+      const bola = this._bola3D;
+      if (!bola || !bola.style) return;
+      const grados = 90 - angulo * 180 / Math.PI;
+      bola.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
+    }
     /**
      * Localiza el panel que la API acaba de crear para el control y lo deja
      * con el aspecto de un botón de herramienta.
@@ -763,17 +928,19 @@
      * abajo a la derecha, que es justo lo contrario de lo que indica).
      */
     _pintarRosa() {
-      if (!this._rosa) return;
-      // En 3D la rosa no se gira. Lo que se gira es la vista, y el gesto todavía
-      // no mueve la cámara (ver el aviso de arriba), así que no hay rumbo que
-      // pintar. Y si se le dejara la rotación que trae del estado, al entrar en
-      // 3D con la vista girada la rosa salía inclinada, que ya no parece un icono
-      // centrado (medido: con la vista en 45 grados llegaba a 3D con
       // `rotate(45deg)`, y una caja de 50,9 px en vez de 36).
       const es3D = !!(this._map && typeof this._es3D === 'function' && this._es3D(this._map));
-      const rotacion = es3D ? 0 : this._rotacion;
-      const grados = (rotacion * 180 / Math.PI);
-      this._rosa.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
+      if (es3D) {
+        // En 3D lo que gira es la cámara, y su rumbo es su `heading`. La rosa se
+        // gira lo contrario, igual que hace la API con su brújula grande
+        // (`rotate(${-heading}rad)`, medido en su bundle). Antes se le ponía 0
+        // porque el gesto no movía la cámara; ahora sí, así que se lee de ella.
+        const camara = this._camaraCesium();
+        if (!camara) return;
+        this._rosa.style.transform = 'rotate(' + (-camara.heading).toFixed(6) + 'rad)';
+        return;
+      }
+      const grados = (this._rotacion * 180 / Math.PI);
     }
 
     /**
@@ -1046,6 +1213,24 @@
       this._marcadorGrados = undefined;
       this._marcadorRotacion = 0;
       this._frameBolita = null;
+      if (this._gesto3D) {
+        if (typeof this._gesto3D.alSoltar === 'function') this._gesto3D.alSoltar();
+        if (this._gesto3D.dial && typeof this._gesto3D.dial.removeEventListener === 'function') {
+          this._gesto3D.dial.removeEventListener('pointerdown', this._gesto3D.alPulsar, false);
+        }
+        this._gesto3D = null;
+      }
+      const camara = this._camaraCesium();
+      const escena = this._escenaCesium();
+      if (this._alCambiarCamara && escena && escena.postRender) {
+        escena.postRender.removeEventListener(this._alCambiarCamara);
+      }
+      this._alCambiarCamara = null;
+      this._girando3D = false;
+      this._anguloGiro3D = null;
+      this._marco = null;
+      this._marcoGuardado = null;
+      this._bola3D = null;
       this._rosaBoton = null;
       this._cajaMovimiento = null;
       this._host = null;

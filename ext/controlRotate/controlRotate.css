@@ -552,6 +552,35 @@
   margin-top: -26.5px !important;
   margin-left: -7.5px !important;
   overflow: visible;
+  /* Gira alrededor del centro del disco, no de sí misma: el pivote está 8 px a
+     la derecha y 22 px abajo de la esquina de la caja, que es justo el centro
+     del disco (medido: la bolita describe una circunferencia de 14 px de radio,
+     los 20 del disco menos los 6 de la propia bolita). */
+  transform-origin: 8px 22px;
+}
+
+  /* Gira alrededor del centro del disco, no de sí misma: el pivote está 8 px a
+     la derecha y 22 px abajo de la esquina de la caja, que es justo el centro
+     del disco (medido: la bolitaDescribe una circunferencia de 14 px de radio,
+     los 20 del disco menos los 6 de la propia bolita). */
+
+/* ---------------------------------------------------------------------
+   EL GESTO DE GIRAR EN 3D.
+
+   Arrastrar la bolita gira la vista de Cesium (el JS monta el marco ENU y
+   aplica el giro). Aquí solo el aspecto: la bolita se ve mientras se arrastra
+   aunque el puntero se salga del botón, y el cursor dice que se puede arrastrar.
+   --------------------------------------------------------------------- */
+.m-panel.m-rotate.g-controlRotate--3D.g-controlRotate-girando #m-rotate-marker {
+  opacity: 1 !important;
+}
+
+.m-panel.m-rotate.g-controlRotate--3D #m-rotate-slider-container {
+  cursor: grab;
+}
+
+.m-panel.m-rotate.g-controlRotate--3D.g-controlRotate-girando #m-rotate-slider-container {
+  cursor: grabbing;
 }
 
 /* ---------------------------------------------------------------------
