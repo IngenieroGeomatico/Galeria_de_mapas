@@ -659,6 +659,14 @@
 
       dial.addEventListener('pointerdown', alPulsar, false);
       this._gesto3D = { dial: dial, alPulsar: alPulsar, alSoltar: alSoltar };
+
+      // El doble clic, igual que en 2D: al norte arriba. Va aquí porque
+      // `_adaptarPanel` sale antes de registrarlo cuando el mapa es de 3D
+      // (medido: en 3D no había ningún manejador de doble clic en el dial).
+      dial.addEventListener('dblclick', function (evento) {
+        if (typeof evento.preventDefault === 'function') evento.preventDefault();
+        self._irAlNorte3D();
+      });
     }
 
     /**
@@ -745,6 +753,36 @@
       const grados = 90 - angulo * 180 / Math.PI;
       bola.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
     }
+    /**
+     * Vuelve al norte en 3D, que es lo que hace el doble clic sobre el dial en
+     * 2D pero con la cámara: el norte arriba es rumbo 0.
+     *
+     * Se gira dentro del mismo marco ENU del gesto, y con el ángulo normalizado
+     * al intervalo [-π, π] para que el giro sea el corto y no el largo: con un
+     * rumbo de 270° el norte se alcanza en 90°, no en 270° (medido).
+     * @returns {boolean} true si se ha podido girar la cámara.
+     */
+    _irAlNorte3D() {
+      if (typeof Cesium === 'undefined') return false;
+      const camara = this._camaraCesium();
+      if (!camara || !this._marcoGiro3D()) return false;
+      if (!this._marcoGuardado) this._marcoGuardado = new Cesium.Matrix4();
+      try {
+        Cesium.Matrix4.clone(camara.transform, this._marcoGuardado);
+        camara.lookAtTransform(this._marco);
+        // `rotateRight` con ángulo positivo baja el rumbo ese mismo ángulo
+        // (medido), así que el ángulo que lleva el rumbo a 0 es el propio rumbo.
+        camara.rotateRight(this._normalizar(camara.heading));
+        camara.lookAtTransform(this._marcoGuardado);
+      } catch (e) {
+        return false;
+      }
+      // Y la bolita, arriba, que es donde está con el norte arriba.
+      this._moverBolita3D(Math.PI / 2);
+      this._pintarRosa();
+      return true;
+    }
+
     /**
      * Localiza el panel que la API acaba de crear para el control y lo deja
      * con el aspecto de un botón de herramienta.
@@ -861,6 +899,10 @@
       if (dial) {
         this._on(dial, 'dblclick', function (evento) {
           evento.preventDefault();
+          // En 3D el norte arriba es el rumbo de la cámara a 0; en 2D la
+          // rotación de la vista a 0. Se prueba primero la cámara, que en 2D
+          // devuelve false y no hace nada.
+          if (self._irAlNorte3D()) return;
           self._aplicarRotacion(0);
         });
         this._on(dial, 'wheel', function (evento) {
