@@ -456,6 +456,39 @@
   opacity: 1;
 }
 
+/* La bolita: el mismo SVG que en 2D (un `<circle cx="8" cy="8" r="6">` dentro de
+   un `<svg viewBox="0 0 16 16">`), con los mismos colores: relleno del color del
+   icono y trazo del color primario, el mismo `stroke-width: 2` que lleva el
+   `.m-rotate-marker-circle` del control nativo.
+
+   La órbita: en 2D la marca va dentro de un `<svg>` de 64 px que la API rota, y el
+   circle queda a 22,6 px del centro del disco de 44 (radio 22), o sea 0,6 px por
+   fuera. Aquí se posiciona con `top: -8px`, que es lo mismo.
+
+   Y la misma regla que en 2D: solo se ve al pasar el ratón por encima. */
+.g-controlRotate-marker {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 19px;
+  height: 19px;
+  margin-left: -9.5px;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+
+.g-controlRotate-marker-circle {
+  fill: var(--g-plugin-icon-color, #ffffff);
+  stroke: var(--g-plugin-bg-color, orangered);
+  stroke-width: 2;
+}
+
+.m-panel.m-rotate.g-controlRotate:hover .g-controlRotate-marker {
+  opacity: 1;
+}
+
 /* ---------------------------------------------------------------------
    El dial es un control: el cursor debe decir que se puede arrastrar, y no
    debe robar el arrastre al mapa.

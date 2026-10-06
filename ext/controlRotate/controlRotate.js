@@ -527,15 +527,27 @@
         rosa.innerHTML = SVG_ROSA;
         disco.appendChild(rosa);
 
-        // La bolita de giro, la misma marca que en 2D: blanca con el borde del
-        // color primario, sobre el borde del disco, y solo visible al pasar el
-        // ratón. En 2D la pone el control nativo (`#m-rotate-marker`, que la
-        // variante de Cesium no trae) y la API la mueve; aquí es nuestra y de
-        // momento se queda arriba, que es como se ve en 2D con el mapa al norte.
-        const bola = document.createElement('span');
-        bola.className = 'g-controlRotate-3D-bola';
-        disco.appendChild(bola);
-        this._bola3D = bola;
+        // La bolita de giro: el MISMO elemento que en 2D, que es un `<svg>` con
+        // dentro un `<circle cx="8" cy="8" r="6">` (`#m-rotate-marker` y
+        // `#m-rotate-marker-circle` del control nativo). Se copia tal cual en vez de
+        // rehacerla con un `span` y un borde de CSS: así es exactamente la misma
+        // pieza y las reglas del CSS sirven para las dos. En 2D la mueve la API al
+        // girar; aquí se queda arriba, que es como se ve en 2D con el mapa al norte.
+        const NS = 'http://www.w3.org/2000/svg';
+        const marcador = document.createElementNS(NS, 'svg');
+        marcador.setAttribute('class', 'g-controlRotate-marker');
+        marcador.setAttribute('viewBox', '0 0 16 16');
+        marcador.setAttribute('width', '19');
+        marcador.setAttribute('height', '19');
+        marcador.setAttribute('aria-hidden', 'true');
+        const circulo = document.createElementNS(NS, 'circle');
+        circulo.setAttribute('cx', '8');
+        circulo.setAttribute('cy', '8');
+        circulo.setAttribute('r', '6');
+        circulo.setAttribute('class', 'g-controlRotate-marker-circle');
+        marcador.appendChild(circulo);
+        disco.appendChild(marcador);
+        this._bola3D = marcador;
 
         panel.appendChild(disco);
 
