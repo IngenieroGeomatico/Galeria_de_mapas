@@ -5,9 +5,14 @@
 
 
 .buttonHerramienta_cambImpl {
-  /* El icono se centra con posicion absoluta respecto de este boton, asi que
-     hace falta que sea su referencia. */
-  position: relative !important;
+  /* El icono se centra con `display: flex` en el botón, no con `position: absolute`
+     en el `:before`. Con absoluto el icono quedaba centrado (desfase medido de
+     0,00 px) pero se salía del flujo, y entonces el panel de detrás crecía de
+     40x40 a 40x42 y asomaba una franja blanca por debajo (medido). Con flex el
+     icono sigue en el flujo y el panel se queda en 40x40. */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   border: 2px solid var(--g-plugin-border-color, #FFF) !important;
   border-radius: 50% !important;
   background-color: var(--g-plugin-bg-color, orangered) !important;
@@ -15,27 +20,24 @@
 
 /* El icono del botón.
    Antes era un emoji (🌐) puesto con `content`. Ahora es el SVG de
-   img/iconos/globe-alt.svg (pack Orchid, MIT) pintado como MÁSCARA:
-   la forma la pone `mask-image` y el color el `background-color`, que es
-   `--g-plugin-icon-color`. Así el SVG puede traer sus propios colores (este
-   viene en negro) y se ve siempre con el del plugin, sin escribir ningún color
-   en el CSS.
-   La ruta es absoluta desde la raíz del repositorio porque en un `url()` de CSS
-   las rutas relativas se resuelven contra el fichero de estilos, no contra la
+   img/iconos/globe-alt.svg (pack Orchid, MIT) pintado como MÁSCARA: la forma la
+   pone `mask-image` y el color el `background-color`, que es
+   `--g-plugin-icon-color`. Así el SVG puede traer sus propios colores (este viene
+   en negro) y se ve siempre con el del plugin, sin escribir ningún color en el
+   CSS. La ruta es absoluta desde la raíz del repositorio porque en un `url()` de
+   CSS las rutas relativas se resuelven contra el fichero de estilos, no contra la
    página. */
 .buttonHerramienta_cambImpl:before {
   content: "";
-  /* POR QUÉ ESTO Y NO UN inline-block: medido, con `display: inline-block` el
-     icono se va hacia arriba, porque el boton de la API es `position: static`
-     con `line-height: 19px` y el inline-block se apoya en la linea base, que
-     empuja la caja hacia el hueco del texto que baja. Con posicion absoluta y
-     margen negativo, el centro cae justo en el del boton. */
-  position: absolute;
-  top: 50%;
-  left: 50%;
+  /* Ni `display: block` ni nada: se deja como `inline-block` y que sea el flex del
+     botón quien lo centre. Con un inline-block sin más el icono se va hacia
+     arriba, porque el botón de la API es `position: static` con
+     `line-height: 19px` y el inline-block se apoya en la línea base, que lo
+     empuja hacia el hueco del texto que baja (medido). */
+  display: inline-block;
+  flex: 0 0 auto;
   width: 22px;
   height: 22px;
-  margin: -11px 0 0 -11px;
   background-color: var(--g-plugin-icon-color, #FFF) !important;
   -webkit-mask-image: url("/img/iconos/globe-alt.svg");
   -webkit-mask-size: contain;
