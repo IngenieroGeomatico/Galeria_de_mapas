@@ -921,26 +921,25 @@
     /**
      * Gira la rosa de los vientos del disco para que apunte al norte.
      *
-     * El signo es el contrario al de la vista, y es lo importante: cuando el mapa
-     * gira 45° en sentido horario, el norte se ve arriba a la izquierda, así que la
-     * rosa tiene que girar 45° en sentido ANTIHORARIO. Con el mismo signo que la
-     // vista la rosa apuntaría al sur (medido: con la vista en +45 la rosa queda
-     * abajo a la derecha, que es justo lo contrario de lo que indica).
+     * El signo es el MISMO que el de la vista, y conviene no tocarlo: la vista
+     * girada +45 grados lleva el norte arriba a la derecha (el mapa gira en
+     * sentido horario), así que la rosa tiene que girar +45 también. Con el signo
+     * contrario apuntaba al sur, que es lo que Pasó aquí antes (medido).
      */
     _pintarRosa() {
-      // `rotate(45deg)`, y una caja de 50,9 px en vez de 36).
+      if (!this._rosa) return;
+      // En 3D lo que gira es la cámara, y su rumbo es su `heading`. La rosa se
+      // gira lo contrario, igual que hace la API con su brújula grande
+      // (`rotate(${-heading}rad)`, medido en su bundle).
       const es3D = !!(this._map && typeof this._es3D === 'function' && this._es3D(this._map));
       if (es3D) {
-        // En 3D lo que gira es la cámara, y su rumbo es su `heading`. La rosa se
-        // gira lo contrario, igual que hace la API con su brújula grande
-        // (`rotate(${-heading}rad)`, medido en su bundle). Antes se le ponía 0
-        // porque el gesto no movía la cámara; ahora sí, así que se lee de ella.
         const camara = this._camaraCesium();
         if (!camara) return;
         this._rosa.style.transform = 'rotate(' + (-camara.heading).toFixed(6) + 'rad)';
         return;
       }
       const grados = (this._rotacion * 180 / Math.PI);
+      this._rosa.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
     }
 
     /**
