@@ -426,6 +426,29 @@
     'EPSG:26930': 'NAD83 / Alabama West',
     'EPSG:3395': 'WGS 84 / World Mercator'
   };
+  /** Proyecciones que se ofrecen en 3D DE MOMENTO. En 2D no aplican: allí sigue
+   *  mandando EPSG_A_FILTRAR y la lista larga.
+   *
+   *  En 3D el globo es geodésico y no admite más que dos formas de leerlo: en
+   *  globo (geográficas, con la altura del terreno) y en plano (las X e Y de la
+   *  Mercator, más la altura). Así que de momento son esas dos y ya, y el resto de
+   *  la maquinaria (registro, WKT, transformaciones) sigue ahí para cuando se
+   *  vuelva a abrir el abanico.
+   *
+   *  Es una constante y no un `if` repartido: para abrir más en 3D se cambia esta
+   *  línea y se le añade su entrada en MODO_3D.
+   */
+  const EPSG_DISPONIBLES = ['EPSG:4326', 'EPSG:3857'];
+  /** Modo de la vista de Cesium que lleva cada proyección en 3D.
+   *  - 'globo': el globo entero, que es como se ve el terreno.
+   *  - 'plano': el globo aplanado, que es la vista plana equivalente al 2D. */
+  const MODO_3D = {
+    'EPSG:4326': 'globo',
+    'EPSG:3857': 'plano',
+  };
+  /** Semieje mayor de la esfera en la Mercator esférica (EPSG:3857), en metros.
+   *  Es el 6378137 del WGS 84, el mismo que usa el EPSG para esta proyección. */
+  const SEMI_MAYOR_MERCATOR = 6378137;
   /** Servicio de definiciones del OGC: resuelve el `coordRefSys` de un código
    *  y devuelve su <gml:name>. Solo se usa como mejora del rótulo. */
   const SERVICIO_DEFINICIONES = 'https://www.opengis.net/def/crs/EPSG/0/';
@@ -611,6 +634,12 @@
       this._focoAlAbrir = null;
       this._proyecciones = [];
       this._epsgActivo = null;
+      // Proyección elegida para la vista 3D. En 3D no hay proyección que poner en el
+      // mapa (el globo es geodésico), pero sí dos formas de leerlo y de verlo:
+      // globo (EPSG:4326, geográficas) o plano (EPSG:3857, X e Y de la Mercator).
+      // Se guarda aparte de _epsgActivo, que es lo de 2D, y es parte del estado
+      // que sobrevive al cambio de implementación.
+      this._epsg3D = 'EPSG:4326';
       this._registrando = false;
       this._rafPuntero = null;
       this._punteroEnCola = null;
@@ -2714,10 +2743,15 @@
           }
           return {
             codigo: codigo,
-            esGeografico: true,
+            // En modo plano lo que se lee son las X e Y de la Mercator, en metros,
+            // y no grados; el resto de la cuenta (qué columnas hay, cuántas) es el
+            // mismo. El modo lo decide MODO_3D a partir del código elegido.
+            esGeografico: (MODO_3D[codigo] !== 'plano'),
             componentes: 3,
-            etiquetas: ['Longitud', 'Latitud', 'Altura'],
-            unidades: ['°', '°', 'm'],
+            etiquetas: (MODO_3D[codigo] === 'plano')
+              ? ['X', 'Y', 'Altura']
+              : ['Longitud', 'Latitud', 'Altura'],
+            unidades: (MODO_3D[codigo] === 'plano') ? ['m', 'm', 'm'] : ['°', '°', 'm'],
           };
         }
 
@@ -2887,14 +2921,47 @@
         } catch (e) {
           altura = 0;
         }
-        this._enColaPuntero([
+        this._enColaPuntero(this._coordenadasDelModo3D(
           carto.longitude * RAD,
           carto.latitude * RAD,
-          altura,
-        ]);
+          altura
+        ));
       } catch (e) {
         this._enColaPuntero(null);
       }
+    }
+
+    /**
+     * Pasa unas coordenadas geodésicas a las del modo que hay puesto en 3D.
+     *
+     * En modo globo se dejan como están (grados, grados, altura del terreno). En
+     * modo plano se cambian las dos primeras por las X e Y de la Mercator
+     * esférica, que es la del EPSG:3857 y la misma proyección que usan las capas
+     * del visor en 2D, para que los números de un sitio y del otro se puedan
+     * comparar. La fórmula es la del EPSG 9804:
+     *
+     *     X = a · λ      Y = a · ln(tan(π/4 + φ/2))
+     *
+     * La altura se pasa tal cual en los dos modos: en el plano es la de la
+     * cámara sobre el elipsoide, que es lo único que hay cuando no hay terreno.
+     * @param {number} lon Longitud en grados.
+     * @param {number} lat Latitud en grados.
+     * @param {number} altura Altura en metros.
+     * @returns {Array<number>} [x, y, altura] en el modo activo.
+     */
+    _coordenadasDelModo3D(lon, lat, altura) {
+      if (MODO_3D[this._epsg3D] !== 'plano') return [lon, lat, altura];
+      const RAD = Math.PI / 180;
+      const a = SEMI_MAYOR_MERCATOR;
+      // La latitud se acota a ±85,0511 (unos 6,3·10^6 m) porque fuera de ahí la
+      // Mercator se va a infinito: sin este tope, un punto en el polo soltaría un
+      // NaN en la lectura.
+      const acotada = Math.max(-85.051129, Math.min(85.051129, lat));
+      return [
+        a * lon * RAD,
+        a * Math.log(Math.tan(Math.PI / 4 + acotada * RAD / 2)),
+        altura,
+      ];
     }
 
     /**
@@ -3570,10 +3637,21 @@
         base = null;
       }
 
-      const codigos = EPSG_A_FILTRAR.slice();
-      // Las registradas en caliente, que no pueden estar en la lista fija.
-      const extra = Object.keys(this._nombresRegistrados || {});
-      extra.forEach(function (c) { if (codigos.indexOf(c) === -1) codigos.push(c); });
+      // La lista depende de la implementación: en 3D solo se ofrecen las dos que
+      // tienen modo de vista (MODO_3D), porque en el globo geodésico las demás no
+      // se pueden ver de otra manera; en 2D sigue la lista larga de siempre, que
+      // es lo que había antes de esto.
+      const es3D = this._es3D(this._map);
+      const codigos = (es3D ? EPSG_DISPONIBLES : EPSG_A_FILTRAR).slice();
+      // Las registradas en caliente, que no pueden estar en la lista fija. En 3D
+      // NO se mezclan: son las que se registraron en 2D (la instancia sobrevive al
+      // cambio de implementación) y aquí no se pueden usar, porque MODO_3D solo
+      // tiene esas dos. Mezclarlas salía con las 14 de 2D más las 2 de 3D, con dos
+      // 4326 y dos 3857 repetidos (medido).
+      if (!es3D) {
+        const extra = Object.keys(this._nombresRegistrados || {});
+        extra.forEach(function (c) { if (codigos.indexOf(c) === -1) codigos.push(c); });
+      }
 
       const self = this;
       codigos.forEach(function (codigo) {
@@ -3615,10 +3693,29 @@
       this._pintarCodigo(this._epsgActivo || this._crsDelVisor().codigo);
 
       if (!this._modalLista) return;
+      // Se quitan las ventanas que no sean NUESTRA. Pasa al cambiar de
+      // implementación: la instancia anterior deja su capa en el body (si su
+      // destroy() no llega a correr) y entonces hay dos ventanas, la que
+      // responde al botón con la lista al día y la otra con la lista vieja, que es
+      // lo que se veía: en 3D salían las 14 de 2D más las 2 de 3D (medido).
+      try {
+        const suyas = document.querySelectorAll('.g-mapInfo-modal-capa');
+        Array.prototype.slice.call(suyas).forEach(function (capa) {
+          if (capa !== this._modal && capa.parentNode) capa.parentNode.removeChild(capa);
+        }.bind(this));
+      } catch (e) {
+        /* si no se puede limpiar, sigue como estaba */
+      }
       const lista = this._modalLista;
       lista.textContent = '';
 
-      const activo = this._epsgActivo || this._crsDelVisor().codigo;
+      // El marcado es el modo de 3D si estamos en 3D: el código que declara la API
+      // (el 4979) no está en la lista de 3D, así que con la cuenta de antes
+      // ninguna fila salía marcada y el radio acababa en la primera (medido: con
+      // el 4326 puesto aparecía marcado el 3857).
+      const activo = this._es3D(this._map)
+        ? this._epsg3D
+        : (this._epsgActivo || this._crsDelVisor().codigo);
       this._proyecciones.forEach(function (item) {
         const fila = document.createElement('label');
         fila.className = 'g-mapInfo-modal-fila';
@@ -3706,7 +3803,10 @@
     _ajustarSelector() {
       if (!this._selector) return;
       const es3D = this._es3D(this._map);
-      this._selector.disabled = es3D;
+      // El botón NO se deshabilita en 3D: ahora hay algo que cambiar ahi, que es
+      // el modo de la vista (globo o plano). Antes, con 3D deshabilitado, no había
+      // nada que elegir porque el globo es geodésico y solo es EPSG:4979.
+      this._selector.disabled = false;
       const recortable = this._hayExtensionPropia();
       if (this._casillaAlcance) {
         // En 3D el recorte lo pone el propio globo (la escena se dibuja en el
@@ -3716,13 +3816,12 @@
         this._casillaAlcance.checked = Boolean(this._recortar);
       }
       const explicacion = es3D
-        ? 'En la visualización 3D el globo es geodésico: la proyección la declara la propia API como EPSG:4979 (longitud, latitud y altura) y no se puede cambiar.'
+        ? 'Elige cómo se ve el globo y en qué unidades se leen las coordenadas: ' +
+        'EPSG:4326, el globo con su relieve y las coordenadas en grados; ' +
+        'EPSG:3857, el globo aplanado y las coordenadas en metros de la Mercator.'
         : 'Cambia el sistema de coordenadas del visualizador, manteniendo la extensión que se está viendo.';
       this._etiquetaSelector.title = explicacion;
-      // El título del botón lo pone _pintarCodigo(), que le añade el nombre de la
-      // proyección activa; aquí solo se le añade la explicación cuando no hay
-      // nombre que poner (3D), para que el aviso de 3D no se pierda.
-      if (this._selector && es3D) this._selector.title = explicacion;
+      if (this._selector) this._selector.title = explicacion;
       const explicacionAlcance = es3D
         ? 'En 3D no hay nada que recortar: el globo se ve entero.'
         : (recortable
@@ -3730,9 +3829,9 @@
           : 'Esta proyección no viene con extensión propia, así que no hay nada que recortar: se ve siempre en global.');
       if (this._cajaAlcance) this._cajaAlcance.title = explicacionAlcance;
       if (this._etiquetaAlcance) this._etiquetaAlcance.title = explicacionAlcance;
-      // En 3D el botón enseña el código que declara la API, no el último elegido,
-      // porque aquel ya no es el del visor.
-      if (es3D) this._pintarCodigo(this._crsDelVisor().codigo);
+      // En 3D el botón enseña el modo elegido (4326 o 3857), no el código que
+      // declara la API, porque aquel no depende de lo que se haya pedido.
+      if (es3D) this._pintarCodigo(this._epsg3D);
     }
 
     /**
@@ -3834,6 +3933,68 @@
     }
 
     /**
+     * Cambia el modo de la vista de Cesium: globo o plano.
+     *
+     * En 3D el globo es geodésico y no admite más que dos formas de leerlo, así
+     * que "cambiar de proyección" aquí es cambiar el modo y lo que se muestra:
+     *   - EPSG:4326, modo globo: se ve el globo entero con su relieve y las
+     *     coordenadas van en grados (longitud, latitud) más la altura del terreno.
+     *   - EPSG:3857, modo plano: el globo se aplana, que es lo que más se parece
+     *     a la vista 2D, y las coordenadas van en metros de la Mercator (X, Y)
+     *     más la altura.
+     *
+     * El aplanado es `morphTo3D(0)`: Cesium interpola la geometría del globo
+     * hacia un plano. Con el botón deshabilitado no se nota; con el botón vivo
+     * (que es lo que hay ahora) se ve cómo el globo se aplasta.
+     * @param {string} codigo Código de la proyección elegida.
+     * @returns {boolean} true si el modo se aplicó.
+     */
+    _cambiarModo3D(codigo) {
+      const modo = MODO_3D[codigo];
+      if (!modo) {
+        this._avisoAlta(codigo + ' no se puede ver en 3D: el globo solo admite ' +
+          'geográficas (EPSG:4326) o la Mercator plana (EPSG:3857).', 'error');
+        return false;
+      }
+      this._epsg3D = codigo;
+      const aplicada = this._aplicarModo3D(modo);
+      this._ajustarSelector();
+      this._actualizar();
+      if (aplicada) {
+        this._avisoAlta('', '');
+        console.info(`${this.name}: vista de Cesium en modo ${modo} (${codigo}).`);
+      }
+      return aplicada;
+    }
+
+    /**
+     * Pone la escena de Cesium en modo globo o en modo plano.
+     * @param {string} modo 'globo' o 'plano'.
+     * @returns {boolean} true si se pudo.
+     */
+    _aplicarModo3D(modo) {
+      const escena = this._escenaCesium();
+      if (!escena) return false;
+      try {
+        if (typeof escena.morphTo3D === 'function') {
+          // 0 es plano y 1 es globo. morphTo3D es instantáneo; para una
+          // transición se usaría scene.morphComplete.addEventListener con
+          // scene.morphTime, que aquí no hace falta: el cambio lo pide el usuario
+          // y se aplica ya.
+          escena.morphTo3D(modo === 'plano' ? 0 : 1);
+          return true;
+        }
+        // Sin morphTo3D (versiones antiguas) se recurre a esconder el globo, que
+        // es el otro modo de "verlo plano".
+        if (escena.globe) escena.globe.show = (modo !== 'plano');
+        return true;
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo cambiar el modo de la vista 3D.`, e);
+        return false;
+      }
+    }
+
+    /**
      * Dice si un punto en coordenadas de la proyección actual cae fuera de la zona
      * de otra proyección, o si no se puede saber.
      *
@@ -3913,6 +4074,11 @@
      */
     _cambiarProyeccion(codigo, forzar) {
       if (this._registrando) return false;
+      // En 3D no hay proyección que poner en el mapa, pero sí dos modos de verlo
+      // (globo o plano), y eso es lo que hace este camino. Está antes que el
+      // resto porque la comprobación de _puedeUsarProyeccion() es de 2D: en 3D no
+      // hay vista de OpenLayers y siempre daría falso.
+      if (this._es3D(this._map)) return this._cambiarModo3D(codigo);
       if (!this._puedeUsarProyeccion(codigo)) {
         this._rechazar(this._selector);
         this._volverAProyeccionPorDefecto(codigo + ' no se puede usar en este visualizador: no se sabe ' +
@@ -4885,6 +5051,10 @@
         visible: Boolean(this._visible),
         epsg: epsg,
         recortar: Boolean(this._recortar),
+        // El modo de la vista de Cesium viaja aparte de `epsg`, porque `epsg` es
+        // lo de 2D y este modo solo existe en 3D: sin campo propio, al ir de 2D a
+        // 3D el visualizador volvía siempre al modo globo.
+        epsg3D: this._epsg3D,
       };
     }
 
@@ -4924,6 +5094,14 @@
         // proyección y el de vuelta no la llevaba, y el usuario se encontraba el
         // visualizador en la 3857 al volver de 3D (medido).
         this._epsgActivo = state.epsg;
+      }
+
+      // El modo de la vista de Cesium se restaura aquí, y solo en 3D: es lo que
+      // decide si se ve el globo o el plano y en qué unidades se leen las
+      // coordenadas. Sin esto, al volver de 2D a 3D salía siempre en globo.
+      if (this._es3D(this._map) && state && typeof state === 'object' && MODO_3D[state.epsg3D]) {
+        this._epsg3D = state.epsg3D;
+        this._aplicarModo3D(MODO_3D[state.epsg3D]);
       }
 
       if (this._es3D(this._map)) {
