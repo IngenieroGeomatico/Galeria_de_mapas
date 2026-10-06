@@ -575,6 +575,7 @@
         atom.setAttribute('aria-hidden', 'true');
         atom.innerHTML = SVG_ATOM;
         disco.appendChild(atom);
+        this._atom3D = atom;
 
         contenedor.appendChild(disco);
         panel.appendChild(contenedor);
@@ -588,6 +589,8 @@
 
         // El gesto de girar: en este dial no lo trae la API, hay que ponerlo.
         this._arrastrarDial3D(panel);
+        // El gesto del átomo, que inclina la vista. También es solo de 3D.
+        this._arrastrarAtomo3D(panel);
         // La rosa tiene que seguir a la cámara, que también se gira con el
         // ratón sobre el mapa, no solo con la bolita. Se escucha en
         // `postRender` y no en `camera.changed` porque es lo que hace la API con
@@ -595,7 +598,13 @@
         // quedaba con un rumbo intermedio al terminar el arrastre (medido).
         const escena = this._escenaCesium();
         if (escena && escena.postRender && typeof escena.postRender.addEventListener === 'function') {
-          this._alCambiarCamara = () => { this._pintarRosa(); };
+          // Se repinta la rosa y se recoloca la bolita. La bolita es la marca
+          // de giro, así que tiene que ir detrás del rumbo de verdad:
+          // medido, con la bolita a la derecha el rumbo es -90 grados.
+          this._alCambiarCamara = () => {
+            this._pintarRosa();
+            this._sincronizarBolita3D();
+          };
           escena.postRender.addEventListener(this._alCambiarCamara);
         }
       } catch (e) {
@@ -757,6 +766,243 @@
         /* la cámara puede estar en medio de un vuelo */
       }
     }
+    /**
+     * Engancha el gesto del átomo, que solo es de 3D: arrastrarlo por dentro del
+     * botón inclina la vista, como cuando se arrastra el mapa con Ctrl en Cesium.
+     *
+     * LA RECETA, la misma del giro: dentro del marco ENU, `rotateUp` mueve la
+     * cámara y con ella la inclinación. Medido: la cámara estaba mirando
+     * verticalmente (pitch −90°) y `rotateUp(0.1)` la deja en −84,3°, o sea que
+     * el ángulo que se le mete es, uno a uno, el cambio de inclinación.
+     *
+     * MAPEO: un píxel de recorrido vertical = un grado de inclinación, y hacia
+     * arriba se mira más de lado (el pitch va de -90 grados, mirando al suelo, a 0, el horizonte).
+     * El átomo se mueve en las dos dimensiones porque es una palanca de dos
+     * ejes, pero del desplazamiento horizontal no sale nada: inclinar es una
+     * sola dirección, y el otro sentido ya lo hace la bolita.
+     *
+     * @param {HTMLElement} panel Panel del dial de 3D.
+     */
+    _arrastrarAtomo3D(panel) {
+      const atom = (this._atom3D || (panel.querySelector ? panel.querySelector('.g-controlRotate-atom') : null));
+      if (!atom || typeof atom.addEventListener !== 'function') return;
+      const self = this;
+
+      const alMover = function (evento) {
+        if (!self._inclinando3D) return;
+        self._moverAtomo3D(evento, atom);
+      };
+
+      const alSoltar = function () {
+        self._inclinando3D = false;
+        // El punto de partida NO se borra aquí: lo necesita el retorno, que sigue
+        // moviendo el átomo y, con él, la inclinación. Se actualiza sola cuando el
+        // átomo llega al centro.
+        if (self._panel && self._panel.classList) {
+          self._panel.classList.remove('g-controlRotate-inclinando');
+        self._devolverAtomo3D();
+        }
+        document.removeEventListener('pointermove', alMover, false);
+        document.removeEventListener('pointerup', alSoltar, false);
+        document.removeEventListener('pointercancel', alSoltar, false);
+      };
+
+      const alPulsar = function (evento) {
+        if (!self._es3D(self._map)) return;
+        if (evento.button !== undefined && evento.button !== 0) return;
+        if (!self._marcoGiro3D()) return;
+        // Que no empiece además el giro de la bolita: son dos gestos distintos
+        // sobre el mismo botón.
+        if (typeof evento.stopPropagation === 'function') evento.stopPropagation();
+        if (typeof evento.preventDefault === 'function') evento.preventDefault();
+        self._inclinando3D = true;
+        const camara = self._camaraCesium();
+        self._pitchAlAgarrar = camara ? camara.pitch : 0;
+        if (self._panel && self._panel.classList) {
+          self._panel.classList.add('g-controlRotate-inclinando');
+        }
+        if (evento.pointerId !== undefined && typeof atom.setPointerCapture === 'function') {
+          try { atom.setPointerCapture(evento.pointerId); } catch (e) { /* sin captura */ }
+        }
+        document.addEventListener('pointermove', alMover, false);
+        document.addEventListener('pointerup', alSoltar, false);
+        document.addEventListener('pointercancel', alSoltar, false);
+      };
+
+      atom.addEventListener('pointerdown', alPulsar, false);
+      this._gestoAtomo = { atom: atom, alPulsar: alPulsar, alSoltar: alSoltar };
+    }
+
+    /**
+     * Lleva el átomo donde está el puntero, sin salirse del disco, e inclina la
+     * vista con lo que se ha movido en vertical.
+     * @param {Event} evento Evento del puntero.
+     * @param {HTMLElement} atom Elemento del átomo.
+     */
+    _moverAtomo3D(evento, atom) {
+      const dial = this._dial3D;
+      if (!dial || typeof dial.getBoundingClientRect !== 'function') return;
+      const caja = dial.getBoundingClientRect();
+      if (!caja.width || !caja.height) return;
+      const cx = caja.left + caja.width / 2;
+      const cy = caja.top + caja.height / 2;
+      // Que el átomo no se salga del botón: su centro puede llegar hasta el borde
+      // del disco, o sea media caja menos la mitad del átomo.
+      const maximo = caja.width / 2 - atom.offsetWidth / 2;
+      let dx = (evento.clientX !== undefined ? evento.clientX : cx) - cx;
+      let dy = (evento.clientY !== undefined ? evento.clientY : cy) - cy;
+      const distancia = Math.sqrt(dx * dx + dy * dy);
+      if (distancia > maximo && distancia > 0) {
+        dx = dx / distancia * maximo;
+        dy = dy / distancia * maximo;
+      }
+      this._atomDX = dx;
+      this._atomDY = dy;
+      atom.style.transform = 'translate(' + dx.toFixed(1) + 'px, ' + dy.toFixed(1) + 'px)';
+      // La inclinación se saca de la posición, no de lo que se ha movido desde
+      // el gesto anterior: así el átomo manda siempre y no se va acumulando error.
+      // El recorrido entero del átomo son 45 grados de inclinación (medido: el
+      // recorrido útil es de 13,5 px para un disco de 40).
+      const camara = this._camaraCesium();
+      if (!camara) return;
+      const porPixel = (45 * Math.PI / 180) / Math.max(1, maximo);
+      let objetivo = (this._pitchAlAgarrar || camara.pitch) + (-dy) * porPixel;
+      // Ni mirando al suelo ni por encima del horizonte.
+      const minimo = -Math.PI / 2 + 0.01;
+      const maximoPitch = -5 * Math.PI / 180;
+      if (objetivo < minimo) objetivo = minimo;
+      if (objetivo > maximoPitch) objetivo = maximoPitch;
+      const delta = objetivo - camara.pitch;
+      if (Math.abs(delta) > 1e-6) this._girarCamara3DInclinacion(delta);
+    }
+
+    /**
+     * Inclina la vista de Cesium, con la misma receta del giro: dentro del marco
+     * ENU, `rotateUp`.
+     * @param {number} delta Ángulo en radianes.
+     */
+    _girarCamara3DInclinacion(delta) {
+      if (typeof Cesium === 'undefined') return;
+      const camara = this._camaraCesium();
+      if (!camara || !this._marco) return;
+      if (!this._marcoGuardado) this._marcoGuardado = new Cesium.Matrix4();
+      try {
+        Cesium.Matrix4.clone(camara.transform, this._marcoGuardado);
+        camara.lookAtTransform(this._marco);
+        camara.rotateUp(delta);
+        camara.lookAtTransform(this._marcoGuardado);
+      } catch (e) {
+        /* la cámara puede estar en medio de un vuelo */
+      }
+    }
+    /**
+     * Recoloca la bolita de giro según el rumbo de la cámara, para que no se
+     * descompase cuando la vista gira por otra vía (el gesto propio de Cesium, un
+     * vuelo del storymap, un `setView`).
+     *
+     * Mismo signo que el del gesto, porque es el mismo sitio: arrastrar la bolita
+     * en sentido horario baja el rumbo, y el `transform` que se le pone crece.
+     * Mientras se arrastra ella no se toca, que si no las dos cosas se pelean.
+     */
+    _sincronizarBolita3D() {
+      if (!this._bola3D || !this._bola3D.style) return;
+      if (this._girando3D) return;
+      const camara = this._camaraCesium();
+      if (!camara) return;
+      // El -0,5 es el mismo medio píxel que deja la bolita centrada en 2D.
+      // El -0,5 es el mismo medio píxel que deja la bolita centrada en 2D, y el
+      // ángulo se normaliza a [-180, 180] para que con el rumbo en 360 salga
+      // -0,5 y no -360,5 (medido: los dos son el mismo sitio, pero el segundo
+      // parece un error).
+      const grados = this._normalizar(-camara.heading) * 180 / Math.PI - 0.5;
+      const texto = 'rotate(' + grados.toFixed(1) + 'deg)';
+      if (this._bola3DGrados !== grados) {
+        this._bola3DGrados = grados;
+        this._bola3D.style.transform = texto;
+      }
+    }
+
+    /**
+     * Devuelve el átomo al centro después de soltarlo. No es una transición de CSS:
+     * se mueve paso a paso llamando a `_situarAtomo3D`, que es la misma ruta que
+     * sigue el dedo, para que la vista siga inclinándose mientras el átomo vuelve
+     * y solo se pare cuando el átomo llega al centro (que es lo pedido).
+     */
+    _devolverAtomo3D() {
+      const atom = this._atom3D;
+      if (!atom) return;
+      if (this._frameAtomo && window.cancelAnimationFrame) {
+        window.cancelAnimationFrame(this._frameAtomo);
+        this._frameAtomo = null;
+      }
+      const self = this;
+      const paso = function () {
+        self._frameAtomo = null;
+        if (!self._atom3D) return;
+        let dx = self._atomDX || 0;
+        let dy = self._atomDY || 0;
+        // Un cuarto de lo que le queda a cada frame: llega al centro en unos 10.
+        dx = dx * 0.75;
+        dy = dy * 0.75;
+        if (Math.abs(dx) < 0.2) dx = 0;
+        if (Math.abs(dy) < 0.2) dy = 0;
+        // La inclinación vuelve al punto de partida, no a la que tenía la cámara
+        // antes de soltar: el átomo manda mientras no esté en el centro.
+        self._situarAtomo3D(dx, dy);
+        if (dx || dy) {
+          self._frameAtomo = window.requestAnimationFrame
+            ? window.requestAnimationFrame(paso)
+            : window.setTimeout(paso, 16);
+        }
+      };
+      if ((self._atomDX || self._atomDY)) {
+        this._frameAtomo = window.requestAnimationFrame
+          ? window.requestAnimationFrame(paso)
+          : window.setTimeout(paso, 16);
+      }
+    }
+
+    /**
+     * Coloca el átomo en un punto del dial e inclina la vista lo que toca. Es la
+     * ruta única: la usan el dedo, el ratón y el retorno al centro.
+     * @param {number} dx Desplazamiento horizontal, en píxeles.
+     * @param {number} dy Desplazamiento vertical, en píxeles.
+     */
+    _situarAtomo3D(dx, dy) {
+      const atom = this._atom3D;
+      if (!atom || !atom.style) return;
+      this._atomDX = dx;
+      this._atomDY = dy;
+      atom.style.transform = 'translate(' + dx.toFixed(1) + 'px, ' + dy.toFixed(1) + 'px)';
+      const camara = this._camaraCesium();
+      if (!camara) return;
+      const caja = (this._dial3D && typeof this._dial3D.getBoundingClientRect === 'function')
+        ? this._dial3D.getBoundingClientRect()
+        : null;
+      if (!caja || !caja.width) return;
+      const maximo = caja.width / 2 - atom.offsetWidth / 2;
+      // El recorrido entero del átomo son 45 grados de inclinación (medido: el
+      // recorrido útil es de 13,5 px para un disco de 40).
+      const porPixel = (45 * Math.PI / 180) / Math.max(1, maximo);
+      const partida = (this._pitchAlAgarrar === null || this._pitchAlAgarrar === undefined)
+        ? this._pitchAlAgarrar3D
+        : this._pitchAlAgarrar;
+      let objetivo = (partida === null || partida === undefined ? camara.pitch : partida) + (-dy) * porPixel;
+      // Ni mirando al suelo ni por encima del horizonte.
+      const minimo = -Math.PI / 2 + 0.01;
+      const maximoPitch = -5 * Math.PI / 180;
+      if (objetivo < minimo) objetivo = minimo;
+      if (objetivo > maximoPitch) objetivo = maximoPitch;
+      const delta = objetivo - camara.pitch;
+      if (Math.abs(delta) > 1e-6) this._girarCamara3DInclinacion(delta);
+      // Cuando el átomo llega al centro, el punto de partida pasa a ser la
+      // inclinación que ha quedado: el siguiente gesto arranca desde ahí.
+      if (!dx && !dy) {
+        this._pitchAlAgarrar3D = objetivo;
+        this._pitchAlAgarrar = null;
+      }
+    }
+
 
     /**
      * Lleva la bolita al punto del dial donde está el puntero. El dial está en
@@ -1289,6 +1535,17 @@
           this._gesto3D.dial.removeEventListener('pointerdown', this._gesto3D.alPulsar, false);
         }
         this._gesto3D = null;
+      if (this._gestoAtomo) {
+        if (typeof this._gestoAtomo.alSoltar === 'function') this._gestoAtomo.alSoltar();
+        if (this._gestoAtomo.atom && typeof this._gestoAtomo.atom.removeEventListener === 'function') {
+          this._gestoAtomo.atom.removeEventListener('pointerdown', this._gestoAtomo.alPulsar, false);
+        }
+        this._gestoAtomo = null;
+      }
+      this._inclinando3D = false;
+      this._atomDX = 0;
+      this._atomDY = 0;
+      this._atom3D = null;
       }
       const camara = this._camaraCesium();
       const escena = this._escenaCesium();

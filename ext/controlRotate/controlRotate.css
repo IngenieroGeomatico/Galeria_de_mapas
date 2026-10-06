@@ -620,19 +620,26 @@
   position: absolute;
   top: 50%;
   left: 50%;
+  /* Por encima de la rosa y de la bolita, que si no el puntero no llega: los
+     tres se solapan en el centro del disco (medido: el norte va con z-index
+     200). */
+  z-index: 210;
   /* La mitad que el resto: 26 px de lado, medidos en la caja de la rosa y en el
      svg que lleva dentro. Con 26 se comía la rosa entera y no parecía una palanca
      sino el icono del botón. */
   width: 13px;
   height: 13px;
   margin: -6.5px 0 0 -6.5px;
-  pointer-events: none;
+  cursor: grab;
   opacity: 0;
   transition: opacity 120ms ease-out;
 }
 
 .m-panel.m-rotate.g-controlRotate--3D:hover .g-controlRotate-atom {
   opacity: 1;
+}
+.m-panel.m-rotate.g-controlRotate--3D.g-controlRotate-inclinando .g-controlRotate-atom {
+  cursor: grabbing;
 }
 /* Y la rosa se va, que si no los dos iconos se ven a la vez (medido). Se esconde
    con `opacity` y no con `display`, a propósito: la rosa es la que lleva el
