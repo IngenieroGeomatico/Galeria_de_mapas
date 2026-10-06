@@ -408,6 +408,7 @@
         // siempre al norte de verdad (mismo truco que la rosa del dial de 2D).
         const aguja = document.createElement('div');
         aguja.className = 'g-controlRotate-3D-aguja';
+        aguja.title = 'Arrastra para girar la vista';
         const norte = document.createElement('span');
         norte.className = 'g-controlRotate-3D-norte';
         norte.textContent = 'N';
@@ -435,9 +436,20 @@
         // Se hace con los eventos de puntero (que ya traen el id de puntero) y
         // no con los del raton, porque el control tiene que funcionar tambien
         // con el dedo.
-        this._arrastrar(disco, false);
-        this._arrastrar(giroscopio, true);
-        this._on(disco, 'dblclick', function () { self._vistaInicial3D(); });
+        // La N es la que gira (arrastrando) y el icono del centro es el que
+        // inclina. Cada uno, con un clic, vuelve a su sitio: la N arriba y la
+        // inclinacion normal. Es lo que se ha pedido, y es mas comodo que tener
+        // que buscar un doble clic.
+        this._arrastrar(aguja, 'rumbo');
+        this._arrastrar(giroscopio, 'inclinar');
+        this._on(aguja, 'click', function (ev) {
+          ev.stopPropagation();
+          self._alNorte3D();
+        });
+        this._on(giroscopio, 'click', function (ev) {
+          ev.stopPropagation();
+          self._inclinacionNormal3D();
+        });
 
         this._aplicarColores();
         if (this.order !== undefined) panel.style.order = String(this.order);
@@ -450,16 +462,17 @@
     }
 
     /**
-     * Conecta un arrastre de puntero sobre un elemento al movimiento de la
-     * camara: en horizontal gira (rumbo) y en vertical inclina (pitch).
+     * Conecta un arrastre de puntero sobre un elemento al movimiento de la camara.
      * @param {HTMLElement} el Elemento que arrastra.
-     * @param {boolean} inclina true si es el giroscopio (solo inclina).
+     * @param {string} que 'rumbo' para girar la vista o 'inclinar' para la
+     *   inclinacion.
      */
     _arrastrar(el, inclina) {
       const self = this;
       let x0 = 0, y0 = 0;
-      const RATIO_GIRO = 0.008;
-      const RATIO_INCLINAR = 0.006;
+      const RATIO_GIRO = 0.01;
+      const RATIO_INCLINAR = 0.008;
+      const inclinando = (que === 'inclinar');
       this._on(el, 'pointerdown', function (ev) {
         if (ev.button !== undefined && ev.button !== 0) return;
         x0 = ev.clientX;
@@ -478,8 +491,9 @@
         x0 = ev.clientX;
         y0 = ev.clientY;
         try {
-          if (inclina) {
-            // Arriba del centro se mira más de lado y abajo más de cenital.
+          if (inclinando) {
+            // Abajo del centro se mira mas de lado y arriba mas de cenital: al
+            // arrastrar hacia abajo, el mapa se abate (mas cenital).
             camara.rotateUp(dy * RATIO_INCLINAR);
           } else {
             camara.rotateLeft(-dx * RATIO_GIRO);
@@ -492,15 +506,49 @@
     }
 
     /**
-     * Gira la aguja para que la N apunte al norte, y deduce el rumbo de la
-     * camara. Como gira al reves que el mapa, es el mismo criterio que la rosa
-     * del dial de 2D.
+     * Gira la N con el rumbo de la camara, al MISMO sentido que el mapa (como la
+     * rosa del dial de 2D): con el contrario la marca se iba en contra del gesto.
      */
     _pintarAguja3D() {
       const camara = this._camaraCesium();
       if (!camara || !this._aguja) return;
-      const grados = -(Number(camara.heading) || 0) * 180 / Math.PI;
+      const grados = (Number(camara.heading) || 0) * 180 / Math.PI;
       this._aguja.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
+    }
+
+    /**
+     * Devuelve la vista al norte: rumbo cero, con la N del botón arriba.
+     */
+    _alNorte3D() {
+      const camara = this._camaraCesium();
+      if (!camara) return;
+      try {
+        camara.setView({
+          destination: camara.positionWC,
+          orientation: { heading: 0, pitch: camara.pitch, roll: 0 },
+        });
+        this._pintarAguja3D();
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo volver al norte.`, e);
+      }
+    }
+
+    /**
+     * Devuelve la inclinación a la normal, que es mirar el mapa desde arriba
+     * (90 grados hacia abajo), que es la vista con la que se entra.
+     */
+    _inclinacionNormal3D() {
+      const C = window.Cesium;
+      const camara = this._camaraCesium();
+      if (!camara || !C || !C.Math) return;
+      try {
+        camara.setView({
+          destination: camara.positionWC,
+          orientation: { heading: camara.heading, pitch: C.Math.toRadians(-90), roll: 0 },
+        });
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo volver a la inclinación normal.`, e);
+      }
     }
 
     /**
@@ -608,8 +656,32 @@
         rosa.setAttribute('aria-hidden', 'true');
         sitio.appendChild(rosa);
         this._rosa = rosa;
+        // Púlsala para volver al norte, que es lo que se espera de una brújula.
+        this._on(rosa, 'click', function (evento) {
+          evento.stopPropagation();
+          self._aplicarRotacion(0);
+        });
       }
       this._pintarRosa();
+
+      // La flechita que orbita. La bolita blanca del control nativo (que es el
+      // marcador que la API mueve al girar) se esconde y se sustituye por una
+      // flecha, que se lee mejor que un punto cuando dice hacia dónde has girado.
+      // Giran las dos cosas con el mismo ángulo, en _pintarFlecha2D().
+      if (!this._es3D(this._map)) {
+        const sitioFlecha = panel.querySelector('#m-rotate-slider-container') || dial;
+        const flecha = document.createElement('span');
+        flecha.className = 'g-controlRotate-flecha';
+        flecha.title = 'Girar el mapa';
+        flecha.setAttribute('aria-hidden', 'true');
+        sitioFlecha.appendChild(flecha);
+        this._flecha = flecha;
+        this._on(flecha, 'click', function (evento) {
+          evento.stopPropagation();
+          self._aplicarRotacion(0);
+        });
+      }
+      this._pintarFlecha2D();
 
       if (dial) {
         const self = this;
@@ -637,6 +709,7 @@
       // La rosa va antes del guard de 3D: es adorno del dial, que es de 2D, pero
       // pintarla siempre deja el elemento al día aunque el mapa cambie mientras.
       this._pintarRosa();
+      this._pintarFlecha2D();
       if (this._es3D(this._map)) return;
       const vista = this._vista2D();
       if (vista && typeof vista.setRotation === 'function') {
@@ -673,7 +746,19 @@
       if (isFinite(rotacion)) {
         this._rotacion = this._normalizar(rotacion);
         this._pintarRosa();
+        this._pintarFlecha2D();
       }
+    }
+
+    /**
+     * Gira la flecha que orbita por el borde del disco, a la misma velocidad que
+     * la vista. Es el marcador de giro: el puntero del dial nativo (una bolita
+     * blanca) queda escondido y en su lugar está esta flecha.
+     */
+    _pintarFlecha2D() {
+      if (!this._flecha) return;
+      const grados = (this._rotacion * 180 / Math.PI);
+      this._flecha.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
     }
 
     /**
@@ -687,7 +772,7 @@
      */
     _pintarRosa() {
       if (!this._rosa) return;
-      const grados = -(this._rotacion * 180 / Math.PI);
+      const grados = (this._rotacion * 180 / Math.PI);
       this._rosa.style.transform = 'rotate(' + grados.toFixed(1) + 'deg)';
     }
 
@@ -954,6 +1039,9 @@
       this._panel = null;
       this._dial = null;
       this._rosa = null;
+      this._flecha = null;
+      this._aguja = null;
+      this._giroscopio = null;
       this._rosaBoton = null;
       this._cajaMovimiento = null;
       this._host = null;
