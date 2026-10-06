@@ -2986,7 +2986,17 @@
         const lienzo = escena.canvas;
         this._on(lienzo, 'pointermove', function (ev) { self._alMoverPuntero3D(ev); }, { passive: true });
         this._on(lienzo, 'mousemove', function (ev) { self._alMoverPuntero3D(ev); }, { passive: true });
-        this._on(lienzo, 'mouseleave', function () { self._enColaPuntero(null); });
+        // La salida del ratón se escucha en el contenedor del mapa y NO en el
+        // lienzo, igual que en 2D: el panel de lectura va montado encima del
+        // lienzo, así que al pasarle por encima el lienzo recibe `mouseleave`
+        // aunque el puntero siga dentro del mapa, y las coordenadas se
+        // vaciaban justo cuando hacen falta para pulsar el selector del S.C.R.
+        // (medido). Con el contenedor no ocurre, porque el panel está dentro.
+        if (this._host) {
+          this._on(this._host, 'mouseleave', function () { self._enColaPuntero(null); });
+        } else {
+          this._on(lienzo, 'mouseleave', function () { self._enColaPuntero(null); });
+        }
         return;
       }
 
