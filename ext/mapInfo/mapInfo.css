@@ -284,7 +284,7 @@
   display: inline-flex;
   align-items: center;
   /* El texto y la flecha van juntos con el aire del `gap` de .g-mapInfo-dato, así
-     que aquí no hay margen: el que se ve entre el rótulo y "Proyección" es el
+     que aquí no hay margen: el que se ve entre el rótulo y "S.C.R." es el
      del dato. */
   gap: 0.25em;
   height: 1.25em;
@@ -408,7 +408,7 @@
 }
 
 /* ---------------------------------------------------------------------
-   LA VENTANA MODAL DE PROYECCIÓN.
+   LA VENTANA MODAL DEL S.C.R.
 
    Va colgada del body (no de la caja de la tira) para poder ser `fixed` y
    centrarse en el mapa entero, y usa las mismas variables de color que la tira,

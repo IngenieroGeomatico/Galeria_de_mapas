@@ -190,7 +190,7 @@
      dato, y entonces se muestra la del elipsoide.
 
    PROYECCIÓN DEL VISUALIZADOR:
-     Botón "Proyección EPSG:n" en la tira, que abre una VENTANA MODAL con la
+     Botón "S.C.R. EPSG:n" en la tira, que abre una VENTANA MODAL con la
      lista de los sistemas de coordenadas utilizables, la casilla de recorte y
      el alta de uno nuevo. Es modal, y no un desplegable, por dos razones
      medidas: el desplegable tenía que ser de 26 em para que cupieran los
@@ -756,7 +756,7 @@
             'API mide metros de PLANO, y un metro del plano no son lo mismo ' +
             'que un metro de suelo en cuanto el mapa se estira hacia los polos. ' +
             'El criterio es el mismo que usa OpenLayers para su resolución en ' +
-            'el punto, y por eso vale en cualquier proyección. En el ecuador ' +
+            'el punto, y por eso vale en cualquier S.C.R. En el ecuador ' +
             'los dos números coinciden exactamente; a 49,6 grados norte esta ' +
             'escala marca unos dos tercios de la de la API.</p></div>';
           if (IDEE && IDEE.utils && typeof IDEE.utils.stringToHtml === 'function') {
@@ -986,7 +986,7 @@
       bloqueProj.className = 'g-mapInfo-dato';
       const etiquetaSelector = document.createElement('span');
       etiquetaSelector.className = 'g-mapInfo-etiqueta';
-      etiquetaSelector.textContent = 'Proyección';
+      etiquetaSelector.textContent = 'S.C.R.';
       const selector = document.createElement('button');
       selector.className = 'g-mapInfo-selector';
       selector.type = 'button';
@@ -1071,14 +1071,14 @@
       ventana.className = 'g-mapInfo-modal';
       ventana.setAttribute('role', 'dialog');
       ventana.setAttribute('aria-modal', 'true');
-      ventana.setAttribute('aria-label', 'Proyección del visualizador');
+      ventana.setAttribute('aria-label', 'S.C.R. del visualizador');
 
       // Cabecera con el título y la X de cerrar.
       const cabecera = document.createElement('div');
       cabecera.className = 'g-mapInfo-modal-cabecera';
       const titulo = document.createElement('span');
       titulo.className = 'g-mapInfo-modal-titulo';
-      titulo.textContent = 'Proyección del visualizador';
+      titulo.textContent = 'S.C.R. del visualizador';
       const cerrarX = document.createElement('button');
       cerrarX.className = 'g-mapInfo-modal-cerrar';
       cerrarX.type = 'button';
@@ -1120,7 +1120,7 @@
       casillaAlcance.checked = Boolean(this._recortar);
       const etiquetaAlcance = document.createElement('span');
       etiquetaAlcance.className = 'g-mapInfo-modal-etiqueta';
-      etiquetaAlcance.textContent = 'Recortar el visualizador a la extensión de la proyección';
+      etiquetaAlcance.textContent = 'Recortar el visualizador a la extensión del S.C.R.';
       filaAlcance.appendChild(casillaAlcance);
       filaAlcance.appendChild(etiquetaAlcance);
 
@@ -1187,7 +1187,7 @@
       panelDef.hidden = true;
       const explicacionAlta = document.createElement('span');
       explicacionAlta.className = 'g-mapInfo-modal-explicacion';
-      explicacionAlta.textContent = 'Se admiten las proyecciones que se pueden calcular aquí ' +
+      explicacionAlta.textContent = 'Se admiten los S.C.R. que se pueden calcular aquí ' +
         '(Mercator, Mercator Auxiliar, Transversal de Mercator y Cónica Conforme de Lambert). ' +
         'La definición puede ser una cadena proj4 o un WKT, y también puede ir con el código delante, separado por una barra vertical.';
       const camposAlta = document.createElement('div');
@@ -3052,7 +3052,7 @@
       } else if (NOMBRES_EPSG[codigo]) {
         nombre = NOMBRES_EPSG[codigo];
       } else {
-        nombre = 'Proyección ' + codigo;
+        nombre = 'S.C.R. ' + codigo;
       }
       if (proyeccion) proyeccion.name = nombre;
       return nombre;
@@ -3742,7 +3742,7 @@
       if (!this._proyecciones.length) {
         const vacio = document.createElement('div');
         vacio.className = 'g-mapInfo-modal-vacio';
-        vacio.textContent = 'No hay ninguna proyección utilizable en este visualizador.';
+        vacio.textContent = 'No hay ningún S.C.R. utilizable en este visualizador.';
         lista.appendChild(vacio);
       }
 
@@ -3825,8 +3825,8 @@
       const explicacionAlcance = es3D
         ? 'En 3D no hay nada que recortar: el globo se ve entero.'
         : (recortable
-          ? 'Marcada, el visualizador se recorta a la extensión de la proyección (una UTM solo enseña su franja). Desmarcada, se ve en global y se repite hacia los lados.'
-          : 'Esta proyección no viene con extensión propia, así que no hay nada que recortar: se ve siempre en global.');
+          ? 'Marcada, el visualizador se recorta a la extensión del S.C.R. (una UTM solo enseña su franja). Desmarcada, se ve en global y se repite hacia los lados.'
+          : 'Este S.C.R. no viene con extensión propia, así que no hay nada que recortar: se ve siempre en global.');
       if (this._cajaAlcance) this._cajaAlcance.title = explicacionAlcance;
       if (this._etiquetaAlcance) this._etiquetaAlcance.title = explicacionAlcance;
       // En 3D el botón enseña el modo elegido (4326 o 3857), no el código que
@@ -4242,7 +4242,7 @@
           // _registrarDefinicion() devuelve null cuando la proyección no está
           // entre las que este plugin sabe calcular, y en ese caso no ha
           // declarado nada: aquí solo se dice por qué.
-          this._avisoAlta(codigo + ' no se ha registrado: esta proyección no está entre las que ' +
+          this._avisoAlta(codigo + ' no se ha registrado: este S.C.R. no está entre los que ' +
             'el visualizador sabe calcular (Mercator, Mercator Auxiliar, Transversal de Mercator ' +
             'y Cónica Conforme de Lambert).', 'error');
           return false;
