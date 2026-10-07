@@ -1,4 +1,4 @@
-const SVGCarga = document.getElementById("cargaSVG")
+﻿const SVGCarga = document.getElementById("cargaSVG")
 // window.onload = (event) => {
 //   SVGCarga.hidden = true
 // };
@@ -37,7 +37,7 @@ function mapa() {
   const ext_UpgradeLibs = new IDEE.plugin.miPlugin_upgradeLibs({
     que: 'ambos',
     olVersion: '10.6.1',
-    cesiumVersion: '1.134',
+    cesiumVersion: '1.145',
     sobrescribirGlobales: false
   });
   mapajs.addPlugin(ext_UpgradeLibs);
@@ -604,3 +604,4 @@ async function myFunction_CSV() {
 
   return CSV
 }
+
