@@ -30,6 +30,18 @@ function mapa() {
   });
   mapajs.addPlugin(ext_Attribution);
 
+  // Librerias nuevas para el codigo de este visualizador. Van aparte, en
+  // window.newOl y window.newCesium, porque la API-CNIG lleva las suyas
+  // dentro del bundle y no lee de los globales: pisarlos no haria que ella
+  // usara las nuevas (ver la cabecera de ext/upgradeLibs).
+  const ext_UpgradeLibs = new IDEE.plugin.miPlugin_upgradeLibs({
+    que: 'ambos',
+    olVersion: '10.6.1',
+    cesiumVersion: '1.134',
+    sobrescribirGlobales: false
+  });
+  mapajs.addPlugin(ext_UpgradeLibs);
+
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     mapsFunction: mapa,
