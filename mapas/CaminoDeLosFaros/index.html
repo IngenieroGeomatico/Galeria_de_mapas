@@ -5,170 +5,123 @@
     <meta charset="UTF-8">
     <title>Camino de los Faros</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="../../bootstrap/bootstrap.min.css">
+    <meta name="description" content="Ocho etapas por la costa de Galicia, de Malpica al cabo Finisterre, cada una con su visualizador 2D y 3D.">
     <link rel="stylesheet" href="./css/styles.css">
-
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;500;700&display=swap" rel="stylesheet">
-    <style>
-
-    </style>
 </head>
 
 <body>
-    <div id="headerDIV">
-        <header class="d-flex flex-wrap justify-content-center align-items-center shadow">
-            <a href="./" class="d-flex align-items-center text-dark text-decoration-none">
-                <span class="fs-3 fw-bold">Camino de los Faros</span>
-            </a>
+    <!-- Fondo: dos brillos suaves y una trama de puntos. Todo decorativo, nada
+         de esto es informacion, asi que va aria-hidden y fuera del flujo. -->
+    <div class="fondo" aria-hidden="true">
+        <span class="fondo__brillo fondo__brillo--uno"></span>
+        <span class="fondo__brillo fondo__brillo--dos"></span>
+        <span class="fondo__trama"></span>
+    </div>
+
+    <main class="pagina">
+        <header class="cabecera">
+            <!-- Faro de la cabecera, dibujado con trazos y relleno currentColor para que
+                 el color lo ponga el CSS y no este fichero: el SVG no entiende de
+                 clases del proyecto y su relleno por defecto es negro. Es
+                 decorativo, asi que aria-hidden. -->
+            <svg class="faro" viewBox="0 0 48 64" aria-hidden="true" focusable="false">
+                <g class="faro__haz" fill="currentColor">
+                    <path d="M24 8 L46 1 L46 15 Z" />
+                    <path d="M24 8 L2 1 L2 15 Z" />
+                </g>
+                <path d="M20 20 h8 v34 h-8 z" fill="currentColor" />
+                <path d="M19 18 h10 v3 h-10 z" fill="currentColor" />
+                <path d="M21 10 h6 v8 h-6 z" fill="currentColor" />
+                <circle class="faro__luz" cx="24" cy="8" r="3.4" fill="currentColor" />
+                <path d="M18 54 h12 l3 8 h-18 z" fill="currentColor" />
+            </svg>
+            <p class="cabecera__antetitulo">Visualizadores 2D y 3D</p>
+            <h1 class="cabecera__titulo">Camino de los Faros</h1>
+            <p class="cabecera__bajada">Ocho etapas por la costa de Galicia, de Malpica al cabo Finisterre.
+                Cada visualizador abre en su propia pestaña.</p>
         </header>
-    </div>
 
-    <div class="container">
-        <div class="row row-cols-1 row-cols-lg-2 align-items-stretch g-4">
+        <nav class="rejilla" aria-label="Etapas del Camino de los Faros">
+            <a class="tarjeta" href="./etapas/etapa_1/index.html">
+                <span class="tarjeta__numero" aria-hidden="true">01</span>
+                <h2 class="tarjeta__titulo">Malpica - Niñóns</h2>
+                <span class="tarjeta__pie">
+                    <span class="tarjeta__etapa">Etapa 1</span>
+                    <span class="tarjeta__ir">Abrir visualizador<span class="tarjeta__flecha" aria-hidden="true">&#8599;</span></span>
+                </span>
+            </a>
 
-            <div class="col">
-                <div class="card card-cover h-100 overflow-hidden shadow-lg p-4">
-                    <a href="./etapas/etapa_1/index.html" target="_blank">
-                        <div class="d-flex flex-column h-100">
-                            <h2 class="pt-3 mb-4 display-6 lh-1">Malpica - Niñóns</h2>
-                            <ul class="d-flex list-unstyled mt-auto">
-                                <li class="me-auto"></li>
-                                <li class="d-flex align-items-center me-3">
-                                    <small class="fw-light">Etapa 1</small>
-                                </li>
-                            </ul>
-                        </div>
-                    </a>
-                </div>
-            </div>
+            <a class="tarjeta" href="./etapas/etapa_2/index.html">
+                <span class="tarjeta__numero" aria-hidden="true">02</span>
+                <h2 class="tarjeta__titulo">Niñóns - Ponteceso</h2>
+                <span class="tarjeta__pie">
+                    <span class="tarjeta__etapa">Etapa 2</span>
+                    <span class="tarjeta__ir">Abrir visualizador<span class="tarjeta__flecha" aria-hidden="true">&#8599;</span></span>
+                </span>
+            </a>
 
+            <a class="tarjeta" href="./etapas/etapa_3/index.html">
+                <span class="tarjeta__numero" aria-hidden="true">03</span>
+                <h2 class="tarjeta__titulo">Ponteceso - Laxe</h2>
+                <span class="tarjeta__pie">
+                    <span class="tarjeta__etapa">Etapa 3</span>
+                    <span class="tarjeta__ir">Abrir visualizador<span class="tarjeta__flecha" aria-hidden="true">&#8599;</span></span>
+                </span>
+            </a>
 
+            <a class="tarjeta" href="./etapas/etapa_4/index.html">
+                <span class="tarjeta__numero" aria-hidden="true">04</span>
+                <h2 class="tarjeta__titulo">Laxe - Arou</h2>
+                <span class="tarjeta__pie">
+                    <span class="tarjeta__etapa">Etapa 4</span>
+                    <span class="tarjeta__ir">Abrir visualizador<span class="tarjeta__flecha" aria-hidden="true">&#8599;</span></span>
+                </span>
+            </a>
 
-            <div class="col">
-                <div class="card card-cover h-100 overflow-hidden shadow-lg p-4">
-                    <a href="./etapas/etapa_2/index.html" target="_blank">
-                        <div class="d-flex flex-column h-100">
-                            <h2 class="pt-3 mb-4 display-6 lh-1">Niñóns - Ponteceso</h2>
-                            <ul class="d-flex list-unstyled mt-auto">
-                                <li class="me-auto"></li>
-                                <li class="d-flex align-items-center me-3">
-                                    <small class="fw-light">Etapa 2</small>
-                                </li>
-                            </ul>
-                        </div>
-                    </a>
-                </div>
-            </div>
+            <a class="tarjeta" href="./etapas/etapa_5/index.html">
+                <span class="tarjeta__numero" aria-hidden="true">05</span>
+                <h2 class="tarjeta__titulo">Arou - Camariñas</h2>
+                <span class="tarjeta__pie">
+                    <span class="tarjeta__etapa">Etapa 5</span>
+                    <span class="tarjeta__ir">Abrir visualizador<span class="tarjeta__flecha" aria-hidden="true">&#8599;</span></span>
+                </span>
+            </a>
 
+            <a class="tarjeta" href="./etapas/etapa_6/index.html">
+                <span class="tarjeta__numero" aria-hidden="true">06</span>
+                <h2 class="tarjeta__titulo">Camariñas - Muxía</h2>
+                <span class="tarjeta__pie">
+                    <span class="tarjeta__etapa">Etapa 6</span>
+                    <span class="tarjeta__ir">Abrir visualizador<span class="tarjeta__flecha" aria-hidden="true">&#8599;</span></span>
+                </span>
+            </a>
 
-            <div class="col">
-                <div class="card card-cover h-100 overflow-hidden shadow-lg p-4">
-                    <a href="./etapas/etapa_3/index.html" target="_blank">
-                        <div class="d-flex flex-column h-100">
-                            <h2 class="pt-3 mb-4 display-6 lh-1">Ponteceso - Laxe</h2>
-                            <ul class="d-flex list-unstyled mt-auto">
-                                <li class="me-auto"></li>
-                                <li class="d-flex align-items-center me-3">
-                                    <small class="fw-light">Etapa 3</small>
-                                </li>
-                            </ul>
-                        </div>
-                    </a>
-                </div>
-            </div>
+            <a class="tarjeta" href="./etapas/etapa_7/index.html">
+                <span class="tarjeta__numero" aria-hidden="true">07</span>
+                <h2 class="tarjeta__titulo">Muxía - Nemiña</h2>
+                <span class="tarjeta__pie">
+                    <span class="tarjeta__etapa">Etapa 7</span>
+                    <span class="tarjeta__ir">Abrir visualizador<span class="tarjeta__flecha" aria-hidden="true">&#8599;</span></span>
+                </span>
+            </a>
 
-            <div class="col">
-                <div class="card card-cover h-100 overflow-hidden shadow-lg p-4">
-                    <a href="./etapas/etapa_4/index.html" target="_blank">
-                        <div class="d-flex flex-column h-100">
-                            <h2 class="pt-3 mb-4 display-6 lh-1">Laxe - Arou</h2>
-                            <ul class="d-flex list-unstyled mt-auto">
-                                <li class="me-auto"></li>
-                                <li class="d-flex align-items-center me-3">
-                                    <small class="fw-light">Etapa 4</small>
-                                </li>
-                            </ul>
-                        </div>
-                    </a>
-                </div>
-            </div>
+            <a class="tarjeta" href="./etapas/etapa_8/index.html">
+                <span class="tarjeta__numero" aria-hidden="true">08</span>
+                <h2 class="tarjeta__titulo">Nemiña - Cabo Finisterre</h2>
+                <span class="tarjeta__pie">
+                    <span class="tarjeta__etapa">Etapa 8</span>
+                    <span class="tarjeta__ir">Abrir visualizador<span class="tarjeta__flecha" aria-hidden="true">&#8599;</span></span>
+                </span>
+            </a>
+        </nav>
 
-            <div class="col">
-                <div class="card card-cover h-100 overflow-hidden shadow-lg p-4">
-                    <a href="./etapas/etapa_5/index.html" target="_blank">
-                        <div class="d-flex flex-column h-100">
-                            <h2 class="pt-3 mb-4 display-6 lh-1">Arou - Camariñas</h2>
-                            <ul class="d-flex list-unstyled mt-auto">
-                                <li class="me-auto"></li>
-                                <li class="d-flex align-items-center me-3">
-                                    <small class="fw-light">Etapa 5</small>
-                                </li>
-                            </ul>
-                        </div>
-                    </a>
-                </div>
-            </div>
-
-            <div class="col">
-                <div class="card card-cover h-100 overflow-hidden shadow-lg p-4">
-                    <a href="./etapas/etapa_6/index.html" target="_blank">
-                        <div class="d-flex flex-column h-100">
-                            <h2 class="pt-3 mb-4 display-6 lh-1">Camariñas - Muxía</h2>
-                            <ul class="d-flex list-unstyled mt-auto">
-                                <li class="me-auto"></li>
-                                <li class="d-flex align-items-center me-3">
-                                    <small class="fw-light">Etapa 6</small>
-                                </li>
-                            </ul>
-                        </div>
-                    </a>
-                </div>
-            </div>
-
-            <div class="col">
-                <div class="card card-cover h-100 overflow-hidden shadow-lg p-4">
-                    <a href="./etapas/etapa_7/index.html" target="_blank">
-                        <div class="d-flex flex-column h-100">
-                            <h2 class="pt-3 mb-4 display-6 lh-1">Muxía - Nemiña</h2>
-                            <ul class="d-flex list-unstyled mt-auto">
-                                <li class="me-auto"></li>
-                                <li class="d-flex align-items-center me-3">
-                                    <small class="fw-light">Etapa 7</small>
-                                </li>
-                            </ul>
-                        </div>
-                    </a>
-                </div>
-            </div>
-
-            <div class="col">
-                <div class="card card-cover h-100 overflow-hidden shadow-lg p-4">
-                <a href="./etapas/etapa_8/index.html" target="_blank">
-                    <div class="d-flex flex-column h-100">
-                        <h2 class="pt-3 mb-4 display-6 lh-1">Nemiña - Cabo Finisterre</h2>
-                        <ul class="d-flex list-unstyled mt-auto">
-                            <li class="me-auto"></li>
-                            <li class="d-flex align-items-center me-3">
-                                <small class="fw-light">Etapa 8</small>
-                            </li>
-                        </ul>
-                    </div>
-                </a>
-            </div>
-        </div>
-
-    </div>
-    </div>
-
-    <!-- El bundle se llama bootstrap.bundle.min.js.js en el repo (doble
-         extension, tal cual esta en bootstrap/ y como ya lo carga el index.html
-         de la galeria); sin la segunda .js la peticion daba 404 y el bundle no
-         llegaba a ejecutarse. -->
-    <script src="../../bootstrap/bootstrap.bundle.min.js.js"></script>
-    <!-- No hay <script src="./js/main.js">: era el fichero de arranque que
-         trae la plantilla de Bootstrap y se limitaba a buscar un getElementById('map')
-         que esta pagina no tiene (las 8 tarjetas van en HTML plano, sin JS), por lo
-         que lanzaba "TypeError: Cannot set properties of null" en cada carga. -->
+        <footer class="pie">
+            <p>Cada visualizador lleva la ruta, los puntos de interés y las indicaciones de su tramo, y admite las dos implementaciones del motor de mapas.</p>
+        </footer>
+    </main>
+    <!-- Sin Bootstrap: el fichero del repo se llama bootstrap.bundle.min.js.js (con
+         doble extension) y la maquetacion se hace aqui con CSS propio, asi que no
+         hace falta ni el bundle ni su hoja de estilos. -->
 </body>
 
 </html>

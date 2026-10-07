@@ -1,59 +1,311 @@
+/*
+ * Hoja de estilos del indice del Camino de los Faros.
+ *
+ * Que la pagina sea autonomous: sin Bootstrap ni su bundle. Todo el aire lo dan
+ * estas reglas, con variables para los colores y para las medidas, de modo que
+ * cambiar el tono de la pagina es tocar cuatro valores de :root.
+ *
+ * El color del faro y el de la flecha NO estan escritos aqui: los dibuja el SVG
+ * con fill="currentColor", que hereda el color del texto de la cabecera y de la
+ * tarjeta. Asi el unico sitio donde hay color escrito es este fichero.
+ */
+
+/* ---------------------------------------------------------------- variables */
+:root {
+    /* Fondo: un azul noche profundo, que es el color de la cartografia del IGN
+       a oscuras y no el negro puro de una pagina vacia. */
+    --fondo: #0b1220;
+    --fondo-alto: #131f33;
+    --tinta: #eef3fb;
+    --tinta-tenue: #9fb0c8;
+    --tinta-muy-tenue: #6d8099;
+    --acento: #ffb257;
+    --acento-claro: #ffd39b;
+    --linea: rgba(255, 255, 255, 0.12);
+    --linea-fuerte: rgba(255, 255, 255, 0.22);
+    --cristal: rgba(255, 255, 255, 0.045);
+    --cristal-al-pasar: rgba(255, 255, 255, 0.08);
+
+    --radio: 18px;
+    --radio-pequeno: 10px;
+    --sombra: 0 18px 40px rgba(0, 0, 0, 0.45);
+    --transicion: 180ms ease;
+    --tipo: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* ------------------------------------------------------------------ resets */
+* {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
 body {
-    font-family: 'Roboto', sans-serif;
-    background: linear-gradient(135deg, #b6fbff 0%, #83a4d4 100%);
-    min-height: 100vh;
     margin: 0;
-    padding: 1rem;
+    min-height: 100vh;
+    font-family: var(--tipo);
+    color: var(--tinta);
+    background: var(--fondo);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
 }
 
-header {
-    background-color: rgba(255, 255, 255, 0.5);
-    backdrop-filter: blur(10px);
-    border-radius: 1rem;
-    padding: 1rem 2rem;
-    margin-bottom: 2rem;
-}
-
-.card {
-    background-color: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(8px);
-    color: white;
-    border: none;
-    border-radius: 1.5rem;
-    transition: transform 0.3s ease;
-}
-
-.card:hover {
-    transform: translateY(-5px);
-}
-
-.card h2 {
-    font-weight: 700;
-}
-
-.text-shadow-1 {
-    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
-}
-
-.col {
-    margin-block: 20px;
-}
-
-small, small {
-    font-size: 20px;
-}
-
-.disabled-card {
-    opacity: 0.5;
+/* ------------------------------------------------------------------- fondo */
+.fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
     pointer-events: none;
-    filter: grayscale(100%);
-  }
-
-a {
-    color: inherit;
-    text-decoration: inherit;
+    overflow: hidden;
 }
 
-a:hover {
-    color: #86b7fe;
+/* Dos luces suaves, como el haz de un faro girando: dan profundidad sin imagenes
+   ni peticiones de red. */
+.fondo__brillo {
+    position: absolute;
+    display: block;
+    border-radius: 50%;
+    filter: blur(70px);
+    opacity: 0.55;
+}
+
+.fondo__brillo--uno {
+    width: 46rem;
+    height: 46rem;
+    top: -18rem;
+    left: -12rem;
+    background: radial-gradient(circle, #1d4ed8 0%, rgba(29, 78, 216, 0) 70%);
+}
+
+.fondo__brillo--dos {
+    width: 38rem;
+    height: 38rem;
+    right: -14rem;
+    bottom: -16rem;
+    background: radial-gradient(circle, #b45309 0%, rgba(180, 83, 9, 0) 70%);
+    opacity: 0.45;
+}
+
+/* Trama de puntos muy fina, que da textura sin ensuciar. */
+.fondo__trama {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+    background-size: 22px 22px;
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent 75%);
+    mask-image: linear-gradient(to bottom, black, transparent 75%);
+}
+
+/* ------------------------------------------------------------------ pagina */
+.pagina {
+    position: relative;
+    z-index: 1;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1rem, 3vw, 2rem) 3rem;
+}
+
+/* --------------------------------------------------------------- cabecera */
+.cabecera {
+    max-width: 44rem;
+    margin-bottom: clamp(2rem, 4vw, 3.25rem);
+}
+
+.faro {
+    width: 2.75rem;
+    height: auto;
+    color: var(--acento);
+    margin-bottom: 1.25rem;
+    /* El haz late muy despacio, como el giro real del faro. */
+    animation: latir 6s ease-in-out infinite;
+}
+
+/* El haz va a media opacidad: si no, tapa el foco de luz y el faro se lee como
+   un mancha. */
+.faro__haz {
+    opacity: 0.38;
+    animation: latir 6s ease-in-out infinite;
+}
+
+/* La luz del faro y su halo: dos opacidades que suben y bajan. */
+.faro__luz {
+    fill: var(--acento-claro);
+    animation: latir 6s ease-in-out infinite;
+}
+
+@keyframes latir {
+
+    0%,
+    100% {
+        opacity: 0.75;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+.cabecera__antetitulo {
+    margin: 0 0 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--acento);
+}
+
+.cabecera__titulo {
+    margin: 0 0 0.75rem;
+    font-size: clamp(2.1rem, 5.5vw, 3.4rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+}
+
+.cabecera__bajada {
+    margin: 0;
+    max-width: 38rem;
+    color: var(--tinta-tenue);
+    font-size: clamp(1rem, 1.6vw, 1.1rem);
+}
+
+/* ---------------------------------------------------------------- rejilla */
+.rejilla {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16.5rem, 1fr));
+    gap: clamp(0.85rem, 2vw, 1.25rem);
+}
+
+/* --------------------------------------------------------------- tarjeta */
+.tarjeta {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 11.5rem;
+    padding: 1.4rem 1.4rem 1.15rem;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio);
+    background: var(--cristal);
+    color: var(--tinta);
+    text-decoration: none;
+    overflow: hidden;
+    /* transform y box-shadow animables: sin esto el salto del ratón se ve a
+       trompicones, que es justo lo que se quiere quitar. */
+    transition: transform var(--transicion), background var(--transicion),
+        border-color var(--transicion), box-shadow var(--transicion);
+}
+
+.tarjeta:hover,
+.tarjeta:focus-visible {
+    transform: translateY(-4px);
+    background: var(--cristal-al-pasar);
+    border-color: var(--linea-fuerte);
+    box-shadow: var(--sombra);
+}
+
+.tarjeta:focus-visible {
+    /* El foco con teclado tiene que verse: el borde del navegador sobre un fondo
+       translucido se pierde. */
+    outline: 2px solid var(--acento);
+    outline-offset: 3px;
+}
+
+/* El numero, grande y detras del texto: marca de agua, sin robarle sitio. */
+.tarjeta__numero {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.9rem;
+    font-size: 3.6rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    color: var(--tinta);
+    opacity: 0.07;
+    pointer-events: none;
+    user-select: none;
+}
+
+.tarjeta__titulo {
+    margin: 0;
+    padding-right: 3.25rem;
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+}
+
+.tarjeta__pie {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: auto;
+    padding-top: 1.25rem;
+}
+
+.tarjeta__etapa {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tinta-muy-tenue);
+}
+
+/* El pie con el color del faro, y la flecha que se separa al pasar el ratón. */
+.tarjeta__ir {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--acento);
+    opacity: 0.85;
+    transition: opacity var(--transicion), gap var(--transicion);
+}
+
+.tarjeta:hover .tarjeta__ir,
+.tarjeta:focus-visible .tarjeta__ir {
+    opacity: 1;
+    gap: 0.65rem;
+}
+
+.tarjeta__flecha {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* -------------------------------------------------------------------- pie */
+.pie {
+    margin-top: clamp(2rem, 4vw, 3rem);
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--linea);
+    color: var(--tinta-muy-tenue);
+    font-size: 0.85rem;
+}
+
+.pie p {
+    margin: 0;
+}
+
+/* ------------------------------------------------------------------Movimiento
+   Menos movimiento donde no hace falta: el latido del faro y el salto de las
+   tarjetas se quitan si la persona lo ha pedido. */
+@media (prefers-reduced-motion: reduce) {
+
+    .faro,
+    .faro__luz {
+        animation: none;
+    }
+
+    .tarjeta,
+    .tarjeta__ir {
+        transition: none;
+    }
+
+    .tarjeta:hover,
+    .tarjeta:focus-visible {
+        transform: none;
+    }
 }
