@@ -11,14 +11,24 @@ function mapa() {
   mapajs = IDEE.map({
     container: "mapa",
     center: { x: -512140.0194987538, y: 4552625.8998558065 },
-    controls:["attributions"],
+    // Los créditos no se piden como control: los pone ext/attribution, que es
+    // como lo hacen los demás visualizadores y además sobrevive al cambio de
+    // implementación (el control de la API solo es de 2D).
+    controls: [],
     zoom: 5
   });
 
-  mapajs.addAttribution({
-    name: "Autor:",
-    description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
-  })
+  // Autor del visualizador, como el resto de visualizadores: boton en el rail y
+  // barra de creditos abajo, con lo que declaren las capas (SEPE, INE, IGN).
+  const ext_Attribution = new IDEE.plugin.miPlugin_attribution({
+    position: 'BR',
+    mode: 'lite',
+    attributions: [{
+      name: 'Autor:',
+      description: " <a style='color: #0000FF' href='https://github.com/IngenieroGeomatico' target='_blank'>IngenieroGeomático</a> "
+    }]
+  });
+  mapajs.addPlugin(ext_Attribution);
 
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
