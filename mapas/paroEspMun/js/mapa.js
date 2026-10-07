@@ -332,8 +332,18 @@ async function myFunction_CSV() {
 
   // Buscar el último mes con datos disponible en el CSV (el SEPE
   // publica con retraso variable, no podemos asumir mes-1).
+  // Solo los periodos de verdad: seis digitos, AAAAMM. hace falta porque el
+  // conversor mete la fila de cabecera tambien como dato, y al ordenar las
+  // cadenas ese valor ("Código mes", que empieza por C) se queda el ultimo:
+  // era el que se elegia, de modo que el filtro se quedaba con una sola fila,
+  // el año salia undefined y de ahi que no llegaran ni el color ni el aviso
+  // (medido: 65.081 filas y nueve valores distintos en esa columna, uno de
+  // ellos la cabecera con una fila).
+  const esPeriodo = function (v) {
+    return typeof v === 'string' && /^\d{6}$/.test(v.trim());
+  };
   const mesesDisponibles = [...new Set(
-    dataParo.map(obj => obj[keyCodMes]).filter(Boolean)
+    dataParo.map(obj => obj[keyCodMes]).filter(esPeriodo)
   )].sort();
   const ultimoMes = mesesDisponibles.length > 0
     ? mesesDisponibles[mesesDisponibles.length - 1]
@@ -475,10 +485,22 @@ async function myFunction_CSV() {
     });
   });
   dataPoblacion = await myPromise_poblo_prov;
-  dataPoblacionFiltrado = dataPoblacion.filter(obj => obj["Periodo"] === `${añoCSV}`).filter(obj => obj["Sexo"] === `Total`)
-  if (dataPoblacionFiltrado.length === 0) {
-    dataPoblacionFiltrado = dataPoblacion.filter(obj => obj["Periodo"] === `${añoCSV - 1}`).filter(obj => obj["Sexo"] === `Total`)
-  }
+
+  // El periodo de la poblacion se saca de los propios datos y no del ano del
+  // paro. Antes se comparaba con `añoCSV`, asi que si el paro venia mal la
+  // poblacion se quedaba vacia aunque estuviera descargada y entera: 736.920
+  // filas que se quedaban en cero y el aviso decia que faltaba la poblacion, que no
+  // era verdad (medido).
+  const periodosPoblacion = [...new Set(
+    dataPoblacion.map(obj => String(obj["Periodo"]).trim()).filter(Boolean)
+  )].sort();
+  const periodoPoblacion = periodosPoblacion.length > 0
+    ? periodosPoblacion[periodosPoblacion.length - 1]
+    : '';
+  dataPoblacionFiltrado = periodoPoblacion
+    ? dataPoblacion.filter(obj => String(obj["Periodo"]).trim() === periodoPoblacion)
+      .filter(obj => obj["Sexo"] === `Total`)
+    : [];
 
 
   const myPromise_poblo_TOTAL = new Promise(function (resolve, reject) {
