@@ -1371,6 +1371,12 @@
     _abrirModal() {
       if (!this._modal) return;
       this._rellenarProyecciones();
+      // La ventana se construye la primera vez que se abre, que es mas tarde que
+      // el montaje en el mapa, asi que el estado de la fila de recorte (que en
+      // 3D se esconde, porque no hay nada que recortar) se ajusta aqui y no solo
+      // en _ajustarSelector() del montaje: si no, la primera vez sale a la vista
+      // (medido) y solo a partir de la segunda desaparece.
+      this._ajustarSelector();
       this._modal.hidden = false;
       // Sin esta clase la ventana aparece ya en su sitio y el cambio se ve como
       // un parpadeo; con ella se pinta desde la escala y la opacidad de 0 (ver
@@ -3812,14 +3818,15 @@
      * Habilita o deshabilita el botón de proyección según la implementación
      * activa.
      *
-     * En 3D no hay nada que cambiar: el globo es geodésico y la proyección la
-     * declara la propia API como EPSG:4979. Dejarlo vivo ahí sería prometer algo
-     * que no ocurre, así que se deshabilita y se explica por qué en el título y
-     * en la etiqueta.
+     * En 3D lo que se elige no es una proyección del visualizador, que en un
+     * globo geodésico no hay tal cosa, sino el modo de la vista (globo o plano)
+     * y las unidades en las que se leen las coordenadas. Dejarlo apagado como si
+     * no admitiera elección sería mentir: sí admite, y es lo que hace el título.
      *
-     * La casilla de recorte se deshabilita además cuando la proyección activa no
-     * tiene extensión propia (la 4269, que viene con extent null), porque entonces
-     * no hay nada que recortar y dejarla viva sería un control que no hace nada.
+     * La casilla de recorte se esconde entera en 3D, porque el recorte lo pone el
+     * propio globo y no hay nada que mandar, y además se deshabilita cuando la
+     * proyección activa no tiene extensión propia (la 4269, que viene con extent
+     * null), porque entonces tampoco hay nada que recortar.
      */
     _ajustarSelector() {
       if (!this._selector) return;
@@ -3832,10 +3839,13 @@
       if (this._casillaAlcance) {
         // En 3D el recorte lo pone el propio globo (la escena se dibuja en el
         // geodésico y no hay proyección que recortar), así que la casilla no
-        // tiene nada que mandar y se deshabilita con el botón.
-        this._casillaAlcance.disabled = es3D || !recortable;
+        // tiene nada que mandar: se esconde la fila entera, con su etiqueta, en
+        // vez de dejarla a la vista apagada. Una fila gris que no hace nada
+        // ocupa sitio en la ventana y hace pensar que falta algo.
+        this._casillaAlcance.disabled = !recortable;
         this._casillaAlcance.checked = Boolean(this._recortar);
       }
+      if (this._cajaAlcance) this._cajaAlcance.hidden = es3D;
       const explicacion = es3D
         ? 'Elige cómo se ve el globo y en qué unidades se leen las coordenadas: ' +
         'EPSG:4326, el globo con su relieve y las coordenadas en grados; ' +

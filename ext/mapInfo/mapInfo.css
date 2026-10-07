@@ -605,6 +605,14 @@
   padding-top: 9px;
 }
 
+/* Poner hidden a una fila no basta: .g-mapInfo-modal-fila declara display: flex,
+   que le gana al display: none que el navegador aplica al atributo hidden. Sin
+   esta regla, esconder la fila de recorte en 3D (donde el globo se ve entero y
+   no hay nada que recortar) no ocultaba nada (medido). */
+.g-mapInfo-modal-fila[hidden] {
+  display: none;
+}
+
 .g-mapInfo-modal-fila--casilla:hover {
   background: transparent;
 }
