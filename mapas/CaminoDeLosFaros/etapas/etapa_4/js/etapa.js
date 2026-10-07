@@ -62,9 +62,9 @@ function updateConfigBaseLayer() {
     {
       "id": "raster",
       "title": "Mapa Ráster",
-      // De momento la tesela 0/0/0 del servicio, que es el mapa del mundo
-      // entero; cuando haya miniatura de la zona, se cambia solo esta linea.
-      "imgPreview": "../../../../mapas/MapaBase/img/MapaRaster.jpg",
+      // Miniatura de la zona, puesta a mano: no es una tesela del servicio, sino un
+      // recorte del Mapa Raster con la peninsula y el norte de Africa.
+      "imgPreview": "../../../../mapas/MapaBase/img/Raster.png",
       "layers": [
         "QUICK*Base_MapaRaster_TMS"
       ]
