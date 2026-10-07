@@ -630,6 +630,8 @@
       this._modalCampoCodigoBusqueda = null;
       this._modalCampoDefinicion = null;
       this._modalAviso = null;
+      this._modalBotonForzar = null;
+      this._codigoParaForzar = null;
       this._modalPanelCodigo = null;
       this._modalPanelDef = null;
       this._modalPestanaCodigo = null;
@@ -1223,11 +1225,22 @@
       avisoAlta.className = 'g-mapInfo-modal-aviso';
       avisoAlta.setAttribute('role', 'status');
 
+      // Botón de "aplicar de todos modos", que solo aparece cuando lo que ha
+      // parado la elección es que el S.C.R. no cubre la zona que se está viendo.
+      // Va debajo del aviso porque es la continuación de lo que dice, no una
+      // opción más del formulario. Se esconde por defecto.
+      const botonForzar = document.createElement('button');
+      botonForzar.className = 'g-mapInfo-modal-boton g-mapInfo-modal-boton--forzar';
+      botonForzar.type = 'button';
+      botonForzar.textContent = 'Aplicar de todos modos';
+      botonForzar.hidden = true;
+
       alta.appendChild(tituloAlta);
       alta.appendChild(pestanas);
       alta.appendChild(panelCodigo);
       alta.appendChild(panelDef);
       alta.appendChild(avisoAlta);
+      alta.appendChild(botonForzar);
 
       // Pie con el botón de cerrar.
       const pie = document.createElement('div');
@@ -1260,6 +1273,8 @@
       this._modalCampoCodigo = campoCodigoManual;
       this._modalCampoDefinicion = campoDefinicion;
       this._modalAviso = avisoAlta;
+      this._modalBotonForzar = botonForzar;
+      this._codigoParaForzar = null;
       this._modalCampoCodigoBusqueda = campoCodigo;
       this._modalPanelCodigo = panelCodigo;
       this._modalPanelDef = panelDef;
@@ -1279,6 +1294,7 @@
       this._on(cerrarX, 'click', function () { this._cerrarModal(); }.bind(this));
       this._on(botonCerrar, 'click', function () { this._cerrarModal(); }.bind(this));
       this._on(fondo, 'click', function () { this._cerrarModal(); }.bind(this));
+      this._on(botonForzar, 'click', function () { this._aplicarForzando(); }.bind(this));
       this._on(document, 'keydown', function (ev) {
         if (ev.key !== 'Escape') return;
         if (!this._modal || this._modal.hidden) return;
@@ -1624,6 +1640,54 @@
       this._modalAviso.textContent = texto || '';
       this._modalAviso.className = 'g-mapInfo-modal-aviso'
         + (tipo ? ' g-mapInfo-modal-aviso--' + tipo : '');
+      // Cualquier aviso nuevo esconde el botón de forzar: solo tiene sentido
+      // mientras el aviso sea el que explica que no se ha aplicado por la zona.
+      this._esconderForzar();
+    }
+
+    /**
+     * Esconde el botón de "aplicar de todos modos" y olvida el código.
+     */
+    _esconderForzar() {
+      this._codigoParaForzar = null;
+      if (this._modalBotonForzar) this._modalBotonForzar.hidden = true;
+    }
+
+    /**
+     * Ofrece aplicar un S.C.R. que no cubre la zona que se está viendo.
+     *
+     * La comprobación de zona está porque, fuera de la franja, la rejilla de las
+     * capas de la API se sale de rango y revienta (medido: "TypeError:
+     * coordinates must be finite numbers", con su diálogo de error encima). Pero
+     * quien registra un código quiere ver cómo queda, así que en vez de negarse
+     * del todo se ofrece el botón: el aviso sigue diciendo la verdad y quien
+     * quiere, lo hace.
+     * @param {string} codigo Código EPSG a aplicar saltándose la comprobación.
+     * @param {string} [explicacion] Lo que se va a perder, en el título.
+     */
+    _ofrecerForzar(codigo, explicacion) {
+      if (!this._modalBotonForzar) return;
+      this._codigoParaForzar = codigo;
+      this._modalBotonForzar.hidden = false;
+      this._modalBotonForzar.title = explicacion || '';
+    }
+
+    /**
+     * Aplica el código pendiente saltándose la comprobación de zona.
+     * @returns {boolean} true si el cambio se hizo.
+     */
+    _aplicarForzando() {
+      const codigo = this._codigoParaForzar;
+      if (!codigo) return false;
+      this._esconderForzar();
+      const bien = this._cambiarProyeccion(codigo, true);
+      this._avisoAlta(
+        bien
+          ? codigo + ' aplicado de todos modos. Fuera de su franja las capas pueden quedar en blanco.'
+          : codigo + ' no se ha podido aplicar tampoco de este modo.',
+        bien ? 'ok' : 'error'
+      );
+      return bien;
     }
 
     /**
@@ -4169,6 +4233,12 @@
           this._rechazar(this._selector);
           this._volverAProyeccionPorDefecto(codigo + ' no cubre la zona que se está viendo (' +
             fuera + '), así que no se ha aplicado y se ha vuelto a la de por defecto.');
+          // Se ofrece de todos modos: quien acaba de elegir ese código, o de
+          // registrarlo, lo que quiere es verlo, y el aviso ya dice lo que pasa.
+          // Aplicarlo es lo mismo que se hace al recuperar un estado tras el
+          // cambio de implementación: saltar esta comprobación y ya.
+          this._ofrecerForzar(codigo, 'Se aplica igualmente. Fuera de su franja la rejilla de las ' +
+            'capas puede salirse de rango y las teselas salir en blanco.');
           return false;
         }
       }
@@ -5073,6 +5143,8 @@
       this._modalCampoCodigoBusqueda = null;
       this._modalCampoDefinicion = null;
       this._modalAviso = null;
+      this._modalBotonForzar = null;
+      this._codigoParaForzar = null;
       this._modalPanelCodigo = null;
       this._modalPanelDef = null;
       this._modalPestanaCodigo = null;

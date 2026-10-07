@@ -619,6 +619,21 @@
   display: none;
 }
 
+/* Y con el boton de aplicar de todos modos, por el mismo motivo. */
+.g-mapInfo-modal-boton[hidden] {
+  display: none;
+}
+
+/* El boton de forzar es la continuacion del aviso, no una opcion mas del
+   formulario: va a lo ancho, debajo del texto que explica que se ofrece. */
+.g-mapInfo-modal-boton--forzar {
+  align-self: stretch;
+  width: 100%;
+  margin-top: 2px;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  background: transparent;
+}
+
 .g-mapInfo-modal-fila--casilla:hover {
   background: transparent;
 }
