@@ -13,8 +13,28 @@ function updateConfigBaseLayer() {
     displayInLayerSwitcher: false,
   })
 
+
+  MapaRaster_TMS = new IDEE.layer.TMS({
+    url: 'https://tms-mapa-raster.ign.es/1.0.0/mapa-raster/{z}/{x}/{-y}.jpeg',
+    legend: 'MapaRaster',
+    // No visible de salida: solo hay una base activa a la vez y la de por
+    // defecto es la de al lado (la tms_2 de mas abajo). El conmutador de bases
+    // la enciende cuando se elige, y para eso visible a false es lo correcto.
+    visible: false,
+    isBase: true,
+    // Zoom maximo medido del servicio: la tesela 17 contesta 200 y la 18 da
+    // 403, el mismo limite que tiene la capa de al lado.
+    tileGridMaxZoom: 17,
+    name: 'MapaRaster',
+    attribution: '<p><b>Mapa base</b>: <a style="color: #0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
+  }, {
+    crossOrigin: 'anonymous',
+    displayInLayerSwitcher: false,
+  })
+
   IDEE.addQuickLayers({
-    Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2
+    Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2,
+    Base_MapaRaster_TMS: MapaRaster_TMS
   })
 
   tms_2 = {
@@ -37,6 +57,16 @@ function updateConfigBaseLayer() {
       "imgPreview": "../../../../mapas/MapaBase/img/imagen.png",
       "layers": [
         "QUICK*BASE_PNOA_MA_TMS"
+      ]
+    },
+    {
+      "id": "raster",
+      "title": "Mapa Ráster",
+      // De momento la tesela 0/0/0 del servicio, que es el mapa del mundo
+      // entero; cuando haya miniatura de la zona, se cambia solo esta linea.
+      "imgPreview": "../../../../mapas/MapaBase/img/MapaRaster.jpg",
+      "layers": [
+        "QUICK*Base_MapaRaster_TMS"
       ]
     }
   ]
