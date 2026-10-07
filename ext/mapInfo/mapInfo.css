@@ -613,6 +613,12 @@
   display: none;
 }
 
+/* Lo mismo con el bloque de alta de un EPSG nuevo, que en 3D tampoco se
+   enseña: declara display:flex y le ganaria al display:none del atributo. */
+.g-mapInfo-modal-alta[hidden] {
+  display: none;
+}
+
 .g-mapInfo-modal-fila--casilla:hover {
   background: transparent;
 }

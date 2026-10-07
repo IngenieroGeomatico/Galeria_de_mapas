@@ -614,6 +614,10 @@
       this._cajaAlcance = null;
       this._casillaAlcance = null;
       this._etiquetaAlcance = null;
+      // El bloque de alta de un EPSG nuevo, que en 3D no se enseña (ver
+      // _ajustarSelector): allí el globo solo admite 4326 y 3857, así que un
+      // código que se registrara no se podría ni ver ni leer.
+      this._modalAlta = null;
       // Ventana modal de proyección. Va colgada del body y se crea una sola vez
       // en _construirUI(), cerrada; `_abrirModal()` la muestra.
       this._modal = null;
@@ -1266,6 +1270,7 @@
       this._casillaAlcance = casillaAlcance;
       this._etiquetaAlcance = etiquetaAlcance;
       this._cajaAlcance = filaAlcance;
+      this._modalAlta = alta;
       this._focoAlAbrir = botonAnadir;
 
       // Los tres caminos de cerrar: la X, el pie y el fondo. Y Escape, que se
@@ -3846,6 +3851,12 @@
         this._casillaAlcance.checked = Boolean(this._recortar);
       }
       if (this._cajaAlcance) this._cajaAlcance.hidden = es3D;
+      // El alta de un EPSG nuevo tampoco se enseña en 3D: el globo solo admite
+      // 4326 y 3857 (scene.mapProjection de Cesium solo sabe de geograficas y
+      // Web Mercator, y la API no expone un setProjection que la toque), de modo
+      // que un codigo que se registrara aqui no se podria ni ver ni leer. En 2D
+      // el bloque entero sigue igual, con sus dos pestanas.
+      if (this._modalAlta) this._modalAlta.hidden = es3D;
       const explicacion = es3D
         ? 'Elige cómo se ve el globo y en qué unidades se leen las coordenadas: ' +
         'EPSG:4326, el globo con su relieve y las coordenadas en grados; ' +
@@ -5080,6 +5091,7 @@
       this._cajaAlcance = null;
       this._casillaAlcance = null;
       this._etiquetaAlcance = null;
+      this._modalAlta = null;
       this._campoEditando = null;
       this._descartar = null;
       this._textoAlEntrar = null;
