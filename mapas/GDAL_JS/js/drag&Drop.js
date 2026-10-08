@@ -273,16 +273,16 @@
       try {
         let filePathExportWarp;
         try {
-          // Intento 1: sin forzar s_srs
-          filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarp, outputNameGTiff);
+          // Intento 1: solo convertir a GTiff (sin reproyectar) - más robusto para COG
+          filePathExportWarp = await window.gdal.gdalwarp(ds0, ['-of', 'GTiff'], outputNameGTiff);
         } catch (e1) {
           try {
-            // Intento 2: forzar EPSG:3857 como destino
-            filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarpT3857, outputNameGTiff);
+            // Intento 2: sin forzar s_srs, con t_srs opcional fuera
+            filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarp, outputNameGTiff);
           } catch (e2) {
             try {
-              // Intento 3: solo convertir a GTiff sin reprojectar
-              filePathExportWarp = await window.gdal.gdalwarp(ds0, ['-of', 'GTiff'], outputNameGTiff);
+              // Intento 3: forzar EPSG:3857 como destino
+              filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarpT3857, outputNameGTiff);
             } catch (e3) {
               throw e3;
             }
