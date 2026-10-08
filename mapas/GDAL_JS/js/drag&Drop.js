@@ -324,31 +324,29 @@
         try {
           const impl = mapRef && mapRef.getMapImpl ? mapRef.getMapImpl() : null;
           if (impl && impl.scene && typeof Cesium !== 'undefined') {
-            let provider = null;
-            // Intentar GeoTIFFImageryProvider desde blob
-            try {
-              if (Cesium.GeoTIFFImageryProvider) {
-                if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
-                  provider = await Cesium.GeoTIFFImageryProvider.fromBlob(blobFile);
-                } else if (typeof Cesium.GeoTIFFImageryProvider.fromUrlOrBlob === 'function') {
-                  provider = await Cesium.GeoTIFFImageryProvider.fromUrlOrBlob(blobFile);
+            // Esperar a que Cesium esté listo para añadir provider
+            setTimeout(async () => {
+              let provider = null;
+              try {
+                if (Cesium.GeoTIFFImageryProvider) {
+                  if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
+                    provider = await Cesium.GeoTIFFImageryProvider.fromBlob(blobFile);
+                  } else if (typeof Cesium.GeoTIFFImageryProvider.fromUrlOrBlob === 'function') {
+                    provider = await Cesium.GeoTIFFImageryProvider.fromUrlOrBlob(blobFile);
+                  }
+                }
+              } catch (provErr) {
+                provider = null;
+                console.warn('Error creando GeoTIFFImageryProvider:', provErr);
+              }
+              if (provider) {
+                try {
+                  impl.imageryLayers.addImageryProvider(provider);
+                } catch (addErr) {
+                  console.warn('Error añadiendo imageryProvider a Cesium:', addErr);
                 }
               }
-              // Fallback: usar TileMapService si no hay proveedor GeoTIFF
-            } catch (provErr) {
-              provider = null;
-              console.warn('Error creando GeoTIFFImageryProvider:', provErr);
-            }
-            if (provider) {
-              try {
-                impl.imageryLayers.addImageryProvider(provider);
-                console.log('Añadido GeoTIFFImageryProvider a Cesium');
-              } catch (addErr) {
-                console.warn('Error añadiendo imageryProvider a Cesium:', addErr);
-              }
-            } else {
-              console.warn('No se pudo crear GeoTIFFImageryProvider desde blob; el visor 3D puede no mostrar el ráster.');
-            }
+            }, 500);
           }
         } catch (cesErr) {
           // Silencioso: solo afecta a 3D
