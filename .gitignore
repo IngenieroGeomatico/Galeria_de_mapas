@@ -406,5 +406,8 @@ FodyWeavers.xsd
 # Directorio de trabajo de depuración (capturas y pruebas temporales)
 .debug/
 
+# Capturas y pruebas temporales de QA
+.test/
+
 # Credenciales de Azure (nunca subir)
 azure-ad-credentials.json

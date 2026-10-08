@@ -1,7 +1,76 @@
-﻿const SVGCarga = document.getElementById("cargaSVG")
+﻿/*
+ * paroEspMun: coropleta de paro municipal.
+ *
+ * NOTAS DE DATOS (medido, para no volver a tropezar)
+ *
+ * - El CSV del SEPE está en LATIN-1. `M.remote.get` devuelve solo `res.text`, ya
+ *   decodificado como UTF-8, e ignora `responseType` (medido: sus claves son
+ *   `text`, `xml`, `headers`, `error`, `code`). Los acentos llegaban rotos,
+ *   "C?digo mes". No se puede arreglar del texto roto porque los bytes originales
+ *   ya no están, así que ese CSV se baja con `fetch()` y se decodifica el
+ *   `ArrayBuffer` en Latin-1 por trozos de 8 KB. Los CSV de población (INE) sí
+ *   siguen con `M.remote.get`: vienen en UTF-8 y no tienen el problema.
+ *
+ * - El CSV trae la fila de cabecera también como dato. Al ordenar los valores
+ *   como cadenas esa cabecera ganaba (empieza por C) y el filtro se quedaba con
+ *   una fila de basura; el año salía `undefined` y el filtro de la población,
+ *   que compara contra ese año, se caía también. Por eso los periodos se eligen
+ *   por forma (/^\d{6}$/) y el periodo de la población se saca de los propios
+ *   datos.
+ *
+ * - De las filas del CSV, 52 tienen códigos de 2 dígitos del INE: son agregados
+ *   ("Sin_distribuir"), no municipios, y por eso no tienen correspondencia en el
+ *   MVT. Al revés, las entidades del MVT sin fila en el CSV son 84 de 9 199 y
+ *   todas tienen código 53xxx, o sea mancomunidades y entidades singulares, que
+ *   el INE no publica como municipios.
+ *
+ * - El `nationalcode` del MVT mide siempre 11 caracteres ('34' + '07' + '37354'),
+ *   y el código municipal son los 5 últimos. Por eso `slice(-5)` siempre acierta.
+ *
+ * - El MVT en 3D lo lleva `ext/MVTLayer`, que tiene su propia cabecera con el
+ *   diagnóstico de por qué hace falta una fachada propia y qué queda por hacer.
+ */
+
+const SVGCarga = document.getElementById("cargaSVG")
 // window.onload = (event) => {
 //   SVGCarga.hidden = true
 // };
+
+/**
+ * Color de cada municipio a partir del CSV del SEPE: clave = código municipal de
+ * 5 cifras, valor = color del ramp. Lo usan las dos implementaciones: en 2D lo
+ * mete el `IDEE.style.Polygon` y en 3D lo lee `ext/MVTLayer` al construir las
+ * primitivas, así que el ramp es el mismo en los dos.
+ *
+ * Los municipios que no están en el CSV salen en gris (COLOR_SIN_DATO en el
+ * plugin). Medido: son 84 de 9 199 y todos tienen código 53xxx, o sea
+ * mancomunidades y entidades singulares, que el INE no publica como municipios.
+ * @param {Array} data Filas ya transformadas por myFunction_CSV.
+ * @returns {Object} {"28092": "rgba(253, 169, 42, 0.75)", ...}
+ */
+function crearColorPorCodigo(data) {
+  const colorPorCodigo = {};
+  for (const fila of data) {
+    const codigo = String(fila["Municipios"]).split(" ")[0];
+    const porcParo = fila["porcParo"];
+    let color;
+    if (porcParo < 1.5) {
+      color = "rgba(202, 247, 170, 0.75)";
+    } else if (porcParo < 3) {
+      color = "rgba(126, 247, 45, 0.75)";
+    } else if (porcParo < 5) {
+      color = "rgba(215, 253, 42, 0.75)";
+    } else if (porcParo < 8) {
+      color = "rgba(253, 221, 42, 0.75)";
+    } else if (porcParo < 15) {
+      color = "rgba(253, 169, 42, 0.75)";
+    } else {
+      color = "rgba(253, 74, 42, 0.75)";
+    }
+    colorPorCodigo[codigo] = color;
+  }
+  return colorPorCodigo;
+}
 
 
 function mapa() {
@@ -30,29 +99,177 @@ function mapa() {
   });
   mapajs.addPlugin(ext_Attribution);
 
-  // Librerias nuevas para el codigo de este visualizador. Van aparte, en
-  // window.newOl y window.newCesium, porque la API-CNIG lleva las suyas
-  // dentro del bundle y no lee de los globales: pisarlos no haria que ella
-  // usara las nuevas (ver la cabecera de ext/upgradeLibs).
-  const ext_UpgradeLibs = new IDEE.plugin.miPlugin_upgradeLibs({
-    que: 'ambos',
-    olVersion: '10.6.1',
-    cesiumVersion: '1.145',
-    sobrescribirGlobales: false
-  });
-  mapajs.addPlugin(ext_UpgradeLibs);
+  // ext/upgradeLibs ya NO se usa aqui. Se cargo hasta que se vio que sobra:
+  // la API-CNIG ya trae OpenLayers 10.7.0 en su bundle (su package.json lo fija),
+  // asi que no aporta una version mas nueva; y su Cesium 1.145 estorba, porque
+  // construir con esa copia objetos que van a la escena de la API falla. Para el
+  // 3D se usa window.Cesium, la de la API. Ver notas en
+  // .opencode/docs/paroEspMun-3D-vectorTile.md.
 
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
     mapsFunction: mapa,
     sameMap: true,
     shareView: true,
-    shareLayers: true
+    shareLayers: false
   }));
   mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
   mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
-  return mapajs
+  // Da soporte 3D a IDEE.layer.MVT. En 2D no hace nada (la API ya trae esa
+  // implementación); en 3D registra la de Cesium, que es la que falta.
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_MVTLayer());
+
+  const es3D = Boolean(IDEE.impl && IDEE.impl.cesium);
+
+  const capa1 = new IDEE.layer.GeoJSON({
+    source: {},
+    attribution: {
+      name: "Paro:",
+      description: "<a style='color: #0000FF' href='https://www.sepe.es/HomeSepe/es/' target='_blank'>SEPE</a>"
+    }
+  });
+  mapajs.addLayers(capa1);
+
+  const capa2 = new IDEE.layer.GeoJSON({
+    source: {},
+    attribution: {
+      name: "Población:",
+      description: "<a style='color: #0000FF' href='https://www.ine.es/' target='_blank'>INE</a>"
+    }
+  });
+  mapajs.addLayers(capa2);
+
+  // UNA SOLA CAPA PARA 2D Y 3D.
+  //
+  // IDEE.layer.MVT ya existe en la API. En 2D la implementa OpenLayers; en 3D la
+  // implementa ext/MVTLayer, que se registra justo antes. Por eso aqui no hay
+  // ningun `if (es3D)` para la capa: solo cambia como se le da el color y como
+  // se escucha el click, que es donde las dos implementaciones no coinciden.
+  const capaMVT_Municipios = new IDEE.layer.MVT({
+    url: "https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf",
+    name: 'Municipios',
+    layers: 'municipio',
+    visibility: true,
+    extract: false,
+    attribution: {
+      name: "Municipios:",
+      description: "<a style='color: #0000FF' href='https://www.ign.es/web/ign/portal' target='_blank'>Instituto Geográfico Nacional</a>"
+    }
+  });
+  mapajs.addLayers(capaMVT_Municipios);
+
+  CSV.then((data) => {
+    // El color de cada municipio, el mismo ramp en las dos implementaciones.
+    const colorPorCodigo = window.crearColorPorCodigo(data);
+
+    if (!es3D) {
+      // 2D: el estilo es un IDEE.style.Polygon con función.
+      capaMVT_Municipios.on(IDEE.evt.SELECT_FEATURES, (features, m) => {
+        const codMuni = features[0].getAttributes().nationalcode.slice(-5);
+        const filtrado = data.filter(obj => obj["Codigo Municipio"] === codMuni);
+        if (!filtrado.length) return;
+        mostrarPopupParo(filtrado[0], m.coord);
+      });
+
+      capaMVT_Municipios.setStyle(new IDEE.style.Polygon({
+        fill: {
+          color: (feature) => {
+            try {
+              return colorPorCodigo[feature.getAttributes().nationalcode.slice(-5)];
+            } catch {
+              // Sin fila en el CSV: en la practica son mancomunidades (53xxx),
+              // que no son municipios. Ver COLOR_SIN_DATO en ext/MVTLayer.
+              return "rgba(150, 150, 150, 1)";
+            }
+          },
+        },
+        stroke: { color: 'grey', width: 1 },
+      }));
+    } else {
+      // 3D: la capa se crea con la misma definición que en 2D porque ext/MVTLayer
+      // registra una fachada propia de `IDEE.layer.MVT` (ver la cabecera del
+      // plugin: el bundle de Cesium deja su implementación como un módulo
+      // vacío, así que no había nada que registrar).
+      //
+      // Ahora mismo NO se dibuja: el plugin se ha dejado solo con la lectura, a
+      // propósito, para iterar sin que el render enturbie lo que se mide. De la
+      // capa solo se usa el lector:
+      //
+      //   capaMVT_Municipios.getImpl().cargar(z, x, y).then(console.log)
+      //
+      // Se le da la función de color para que el ramp sea el mismo que en 2D.
+      const impl = capaMVT_Municipios.impl_;
+      if (impl && typeof impl.setColorFunction === 'function') {
+        impl.setColorFunction((codigo) => colorPorCodigo[codigo]);
+      }
+    }
+
+    SVGCarga.hidden = true;
+  });
+
+  return mapajs;
+}
+
+/**
+ * Muestra el popup con los datos de paro de un municipio. Lo usan tanto el
+ * click en 2D como el de 3D, para que la tabla sea la misma.
+ * @param {Object} fila Fila del CSV del municipio.
+ * @param {Array} [coord] [lon, lat] donde ponerlo.
+ */
+function mostrarPopupParo(fila, coord) {
+  if (!fila) return;
+
+  const escape = (s) => String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const filas = Object.entries(fila)
+    .map(([k, v], i) => {
+      if (k === "Total") k = "Población Total";
+      else if (k === "Sexo") k = "Población Sexo";
+      else if (k === "Periodo") k = "Población Periodo";
+
+      return `
+        <tr style="background:${i % 2 ? '#f7f7f7' : 'white'};">
+          <th style="text-align:left; padding:8px 12px; border-bottom:1px solid #ddd;">
+            ${escape(k)}
+          </th>
+          <td style="padding:8px 12px; border-bottom:1px solid #ddd;">
+            ${escape(v)}
+          </td>
+        </tr>`;
+    }).join("");
+
+  const featureTabOpts = {
+    icon: 'g-cartografia-pin',
+    title: 'Paro por Municipios',
+    content: `
+      <table style="border:1px solid #ccc; border-radius:6px; max-height:250px; width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:14px;">
+        <thead>
+          <tr>
+            <th style="background:#e9e9e9; padding:10px 12px; text-align:left; border-bottom:1px solid #ccc; position:sticky; top:0; z-index:10;">
+              Propiedad
+            </th>
+            <th style="background:#e9e9e9; padding:10px 12px; text-align:left; border-bottom:1px solid #ccc; position:sticky; top:0; z-index:10;">
+              Valor
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filas}
+        </tbody>
+      </table>`
+  };
+
+  const popup = new IDEE.Popup();
+  popup.addTab(featureTabOpts);
+
+  if (Array.isArray(coord)) {
+    mapajs.addPopup(popup, coord);
+  } else {
+    // Sin coordenadas: se abre centrado en la vista.
+    mapajs.addPopup(popup);
+  }
 }
 
 function updateConfigBaseLayer() {
@@ -102,187 +319,14 @@ function updateConfigBaseLayer() {
   return
 }
 
-mapa()
-
-const capaMVT_Municipios = new IDEE.layer.MVT({
-  url: "https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf",
-  name: 'Municipios',
-  layers: 'municipio',
-  visibility: true,
-  extract: false,
-  attribution: {
-        name: "Municipios:",
-        description: "<a style='color: #0000FF' href='https://www.ign.es/web/ign/portal' target='_blank'>Instituto Geográfico Nacional</a>"
-      }
-});
-
-mapajs.addLayers(capaMVT_Municipios);
-
-const capa1 = new IDEE.layer.GeoJSON({
-  source:{},
-  attribution: {
-        name: "Paro:",
-        description: "<a style='color: #0000FF' href='https://www.sepe.es/HomeSepe/es/' target='_blank'>SEPE</a>"
-      }
-});
-mapajs.addLayers(capa1);
-
-const capa2 = new IDEE.layer.GeoJSON({
-  source:{},
-  attribution: {
-        name: "Población:",
-        description: "<a style='color: #0000FF' href='https://www.ine.es/' target='_blank'>INE</a>"
-      }
-});
-mapajs.addLayers(capa2);
-
-CSV = myFunction_CSV()
+const CSV = myFunction_CSV();
 CSV.catch(function (err) {
   console.error('No se pudieron obtener los datos del paro:', err);
   IDEE.toast.error('No se pudieron obtener los datos del SEPE. Prueba desde la versión publicada en GitHub Pages.', null, 10000);
   SVGCarga.hidden = true;
 });
-CSV.then((data) => {
 
-  capaMVT_Municipios.on(IDEE.evt.SELECT_FEATURES, (features, m) => {
-    codMuni = features[0].getAttributes().nationalcode.slice(-5)
-    filtrado = data.filter(obj => obj["Codigo Municipio"] === codMuni)
-
-    const escape = (s) => String(s)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-    const filas = Object.entries(filtrado[0])
-      .map(([k, v], i) => {
-
-        if (k == "Total") {
-          k = "Población Total"
-        } else if (k == "Sexo") {
-          k = "Población Sexo"
-        } else if (k == "Periodo") {
-          k = "Población Periodo"
-        }
-
-        return `
-    <tr style="background:${i % 2 ? '#f7f7f7' : 'white'};">
-      <th style="text-align:left; padding:8px 12px; border-bottom:1px solid #ddd;">
-        ${escape(k)}
-      </th>
-      <td style="padding:8px 12px; border-bottom:1px solid #ddd;">
-        ${escape(v)}
-      </td>
-    </tr>
-  `})
-      .join("");
-
-
-    const featureTabOpts = {
-      icon: 'g-cartografia-pin',
-      title: 'Paro por Municipios',
-      content: `
-      <table style="border:1px solid #ccc; border-radius:6px; max-height:250px; width:100%; border-collapse:collapse; font-family:Arial,sans-serif; font-size:14px;">
-        <thead>
-          <tr>
-            <th
-              style="
-                background:#e9e9e9;
-                padding:10px 12px;
-                text-align:left;
-                border-bottom:1px solid #ccc;
-                position:sticky;
-                top:0;
-                z-index:10;
-              "
-            >
-              Propiedad
-            </th>
-            <th
-              style="
-                background:#e9e9e9;
-                padding:10px 12px;
-                text-align:left;
-                border-bottom:1px solid #ccc;
-                position:sticky;
-                top:0;
-                z-index:10;
-              "
-            >
-              Valor
-            </th>
-          </tr>
-        </thead>
-
-        <tbody>
-          ${filas}
-        </tbody>
-
-      </table>
-  `
-    };
-
-
-    // Creamos el popup
-    popup = new IDEE.Popup();
-    // Añadimos la pestaña al popup
-    popup.addTab(featureTabOpts);
-    // Añadimos el popup en las coordenadas devueltas por el evento click
-    mapajs.addPopup(popup, m.coord);
-  });
-
-  function createStyleforMVT() {
-
-    paroStyle = {}
-    for (const element of data) {
-      codMuni = element["Municipios"].split(" ")[0];
-      porcParo = element["porcParo"]
-
-      if (porcParo < 1.5) {
-        color = "rgba(202, 247, 170, 1)"
-      } else if (porcParo < 3) {
-        color = "rgba(126, 247, 45, 1)"
-      } else if (porcParo < 5) {
-        color = "rgba(215, 253, 42, 1)"
-      } else if (porcParo < 8) {
-        color = "rgba(253, 221, 42, 1)"
-      } else if (porcParo < 15) {
-        color = "rgba(253, 169, 42, 1)"
-      } else {
-        color = "rgba(253, 74, 42, 1)"
-      }
-
-      paroStyle[codMuni] = { "color": color }
-
-    };
-
-    return paroStyle
-
-  }
-  estilo = createStyleforMVT()
-
-  let estilo_Municipios = new IDEE.style.Polygon({
-    fill: {
-      color: (feature) => {
-        codMuni = feature.getAttributes().nationalcode.slice(-5)
-
-        try {
-          color = estilo[codMuni].color
-        } catch {
-          color = "white"
-        }
-        return color;
-      },
-    },
-    stroke: {
-      color: 'grey',
-      width: 1,
-    },
-  });
-  capaMVT_Municipios.setStyle(estilo_Municipios)
-  SVGCarga.hidden = true
-
-
-
-})
-
+mapa();
 
 // Funciones necesarias para el visualizador
 async function myFunction_CSV() {
@@ -311,20 +355,50 @@ async function myFunction_CSV() {
         Object.keys(data[0]).some(function (k) { return /c.digo\s*mes/i.test(k); });
     }
     function _parsearParo(res) {
-      var text = res.text;
-      // El CSV del SEPE viene en Latin-1; M.remote.get puede corromper
-      // los acentos, pero csvToJson sigue funcionando.
-      return csvToJson(text, id = false, headerRow = 1);
+      // El CSV del SEPE está en Latin-1. Decodificado como UTF-8 (que es lo que
+      // hace M.remote.get) los acentos salen rotos: "C�digo mes" en vez de
+      // "Código mes". No se arregla desde el texto roto, porque los bytes
+      // originales ya no están: hay que decodificar el buffer en Latin-1.
+      var texto = _latin1DesdeBuffer(res.buffer);
+      if (!texto) throw new Error('no se ha podido leer el CSV del SEPE');
+      return csvToJson(texto, id = false, headerRow = 1);
+    }
+    // Decodifica un ArrayBuffer como Latin-1 (ISO-8859-1).
+    function _latin1DesdeBuffer(buffer) {
+      if (!buffer || !buffer.byteLength) return null;
+      var bytes = new Uint8Array(buffer);
+      var texto = '';
+      // Por trozos: el CSV del SEPE son varios MB y no entra cómodo en un
+      // apply() con miles de argumentos.
+      for (var i = 0; i < bytes.length; i += 8192) {
+        texto += String.fromCharCode.apply(
+          null, bytes.subarray(i, Math.min(i + 8192, bytes.length)));
+      }
+      return texto;
     }
 
-    M.remote.get(urlParo).then(function (res) {
+    // Se baja con fetch() y no con M.remote.get porque este ultimo solo
+    // devuelve res.text, ya decodificado como UTF-8, e ignora el responseType
+    // (medido: las claves de la respuesta son text, xml, headers, error, code).
+    // Con los bytes si se puede decodificar en Latin-1, que es la codificacion
+    // real del CSV del SEPE.
+    function _bajarCsv(url) {
+      return fetch(url).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.arrayBuffer().then(function (buffer) {
+          return { buffer: buffer };
+        });
+      });
+    }
+
+    _bajarCsv(urlParo).then(function (res) {
       try {
         var data = _parsearParo(res);
         if (_esCsvParo(data)) { resolve(data); return; }
       } catch (_) { /* cae al fallback */ }
 
       // Fallback: año anterior
-      M.remote.get(urlParo_1).then(function (res2) {
+      _bajarCsv(urlParo_1).then(function (res2) {
         try {
           var data2 = _parsearParo(res2);
           if (_esCsvParo(data2)) { resolve(data2); return; }
@@ -334,7 +408,7 @@ async function myFunction_CSV() {
 
     }).catch(function () {
       // M.remote.get rechazó (red caída, etc.): intentar año anterior
-      M.remote.get(urlParo_1).then(function (res2) {
+      _bajarCsv(urlParo_1).then(function (res2) {
         try {
           var data2 = _parsearParo(res2);
           if (_esCsvParo(data2)) { resolve(data2); return; }
