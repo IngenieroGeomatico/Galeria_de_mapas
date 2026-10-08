@@ -349,8 +349,10 @@
               return false;
             }
             await addToCesium();
+            setTimeout(addToCesium, 800);
             setTimeout(addToCesium, 1500);
-            setTimeout(addToCesium, 3000);
+            setTimeout(addToCesium, 2500);
+            setTimeout(addToCesium, 4000);
           }
         } catch (cesErr) {
           // Silencioso: solo afecta a 3D
