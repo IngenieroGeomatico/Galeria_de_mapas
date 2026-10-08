@@ -1,14 +1,10 @@
 'use strict';
 
 (function () {
-  function getPanel(id) {
-    return document.getElementById(id);
-  }
-
   function showTab(targetId) {
-    const mapaID = getPanel('mapaID');
-    const containerID = getPanel('containerID');
-    const infoID = getPanel('infoID');
+    const mapaID = document.getElementById('mapaID');
+    const containerID = document.getElementById('containerID');
+    const infoID = document.getElementById('infoID');
     const links = document.querySelectorAll('.nav-links a');
 
     // Desactivar todos los links
@@ -18,58 +14,34 @@
       const link = document.getElementById('Arhivos') || document.getElementById('Archivos');
       if (link) link.classList.add('activeButton');
 
-      if (mapaID) {
-        mapaID.style.visibility = 'hidden';
-        mapaID.style.display = 'none';
-        mapaID.hidden = true;
-      }
-      if (infoID) {
-        infoID.style.visibility = 'hidden';
-        infoID.style.display = 'none';
-        infoID.hidden = true;
-      }
-      if (containerID) {
-        containerID.style.visibility = 'visible';
-        containerID.style.display = 'block';
-        containerID.hidden = false;
-      }
+      if (mapaID) mapaID.classList.add('is-hidden');
+      if (infoID) infoID.classList.add('is-hidden');
+      if (containerID) containerID.classList.remove('is-hidden');
     } else if (targetId === 'Info') {
       const link = document.getElementById('Info');
       if (link) link.classList.add('activeButton');
 
-      if (mapaID) {
-        mapaID.style.visibility = 'hidden';
-        mapaID.style.display = 'none';
-        mapaID.hidden = true;
-      }
-      if (containerID) {
-        containerID.style.visibility = 'hidden';
-        containerID.style.display = 'none';
-        containerID.hidden = true;
-      }
-      if (infoID) {
-        infoID.style.visibility = 'visible';
-        infoID.style.display = 'block';
-        infoID.hidden = false;
-      }
+      if (mapaID) mapaID.classList.add('is-hidden');
+      if (containerID) containerID.classList.add('is-hidden');
+      if (infoID) infoID.classList.remove('is-hidden');
     } else if (targetId === 'Mapa') {
       const link = document.getElementById('Mapa');
       if (link) link.classList.add('activeButton');
 
-      if (containerID) {
-        containerID.style.visibility = 'hidden';
-        containerID.style.display = 'none';
-        containerID.hidden = true;
-      }
-      if (infoID) {
-        infoID.style.visibility = 'hidden';
-        infoID.style.display = 'none';
-        infoID.hidden = true;
-      }
+      if (containerID) containerID.classList.add('is-hidden');
+      if (infoID) infoID.classList.add('is-hidden');
       if (mapaID) {
-        mapaID.style.visibility = 'visible';
-        mapaID.style.display = 'block';
-        mapaID.hidden = false;
+        mapaID.classList.remove('is-hidden');
+        mapaID.removeAttribute('hidden');
+        if (window.mapajs) {
+          if (typeof window.mapajs.updateSize === 'function') {
+            window.mapajs.updateSize();
+          }
+          const impl = window.mapajs.getMapImpl && window.mapajs.getMapImpl();
+          if (impl && typeof impl.updateSize === 'function') {
+            impl.updateSize();
+          }
+        }
       }
     }
   }

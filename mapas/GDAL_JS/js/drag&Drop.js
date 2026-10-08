@@ -166,8 +166,7 @@
 
     const SVGCarga = document.getElementById('cargaSVG');
     if (SVGCarga) {
-      SVGCarga.hidden = true;
-      SVGCarga.style.visibility = 'hidden';
+      SVGCarga.classList.remove('active');
     }
     // Asegurar que info.js pueda leer drivers tras init
     try {

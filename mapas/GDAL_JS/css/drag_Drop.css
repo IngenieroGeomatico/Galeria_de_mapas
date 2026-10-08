@@ -433,6 +433,39 @@
   background: #e65c00;
 }
 
+#cargaSVG {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 99999999;
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+#cargaSVG.active {
+  display: flex !important;
+}
+
+#cargaSVG > img {
+  width: 64px;
+  height: 64px;
+  max-width: 64px;
+  max-height: 64px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+  animation: spinCarga 1.5s linear infinite;
+}
+
+@keyframes spinCarga {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 .modal {
   display: none; /* Oculto por defecto */
   position: fixed; /* Fijo en la pantalla */
