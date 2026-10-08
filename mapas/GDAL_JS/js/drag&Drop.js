@@ -330,7 +330,9 @@
               try {
                 if (Cesium.GeoTIFFImageryProvider) {
                   if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
-                    provider = await Cesium.GeoTIFFImageryProvider.fromBlob(blobFile);
+                    provider = await Cesium.GeoTIFFImageryProvider.fromBlob(blobFile, {
+                      // Intentar parámetros comunes para mejorar compatibilidad
+                    });
                   } else if (typeof Cesium.GeoTIFFImageryProvider.fromUrlOrBlob === 'function') {
                     provider = await Cesium.GeoTIFFImageryProvider.fromUrlOrBlob(blobFile);
                   }
@@ -340,7 +342,8 @@
               }
               if (provider) {
                 try {
-                  impl.imageryLayers.addImageryProvider(provider);
+                  // Añadir por encima de bases para que sea visible
+                  impl.imageryLayers.addImageryProvider(provider, 0);
                   return true;
                 } catch (addErr) {
                   return false;
