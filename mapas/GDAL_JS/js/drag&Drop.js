@@ -342,17 +342,12 @@
             if (provider) {
               try {
                 impl.imageryLayers.addImageryProvider(provider);
+                console.log('Añadido GeoTIFFImageryProvider a Cesium');
               } catch (addErr) {
                 console.warn('Error añadiendo imageryProvider a Cesium:', addErr);
               }
             } else {
-              // Último recurso: crear un objeto URL temporal y usarlo si es posible
-              try {
-                const urlTmp = URL.createObjectURL(blobFile);
-                // No añadir automáticamente; para COG el GeoTIFFImageryProvider es lo adecuado
-                // Liberamos URL tras corto tiempo
-                setTimeout(() => URL.revokeObjectURL(urlTmp), 30000);
-              } catch (urlErr) {}
+              console.warn('No se pudo crear GeoTIFFImageryProvider desde blob; el visor 3D puede no mostrar el ráster.');
             }
           }
         } catch (cesErr) {
