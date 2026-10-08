@@ -185,8 +185,73 @@
     return (impl && impl.scene && impl.scene.camera && typeof Cesium !== 'undefined') ? 'cesium' : 'ol';
   }
 
+  // Centrado / Zoom automático a la capa activa (2D OpenLayers / 3D Cesium)
+  function zoomToLayer(item, mapRef) {
+    const m = mapRef || window.mapajs;
+    if (!m || !item) return;
+    const implType = checkMapImpl(m);
+
+    if (implType === 'ol') {
+      const impl = m.getMapImpl ? m.getMapImpl() : null;
+      if (!impl || !impl.getView) return;
+
+      if (item.type === 'vector' && item.geojson) {
+        try {
+          const format = new ol.format.GeoJSON();
+          const features = format.readFeatures(item.geojson, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857',
+          });
+          if (features.length > 0) {
+            const vectorSource = new ol.source.Vector({ features });
+            const extent = vectorSource.getExtent();
+            impl.getView().fit(extent, { padding: [60, 60, 60, 60], duration: 900 });
+          }
+        } catch (eFitVec) {
+          console.warn('Error en fit vectorial 2D:', eFitVec);
+        }
+      } else if (item.type === 'raster' && item.rectWgs84) {
+        try {
+          const { west, south, east, north } = item.rectWgs84;
+          let p1 = [west, south];
+          let p2 = [east, north];
+          if (typeof IDEE !== 'undefined' && IDEE.utils && IDEE.utils.reproject) {
+            p1 = IDEE.utils.reproject(p1, 'EPSG:4326', 'EPSG:3857');
+            p2 = IDEE.utils.reproject(p2, 'EPSG:4326', 'EPSG:3857');
+          } else if (typeof ol !== 'undefined' && ol.proj && ol.proj.transform) {
+            p1 = ol.proj.transform(p1, 'EPSG:4326', 'EPSG:3857');
+            p2 = ol.proj.transform(p2, 'EPSG:4326', 'EPSG:3857');
+          }
+          const extent3857 = [
+            Math.min(p1[0], p2[0]),
+            Math.min(p1[1], p2[1]),
+            Math.max(p1[0], p2[0]),
+            Math.max(p1[1], p2[1]),
+          ];
+          impl.getView().fit(extent3857, { padding: [60, 60, 60, 60], duration: 900 });
+        } catch (eFitRas) {
+          console.warn('Error en fit ráster 2D:', eFitRas);
+        }
+      }
+    } else if (implType === 'cesium') {
+      const impl = m.getMapImpl ? m.getMapImpl() : null;
+      if (!impl || !impl.camera || typeof Cesium === 'undefined') return;
+
+      if (item.rectWgs84) {
+        const { west, south, east, north } = item.rectWgs84;
+        const rect = Cesium.Rectangle.fromDegrees(west, south, east, north);
+        impl.camera.flyTo({
+          destination: rect,
+          duration: 1.5,
+        });
+      }
+    }
+  }
+
+  window.zoomToLayerGDAL = zoomToLayer;
+
   // Aplica todas las capas registradas sobre el mapa actual (2D u OL / 3D Cesium)
-  async function aplicarCapasSubidas(mapRef) {
+  async function aplicarCapasSubidas(mapRef, autoZoom = false) {
     const m = mapRef || window.mapajs;
     if (!m) return;
     const implType = checkMapImpl(m);
@@ -265,16 +330,6 @@
               if (provider) {
                 try {
                   impl.imageryLayers.addImageryProvider(provider);
-                  if (item.rectWgs84 && impl.camera && typeof impl.camera.flyTo === 'function') {
-                    impl.camera.flyTo({
-                      destination: Cesium.Rectangle.fromDegrees(
-                        item.rectWgs84.west,
-                        item.rectWgs84.south,
-                        item.rectWgs84.east,
-                        item.rectWgs84.north
-                      ),
-                    });
-                  }
                 } catch (addErr) {
                   console.warn('Error añadiendo provider ráster a Cesium:', addErr);
                 }
@@ -284,6 +339,10 @@
         } catch (errRas) {
           console.warn('Error aplicando capa ráster:', errRas);
         }
+      }
+
+      if (autoZoom) {
+        zoomToLayer(item, m);
       }
     }
   }
@@ -352,6 +411,11 @@
               if (typeof window.showTabGDAL === 'function') {
                 window.showTabGDAL('Mapa');
               }
+
+              // Auto-zoom a la capa subida
+              setTimeout(() => {
+                zoomToLayer(layerData, window.mapajs);
+              }, 300);
             } catch (e) {
               console.error('Error parseando GeoJSON exportado:', e);
             }
@@ -503,6 +567,11 @@
         if (typeof window.showTabGDAL === 'function') {
           window.showTabGDAL('Mapa');
         }
+
+        // Auto-zoom a la capa subida
+        setTimeout(() => {
+          zoomToLayer(rasterLayerData, window.mapajs);
+        }, 300);
       } catch (error) {
         console.error('Error al procesar ráster:', error);
       }
