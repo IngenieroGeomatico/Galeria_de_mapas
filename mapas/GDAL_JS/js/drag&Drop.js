@@ -361,11 +361,8 @@
         } catch (cesErr) {
           // Silencioso: solo afecta a 3D
         }
-        // No forzamos cambio de pestaña para evitar conflictos con cambioImpl; usuario decide
-        // try {
-        //   const mapaLink = document.getElementById('Mapa');
-        //   if (mapaLink) mapaLink.click();
-        // } catch (e) {}
+        // No forzamos cambio de pestaña; usuario decide
+        // (el cambio manual entre pestañas sigue funcionando)
       } catch (error) {
         console.error('Error al reproyectar ráster:', error);
       }
@@ -981,11 +978,8 @@
             setTimeout(() => fileUpload.classList.remove('done'), 2500);
           }
           // Mostrar acordeón de archivos y asegurar que pestaña Archivos esté activa
-          // No forzamos el cambio a pestaña Archivos para evitar problemas con nav; dejamos al usuario
-          // try {
-          //   const archivosLink = document.getElementById('Arhivos');
-          //   if (archivosLink) archivosLink.click();
-          // } catch (e) {}
+          // No forzamos el cambio automático de pestaña; dejamos que el usuario navegue
+          // (el cambio manual entre pestañas sigue funcionando)
           // Limpiar input para permitir subir mismo archivo
           try { input.value = ''; } catch (e) {}
         } catch (procErr) {
