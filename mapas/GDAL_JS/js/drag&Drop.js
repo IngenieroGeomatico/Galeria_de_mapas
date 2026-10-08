@@ -228,11 +228,15 @@
 
               const estilo1 = createRandomStyle();
               capaGeoJSON.setStyle(estilo1);
-              if (window.mapajs && typeof window.mapajs.addLayers === 'function') {
-                window.mapajs.addLayers(capaGeoJSON);
-              } else if (typeof mapajs !== 'undefined' && mapajs.addLayers) {
-                mapajs.addLayers(capaGeoJSON);
+              const mapRef = window.mapajs || (typeof mapajs !== 'undefined' ? mapajs : null);
+              if (mapRef && typeof mapRef.addLayers === 'function') {
+                mapRef.addLayers(capaGeoJSON);
               }
+              // Ir a mapa tras añadir capa
+              try {
+                const mapaLink = document.getElementById('Mapa');
+                if (mapaLink) mapaLink.click();
+              } catch (e) {}
             } catch (e) {
               console.error('Error parseando GeoJSON exportado:', e);
             }
@@ -288,11 +292,14 @@
           olLayer
         );
 
-        if (window.mapajs && typeof window.mapajs.addLayers === 'function') {
-          window.mapajs.addLayers(genericRaster);
-        } else if (typeof mapajs !== 'undefined' && mapajs.addLayers) {
-          mapajs.addLayers(genericRaster);
+        const mapRef = window.mapajs || (typeof mapajs !== 'undefined' ? mapajs : null);
+        if (mapRef && typeof mapRef.addLayers === 'function') {
+          mapRef.addLayers(genericRaster);
         }
+        try {
+          const mapaLink = document.getElementById('Mapa');
+          if (mapaLink) mapaLink.click();
+        } catch (e) {}
       } catch (error) {
         console.error('Error al reproyectar ráster:', error);
       }

@@ -7,6 +7,7 @@ function initMap() {
     container: 'mapaID',
     zoom: 2,
   });
+  window.mapajs = mapajs;
 
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'Cambiar implementación',
