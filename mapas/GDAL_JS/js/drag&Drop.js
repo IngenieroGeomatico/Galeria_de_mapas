@@ -324,8 +324,8 @@
         try {
           const impl = mapRef && mapRef.getMapImpl ? mapRef.getMapImpl() : null;
           if (impl && impl.scene && typeof Cesium !== 'undefined') {
-            // Esperar a que Cesium esté listo para añadir provider
-            setTimeout(async () => {
+            // Añadir inmediatamente y volver a intentar tras cambio de implementación si aplica
+            async function addToCesium() {
               let provider = null;
               try {
                 if (Cesium.GeoTIFFImageryProvider) {
@@ -346,7 +346,9 @@
                   console.warn('Error añadiendo imageryProvider a Cesium:', addErr);
                 }
               }
-            }, 500);
+            }
+            await addToCesium();
+            setTimeout(addToCesium, 1200);
           }
         } catch (cesErr) {
           // Silencioso: solo afecta a 3D
