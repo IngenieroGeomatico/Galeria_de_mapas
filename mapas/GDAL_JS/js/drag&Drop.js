@@ -273,12 +273,19 @@
       try {
         let filePathExportWarp;
         try {
+          // Intento 1: sin forzar s_srs
           filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarp, outputNameGTiff);
         } catch (e1) {
           try {
+            // Intento 2: forzar EPSG:3857 como destino
             filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarpT3857, outputNameGTiff);
           } catch (e2) {
-            throw e2;
+            try {
+              // Intento 3: solo convertir a GTiff sin reprojectar
+              filePathExportWarp = await window.gdal.gdalwarp(ds0, ['-of', 'GTiff'], outputNameGTiff);
+            } catch (e3) {
+              throw e3;
+            }
           }
         }
         let blobFile;
