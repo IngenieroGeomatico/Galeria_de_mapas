@@ -306,20 +306,84 @@
             const impl = m.getMapImpl ? m.getMapImpl() : null;
             if (impl && impl.imageryLayers && typeof Cesium !== 'undefined') {
               let provider = null;
-              if (item.rectWgs84 && (item.pngUrl || item.blobFile)) {
-                const rect = Cesium.Rectangle.fromDegrees(
-                  item.rectWgs84.west,
-                  item.rectWgs84.south,
-                  item.rectWgs84.east,
-                  item.rectWgs84.north
-                );
-                if (item.pngUrl) {
-                  provider = new Cesium.SingleTileImageryProvider({
-                    url: item.pngUrl,
-                    rectangle: rect,
-                  });
+              const rectCesium = item.rectWgs84 ? Cesium.Rectangle.fromDegrees(
+                item.rectWgs84.west,
+                item.rectWgs84.south,
+                item.rectWgs84.east,
+                item.rectWgs84.north
+              ) : null;
+
+              if (item.blobFile && window.gdal) {
+                try {
+                  let dsRaster;
+                  try {
+                    dsRaster = await window.gdal.open(new Uint8Array(await item.blobFile.arrayBuffer()));
+                  } catch (eOpen1) {
+                    dsRaster = await window.gdal.open(item.blobFile);
+                  }
+
+                  if (dsRaster && dsRaster.datasets && dsRaster.datasets[0]) {
+                    const dsRaster0 = dsRaster.datasets[0];
+                    const nameCesium = `${item.name}_cesium_png`;
+
+                    try {
+                      const filePathPng = await window.gdal.gdal_translate(
+                        dsRaster0,
+                        ['-of', 'PNG', '-ot', 'Byte', '-scale', '-b', '1', '-b', '2', '-b', '3'],
+                        nameCesium
+                      );
+                      let pngBytes;
+                      if (window.gdalWorker) {
+                        pngBytes = await window.gdal.getFileBytes(filePathPng.local);
+                      } else {
+                        pngBytes = window.gdal.Module.FS.readFile(filePathPng.local);
+                      }
+                      const pngBlob = new Blob([pngBytes], { type: 'image/png' });
+                      const pngUrlCesium = URL.createObjectURL(pngBlob);
+                      if (rectCesium) {
+                        provider = new Cesium.SingleTileImageryProvider({
+                          url: pngUrlCesium,
+                          rectangle: rectCesium,
+                        });
+                      }
+                    } catch (eTrans) {
+                      try {
+                        const filePathPng2 = await window.gdal.gdal_translate(
+                          dsRaster0,
+                          ['-of', 'PNG', '-ot', 'Byte', '-scale'],
+                          nameCesium + '_alt'
+                        );
+                        let pngBytes;
+                        if (window.gdalWorker) {
+                          pngBytes = await window.gdal.getFileBytes(filePathPng2.local);
+                        } else {
+                          pngBytes = window.gdal.Module.FS.readFile(filePathPng2.local);
+                        }
+                        const pngBlob = new Blob([pngBytes], { type: 'image/png' });
+                        const pngUrlCesium = URL.createObjectURL(pngBlob);
+                        if (rectCesium) {
+                          provider = new Cesium.SingleTileImageryProvider({
+                            url: pngUrlCesium,
+                            rectangle: rectCesium,
+                          });
+                        }
+                      } catch (eTrans2) {
+                        console.warn('Error generando PNG para Cesium desde Blob:', eTrans2);
+                      }
+                    }
+                  }
+                } catch (eRaster) {
+                  console.warn('Error procesando Blob GeoTIFF para Cesium:', eRaster);
                 }
               }
+
+              if (!provider && rectCesium && item.pngUrl) {
+                provider = new Cesium.SingleTileImageryProvider({
+                  url: item.pngUrl,
+                  rectangle: rectCesium,
+                });
+              }
+
               if (!provider && Cesium.GeoTIFFImageryProvider && item.blobFile) {
                 try {
                   if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
