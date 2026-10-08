@@ -139,6 +139,25 @@
     margin: 10px 0 14px;
     overflow: hidden;
   }
+
+  /* Evitar que el CSS de tablas de la app afecte a tablas internas de Mapea */
+  .m-map table,
+  .m-map thead,
+  .m-map tbody,
+  .m-map tfoot,
+  .m-map tr,
+  .m-map th,
+  .m-map td {
+    border: initial;
+    border-collapse: initial;
+    border-spacing: initial;
+    background: initial;
+    color: initial;
+    padding: initial;
+    margin: initial;
+    box-shadow: initial;
+    border-radius: initial;
+  }
   
   th, td {
     text-align: left;
@@ -179,4 +198,13 @@
   tr.selected td {
     font-weight: 600;
     color: #7a2e00;
+  }
+
+  /* No marcar filas dentro de Mapea */
+  .m-map tr.selected {
+    background-color: initial !important;
+  }
+  .m-map tr.selected td {
+    font-weight: initial !important;
+    color: initial !important;
   }

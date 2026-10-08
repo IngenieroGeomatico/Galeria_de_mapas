@@ -23,7 +23,8 @@ body {
     background-color: orangered !important;
 }
 .m-layerswitcher-content{
-    max-width:450px
+    max-width: 320px;
+    min-width: 240px;
 }
 
 button.m-panel-btn, button.m-layerswitcher-groupDisplay, button.m-layerswitcher-icons-target, 

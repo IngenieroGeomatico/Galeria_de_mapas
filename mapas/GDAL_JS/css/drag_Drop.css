@@ -240,8 +240,7 @@
 
 
 /* 7 */
-.custom-btn,
-button:not(.m-panel-btn):not(.buttonHerramienta_cambImpl):not(.m-layerswitcher-groupDisplay):not(.m-layerswitcher-icons-target):not(.m-layerswitcher-icons-info):not(.m-layerswitcher-icons-delete):not(.m-layerswitcher-button):not(.m-tools):not([class*="m-"]) {
+.custom-btn {
   margin: 20px;
 }
 .custom-btn {
