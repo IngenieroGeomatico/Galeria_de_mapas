@@ -296,6 +296,32 @@
         if (mapRef && typeof mapRef.addLayers === 'function') {
           mapRef.addLayers(genericRaster);
         }
+        // Intentar añadir también como capa Cesium si el visor está en modo 3D
+        try {
+          const impl = mapRef && mapRef.getMapImpl ? mapRef.getMapImpl() : null;
+          if (impl && impl.scene && typeof Cesium !== 'undefined' && Cesium.GeoTIFFImageryProvider) {
+            let provider = null;
+            try {
+              if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
+                provider = await Cesium.GeoTIFFImageryProvider.fromBlob(blobFile);
+              } else if (typeof Cesium.GeoTIFFImageryProvider.fromUrlOrBlob === 'function') {
+                provider = await Cesium.GeoTIFFImageryProvider.fromUrlOrBlob(blobFile);
+              }
+            } catch (provErr) {
+              provider = null;
+              console.warn('Error creando GeoTIFFImageryProvider:', provErr);
+            }
+            if (provider) {
+              try {
+                impl.imageryLayers.addImageryProvider(provider);
+              } catch (addErr) {
+                console.warn('Error añadiendo imageryProvider a Cesium:', addErr);
+              }
+            }
+          }
+        } catch (cesErr) {
+          // Silencioso: solo afecta a 3D
+        }
         try {
           const mapaLink = document.getElementById('Mapa');
           if (mapaLink) mapaLink.click();
