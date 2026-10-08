@@ -337,18 +337,20 @@
                 }
               } catch (provErr) {
                 provider = null;
-                console.warn('Error creando GeoTIFFImageryProvider:', provErr);
               }
               if (provider) {
                 try {
                   impl.imageryLayers.addImageryProvider(provider);
+                  return true;
                 } catch (addErr) {
-                  console.warn('Error añadiendo imageryProvider a Cesium:', addErr);
+                  return false;
                 }
               }
+              return false;
             }
             await addToCesium();
-            setTimeout(addToCesium, 1200);
+            setTimeout(addToCesium, 1500);
+            setTimeout(addToCesium, 3000);
           }
         } catch (cesErr) {
           // Silencioso: solo afecta a 3D
