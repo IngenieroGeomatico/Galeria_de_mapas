@@ -1,210 +1,184 @@
-#infoID{
-    display: grid;
-    justify-items: center;
-    top: 56px;
-    position: absolute;
-    padding-bottom: 64px;
-    width: 100%;
-    gap: 12px;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+#infoID {
+  display: grid;
+  justify-items: center;
+  top: 56px;
+  position: absolute;
+  padding-bottom: 64px;
+  width: 100%;
+  gap: 12px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-.accordion {
-    background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
-    color: #2f2f2f;
-    cursor: pointer;
-    padding: 14px 18px;
-    width: min(1100px, 94vw);
-    border: 1px solid #e6e6e6;
-    border-radius: 12px;
-    text-align: left;
-    outline: none;
-    font-size: 0.98rem;
-    font-weight: 600;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  }
-  
-  .active, .accordion:hover {
-    background: #ffffff;
-    border-color: #d8d8d8;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  }
-  
-  .accordion:after {
-    content: '\002B';
-    color: #777;
-    font-weight: bold;
-    float: right;
-    margin-left: 5px;
-  }
-  
-  .active:after {
-    content: "\2212";
-  }
-  
-  .panel {
-    padding: 0 12px;
-    background-color: transparent;
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.2s ease-out;
-    display: flex;
-    justify-content: center;
-    width: min(1100px, 94vw);
-  }
+#infoID .accordion {
+  background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
+  color: #2f2f2f;
+  cursor: pointer;
+  padding: 14px 18px;
+  width: min(1100px, 94vw);
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  text-align: left;
+  outline: none;
+  font-size: 0.98rem;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
 
-  .info-card {
-    width: 100%;
-    background: #fff;
-    border: 1px solid #e9e9e9;
-    border-radius: 14px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-    margin: 12px 0 16px;
-    padding: 18px 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
+#infoID .accordion.active,
+#infoID .accordion:hover {
+  background: #ffffff;
+  border-color: #d8d8d8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
 
-  .info-lead {
-    margin: 0;
-    font-size: 1rem;
-    line-height: 1.6;
-    color: #2f2f2f;
-  }
+#infoID .accordion:after {
+  content: '\002B';
+  color: #777;
+  font-weight: bold;
+  float: right;
+  margin-left: 5px;
+}
 
-  .info-section h4 {
-    margin: 0 0 8px 0;
-    font-size: 0.98rem;
-    color: #d54e00;
-    font-weight: 700;
-  }
+#infoID .accordion.active:after {
+  content: "\2212";
+}
 
-  .info-section p {
-    margin: 0;
-    line-height: 1.7;
-    color: #3a3a3a;
-    font-size: 0.97rem;
-  }
+#infoID .panel {
+  padding: 0 12px;
+  background-color: transparent;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.2s ease-out;
+  display: flex;
+  justify-content: center;
+  width: min(1100px, 94vw);
+}
 
-  .info-list {
-    margin: 0;
-    padding-left: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    color: #3a3a3a;
-    line-height: 1.7;
-    font-size: 0.97rem;
-  }
+#infoID .info-card {
+  width: 100%;
+  background: #fff;
+  border: 1px solid #e9e9e9;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  margin: 12px 0 16px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
-  .info-links {
-    margin: 0;
-    padding-left: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    line-height: 1.7;
-    font-size: 0.97rem;
-  }
+#infoID .info-lead {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #2f2f2f;
+}
 
-  .info-links a {
-    color: #1a73e8;
-    text-decoration: none;
-  }
+#infoID .info-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.98rem;
+  color: #d54e00;
+  font-weight: 700;
+}
 
-  td span[style*="#0a9e4d"],
-  td span[style*="#0a9e4d"] {
-    font-weight: 700;
-  }
+#infoID .info-section p {
+  margin: 0;
+  line-height: 1.7;
+  color: #3a3a3a;
+  font-size: 0.97rem;
+}
 
-  td span[style*="#d93025"] {
-    font-weight: 700;
-  }
+#infoID .info-list {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #3a3a3a;
+  line-height: 1.7;
+  font-size: 0.97rem;
+}
 
-  .info-links a:hover {
-    text-decoration: underline;
-  }
+#infoID .info-links {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 1.7;
+  font-size: 0.97rem;
+}
 
+#infoID .info-links a {
+  color: #1a73e8;
+  text-decoration: none;
+}
 
-  table {
-    border-collapse: separate;
-    border-spacing: 0;
-    width: 100%;
-    background: #fff;
-    border: 1px solid #e9e9e9;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-    margin: 10px 0 14px;
-    overflow: hidden;
-  }
+#infoID .info-links a:hover {
+  text-decoration: underline;
+}
 
-  /* Evitar que el CSS de tablas de la app afecte a tablas internas de Mapea */
-  .m-map table,
-  .m-map thead,
-  .m-map tbody,
-  .m-map tfoot,
-  .m-map tr,
-  .m-map th,
-  .m-map td {
-    border: initial;
-    border-collapse: initial;
-    border-spacing: initial;
-    background: initial;
-    color: initial;
-    padding: initial;
-    margin: initial;
-    box-shadow: initial;
-    border-radius: initial;
-  }
-  
-  th, td {
-    text-align: left;
-    padding: 10px 12px;
-    font-size: 0.95rem;
-    border-bottom: 1px solid #f0f0f0;
-  }
+#infoID table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #e9e9e9;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  margin: 10px 0 14px;
+  overflow: hidden;
+}
 
-  td:nth-child(3),
-  td:nth-child(4),
-  th:nth-child(3),
-  th:nth-child(4) {
-    text-align: center;
-  }
+#infoID th,
+#infoID td {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  border-bottom: 1px solid #f0f0f0;
+}
 
-  tr:last-child td,
-  tr:last-child th {
-    border-bottom: none;
-  }
+#infoID td:nth-child(3),
+#infoID td:nth-child(4),
+#infoID th:nth-child(3),
+#infoID th:nth-child(4) {
+  text-align: center;
+}
 
-  tr:nth-child(even){background-color: #fcfcfc}
+#infoID tr:last-child td,
+#infoID tr:last-child th {
+  border-bottom: none;
+}
 
-  th {
-    background: linear-gradient(180deg, #ff7a1a 0%, #fb7d00 100%);
-    color: #fff;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-  }
+#infoID tr:nth-child(even) {
+  background-color: #fcfcfc;
+}
 
-  tr:hover{
-    background-color: #fff3ea
-  }
+#infoID th {
+  background: linear-gradient(180deg, #ff7a1a 0%, #fb7d00 100%);
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
 
-  tr.selected {
-    background-color: #ffe8d5 !important;
-  }
+#infoID tr:hover {
+  background-color: #fff3ea;
+}
 
-  tr.selected td {
-    font-weight: 600;
-    color: #7a2e00;
-  }
+#infoID tr.selected {
+  background-color: #ffe8d5 !important;
+}
 
-  /* No marcar filas dentro de Mapea */
-  .m-map tr.selected {
-    background-color: initial !important;
-  }
-  .m-map tr.selected td {
-    font-weight: initial !important;
-    color: initial !important;
-  }
+#infoID tr.selected td {
+  font-weight: 600;
+  color: #7a2e00;
+}
+
+#infoID td span[style*="#0a9e4d"] {
+  font-weight: 700;
+}
+
+#infoID td span[style*="#d93025"] {
+  font-weight: 700;
+}

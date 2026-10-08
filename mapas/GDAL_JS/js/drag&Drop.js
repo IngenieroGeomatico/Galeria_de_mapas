@@ -177,6 +177,120 @@
     } catch (e) {}
   }
 
+  // Registro global de capas activas para sobrevivir a 2D <-> 3D
+  window.GDAL_ACTIVE_LAYERS = window.GDAL_ACTIVE_LAYERS || [];
+
+  function checkMapImpl(mapRef) {
+    const m = mapRef || window.mapajs;
+    const impl = m && m.getMapImpl ? m.getMapImpl() : null;
+    return (impl && impl.scene && impl.scene.camera && typeof Cesium !== 'undefined') ? 'cesium' : 'ol';
+  }
+
+  // Aplica todas las capas registradas sobre el mapa actual (2D u OL / 3D Cesium)
+  async function aplicarCapasSubidas(mapRef) {
+    const m = mapRef || window.mapajs;
+    if (!m) return;
+    const implType = checkMapImpl(m);
+
+    for (const item of (window.GDAL_ACTIVE_LAYERS || [])) {
+      if (item.type === 'vector') {
+        try {
+          const layers = (typeof m.getLayers === 'function') ? (await m.getLayers() || []) : [];
+          const exists = layers.some((l) => l && (l.name === item.name || l.legend === item.legend));
+          if (!exists) {
+            const capaGeoJSON = new M.layer.GeoJSON({
+              name: item.name,
+              legend: item.legend,
+              source: item.geojson,
+              extract: true,
+            });
+            if (item.style) {
+              capaGeoJSON.setStyle(item.style);
+            }
+            if (typeof m.addLayers === 'function') {
+              await m.addLayers(capaGeoJSON);
+            }
+          }
+        } catch (errVec) {
+          console.warn('Error aplicando capa vectorial:', errVec);
+        }
+      } else if (item.type === 'raster') {
+        try {
+          if (implType === 'ol') {
+            // OpenLayers 2D
+            if (item.blobFile && typeof ol !== 'undefined' && ol.layer && ol.layer.WebGLTile) {
+              const layers = (typeof m.getLayers === 'function') ? (await m.getLayers() || []) : [];
+              const exists = layers.some((l) => l && (l.name === item.name || l.legend === item.legend));
+              if (!exists) {
+                const olLayer = new ol.layer.WebGLTile({
+                  source: new ol.source.GeoTIFF({
+                    sources: [{ blob: item.blobFile }],
+                  }),
+                });
+                const genericRaster = new M.layer.GenericRaster(
+                  { name: item.name, legend: item.legend || item.name },
+                  {},
+                  olLayer
+                );
+                if (typeof m.addLayers === 'function') {
+                  await m.addLayers(genericRaster);
+                }
+              }
+            }
+          } else if (implType === 'cesium') {
+            // Cesium 3D
+            const impl = m.getMapImpl ? m.getMapImpl() : null;
+            if (impl && impl.imageryLayers && typeof Cesium !== 'undefined') {
+              let provider = null;
+              if (item.rectWgs84 && (item.pngUrl || item.blobFile)) {
+                const rect = Cesium.Rectangle.fromDegrees(
+                  item.rectWgs84.west,
+                  item.rectWgs84.south,
+                  item.rectWgs84.east,
+                  item.rectWgs84.north
+                );
+                if (item.pngUrl) {
+                  provider = new Cesium.SingleTileImageryProvider({
+                    url: item.pngUrl,
+                    rectangle: rect,
+                  });
+                }
+              }
+              if (!provider && Cesium.GeoTIFFImageryProvider && item.blobFile) {
+                try {
+                  if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
+                    provider = await Cesium.GeoTIFFImageryProvider.fromBlob(item.blobFile);
+                  }
+                } catch (eGtiff) {}
+              }
+              if (provider) {
+                try {
+                  impl.imageryLayers.addImageryProvider(provider);
+                  if (item.rectWgs84 && impl.camera && typeof impl.camera.flyTo === 'function') {
+                    impl.camera.flyTo({
+                      destination: Cesium.Rectangle.fromDegrees(
+                        item.rectWgs84.west,
+                        item.rectWgs84.south,
+                        item.rectWgs84.east,
+                        item.rectWgs84.north
+                      ),
+                    });
+                  }
+                } catch (addErr) {
+                  console.warn('Error añadiendo provider ráster a Cesium:', addErr);
+                }
+              }
+            }
+          }
+        } catch (errRas) {
+          console.warn('Error aplicando capa ráster:', errRas);
+        }
+      }
+    }
+  }
+
+  window.aplicarCapasSubidas = aplicarCapasSubidas;
+
   // Procesado de datasets para mostrar capas en mapa y construir UI
   async function processDataset(dataset, imgName, epsgInput) {
     const ds0 = dataset.datasets && dataset.datasets[0];
@@ -187,10 +301,6 @@
       const groupLayerName = imgName.split('.')[0];
       const layersInfo = ds0.info && ds0.info.layers ? ds0.info.layers : [];
       let layersName = layersInfo.map((item) => item.name).filter((name) => name !== undefined);
-      // Fallback: si no hay capas con nombre, intentar obtener info general o usar nombre base
-      if (layersName.length === 0 && ds0.info && ds0.info.dataset) {
-        // intentar
-      }
       if (layersName.length === 0) {
         layersName = [groupLayerName];
       }
@@ -198,11 +308,11 @@
       const promisesVec = layersName.map((name) => {
         const safeName = name.replace(/"/g, '""');
         const optionsExport = [
-        '-f',
-        'GeoJSON',
-        '-t_srs',
-        'EPSG:4326',
-      ];
+          '-f',
+          'GeoJSON',
+          '-t_srs',
+          'EPSG:4326',
+        ];
         const outputNameGjson = `gjson_${groupLayerName}_${safeName.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 
         return window.gdal.ogr2ogr(ds0, optionsExport, outputNameGjson)
@@ -219,24 +329,30 @@
                 gjsonFile = JSON.parse(decoder.decode(fsData));
               }
 
-              const capaGeoJSON = new M.layer.GeoJSON({
+              const estilo1 = createRandomStyle();
+              const layerData = {
+                type: 'vector',
                 name: name,
                 legend: `${groupLayerName}_${name}`,
-                source: gjsonFile,
-                extract: true,
-              });
+                geojson: gjsonFile,
+                style: estilo1,
+              };
 
-              const estilo1 = createRandomStyle();
-              capaGeoJSON.setStyle(estilo1);
-              const mapRef = window.mapajs || (typeof mapajs !== 'undefined' ? mapajs : null);
-              if (mapRef && typeof mapRef.addLayers === 'function') {
-                mapRef.addLayers(capaGeoJSON);
+              // Registrar en capas activas
+              const exists = window.GDAL_ACTIVE_LAYERS.findIndex((l) => l.name === layerData.name && l.legend === layerData.legend);
+              if (exists >= 0) {
+                window.GDAL_ACTIVE_LAYERS[exists] = layerData;
+              } else {
+                window.GDAL_ACTIVE_LAYERS.push(layerData);
               }
-              // Ir a mapa tras añadir capa
-              try {
-                const mapaLink = document.getElementById('Mapa');
-                if (mapaLink) mapaLink.click();
-              } catch (e) {}
+
+              // Aplicar al mapa actual
+              await aplicarCapasSubidas(window.mapajs);
+
+              // Cambiar a pestaña Mapa
+              if (typeof window.showTabGDAL === 'function') {
+                window.showTabGDAL('Mapa');
+              }
             } catch (e) {
               console.error('Error parseando GeoJSON exportado:', e);
             }
@@ -256,14 +372,12 @@
         '-of',
         'GTiff',
       ];
-      // Solo asignar s_srs si es válido; para muchos COG el CRS puede leerse internamente
       if (epsgInput && String(epsgInput).trim() !== '') {
         const srs = String(epsgInput).trim();
         if (!srs.match(/^(unknown|undefined)$/i)) {
           optionsWarp.push('-s_srs', srs);
         }
       }
-      // No forzamos -t_srs para evitar reproyecciones problemáticas con COG; si falla, probamos con EPSG:3857
       const optionsWarpT3857 = ['-of', 'GTiff', '-t_srs', 'EPSG:3857'];
       if (optionsWarp.includes('-s_srs')) {
         optionsWarpT3857.push('-s_srs', optionsWarp[optionsWarp.indexOf('-s_srs') + 1]);
@@ -297,74 +411,101 @@
           blobFile = new Blob([fsData], { type: 'application/octet-stream' });
         }
 
-        const olLayer = new ol.layer.WebGLTile({
-          source: new ol.source.GeoTIFF({
-            sources: [
-              {
-                blob: blobFile,
-              },
-            ],
-          }),
-        });
-
-        const genericRaster = new M.layer.GenericRaster(
-          {
-            name: dataset.name,
-            legend: dataset.name,
-          },
-          {},
-          olLayer
-        );
-
-        const mapRef = window.mapajs || (typeof mapajs !== 'undefined' ? mapajs : null);
-        if (mapRef && typeof mapRef.addLayers === 'function') {
-          mapRef.addLayers(genericRaster);
-        }
-        // Intentar añadir también como capa Cesium si el visor está en modo 3D
-        try {
-          const impl = mapRef && mapRef.getMapImpl ? mapRef.getMapImpl() : null;
-          if (impl && impl.scene && typeof Cesium !== 'undefined') {
-            // Añadir inmediatamente y volver a intentar tras cambio de implementación si aplica
-            async function addToCesium() {
-              let provider = null;
+        // Obtener extensión en grados WGS84 para visualización en Cesium
+        let rectWgs84 = null;
+        if (ds0.info && ds0.info.wgs84Extent && ds0.info.wgs84Extent.coordinates) {
+          const rings = ds0.info.wgs84Extent.coordinates[0];
+          const lons = rings.map((c) => c[0]);
+          const lats = rings.map((c) => c[1]);
+          rectWgs84 = {
+            west: Math.min(...lons),
+            south: Math.min(...lats),
+            east: Math.max(...lons),
+            north: Math.max(...lats),
+          };
+        } else if (ds0.info && ds0.info.cornerCoordinates) {
+          const cc = ds0.info.cornerCoordinates;
+          if (cc.upperLeft && cc.lowerRight) {
+            const p1 = cc.upperLeft;
+            const p2 = cc.lowerRight;
+            if (Math.abs(p1[0]) <= 180 && Math.abs(p1[1]) <= 90) {
+              rectWgs84 = {
+                west: Math.min(p1[0], p2[0]),
+                south: Math.min(p1[1], p2[1]),
+                east: Math.max(p1[0], p2[0]),
+                north: Math.max(p1[1], p2[1]),
+              };
+            } else if (typeof IDEE !== 'undefined' && IDEE.utils && IDEE.utils.reproject) {
+              const srcCode = epsgInput || (ds0.info.stac && ds0.info.stac['proj:epsg']) || 'EPSG:3857';
               try {
-                if (Cesium.GeoTIFFImageryProvider) {
-                  if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
-                    provider = await Cesium.GeoTIFFImageryProvider.fromBlob(blobFile, {
-                      // Intentar parámetros comunes para mejorar compatibilidad
-                    });
-                  } else if (typeof Cesium.GeoTIFFImageryProvider.fromUrlOrBlob === 'function') {
-                    provider = await Cesium.GeoTIFFImageryProvider.fromUrlOrBlob(blobFile);
-                  }
-                }
-              } catch (provErr) {
-                provider = null;
-              }
-              if (provider) {
-                try {
-                  // Añadir GeoTIFF; no limpiamos todas las capas para no romper otras cosas
-                  impl.imageryLayers.addImageryProvider(provider);
-                  return true;
-                } catch (addErr) {
-                  return false;
-                }
-              }
-              return false;
+                const ul = await IDEE.utils.reproject(p1, String(srcCode), 'EPSG:4326');
+                const lr = await IDEE.utils.reproject(p2, String(srcCode), 'EPSG:4326');
+                rectWgs84 = {
+                  west: Math.min(ul[0], lr[0]),
+                  south: Math.min(ul[1], lr[1]),
+                  east: Math.max(ul[0], lr[0]),
+                  north: Math.max(ul[1], lr[1]),
+                };
+              } catch (eRep) {}
             }
-            await addToCesium();
-            setTimeout(addToCesium, 800);
-            setTimeout(addToCesium, 1500);
-            setTimeout(addToCesium, 2500);
-            setTimeout(addToCesium, 4000);
-            setTimeout(addToCesium, 6000);
           }
-        } catch (cesErr) {
-          // Silencioso: solo afecta a 3D
         }
-        // No forzamos cambio de pestaña; usuario decide
-        // (el cambio manual entre pestañas sigue funcionando)
+
+        // Generar imagen PNG para Cesium 3D
+        let pngUrl = null;
+        const outputNamePng = `PNG_${dataset.name}.png`;
+        try {
+          const filePathPng = await window.gdal.gdal_translate(ds0, ['-of', 'PNG', '-outsize', '2048', '0'], outputNamePng);
+          let pngBytes;
+          if (window.gdalWorker) {
+            pngBytes = await window.gdal.getFileBytes(filePathPng.local);
+          } else {
+            pngBytes = window.gdal.Module.FS.readFile(filePathPng.local);
+          }
+          const pngBlob = new Blob([pngBytes], { type: 'image/png' });
+          pngUrl = URL.createObjectURL(pngBlob);
+        } catch (ePng) {
+          try {
+            const filePathPngWarp = await window.gdal.gdalwarp(ds0, ['-of', 'PNG'], outputNamePng);
+            let pngBytes;
+            if (window.gdalWorker) {
+              pngBytes = await window.gdal.getFileBytes(filePathPngWarp.local);
+            } else {
+              pngBytes = window.gdal.Module.FS.readFile(filePathPngWarp.local);
+            }
+            const pngBlob = new Blob([pngBytes], { type: 'image/png' });
+            pngUrl = URL.createObjectURL(pngBlob);
+          } catch (eWarp) {
+            console.warn('No se pudo generar PNG para Cesium:', eWarp);
+          }
+        }
+
+        const rasterLayerData = {
+          type: 'raster',
+          name: dataset.name,
+          legend: dataset.name,
+          blobFile: blobFile,
+          pngUrl: pngUrl,
+          rectWgs84: rectWgs84,
+        };
+
+        // Guardar en capas activas
+        const exists = window.GDAL_ACTIVE_LAYERS.findIndex((l) => l.name === rasterLayerData.name);
+        if (exists >= 0) {
+          window.GDAL_ACTIVE_LAYERS[exists] = rasterLayerData;
+        } else {
+          window.GDAL_ACTIVE_LAYERS.push(rasterLayerData);
+        }
+
+        // Aplicar al mapa actual
+        await aplicarCapasSubidas(window.mapajs);
+
+        // Cambiar a pestaña Mapa
+        if (typeof window.showTabGDAL === 'function') {
+          window.showTabGDAL('Mapa');
+        }
       } catch (error) {
-        console.error('Error al reproyectar ráster:', error);
+        console.error('Error al procesar ráster:', error);
       }
     }
   }

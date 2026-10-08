@@ -1,68 +1,98 @@
 'use strict';
 
 (function () {
-  const links = document.querySelectorAll('.nav-links a');
-  const mapaID = document.getElementById('mapaID');
-  const containerID = document.getElementById('containerID');
-  const infoID = document.getElementById('infoID');
-  const navCheck = document.getElementById('nav-check');
+  function getPanel(id) {
+    return document.getElementById(id);
+  }
 
-  if (!links.length || !mapaID || !containerID || !infoID) return;
+  function showTab(targetId) {
+    const mapaID = getPanel('mapaID');
+    const containerID = getPanel('containerID');
+    const infoID = getPanel('infoID');
+    const links = document.querySelectorAll('.nav-links a');
 
-  links.forEach((link) => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
+    // Desactivar todos los links
+    links.forEach((l) => l.classList.remove('activeButton'));
 
-      // Close mobile menu if open
-      if (navCheck) {
-        navCheck.checked = false;
+    if (targetId === 'Arhivos' || targetId === 'Archivos') {
+      const link = document.getElementById('Arhivos') || document.getElementById('Archivos');
+      if (link) link.classList.add('activeButton');
+
+      if (mapaID) {
+        mapaID.style.visibility = 'hidden';
+        mapaID.style.display = 'none';
+        mapaID.hidden = true;
       }
-
-      // Remove active state from all links
-      links.forEach((l) => l.classList.remove('activeButton'));
-
-      // Collapse any open accordions in Info panel
-      const accordions = document.querySelectorAll('.accordion.active');
-      accordions.forEach((accordion) => {
-        accordion.click();
-      });
-
-      // Activate clicked link
-      link.classList.add('activeButton');
-
-      const targetId = e.target.id;
-
-      if (targetId === 'Arhivos' || targetId === 'Archivos') {
-        // Show files panel
-        mapaID.style.visibility = 'hidden';
-        mapaID.hidden = true;
-
+      if (infoID) {
         infoID.style.visibility = 'hidden';
+        infoID.style.display = 'none';
         infoID.hidden = true;
-
+      }
+      if (containerID) {
         containerID.style.visibility = 'visible';
+        containerID.style.display = 'block';
         containerID.hidden = false;
-      } else if (targetId === 'Info') {
-        // Show info panel
+      }
+    } else if (targetId === 'Info') {
+      const link = document.getElementById('Info');
+      if (link) link.classList.add('activeButton');
+
+      if (mapaID) {
         mapaID.style.visibility = 'hidden';
+        mapaID.style.display = 'none';
         mapaID.hidden = true;
-
+      }
+      if (containerID) {
         containerID.style.visibility = 'hidden';
+        containerID.style.display = 'none';
         containerID.hidden = true;
-
+      }
+      if (infoID) {
         infoID.style.visibility = 'visible';
+        infoID.style.display = 'block';
         infoID.hidden = false;
-      } else if (targetId === 'Mapa') {
-        // Show map
+      }
+    } else if (targetId === 'Mapa') {
+      const link = document.getElementById('Mapa');
+      if (link) link.classList.add('activeButton');
+
+      if (containerID) {
         containerID.style.visibility = 'hidden';
+        containerID.style.display = 'none';
         containerID.hidden = true;
-
+      }
+      if (infoID) {
         infoID.style.visibility = 'hidden';
+        infoID.style.display = 'none';
         infoID.hidden = true;
-
+      }
+      if (mapaID) {
         mapaID.style.visibility = 'visible';
+        mapaID.style.display = 'block';
         mapaID.hidden = false;
       }
+    }
+  }
+
+  window.showTabGDAL = showTab;
+
+  // Delegación de eventos en el documento para que funcione siempre aunque el DOM cambie
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest && e.target.closest('.nav-links a');
+    if (!link) return;
+    e.preventDefault();
+
+    const navCheck = document.getElementById('nav-check');
+    if (navCheck) {
+      navCheck.checked = false;
+    }
+
+    // Colapsar acordeones abiertos en Info
+    const accordions = document.querySelectorAll('.accordion.active');
+    accordions.forEach((accordion) => {
+      accordion.click();
     });
+
+    showTab(link.id);
   });
 })();

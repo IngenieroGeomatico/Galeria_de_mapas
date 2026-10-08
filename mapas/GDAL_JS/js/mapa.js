@@ -19,6 +19,13 @@ function initMap() {
   mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
   mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
+  // Restaurar capas cargadas dinámicamente si las hay (tras swap 2D/3D)
+  if (typeof window.aplicarCapasSubidas === 'function') {
+    setTimeout(() => {
+      window.aplicarCapasSubidas(mapajs);
+    }, 300);
+  }
+
   return mapajs;
 }
 
