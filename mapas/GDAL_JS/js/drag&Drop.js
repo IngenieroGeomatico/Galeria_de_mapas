@@ -342,9 +342,8 @@
               }
               if (provider) {
                 try {
-                  // Añadir por encima de bases para que sea visible
-                  impl.imageryLayers.removeAll();
-                  impl.imageryLayers.addImageryProvider(provider, 0);
+                  // Añadir GeoTIFF; no limpiamos todas las capas para no romper otras cosas
+                  impl.imageryLayers.addImageryProvider(provider);
                   return true;
                 } catch (addErr) {
                   return false;
