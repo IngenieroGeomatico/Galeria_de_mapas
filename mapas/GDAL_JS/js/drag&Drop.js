@@ -343,6 +343,7 @@
               if (provider) {
                 try {
                   // Añadir por encima de bases para que sea visible
+                  impl.imageryLayers.removeAll();
                   impl.imageryLayers.addImageryProvider(provider, 0);
                   return true;
                 } catch (addErr) {
