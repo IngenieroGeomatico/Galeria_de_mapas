@@ -1,28 +1,28 @@
+'use strict';
 
-function mapa() {
+function initMap() {
+  updateConfigBaseLayer();
 
-  updateConfigBaseLayer()
-
-  mapajs = M.map({
-    container: "mapaID",
+  const mapajs = M.map({
+    container: 'mapaID',
     zoom: 2,
   });
 
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
-    buttonTitle: 'cambiar impl :)',
-    mapsFunction: mapa,
+    buttonTitle: 'Cambiar implementación',
+    mapsFunction: initMap,
     sameMap: true,
     shareView: true,
-    shareLayers: true
+    shareLayers: true,
   }));
   mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
   mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
-  return mapajs
+  return mapajs;
 }
 
 function updateConfigBaseLayer() {
-  Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
+  const Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
     url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
     legend: 'IGNBaseTodo_2',
     visible: true,
@@ -33,41 +33,37 @@ function updateConfigBaseLayer() {
   }, {
     crossOrigin: 'anonymous',
     displayInLayerSwitcher: false,
-  })
+  });
 
   IDEE.addQuickLayers({
-    Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2
-  })
+    Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2,
+  });
 
-  tms_2 = {
-    "base": "QUICK*Base_IGNBaseTodo_TMS_2"
-  }
+  const tms_2 = {
+    base: 'QUICK*Base_IGNBaseTodo_TMS_2',
+  };
 
-  IDEE.config("tms", tms_2)
+  IDEE.config('tms', tms_2);
   IDEE.config.backgroundlayers = [
     {
-      "id": "mapa",
-      "title": "Callejero",
-      "imgPreview": "img/IGNBase.png",
-      "layers": [
-        "QUICK*Base_IGNBaseTodo_TMS_2"
-      ]
+      id: 'mapa',
+      title: 'Callejero',
+      imgPreview: 'img/IGNBase.png',
+      layers: [
+        'QUICK*Base_IGNBaseTodo_TMS_2',
+      ],
     },
     {
-      "id": "imagen",
-      "title": "Imagen",
-      "imgPreview": "img/imagen.png",
-      "layers": [
-        "QUICK*BASE_PNOA_MA_TMS"
-      ]
-    }
-  ]
+      id: 'imagen',
+      title: 'Imagen',
+      imgPreview: 'img/imagen.png',
+      layers: [
+        'QUICK*BASE_PNOA_MA_TMS',
+      ],
+    },
+  ];
 
   IDEE.proxy(false);
-
-  return
 }
 
-mapa()
-
-
+initMap();

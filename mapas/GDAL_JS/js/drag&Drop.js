@@ -1,918 +1,914 @@
-var fileUpload = document.querySelector(".upload");
-var filesObj = {}
-var n = 1
-var gdal;  // Variable global
-var gdalWorker = true;  // Variable global
+'use strict';
 
+(function () {
+  const fileUpload = document.querySelector('.upload');
+  const filesObj = {};
+  let fileIndex = 1;
 
-async function readUrl(input) {
+  // Variables globales compartidas
+  window.gdalWorker = window.gdalWorker !== undefined ? window.gdalWorker : true;
+  window.gdal = window.gdal || null;
 
-  const file = input.files[0];
-  var EPSG_input
+  // Utilidades para aleatoriedad de estilos
+  function rndInt0_255() {
+    return (Math.floor(Math.random() * 255) + 1).toString();
+  }
 
-  if (file && gdal) {
+  function createRandomStyle() {
+    const r1 = rndInt0_255();
+    const r2 = rndInt0_255();
+    const r3 = rndInt0_255();
+    const colorFill = `rgba(${r1},${r2},${r3},0.8)`;
+    const colorStroke = `rgba(${r1},${r2},${r3},0.8)`;
 
-    let imgName = file.name
+    return new M.style.Generic({
+      point: {
+        radius: 7,
+        fill: {
+          color: colorFill,
+          opacity: 0.8,
+        },
+        stroke: {
+          color: colorStroke,
+          width: 2,
+          opacity: 1,
+        },
+      },
+      polygon: {
+        fill: {
+          color: colorFill,
+          opacity: 0.8,
+        },
+        stroke: {
+          color: colorStroke,
+          width: 2,
+          opacity: 1,
+        },
+      },
+      line: {
+        fill: {
+          color: colorFill,
+          opacity: 0.8,
+        },
+        stroke: {
+          color: colorStroke,
+          width: 2,
+          opacity: 1,
+        },
+      },
+    });
+  }
 
-    if (!gdalWorker) {
-      const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
+  // Modal para solicitar EPSG cuando no está disponible
+  function showModalAndGetEPSG() {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('epsgModal');
+      if (!modal) {
+        resolve('EPSG:4326');
+        return;
+      }
 
-      reader.onload = async () => {
+      const closeBtn = modal.querySelector('.close');
+      const acceptButton = document.getElementById('acceptButton');
+      const inputEPSG = document.getElementById('inputTextEPSG');
 
-        const arrayBuffer = reader.result;
+      modal.style.display = 'block';
 
+      function closeModal() {
+        modal.style.display = 'none';
+        if (closeBtn) closeBtn.removeEventListener('click', closeModal);
+        window.removeEventListener('click', onWindowClick);
+        if (acceptButton) acceptButton.removeEventListener('click', onAccept);
+      }
 
-        try {
-          if (input.value.includes('zip')) {
-            try {
-              gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
-              dataset = await gdal.open('/input/' + imgName, [], ['vsizip']);
-              if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
-                EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
-                // Aquí puedes usar EPSG_input si no es undefined
-              } else {
-                // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-                if (dataset.datasets[0].type == "raster") {
-                  EPSG_input = await showModalAndGetEPSG();
-                }
-
-              }
-            } catch (error) {
-              console.error("Error al abrir el archivo comprimido:", error);
-              const zip = new JSZip();
-              const zipContent = await zip.loadAsync(arrayBuffer);
-              const fileNames = Object.keys(zipContent.files);
-
-              for (const fileName of fileNames) {
-                const fileData = await zipContent.files[fileName].async("arraybuffer");
-                gdal.Module.FS.writeFile('/input/' + fileName, new Int8Array(fileData));
-              }
-              for (const fileName of fileNames) {
-                try {
-                  dataset = await gdal.open('/input/' + fileName)
-                  if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
-                    EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
-                    // Aquí puedes usar EPSG_input si no es undefined
-                  } else {
-                    // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-                    if (dataset.datasets[0].type == "raster") {
-                      EPSG_input = await showModalAndGetEPSG();
-                    }
-                  }
-                  continue
-
-                } catch (error) {
-                  console.error("Error al abrir el archivo comprimido:", error);
-                }
-              }
-            }
-          }
-          else {
-            gdal.Module.FS.writeFile('/input/' + imgName, new Int8Array(arrayBuffer));
-            dataset = await gdal.open('/input/' + imgName)
-
-            if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
-              EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
-              // Aquí puedes usar EPSG_input si no es undefined
-            } else {
-              // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-              if (dataset.datasets[0].type == "raster") {
-                EPSG_input = await showModalAndGetEPSG();
-              }
-            }
-          }
-        } catch (error) {
-          console.error(error);
-          setTimeout(() => fileUpload.classList.add("fail"), 1000);
-          setTimeout(() => fileUpload.classList.remove("fail"), 3000);
-          setTimeout(() => fileUpload.classList.remove("drop"), 3000);
-          return
+      function onWindowClick(event) {
+        if (event.target === modal) {
+          closeModal();
         }
       }
 
-      reader.onerror = () => {
-        console.error("Error al leer el archivo");
-      };
+      function onAccept() {
+        const epsgValue = inputEPSG ? inputEPSG.value.trim() : 'EPSG:4326';
+        closeModal();
+        resolve(epsgValue || 'EPSG:4326');
+      }
 
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      window.addEventListener('click', onWindowClick);
+      if (acceptButton) acceptButton.addEventListener('click', onAccept);
+    });
+  }
 
+  // Lee bytes de salida según worker/no-worker
+  async function readOutputBytes(output) {
+    if (!output || !output.local) return null;
+
+    if (window.gdalWorker) {
+      try {
+        return await window.gdal.getFileBytes(output.local);
+      } catch (error) {
+        console.error('Error al obtener bytes con getFileBytes:', error);
+        return null;
+      }
     } else {
       try {
-        if (input.value.includes('zip')) {
-          try {
-            dataset = await gdal.open(file, [], ['vsizip']);
-            datasetInfo = await gdal.getInfo(dataset.datasets[0]);
-            if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
-              EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
-              // Aquí puedes usar EPSG_input si no es undefined
-            } else {
-              // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-              if (dataset.datasets[0].type == "raster") {
-                EPSG_input = await showModalAndGetEPSG();
-              }
-            }
-          } catch (error) {
-            console.error(error);
-            const reader = new FileReader();
-            reader.readAsArrayBuffer(file);
-
-            // Usar promesas para manejar el flujo asincrónico
-            await new Promise((resolve, reject) => {
-              reader.onload = async () => {
-                try {
-                  const zip = await JSZip.loadAsync(reader.result);
-
-                  // Extraer todos los archivos
-                  let zipList = [];
-                  let promises = [];
-
-                  zip.forEach((relativePath, zipEntry) => {
-                    const promise = zipEntry.async("blob").then(function (content) {
-                      // Aquí, "content" será el archivo descomprimido
-                      blob = new Blob([content], { type: "application/octet-stream" });
-                      fileZip = new File([blob], relativePath);
-                      zipList.push(fileZip);
-                    });
-                    promises.push(promise);
-                  });
-
-                  await Promise.all(promises);
-                  dataset = await gdal.open(zipList);
-                  datasetInfo = await gdal.getInfo(dataset.datasets[0]);
-                  if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
-                    EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
-                    // Aquí puedes usar EPSG_input si no es undefined
-                  } else {
-                    // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-                    if (dataset.datasets[0].type == "raster") {
-                      EPSG_input = await showModalAndGetEPSG();
-                    }
-                  }
-
-                  resolve();  // Resolviendo la promesa cuando termine
-                } catch (error) {
-                  console.error("Error al descomprimir el archivo ZIP:", error);
-                  reject(error);  // Si hay un error, rechazamos la promesa
-                }
-              };
-            });
-          }
-        } else {
-
-          dataset = await gdal.open(file);
-          datasetInfo = await gdal.getInfo(dataset.datasets[0]);
-          if (dataset.datasets[0] && dataset.datasets[0].info && dataset.datasets[0].info.stac && dataset.datasets[0].info.stac["proj:epsg"]) {
-            EPSG_input = dataset.datasets[0]?.info?.stac?.["proj:epsg"];
-            // Aquí puedes usar EPSG_input si no es undefined
-          } else {
-            // Mostrar el modal y esperar a que el usuario haga clic en "Aceptar"
-            if (dataset.datasets[0].type == "raster") {
-              EPSG_input = await showModalAndGetEPSG();
-            }
-          }
-
-        }
-
+        return window.gdal.Module.FS.readFile(output.local);
       } catch (error) {
-        console.error(error);
-        setTimeout(() => fileUpload.classList.add("fail"), 1000);
-        setTimeout(() => fileUpload.classList.remove("fail"), 3000);
-        setTimeout(() => fileUpload.classList.remove("drop"), 3000);
-        return
+        console.error('Error al leer FS:', error);
+        return null;
       }
+    }
+  }
 
+  // Inicialización de GDAL.js
+  async function initGdalJS_() {
+    let useWorker = window.gdalWorker;
+
+    if (location.protocol === 'file:') {
+      useWorker = false;
+    } else {
+      try {
+        const workerData = await fetch('../../js/gdal/gdal3.js');
+        await workerData.blob();
+      } catch (e) {
+        console.warn('No se pudo crear blob URL del worker, ejecutando sin worker:', e);
+        useWorker = false;
+      }
     }
 
+    window.gdalWorker = useWorker;
 
-
-    // layerGroup = new M.layer.LayerGroup({
-    //   name: groupLayerName,           // Nombre del grupo de capas
-    //   legend: groupLayerName,  // Leyenda asociada al grupo
-    //   layers: layers    // Capas que pertenecen al grupo
-    // });
-    // mapajs.addLayers(layerGroup)
+    const path = 'https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package';
+    const pathsConfig = {
+      wasm: `${path}/gdal3WebAssembly.wasm`,
+      data: `${path}/gdal3WebAssembly.data`,
+      js: '../../js/gdal/gdal3.js',
+    };
 
     try {
-
-    if (dataset.datasets[0].type == "vector") {
-      dataset.name = imgName
-      groupLayerName = imgName.split(".")[0]
-      layersName = dataset.datasets[0].info.layers.map(item => item.name).filter(name => name !== undefined);
-
-
-      layersName.forEach(name => {
-        const options = [
-          '-f', 'GeoJSON',
-          '-t_srs', 'EPSG:4326',
-          '-sql', 'SELECT * from "' + name + '"'
-        ];
-        outputName = "gjson_" + groupLayerName + "_" + name
-        const filePathExportGJSON = gdal.ogr2ogr(dataset.datasets[0], options, outputName);
-
-        filePathExportGJSON.then(async (OUTPUT) => {
-          // dataset.gjson = OUTPUT.local
-
-          decoder = new TextDecoder('utf-8');
-
-
-
-          if (gdalWorker) {
-
-            newDataset = await gdal.getFileBytes(OUTPUT.local)
-            gjson_file = JSON.parse(decoder.decode(newDataset))
-
-          } else {
-            gjson_file = JSON.parse(decoder.decode(gdal.Module.FS.readFile(OUTPUT.local)))
-          }
-
-          capa = new M.layer.GeoJSON({
-            name: name,
-            legend: groupLayerName + "_" + name,
-            source: gjson_file,
-            extract: true
-          })
-          function rndInt0_255() { return (Math.floor(Math.random() * 255) + 1).toString(); };
-          estilo1 = new M.style.Generic({
-            point: {
-              // Definición atributos para puntos
-              radius: 7,
-
-              fill: {
-                color: 'rgba(' + rndInt0_255() + ',' + rndInt0_255() + ',' + rndInt0_255() + ',0.8)',
-                opacity: 0.8,//Transparencia del punto
-              },
-              //Borde exterior
-              stroke: {
-                color: 'rgba(' + rndInt0_255() + ',' + rndInt0_255() + ',' + rndInt0_255() + ',0.8)',
-                width: 2, // Grosor en pixeles
-                opacity: 1
-              },
-            },
-            polygon: {
-              // Definición atributos para polígonos
-              // Polígono rosa semitransparente con borde rojo de grosor dos
-              fill: {
-                color: 'rgba(' + rndInt0_255() + ',' + rndInt0_255() + ',' + rndInt0_255() + ',0.8)',
-                opacity: 0.8,
-              },
-              stroke: {
-                color: 'rgba(' + rndInt0_255() + ',' + rndInt0_255() + ',' + rndInt0_255() + ',0.8)',
-                width: 2,
-                opacity: 1
-              }
-            },
-            line: {
-              // Definición atributos para líneas
-              fill: {
-                color: 'rgba(' + rndInt0_255() + ',' + rndInt0_255() + ',' + rndInt0_255() + ',0.8)',
-                opacity: 0.8,
-              },
-              stroke: {
-                color: 'rgba(' + rndInt0_255() + ',' + rndInt0_255() + ',' + rndInt0_255() + ',0.8)',
-                width: 2,
-                opacity: 1
-              }
-
-            }
-          });
-          capa.setStyle(estilo1)
-          mapajs.addLayers(capa)
-          // layerGroup.addLayers(capa)
-
-        })
-
+      const Gdal = await initGdalJs({
+        paths: pathsConfig,
+        useWorker: window.gdalWorker,
       });
 
+      window.gdal = Gdal;
+      // Notificar a otros scripts que GDAL está listo (compat con navegadores antiguos)
+      try {
+        document.dispatchEvent(new CustomEvent('gdal-ready', { detail: { gdal: Gdal } }));
+      } catch (e) {
+        const ev = document.createEvent('CustomEvent');
+        ev.initCustomEvent('gdal-ready', false, false, { gdal: Gdal });
+        document.dispatchEvent(ev);
+      }
+    } catch (err) {
+      console.error('Error al inicializar GDAL:', err);
     }
-    else if (dataset.datasets[0].type == "raster") {
-      dataset.name = imgName.split(".")[0]
-      dataset.datasets[0].info.layers = []
-      dataset.datasets[0].info.layers.push({ name: imgName.split(".")[0] })
 
-      // if (!String(EPSG_input).includes("EPSG")) {
-      //   EPSG_input = "EPSG:"+EPSG_input
-      // }
-      const options = [
-        '-of', 'GTiff',
-        '-s_srs', EPSG_input,
-        '-t_srs', 'EPSG:3857'
+    const SVGCarga = document.getElementById('cargaSVG');
+    if (SVGCarga) {
+      SVGCarga.hidden = true;
+      SVGCarga.style.visibility = 'hidden';
+    }
+    // Asegurar que info.js pueda leer drivers tras init
+    try {
+      if (window.gdal) {
+        document.dispatchEvent(new CustomEvent('gdal-ready', { detail: { gdal: window.gdal } }));
+      }
+    } catch (e) {}
+  }
+
+  // Procesado de datasets para mostrar capas en mapa y construir UI
+  async function processDataset(dataset, imgName, epsgInput) {
+    const ds0 = dataset.datasets && dataset.datasets[0];
+    if (!ds0) return;
+
+    if (ds0.type === 'vector') {
+      dataset.name = imgName;
+      const groupLayerName = imgName.split('.')[0];
+      const layersInfo = ds0.info && ds0.info.layers ? ds0.info.layers : [];
+      const layersName = layersInfo.map((item) => item.name).filter((name) => name !== undefined);
+
+      const promisesVec = layersName.map((name) => {
+        const optionsExport = [
+          '-f',
+          'GeoJSON',
+          '-t_srs',
+          'EPSG:4326',
+          '-sql',
+          `SELECT * from "${name}"`,
+        ];
+        const outputNameGjson = `gjson_${groupLayerName}_${name}`;
+
+        return window.gdal.ogr2ogr(ds0, optionsExport, outputNameGjson)
+          .then(async (OUTPUT) => {
+            const decoder = new TextDecoder('utf-8');
+            let gjsonFile;
+
+            if (window.gdalWorker) {
+              const newDatasetBytes = await window.gdal.getFileBytes(OUTPUT.local);
+              gjsonFile = JSON.parse(decoder.decode(newDatasetBytes));
+            } else {
+              const fsData = window.gdal.Module.FS.readFile(OUTPUT.local);
+              gjsonFile = JSON.parse(decoder.decode(fsData));
+            }
+
+            const capaGeoJSON = new M.layer.GeoJSON({
+              name: name,
+              legend: `${groupLayerName}_${name}`,
+              source: gjsonFile,
+              extract: true,
+            });
+
+            const estilo1 = createRandomStyle();
+            capaGeoJSON.setStyle(estilo1);
+            if (window.mapajs && typeof window.mapajs.addLayers === 'function') {
+              window.mapajs.addLayers(capaGeoJSON);
+            } else if (typeof mapajs !== 'undefined' && mapajs.addLayers) {
+              mapajs.addLayers(capaGeoJSON);
+            }
+          })
+          .catch((error) => {
+            console.error('Error al exportar a GeoJSON:', error);
+          });
+      });
+      await Promise.allSettled(promisesVec);
+    } else if (ds0.type === 'raster') {
+      dataset.name = imgName.split('.')[0];
+      if (!ds0.info) ds0.info = {};
+      ds0.info.layers = [];
+      ds0.info.layers.push({ name: imgName.split('.')[0] });
+
+      const optionsWarp = [
+        '-of',
+        'GTiff',
+        '-s_srs',
+        epsgInput,
+        '-t_srs',
+        'EPSG:3857',
       ];
-      outputName = "GTiff_" + dataset.name
-      const filePathExportGJSON = gdal.gdalwarp(dataset.datasets[0], options, outputName);
-      filePathExportGJSON.then(async (OUTPUT) => {
+      const outputNameGTiff = `GTiff_${dataset.name}`;
 
-        if (gdalWorker) {
-
-          newDataset = await gdal.getFileBytes(OUTPUT.local)
-          blob_file_ = new Blob([newDataset], { type: 'application/octet-stream' });
-
+      try {
+        const filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarp, outputNameGTiff);
+        let blobFile;
+        if (window.gdalWorker) {
+          const newDatasetBytes = await window.gdal.getFileBytes(filePathExportWarp.local);
+          blobFile = new Blob([newDatasetBytes], { type: 'application/octet-stream' });
         } else {
-          blob_file_ = new Blob([gdal.Module.FS.readFile(OUTPUT.local)], { type: 'application/octet-stream' });
+          const fsData = window.gdal.Module.FS.readFile(filePathExportWarp.local);
+          blobFile = new Blob([fsData], { type: 'application/octet-stream' });
         }
 
-
-        olLayer = new ol.layer.WebGLTile({
+        const olLayer = new ol.layer.WebGLTile({
           source: new ol.source.GeoTIFF({
             sources: [
               {
-                blob: blob_file_,
+                blob: blobFile,
               },
             ],
           }),
         });
 
-        GenericRaster = new M.layer.GenericRaster({
-          name: dataset.name,
-          legend: dataset.name,
-        }, {}, olLayer);
+        const genericRaster = new M.layer.GenericRaster(
+          {
+            name: dataset.name,
+            legend: dataset.name,
+          },
+          {},
+          olLayer
+        );
 
-        // La añadimos al mapa
-        mapajs.addLayers(GenericRaster);
-      })
-
+        if (window.mapajs && typeof window.mapajs.addLayers === 'function') {
+          window.mapajs.addLayers(genericRaster);
+        } else if (typeof mapajs !== 'undefined' && mapajs.addLayers) {
+          mapajs.addLayers(genericRaster);
+        }
+      } catch (error) {
+        console.error('Error al reproyectar ráster:', error);
+      }
     }
+  }
 
-    filesObj[n] = dataset
-    n += 1
+  // Construye acordeón de archivos subidos
+  function buildAccordionFiles(dataset, imgName, epsgInput) {
+    const divAccordionFiles = document.getElementById('accordionFiles');
+    if (!divAccordionFiles) return;
 
-    divAccordionFiles = document.getElementById("accordionFiles");
+    const ds0 = dataset.datasets && dataset.datasets[0];
+    if (!ds0) return;
 
-    // Crear los elementos
-    const button = document.createElement("button");
-    button.className = "accordion";
-    button.textContent = dataset.datasets[0].type + " - " + imgName;
-    button.addEventListener("click", function () {
-      this.classList.toggle("active");
-      var panel = this.nextElementSibling;
+    // Botón acordeón
+    const buttonAcc = document.createElement('button');
+    buttonAcc.className = 'accordion';
+    buttonAcc.textContent = `${ds0.type} - ${imgName}`;
+    buttonAcc.addEventListener('click', function () {
+      this.classList.toggle('active');
+      const panel = this.nextElementSibling;
       if (panel.style.maxHeight) {
         panel.style.maxHeight = null;
       } else {
-        panel.style.maxHeight = panel.scrollHeight + "px";
+        panel.style.maxHeight = panel.scrollHeight + 'px';
       }
     });
 
+    // Panel
+    const panelAcc = document.createElement('div');
+    panelAcc.className = 'panel';
 
+    const table = document.createElement('table');
 
-    const panel = document.createElement("div");
-    panel.className = "panel";
+    // Cabeceras
+    const filaCab = table.insertRow();
+    if (ds0.type === 'raster') {
+      const cab1 = document.createElement('th');
+      const cab2 = document.createElement('th');
+      const cab3 = document.createElement('th');
+      const cab4 = document.createElement('th');
+      const cab5 = document.createElement('th');
+      cab1.innerHTML = 'Capa';
+      cab2.innerHTML = 'Númuero de píxeles';
+      cab3.innerHTML = 'S.G.R.';
+      cab4.innerHTML = 'Número de bandas';
+      cab5.innerHTML = 'Compresión';
+      filaCab.appendChild(cab1);
+      filaCab.appendChild(cab2);
+      filaCab.appendChild(cab3);
+      filaCab.appendChild(cab4);
+      filaCab.appendChild(cab5);
 
-    const table = document.createElement("table");
+      const filaN = table.insertRow();
+      const c1 = filaN.insertCell(0);
+      const c2 = filaN.insertCell(1);
+      const c3 = filaN.insertCell(2);
+      const c4 = filaN.insertCell(3);
+      const c5 = filaN.insertCell(4);
+      c1.innerHTML = imgName;
+      c2.innerHTML = `${ds0.info.size[0]} x ${ds0.info.size[1]}`;
+      c3.innerHTML = epsgInput;
+      c4.innerHTML = ds0.info.bands.length;
+      c5.innerHTML = ds0.info.metadata && ds0.info.metadata.IMAGE_STRUCTURE ? ds0.info.metadata.IMAGE_STRUCTURE.COMPRESSION : '-';
+    } else if (ds0.type === 'vector') {
+      const cab1 = document.createElement('th');
+      const cab2 = document.createElement('th');
+      const cab3 = document.createElement('th');
+      const cab4 = document.createElement('th');
+      const cab5 = document.createElement('th');
+      cab1.innerHTML = 'Capa';
+      cab2.innerHTML = 'Tipo de geometría';
+      cab3.innerHTML = 'S.G.R.';
+      cab4.innerHTML = 'Número de objetos geográficos';
+      cab5.innerHTML = 'Número de atributos';
+      filaCab.appendChild(cab1);
+      filaCab.appendChild(cab2);
+      filaCab.appendChild(cab3);
+      filaCab.appendChild(cab4);
+      filaCab.appendChild(cab5);
 
-    var fila = table.insertRow();
-
-    var cabecera1_v = document.createElement("th");
-    var cabecera2_v = document.createElement("th");
-    var cabecera3_v = document.createElement("th");
-    var cabecera4_v = document.createElement("th");
-    var cabecera5_v = document.createElement("th");
-
-    var cabecera1_r = document.createElement("th");
-    var cabecera2_r = document.createElement("th");
-    var cabecera3_r = document.createElement("th");
-    var cabecera4_r = document.createElement("th");
-    var cabecera5_r = document.createElement("th");
-
-    cabecera1_v.innerHTML = "Capa";
-    cabecera2_v.innerHTML = "Tipo de geometría";
-    cabecera3_v.innerHTML = "S.G.R.";
-    cabecera4_v.innerHTML = "Número de objetos geográficos";
-    cabecera5_v.innerHTML = "Número de atributos";
-
-    cabecera1_r.innerHTML = "Capa";
-    cabecera2_r.innerHTML = "Númuero de píxeles";
-    cabecera3_r.innerHTML = "S.G.R.";
-    cabecera4_r.innerHTML = "Número de bandas";
-    cabecera5_r.innerHTML = "Compresión";
-
-
-
-
-    if (dataset.datasets[0].type == "raster") {
-      fila.appendChild(cabecera1_r);
-      fila.appendChild(cabecera2_r);
-      fila.appendChild(cabecera3_r);
-      fila.appendChild(cabecera4_r);
-      fila.appendChild(cabecera5_r);
-
-      capa = dataset.datasets[0]
-      var fila_n = table.insertRow();
-      var celda1 = fila_n.insertCell(0);
-      var celda2 = fila_n.insertCell(1);
-      var celda3 = fila_n.insertCell(2);
-      var celda4 = fila_n.insertCell(3);
-      var celda5 = fila_n.insertCell(4);
-
-      celda1.innerHTML = imgName;
-      celda2.innerHTML = capa.info.size[0] + " x " + capa.info.size[1];
-      celda3.innerHTML = EPSG_input;
-      celda4.innerHTML = capa.info.bands.length;
-      celda5.innerHTML = capa.info.metadata.IMAGE_STRUCTURE.COMPRESSION
-
-
-    } else if (dataset.datasets[0].type == "vector") {
-
-      // Agregamos las celdas de cabecera a la fila
-      fila.appendChild(cabecera1_v);
-      fila.appendChild(cabecera2_v);
-      fila.appendChild(cabecera3_v);
-      fila.appendChild(cabecera4_v);
-      fila.appendChild(cabecera5_v);
-
-      for (let capa_n in dataset.datasets[0].info.layers) {
-        capa = dataset.datasets[0].info.layers[capa_n]
+      const layersInfoV = ds0.info && ds0.info.layers ? ds0.info.layers : [];
+      for (let capaN = 0; capaN < layersInfoV.length; capaN++) {
+        const capa = layersInfoV[capaN];
         if (capa.name) {
-          var fila_n = table.insertRow();
-          var celda1 = fila_n.insertCell(0);
-          var celda2 = fila_n.insertCell(1);
-          var celda3 = fila_n.insertCell(2);
-          var celda4 = fila_n.insertCell(3);
-          var celda5 = fila_n.insertCell(4);
-
-          // Asignar contenido a las celdas
-          celda1.innerHTML = capa.name;
-          var geomField = capa.geometryFields && capa.geometryFields[0];
-          celda2.innerHTML = geomField ? geomField.type : "Sin geometría";
-          try { celda3.innerHTML = geomField.coordinateSystem.projjson.id.authority + ":" + geomField.coordinateSystem.projjson.id.code; } catch (_) { celda3.innerHTML = "-"; }
-          celda5.innerHTML = capa.featureCount;
-          celda4.innerHTML = capa.fields.length;
+          const filaN = table.insertRow();
+          const c1 = filaN.insertCell(0);
+          const c2 = filaN.insertCell(1);
+          const c3 = filaN.insertCell(2);
+          const c4 = filaN.insertCell(3);
+          const c5 = filaN.insertCell(4);
+          c1.innerHTML = capa.name;
+          const geomField = capa.geometryFields && capa.geometryFields[0];
+          c2.innerHTML = geomField ? geomField.type : 'Sin geometría';
+          try {
+            const projjson = geomField.coordinateSystem.projjson;
+            c3.innerHTML = `${projjson.id.authority}:${projjson.id.code}`;
+          } catch (_) {
+            c3.innerHTML = '-';
+          }
+          c4.innerHTML = capa.featureCount;
+          c5.innerHTML = capa.fields ? capa.fields.length : 0;
         }
-
       }
-
     }
 
+    // Separador y cabecera exportación
+    const filaSep = table.insertRow();
+    const celdaSep = document.createElement('td');
+    celdaSep.colSpan = 5;
+    filaSep.appendChild(celdaSep);
 
+    const filaCabExp = table.insertRow();
+    const celdaCabExp = document.createElement('th');
+    celdaCabExp.colSpan = 5;
+    celdaCabExp.style.textAlign = 'center';
+    celdaCabExp.innerHTML = 'Opciones de exportación';
+    filaCabExp.appendChild(celdaCabExp);
 
-    var fila_0 = table.insertRow();
-    var celda_0 = document.createElement("td");
-    celda_0.colSpan = 5
-    fila_0.appendChild(celda_0);
+    const filaExp = table.insertRow();
+    const celdaExp1 = document.createElement('th');
+    const celdaExp2 = document.createElement('th');
+    const celdaExp3 = document.createElement('th');
+    celdaExp1.colSpan = 2;
+    celdaExp2.colSpan = 2;
+    celdaExp3.colSpan = 1;
+    celdaExp1.innerHTML = 'Formato exportación';
+    celdaExp2.innerHTML = 'S.G.R. Exportación';
+    celdaExp3.innerHTML = 'Exportar';
+    filaExp.appendChild(celdaExp1);
+    filaExp.appendChild(celdaExp2);
+    filaExp.appendChild(celdaExp3);
 
-    var fila_cabeceraExp = table.insertRow();
-    var celda_cabExp = document.createElement("th");
-    celda_cabExp.colSpan = 5
-    celda_cabExp.style = "text-align: center;"
-    celda_cabExp.innerHTML = "Opciones de exportación";
+    const filaExpOpt = table.insertRow();
+    const celdaOpt1 = filaExpOpt.insertCell(0);
+    const celdaOpt2 = filaExpOpt.insertCell(1);
+    const celdaOpt3 = filaExpOpt.insertCell(2);
 
-    var fila_1 = table.insertRow();
-    var celda_1 = document.createElement("td");
-    celda_1.colSpan = 5
-    fila_cabeceraExp.appendChild(celda_cabExp);
-    fila_1.appendChild(celda_1);
+    // Select formato
+    const selectFormat = document.createElement('select');
+    const vectoresDrivers = window.gdal.drivers.vector;
+    const rasterDrivers = window.gdal.drivers.raster;
 
-    var fila_Exp = table.insertRow();
-    var celda_Exp_1 = document.createElement("th");
-    var celda_Exp_2 = document.createElement("th");
-    var celda_Exp_3 = document.createElement("th");
-    celda_Exp_1.colSpan = 2
-    celda_Exp_2.colSpan = 2
-    celda_Exp_3.colSpan = 1
-    celda_Exp_1.innerHTML = "Formato exportación";
-    celda_Exp_2.innerHTML = "S.G.R. Exportación";
-    celda_Exp_3.innerHTML = "Exportar";
-    fila_Exp.appendChild(celda_Exp_1);
-    fila_Exp.appendChild(celda_Exp_2);
-    fila_Exp.appendChild(celda_Exp_3);
-
-    var fila_ExpOpt = table.insertRow();
-    var celda_opt_1 = fila_ExpOpt.insertCell(0);
-    var celda_opt_2 = fila_ExpOpt.insertCell(1);
-    var celda_opt_3 = fila_ExpOpt.insertCell(2);
-
-    var selectFormat = document.createElement('select');
-    vectores = gdal.drivers.vector
-    raster = gdal.drivers.raster
-    if (dataset.datasets[0].type == "raster") {
-      for (let format in raster) {
-        option = document.createElement('option');
-        option.value = format;
-        option.textContent = raster[format].longName;
-        selectFormat.appendChild(option);
-      }
-    } else if (dataset.datasets[0].type == "vector") {
-      for (let format in vectores) {
-        option = document.createElement('option');
-        option.value = format;
-        option.textContent = vectores[format].longName;
-        if (format == "GeoJSON") {
-          option.selected = true;
-        }
-        if (vectores[format].isWritable == true) {
+    if (ds0.type === 'raster') {
+      for (const format in rasterDrivers) {
+        if (Object.prototype.hasOwnProperty.call(rasterDrivers, format)) {
+          const option = document.createElement('option');
+          option.value = format;
+          option.textContent = rasterDrivers[format].longName;
           selectFormat.appendChild(option);
         }
       }
+    } else if (ds0.type === 'vector') {
+      for (const format in vectoresDrivers) {
+        if (Object.prototype.hasOwnProperty.call(vectoresDrivers, format)) {
+          const option = document.createElement('option');
+          option.value = format;
+          option.textContent = vectoresDrivers[format].longName;
+          if (format === 'GeoJSON') {
+            option.selected = true;
+          }
+          if (vectoresDrivers[format].isWritable === true) {
+            selectFormat.appendChild(option);
+          }
+        }
+      }
     }
 
-    celda_opt_1.appendChild(selectFormat);
-    celda_opt_1.colSpan = 2
-    celda_opt_1.id = "outputFormat_" + (n - 1)
+    celdaOpt1.appendChild(selectFormat);
+    celdaOpt1.colSpan = 2;
+    celdaOpt1.id = `outputFormat_${fileIndex - 1}`;
 
-    var inputTextEPSG = document.createElement('input');
-    inputTextEPSG.type = 'text';
-    inputTextEPSG.value = 'EPSG:4326';
-    inputTextEPSG.id = "InputTextEpsg_" + (n - 1)
-    inputTextEPSG.style = "text-align: center;"
-    celda_opt_2.appendChild(inputTextEPSG);
-    celda_opt_2.colSpan = 2
-    celda_opt_2.colSpan = 2
+    const inputTextEPSGOut = document.createElement('input');
+    inputTextEPSGOut.type = 'text';
+    inputTextEPSGOut.value = 'EPSG:4326';
+    inputTextEPSGOut.id = `InputTextEpsg_${fileIndex - 1}`;
+    inputTextEPSGOut.style.textAlign = 'center';
+    celdaOpt2.appendChild(inputTextEPSGOut);
+    celdaOpt2.colSpan = 2;
 
-    let botonExp = document.createElement('button');
+    const botonExp = document.createElement('button');
     botonExp.textContent = 'Exportar';
-    botonExp.id = "buttonExport_" + (n - 1)
-    botonExp.classList = "custom-btn btn-7 btn-exp"
+    botonExp.id = `buttonExport_${fileIndex - 1}`;
+    botonExp.classList = 'custom-btn btn-7 btn-exp';
 
     botonExp.onclick = function (e) {
-      id = e.target.id.split("_")[1]
-      datasetInExport = filesObj[id]
-      console.log("datasetInExport: ", datasetInExport)
+      const idExport = e.target.id.split('_')[1];
+      const datasetInExport = filesObj[idExport];
+      if (!datasetInExport) return;
 
-      EPSG_out = document.getElementById("InputTextEpsg_" + id).value
-      console.log("EPSG_out: ", EPSG_out)
+      const epsgOutEl = document.getElementById(`InputTextEpsg_${idExport}`);
+      const formatOutEl = document.getElementById(`outputFormat_${idExport}`);
+      const epsgOut = epsgOutEl ? epsgOutEl.value : 'EPSG:4326';
+      const formatOut = formatOutEl && formatOutEl.children[0] ? formatOutEl.children[0].value : 'GeoJSON';
 
-      format_out = document.getElementById("outputFormat_" + id).children[0].value
-      console.log("format_out: ", format_out)
-
-
-      // Función para generar un archivo y descargarlo
-      function descargarArchivo(contenido, EPSG, format) {
-        nameFile = contenido.name.split(".")[0];
-        layersName = contenido.datasets[0].info.layers.map(item => item.name).filter(name => name !== undefined);
-        filesExport = [];
-
-        if (contenido.datasets[0].type === "vector") {
-          const options = [
-            '-f', format,
-            '-t_srs', EPSG,
-          ];
-          outputName = contenido.name.split(".")[0];
-
-          try {
-            const filePathExport = gdal.ogr2ogr(contenido.datasets[0], options, outputName);
-            filePathExport.then(async (OUTPUT) => {
-
-              if (OUTPUT.all.length > 1) {
-                manejarErrorExportacion_Vector(layersName, contenido, EPSG, format);
-                return
-              }
-
-              if (gdalWorker) {
-
-                newDataset = await gdal.getFileBytes(OUTPUT.local)
-                fileExport = new Blob([newDataset], { type: 'application/octet-stream' });
-
-              } else {
-                fileExport = gdal.Module.FS.readFile(OUTPUT.local);
-              }
-
-
-              // Crear un Blob con el contenido que quieres exportar
-              const blob = new Blob([fileExport], { type: 'text/plain' });
-
-              // Crear una URL para el Blob
-              const url = URL.createObjectURL(blob);
-
-              // Crear un enlace de descarga
-              const enlace = document.createElement('a');
-              enlace.href = url;
-              outname = OUTPUT.local.replace("/output/", "")
-              enlace.download = outname;  // Establecer el nombre del archivo de descarga
-
-              // Hacer clic en el enlace para iniciar la descarga
-              enlace.click();
-
-              // Liberar el objeto URL después de usarlo
-              URL.revokeObjectURL(url);
-            }).catch(error => {
-              console.error("Error en la promesa de exportación:", error);
-              manejarErrorExportacion_Vector(layersName, contenido, EPSG, format);
-            });
-          } catch (error) {
-            console.error("Error en el bloque try:", error);
-            manejarErrorExportacion_Vector(layersName, contenido, EPSG, format);
-          }
-        } else if (contenido.datasets[0].type === "raster") {
-
-          const options1 = [
-            '-of', format,
-            '-t_srs', EPSG,
-            '-co', "WORLDFILE=YES"
-          ];
-          const options2 = [
-            '-of', format,
-            '-t_srs', EPSG,
-          ];
-          outputName = contenido.name.split(".")[0];
-
-          try {
-            const filePathExport = obtenerFilePathExport(contenido, options1, options2, outputName);
-
-            filePathExport.then(async (OUTPUT) => {
-              
-
-              if (gdalWorker) {
-                newDataset = await gdal.getFileBytes(OUTPUT.local)
-                fileExport = new Blob([newDataset], { type: 'application/octet-stream' });
-
-              } else {
-                fileExport = gdal.Module.FS.readFile(OUTPUT.local);
-              }
-
-              console.log(OUTPUT)
-              if (OUTPUT.all.length > 1) {
-                console.log("más de un archivo")
-                manejarErrorExportacion_Raster(OUTPUT);
-                return
-              }
-
-
-              // Crear un Blob con el contenido que quieres exportar
-              const blob = new Blob([fileExport], { type: 'text/plain' });
-
-              // Crear una URL para el Blob
-              const url = URL.createObjectURL(blob);
-
-              // Crear un enlace de descarga
-              const enlace = document.createElement('a');
-              enlace.href = url;
-              outname = OUTPUT.local.replace("/output/", "")
-              enlace.download = outname;  // Establecer el nombre del archivo de descarga
-
-              // Hacer clic en el enlace para iniciar la descarga
-              enlace.click();
-
-              // Liberar el objeto URL después de usarlo
-              URL.revokeObjectURL(url);
-            }).catch(error => {
-              console.error("Error en la promesa de exportación:", error);
-            });
-          } catch (error) {
-            console.error("Error en el bloque try:", error);
-          }
-
-
-
-
-          async function obtenerFilePathExport(dataset, options1, options2, outputName) {
-            let filePathExport;
-          
-            try {
-              // Intentamos con opciones1
-              filePathExport = await gdal.gdalwarp(dataset.datasets[0], options1, outputName);
-            } catch (error) {
-              console.log("Error con opciones1:", error);
-              // Si falla, intentamos con opciones2
-              try {
-                filePathExport = await gdal.gdalwarp(dataset.datasets[0], options2, outputName);
-              } catch (error) {
-                console.log("Error con opciones2:", error);
-                throw error;  // Lanzamos el error si ambas opciones fallan
-              }
-            }
-          
-            // Retornamos el resultado
-            return filePathExport;
-          }
-
-        }
-      }
-
-      async function manejarErrorExportacion_Raster(OUTPUT) {
-        if (OUTPUT.all.length > 1) {
-          // Usamos un bucle for...of para esperar que cada operación asíncrona termine antes de pasar a la siguiente.
-          for (const element of OUTPUT.all) {
-            let elementLayer = await element.local.split("/")[element.local.split("/").length - 1];
-      
-            let fileExport;
-            if (gdalWorker) {
-              const newDataset = await gdal.getFileBytes(element.local);
-              fileExport = new Blob([newDataset], { type: 'application/octet-stream' });
-            } else {
-              fileExport = await gdal.Module.FS.readFile(element.local);
-            }
-      
-            const blob2 = new Blob([fileExport], { type: 'text/plain' });
-      
-            // Ahora se puede hacer push de manera segura
-            await filesExport.push({ name: elementLayer, blob: blob2 });
-      
-            console.log(elementLayer, blob2);
-          }
-      
-          // Una vez que todos los elementos han sido procesados, se crea y descarga el ZIP.
-          await crearYDescargarZip(filesExport);
-          filesExport = []; // Reiniciamos el arreglo de exportación.
-        }
-      }
-
-      async function manejarErrorExportacion_Vector(layersName, contenido, EPSG, format) {
-
-        filesExport = []; // Reiniciamos el arreglo de exportación.
-    
-        for (const name of layersName) {
-            try {
-                const options = [
-                    '-f', format,
-                    '-t_srs', EPSG,
-                    '-sql', 'SELECT * from "' + name + '"'
-                ];
-    
-                const outputName = contenido.name.split(".")[0];
-    
-                const filePathExport = await gdal.ogr2ogr(contenido.datasets[0], options, name);
-    
-                if (filePathExport.all.length === 1) {
-                    const fileExport = await gdal.Module.FS.readFile(filePathExport.local);
-                    const fileExportFormat = filePathExport.local.split(".")[filePathExport.local.split(".").length - 1];
-    
-                    // Crear un Blob con el contenido que quieres exportar
-                    const blob2 = new Blob([fileExport], { type: 'text/plain' });
-    
-                    filesExport.push({ name: name + "." + fileExportFormat, blob: blob2 });
-                } else {
-                    for (const element of filePathExport.all) {
-                        const elementLayer = await element.local.split("/")[element.local.split("/").length - 1];
-    
-                        if (elementLayer.includes(name)) {
-                            let fileExport;
-    
-                            if (gdalWorker) {
-                                const newDataset = await gdal.getFileBytes(element.local);
-                                fileExport = new Blob([newDataset], { type: 'application/octet-stream' });
-                            } else {
-                                fileExport = await gdal.Module.FS.readFile(element.local);
-                            }
-    
-                            const fileExportFormat = element.local.split(".")[element.local.split(".").length - 1];
-    
-                            // Crear un Blob con el contenido que quieres exportar
-                            const blob2 = new Blob([fileExport], { type: 'text/plain' });
-    
-                            filesExport.push({ name: name + "." + fileExportFormat, blob: blob2 });
-                        }
-                    }
-                }
-    
-                const nombresUnicos = filesExport
-                    .map(archivo => archivo.name.split('.')[0])  // Dividir por el punto y quedarnos con el primer valor (sin extensión)
-                    .filter((value, index, self) => self.indexOf(value) === index);  // Filtrar los valores únicos
-    
-    
-                // Llamar a crearYDescargarZip cuando se haya exportado todo correctamente
-                if (filesExport.length === layersName.length || nombresUnicos.length === layersName.length) {
-                    crearYDescargarZip(filesExport);
-                }
-    
-            } catch (error) {
-                console.error("Error en la promesa de exportación por capa:", error);
-            }
-        }
-    }
-    
-
-      function crearYDescargarZip(filesExport) {
-        const zip = new JSZip();
-
-        filesExport.forEach(file => {
-          zip.file(file.name, file.blob);
-        });
-
-        zip.generateAsync({ type: 'blob' }).then(content => {
-          const url = URL.createObjectURL(content);
-          const enlace = document.createElement('a');
-          enlace.href = url;
-          enlace.download = outputName + '.zip';
-          enlace.click();
-          URL.revokeObjectURL(url);
-        }).catch(error => {
-          console.error("Error al generar el archivo ZIP:", error);
-        });
-      }
-
-      // Llamada a la función para descargar el archivo
-      descargarArchivo(datasetInExport, EPSG_out, format_out);
+      downloadDataset(datasetInExport, epsgOut, formatOut, imgName);
     };
 
-    celda_opt_3.appendChild(botonExp);
-    celda_opt_3.colSpan = 1
+    celdaOpt3.appendChild(botonExp);
+    celdaOpt3.colSpan = 1;
 
-    panel.appendChild(table);
+    panelAcc.appendChild(table);
+    divAccordionFiles.appendChild(buttonAcc);
+    divAccordionFiles.appendChild(panelAcc);
+  }
 
-    // Añadir el contenido al div
-    divAccordionFiles.appendChild(button);
-    divAccordionFiles.appendChild(panel);
+  // Exportación y descarga (incluye manejo ZIP)
+  function crearYDescargarZip(filesExportList, outputBaseName) {
+    const zip = new JSZip();
+    filesExportList.forEach((file) => {
+      zip.file(file.name, file.blob);
+    });
+    zip.generateAsync({ type: 'blob' }).then((content) => {
+      const url = URL.createObjectURL(content);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = `${outputBaseName}.zip`;
+      enlace.click();
+      URL.revokeObjectURL(url);
+    }).catch((error) => {
+      console.error('Error al generar el archivo ZIP:', error);
+    });
+  }
 
-    setTimeout(() => fileUpload.classList.add("done"), 1000);
-    setTimeout(() => fileUpload.classList.remove("done"), 3000);
-    setTimeout(() => fileUpload.classList.remove("drop"), 3000);
-
-    } catch (error) {
-      console.error("Error al procesar el archivo:", error);
-      setTimeout(() => fileUpload.classList.add("fail"), 1000);
-      setTimeout(() => fileUpload.classList.remove("fail"), 3000);
-      setTimeout(() => fileUpload.classList.remove("drop"), 3000);
-    }
-
-  };
-
-  function showModalAndGetEPSG() {
-    return new Promise((resolve) => {
-      const modal = document.getElementById("epsgModal");
-      const span = document.getElementsByClassName("close")[0];
-      const acceptButton = document.getElementById("acceptButton");
-
-      modal.style.display = "block";
-
-      span.onclick = function () {
-        modal.style.display = "none";
-      };
-
-      window.onclick = function (event) {
-        if (event.target == modal) {
-          modal.style.display = "none";
+  async function manejarErrorExportacion_Raster(OUTPUT, outputBaseName) {
+    const filesExportList = [];
+    if (OUTPUT.all && OUTPUT.all.length > 1) {
+      for (const element of OUTPUT.all) {
+        const parts = element.local.split('/');
+        const elementLayer = parts[parts.length - 1];
+        let fileExportBlob;
+        if (window.gdalWorker) {
+          const newDatasetBytes = await window.gdal.getFileBytes(element.local);
+          fileExportBlob = new Blob([newDatasetBytes], { type: 'application/octet-stream' });
+        } else {
+          fileExportBlob = await window.gdal.Module.FS.readFile(element.local);
         }
-      };
-
-      acceptButton.onclick = function () {
-        const EPSG_input = document.getElementById("inputTextEPSG").value;
-        modal.style.display = "none";
-        resolve(EPSG_input);
-      };
-    });
-  }
-
-}
-
-
-fileUpload.addEventListener("dragover", function () {
-  this.classList.add("drag");
-  this.classList.remove("drop", "done");
-});
-
-fileUpload.addEventListener("dragleave", function () {
-  this.classList.remove("drag");
-});
-
-fileUpload.addEventListener("drop", start, false);
-fileUpload.addEventListener("change", start, false);
-
-function start() {
-  this.classList.remove("drag");
-  this.classList.add("drop");
-
-}
-
-
-async function initGdalJS_() {
-
-  // Desde file:// el navegador bloquea fetch() y Web Workers con blob URL;
-  // en ese caso desactivamos el worker y usamos la ruta directa.
-  var useWorker = gdalWorker;
-  if (location.protocol === 'file:') {
-    useWorker = false;
-  } else {
-    try {
-      const workerData = await fetch('../../js/gdal/gdal3.js');
-      window.URL.createObjectURL(await workerData.blob());
-    } catch (e) {
-      console.warn('No se pudo crear blob URL del worker, ejecutando sin worker:', e);
-      useWorker = false;
+        filesExportList.push({ name: elementLayer, blob: fileExportBlob });
+      }
+      await crearYDescargarZip(filesExportList, outputBaseName);
     }
   }
 
-  const path = 'https://cdn.jsdelivr.net/npm/gdal3.js@2.8.1/dist/package';
-  const paths = {
-    wasm: `${path}/gdal3WebAssembly.wasm`,
-    data: `${path}/gdal3WebAssembly.data`,
-    js: '../../js/gdal/gdal3.js',
-  };
+  async function manejarErrorExportacion_Vector(layersName, contenido, EPSG, format, outputBaseName) {
+    const filesExportList = [];
+    const ds0 = contenido.datasets && contenido.datasets[0];
+    if (!ds0) return;
 
-  // Esperamos a que gdal se haya inicializado
-  await initGdalJs({
-    paths: paths,
-    useWorker: useWorker
-  })
-    .then((Gdal) => {
+    for (const name of layersName) {
+      try {
+        const optionsSql = [
+          '-f',
+          format,
+          '-t_srs',
+          EPSG,
+          '-sql',
+          `SELECT * from "${name}"`,
+        ];
+        const filePathExport = await window.gdal.ogr2ogr(ds0, optionsSql, name);
 
-      gdal = Gdal;
+        if (filePathExport.all.length === 1) {
+          let fileExportData;
+          if (window.gdalWorker) {
+            fileExportData = await window.gdal.getFileBytes(filePathExport.local);
+          } else {
+            fileExportData = await window.gdal.Module.FS.readFile(filePathExport.local);
+          }
+          const extParts = filePathExport.local.split('.');
+          const fileExportFormat = extParts[extParts.length - 1];
+          const blob2 = new Blob([fileExportData], { type: 'application/octet-stream' });
+          filesExportList.push({ name: `${name}.${fileExportFormat}`, blob: blob2 });
+        } else {
+          for (const element of filePathExport.all) {
+            const parts = element.local.split('/');
+            const elementLayer = parts[parts.length - 1];
+            if (elementLayer.includes(name)) {
+              let fileExportData;
+              if (window.gdalWorker) {
+                fileExportData = await window.gdal.getFileBytes(element.local);
+              } else {
+                fileExportData = await window.gdal.Module.FS.readFile(element.local);
+              }
+              const extParts = element.local.split('.');
+              const fileExportFormat = extParts[extParts.length - 1];
+              const blob2 = new Blob([fileExportData], { type: 'application/octet-stream' });
+              filesExportList.push({ name: `${name}.${fileExportFormat}`, blob: blob2 });
+            }
+          }
+        }
 
-      // const count = Object.keys(Gdal.drivers.raster).length + Object.keys(Gdal.drivers.vector).length;
-      // console.log(count);
-      // console.log(Gdal)
-      // console.log(Gdal.drivers);
-      // console.log(gdal)
-      // console.log(gdal.drivers);
-    })
-    .catch((err) => {
-      console.error("Error al inicializar GDAL:", err);
+        const nombresUnicos = filesExportList
+          .map((archivo) => archivo.name.split('.')[0])
+          .filter((value, index, self) => self.indexOf(value) === index);
+
+        if (filesExportList.length === layersName.length || nombresUnicos.length === layersName.length) {
+          crearYDescargarZip(filesExportList, outputBaseName);
+        }
+      } catch (error) {
+        console.error('Error en la exportación por capa:', error);
+      }
+    }
+  }
+
+  async function obtenerFilePathExport(dataset, options1, options2, outputName) {
+    try {
+      return await window.gdal.gdalwarp(dataset.datasets[0], options1, outputName);
+    } catch (error) {
+      try {
+        return await window.gdal.gdalwarp(dataset.datasets[0], options2, outputName);
+      } catch (error2) {
+        throw error2;
+      }
+    }
+  }
+
+  function downloadDataset(datasetInExport, epsgOut, formatOut, imgName) {
+    const ds0Exp = datasetInExport.datasets && datasetInExport.datasets[0];
+    if (!ds0Exp) return;
+
+    const outputBaseName = datasetInExport.name ? datasetInExport.name.split('.')[0] : imgName.split('.')[0];
+
+    if (ds0Exp.type === 'vector') {
+      const optionsVec = [
+        '-f',
+        formatOut,
+        '-t_srs',
+        epsgOut,
+      ];
+      const outputNameVec = outputBaseName;
+
+      try {
+        const filePathExportVec = window.gdal.ogr2ogr(ds0Exp, optionsVec, outputNameVec);
+        filePathExportVec
+          .then(async (OUTPUT) => {
+            const layersInfoV = ds0Exp.info && ds0Exp.info.layers ? ds0Exp.info.layers : [];
+            const layersNameV = layersInfoV.map((item) => item.name).filter((name) => name !== undefined);
+
+            if (OUTPUT.all && OUTPUT.all.length > 1) {
+              await manejarErrorExportacion_Vector(layersNameV, datasetInExport, epsgOut, formatOut, outputBaseName);
+              return;
+            }
+
+            let fileExportData;
+            if (window.gdalWorker) {
+              fileExportData = await window.gdal.getFileBytes(OUTPUT.local);
+            } else {
+              fileExportData = window.gdal.Module.FS.readFile(OUTPUT.local);
+            }
+
+            const blobExp = new Blob([fileExportData], { type: 'application/octet-stream' });
+            const urlExp = URL.createObjectURL(blobExp);
+            const enlaceExp = document.createElement('a');
+            enlaceExp.href = urlExp;
+            const outname = OUTPUT.local.replace('/output/', '');
+            enlaceExp.download = outname;
+            enlaceExp.click();
+            URL.revokeObjectURL(urlExp);
+          })
+          .catch(async (error) => {
+            console.error('Error en exportación vectorial:', error);
+            const layersInfoV = ds0Exp.info && ds0Exp.info.layers ? ds0Exp.info.layers : [];
+            const layersNameV = layersInfoV.map((item) => item.name).filter((name) => name !== undefined);
+            await manejarErrorExportacion_Vector(layersNameV, datasetInExport, epsgOut, formatOut, outputBaseName);
+          });
+      } catch (error) {
+        console.error('Error bloque try vector:', error);
+      }
+    } else if (ds0Exp.type === 'raster') {
+      const options1R = [
+        '-of',
+        formatOut,
+        '-t_srs',
+        epsgOut,
+        '-co',
+        'WORLDFILE=YES',
+      ];
+      const options2R = [
+        '-of',
+        formatOut,
+        '-t_srs',
+        epsgOut,
+      ];
+      const outputNameR = outputBaseName;
+
+      try {
+        const filePathExportR = obtenerFilePathExport(datasetInExport, options1R, options2R, outputNameR);
+        filePathExportR
+          .then(async (OUTPUT) => {
+            if (OUTPUT.all && OUTPUT.all.length > 1) {
+              await manejarErrorExportacion_Raster(OUTPUT, outputBaseName);
+              return;
+            }
+
+            let fileExportData;
+            if (window.gdalWorker) {
+              fileExportData = await window.gdal.getFileBytes(OUTPUT.local);
+            } else {
+              fileExportData = window.gdal.Module.FS.readFile(OUTPUT.local);
+            }
+
+            const blobExp = new Blob([fileExportData], { type: 'application/octet-stream' });
+            const urlExp = URL.createObjectURL(blobExp);
+            const enlaceExp = document.createElement('a');
+            enlaceExp.href = urlExp;
+            const outname = OUTPUT.local.replace('/output/', '');
+            enlaceExp.download = outname;
+            enlaceExp.click();
+            URL.revokeObjectURL(urlExp);
+          })
+          .catch((error) => {
+            console.error('Error en exportación ráster:', error);
+          });
+      } catch (error) {
+        console.error('Error bloque try ráster:', error);
+      }
+    }
+  }
+
+  // Lectura y procesamiento de archivo
+  async function readUrl(input) {
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    if (!file) return;
+    // Asegurarse de que GDAL esté inicializado antes de continuar
+    if (!window.gdal) {
+      try {
+        await initGdalJS_();
+      } catch (e) {
+        console.error('Error inicializando GDAL:', e);
+        if (fileUpload) {
+          setTimeout(() => fileUpload.classList.add('fail'), 100);
+          setTimeout(() => fileUpload.classList.remove('fail'), 2500);
+          setTimeout(() => fileUpload.classList.remove('drop'), 2500);
+        }
+        return;
+      }
+    }
+
+    const imgName = file.name;
+    let datasetResult = null;
+    let epsgInputResult = null;
+
+    try {
+      if (window.gdalWorker) {
+        // Modo worker
+        if (input.value.includes('zip')) {
+          try {
+            datasetResult = await window.gdal.open(file, [], ['vsizip']);
+            const ds0w = datasetResult.datasets && datasetResult.datasets[0];
+            if (ds0w && ds0w.info && ds0w.info.stac && ds0w.info.stac['proj:epsg']) {
+              epsgInputResult = ds0w.info.stac['proj:epsg'];
+            } else if (ds0w && ds0w.type === 'raster') {
+              epsgInputResult = await showModalAndGetEPSG();
+            } else {
+              epsgInputResult = undefined;
+            }
+          } catch (errorZip) {
+            const reader = new FileReader();
+            reader.readAsArrayBuffer(file);
+            await new Promise((resolve, reject) => {
+              reader.onload = async () => {
+                try {
+                  const zip = await JSZip.loadAsync(reader.result);
+                  const zipList = [];
+                  const promisesZip = [];
+                  zip.forEach((relativePath, zipEntry) => {
+                    const p = zipEntry.async('blob').then((content) => {
+                      const blobZ = new Blob([content], { type: 'application/octet-stream' });
+                      const fileZ = new File([blobZ], relativePath);
+                      zipList.push(fileZ);
+                    });
+                    promisesZip.push(p);
+                  });
+                  await Promise.all(promisesZip);
+                  datasetResult = await window.gdal.open(zipList);
+                  const ds0z = datasetResult.datasets && datasetResult.datasets[0];
+                  if (ds0z && ds0z.info && ds0z.info.stac && ds0z.info.stac['proj:epsg']) {
+                    epsgInputResult = ds0z.info.stac['proj:epsg'];
+                  } else if (ds0z && ds0z.type === 'raster') {
+                    epsgInputResult = await showModalAndGetEPSG();
+                  }
+                  resolve();
+                } catch (e) {
+                  reject(e);
+                }
+              };
+            });
+          }
+        } else {
+          datasetResult = await window.gdal.open(file);
+          const ds0f = datasetResult.datasets && datasetResult.datasets[0];
+          if (ds0f && ds0f.info && ds0f.info.stac && ds0f.info.stac['proj:epsg']) {
+            epsgInputResult = ds0f.info.stac['proj:epsg'];
+          } else if (ds0f && ds0f.type === 'raster') {
+            epsgInputResult = await showModalAndGetEPSG();
+          }
+        }
+      } else {
+        // Modo sin worker
+        const reader = new FileReader();
+        reader.readAsArrayBuffer(file);
+        const arrayBuffer = await new Promise((resolve) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+        });
+
+        if (!arrayBuffer) throw new Error('Error al leer archivo');
+
+        if (input.value.includes('zip')) {
+          try {
+            window.gdal.Module.FS.writeFile(`/input/${imgName}`, new Int8Array(arrayBuffer));
+            datasetResult = await window.gdal.open(`/input/${imgName}`, [], ['vsizip']);
+            const ds0s = datasetResult.datasets && datasetResult.datasets[0];
+            if (ds0s && ds0s.info && ds0s.info.stac && ds0s.info.stac['proj:epsg']) {
+              epsgInputResult = ds0s.info.stac['proj:epsg'];
+            } else if (ds0s && ds0s.type === 'raster') {
+              epsgInputResult = await showModalAndGetEPSG();
+            }
+          } catch (errorZip2) {
+            const zip = new JSZip();
+            const zipContent = await zip.loadAsync(arrayBuffer);
+            const fileNamesZip = Object.keys(zipContent.files);
+            for (const fileNameZ of fileNamesZip) {
+              const fileDataZ = await zipContent.files[fileNameZ].async('arraybuffer');
+              window.gdal.Module.FS.writeFile(`/input/${fileNameZ}`, new Int8Array(fileDataZ));
+            }
+            for (const fileNameZ of fileNamesZip) {
+              try {
+                datasetResult = await window.gdal.open(`/input/${fileNameZ}`);
+                const ds0sz = datasetResult.datasets && datasetResult.datasets[0];
+                if (ds0sz && ds0sz.info && ds0sz.info.stac && ds0sz.info.stac['proj:epsg']) {
+                  epsgInputResult = ds0sz.info.stac['proj:epsg'];
+                } else if (ds0sz && ds0sz.type === 'raster') {
+                  epsgInputResult = await showModalAndGetEPSG();
+                }
+                break;
+              } catch (e) {
+                // continuar
+              }
+            }
+          }
+        } else {
+          window.gdal.Module.FS.writeFile(`/input/${imgName}`, new Int8Array(arrayBuffer));
+          datasetResult = await window.gdal.open(`/input/${imgName}`);
+          const ds0sn = datasetResult.datasets && datasetResult.datasets[0];
+          if (ds0sn && ds0sn.info && ds0sn.info.stac && ds0sn.info.stac['proj:epsg']) {
+            epsgInputResult = ds0sn.info.stac['proj:epsg'];
+          } else if (ds0sn && ds0sn.type === 'raster') {
+            epsgInputResult = await showModalAndGetEPSG();
+          }
+        }
+      }
+
+      // Procesar dataset
+      if (datasetResult) {
+        try {
+          await processDataset(datasetResult, imgName, epsgInputResult || 'EPSG:4326');
+
+          // Guardar y construir UI
+          filesObj[fileIndex] = datasetResult;
+          fileIndex += 1;
+
+          buildAccordionFiles(datasetResult, imgName, epsgInputResult || 'EPSG:4326');
+
+          // Animación éxito
+          if (fileUpload) {
+            fileUpload.classList.remove('drop');
+            setTimeout(() => fileUpload.classList.add('done'), 100);
+            setTimeout(() => fileUpload.classList.remove('done'), 2500);
+          }
+        } catch (procErr) {
+          console.error('Error procesando dataset:', procErr);
+          if (fileUpload) {
+            setTimeout(() => fileUpload.classList.add('fail'), 100);
+            setTimeout(() => fileUpload.classList.remove('fail'), 2500);
+            setTimeout(() => fileUpload.classList.remove('drop'), 2500);
+          }
+        }
+      } else {
+        if (fileUpload) {
+          fileUpload.classList.remove('drop');
+          setTimeout(() => fileUpload.classList.add('fail'), 100);
+          setTimeout(() => fileUpload.classList.remove('fail'), 2500);
+        }
+      }
+    } catch (error) {
+      console.error('Error al procesar el archivo:', error);
+      if (fileUpload) {
+        setTimeout(() => fileUpload.classList.add('fail'), 100);
+        setTimeout(() => fileUpload.classList.remove('fail'), 2500);
+        setTimeout(() => fileUpload.classList.remove('drop'), 2500);
+      }
+    }
+  }
+
+  // Exponer readUrl globalmente (usado en HTML)
+  window.readUrl = readUrl;
+
+  // Eventos drag & drop
+  if (fileUpload) {
+    fileUpload.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      this.classList.add('drag');
+      this.classList.remove('drop', 'done', 'fail');
     });
 
+    fileUpload.addEventListener('dragleave', function () {
+      this.classList.remove('drag');
+    });
 
+    fileUpload.addEventListener('drop', function (e) {
+      e.preventDefault();
+      this.classList.remove('drag', 'done', 'fail');
+      this.classList.add('drop');
+    }, false);
 
-  const SVGCarga = document.getElementById("cargaSVG")
-  SVGCarga.hidden = true
-  SVGCarga.style.visibility = "hidden"
-  console.log('o:   gdal - - - - -', gdal);  // Aquí ya puedes acceder a la variable gdal
-}
+    fileUpload.addEventListener('change', function () {
+      this.classList.remove('drag', 'done', 'fail');
+      this.classList.add('drop');
+    }, false);
+  }
 
+  // Inicialización
+  async function init() {
+    await initGdalJS_();
+  }
 
-initGdalJS_()
+  init();
+})();

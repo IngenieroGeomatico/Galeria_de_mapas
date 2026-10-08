@@ -3,9 +3,10 @@
   flex-direction: column; /* Alinea los elementos de arriba hacia abajo */
   justify-content: center; /* Centra verticalmente los elementos */
   align-items: center; /* Centra horizontalmente los elementos */
-  top: 50px;
+  top: 56px;
   position: relative;
-  padding-bottom: 50px;
+  padding-bottom: 64px;
+  gap: 18px;
 }
 
 
@@ -29,11 +30,10 @@
     height: 100%;
     background: var(--background);
     border-radius: var(--border-radius);
-    border: #e2542b;
-    border-radius: 20px;
-    border-style: dashed;
+    border: 2px dashed #f07a3d;
+    border-radius: 18px;
     /* transition:  all .3s ease;  */
-    box-shadow: var(--shadow-x, 0px) var(--shadow-y, 1px) var(--shadow-blur, 3px) rgba(#000, 0.1);
+    box-shadow: 0 10px 30px rgba(255, 92, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
     transform: scale(var(--scale, 1));
   }
   
@@ -211,7 +211,7 @@
   }
 }
 .upload:hover::before {
-  background-color: #fcf1e9;
+  background-color: #fff6ef;
 }
 
 @keyframes shadow-animate {
@@ -240,7 +240,8 @@
 
 
 /* 7 */
-button {
+.custom-btn,
+button:not(.m-panel-btn):not(.buttonHerramienta_cambImpl):not(.m-layerswitcher-groupDisplay):not(.m-layerswitcher-icons-target):not(.m-layerswitcher-icons-info):not(.m-layerswitcher-icons-delete):not(.m-layerswitcher-button):not(.m-tools):not([class*="m-"]) {
   margin: 20px;
 }
 .custom-btn {

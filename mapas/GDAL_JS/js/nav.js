@@ -1,80 +1,68 @@
+'use strict';
 
-// Obtener todos los enlaces
-const links = document.querySelectorAll('.nav-links a');
-// Selecciona el elemento
-const mapaID = document.getElementById('mapaID');
-const containerID = document.getElementById('containerID');
-const infoID = document.getElementById('infoID');
+(function () {
+  const links = document.querySelectorAll('.nav-links a');
+  const mapaID = document.getElementById('mapaID');
+  const containerID = document.getElementById('containerID');
+  const infoID = document.getElementById('infoID');
+  const navCheck = document.getElementById('nav-check');
 
+  if (!links.length || !mapaID || !containerID || !infoID) return;
 
-
-// Añadir un evento de clic a cada enlace
-links.forEach(link => {
+  links.forEach((link) => {
     link.addEventListener('click', (e) => {
+      e.preventDefault();
 
-        // Eliminar la clase 'activeButton' de todos los enlaces
-        links.forEach(l => l.classList.remove('activeButton'));
+      // Close mobile menu if open
+      if (navCheck) {
+        navCheck.checked = false;
+      }
 
-        const accordions = document.querySelectorAll('.accordion.active');
+      // Remove active state from all links
+      links.forEach((l) => l.classList.remove('activeButton'));
 
-        // Recorremos todos esos elementos
-        accordions.forEach(function(accordion) {
-          // Eliminamos la clase 'active' de cada uno de los elementos
-          accordion.click()
-        });
+      // Collapse any open accordions in Info panel
+      const accordions = document.querySelectorAll('.accordion.active');
+      accordions.forEach((accordion) => {
+        accordion.click();
+      });
 
-        // Añadir la clase 'activeButton' al enlace clicado
-        link.classList.add('activeButton');
+      // Activate clicked link
+      link.classList.add('activeButton');
 
-        if (e.target.id == "Arhivos"){// Establecer la propiedad hidden a false
-          mapaID.style.visibility = "hidden";
-          mapaID.hidden = true
-          
-          infoID.style.visibility = "hidden";
-          infoID.hidden = true
+      const targetId = e.target.id;
 
-          containerID.style.visibility = "visible";
-          containerID.hidden = false
+      if (targetId === 'Arhivos' || targetId === 'Archivos') {
+        // Show files panel
+        mapaID.style.visibility = 'hidden';
+        mapaID.hidden = true;
 
-        }else if (e.target.id == "Info"){// Establecer la propiedad hidden a false
-          mapaID.style.visibility = "hidden";
-          mapaID.hidden = true
+        infoID.style.visibility = 'hidden';
+        infoID.hidden = true;
 
-          containerID.style.visibility = "hidden";
-          containerID.hidden = true
+        containerID.style.visibility = 'visible';
+        containerID.hidden = false;
+      } else if (targetId === 'Info') {
+        // Show info panel
+        mapaID.style.visibility = 'hidden';
+        mapaID.hidden = true;
 
-          infoID.style.visibility = "visible";
-          infoID.hidden = false
+        containerID.style.visibility = 'hidden';
+        containerID.hidden = true;
 
-        }else if (e.target.id == "Mapa"){// Establecer la propiedad hidden a false
-          
-          containerID.style.visibility = "hidden";
-          containerID.hidden = true
+        infoID.style.visibility = 'visible';
+        infoID.hidden = false;
+      } else if (targetId === 'Mapa') {
+        // Show map
+        containerID.style.visibility = 'hidden';
+        containerID.hidden = true;
 
-          infoID.style.visibility = "hidden";
-          infoID.hidden = true
+        infoID.style.visibility = 'hidden';
+        infoID.hidden = true;
 
-          mapaID.style.visibility = "visible";
-          mapaID.hidden = false;
-
-          // setTimeout(function(){ 
-            
-          //   mapaID.style.visibility = "visible";
-          //   mapaID.hidden = false;
-
-          // }, 500);
-
-          // setTimeout(function(){ 
-            
-          //   mapajs.setCenter({x: -841284.6582134482, y: 4219019.308751002})
-          //   mapajs.setZoom(5)
-
-          // }, 2000);
-
-          
-
-          
-
-        }
+        mapaID.style.visibility = 'visible';
+        mapaID.hidden = false;
+      }
     });
-});
+  });
+})();
