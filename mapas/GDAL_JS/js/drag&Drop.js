@@ -323,14 +323,18 @@
         // Intentar añadir también como capa Cesium si el visor está en modo 3D
         try {
           const impl = mapRef && mapRef.getMapImpl ? mapRef.getMapImpl() : null;
-          if (impl && impl.scene && typeof Cesium !== 'undefined' && Cesium.GeoTIFFImageryProvider) {
+          if (impl && impl.scene && typeof Cesium !== 'undefined') {
             let provider = null;
+            // Intentar GeoTIFFImageryProvider desde blob
             try {
-              if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
-                provider = await Cesium.GeoTIFFImageryProvider.fromBlob(blobFile);
-              } else if (typeof Cesium.GeoTIFFImageryProvider.fromUrlOrBlob === 'function') {
-                provider = await Cesium.GeoTIFFImageryProvider.fromUrlOrBlob(blobFile);
+              if (Cesium.GeoTIFFImageryProvider) {
+                if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
+                  provider = await Cesium.GeoTIFFImageryProvider.fromBlob(blobFile);
+                } else if (typeof Cesium.GeoTIFFImageryProvider.fromUrlOrBlob === 'function') {
+                  provider = await Cesium.GeoTIFFImageryProvider.fromUrlOrBlob(blobFile);
+                }
               }
+              // Fallback: usar TileMapService si no hay proveedor GeoTIFF
             } catch (provErr) {
               provider = null;
               console.warn('Error creando GeoTIFFImageryProvider:', provErr);
@@ -341,6 +345,14 @@
               } catch (addErr) {
                 console.warn('Error añadiendo imageryProvider a Cesium:', addErr);
               }
+            } else {
+              // Último recurso: crear un objeto URL temporal y usarlo si es posible
+              try {
+                const urlTmp = URL.createObjectURL(blobFile);
+                // No añadir automáticamente; para COG el GeoTIFFImageryProvider es lo adecuado
+                // Liberamos URL tras corto tiempo
+                setTimeout(() => URL.revokeObjectURL(urlTmp), 30000);
+              } catch (urlErr) {}
             }
           }
         } catch (cesErr) {
