@@ -353,14 +353,16 @@
             setTimeout(addToCesium, 1500);
             setTimeout(addToCesium, 2500);
             setTimeout(addToCesium, 4000);
+            setTimeout(addToCesium, 6000);
           }
         } catch (cesErr) {
           // Silencioso: solo afecta a 3D
         }
-        try {
-          const mapaLink = document.getElementById('Mapa');
-          if (mapaLink) mapaLink.click();
-        } catch (e) {}
+        // No forzamos cambio de pestaña para evitar conflictos con cambioImpl; usuario decide
+        // try {
+        //   const mapaLink = document.getElementById('Mapa');
+        //   if (mapaLink) mapaLink.click();
+        // } catch (e) {}
       } catch (error) {
         console.error('Error al reproyectar ráster:', error);
       }
@@ -976,10 +978,11 @@
             setTimeout(() => fileUpload.classList.remove('done'), 2500);
           }
           // Mostrar acordeón de archivos y asegurar que pestaña Archivos esté activa
-          try {
-            const archivosLink = document.getElementById('Arhivos');
-            if (archivosLink) archivosLink.click();
-          } catch (e) {}
+          // No forzamos el cambio a pestaña Archivos para evitar problemas con nav; dejamos al usuario
+          // try {
+          //   const archivosLink = document.getElementById('Arhivos');
+          //   if (archivosLink) archivosLink.click();
+          // } catch (e) {}
           // Limpiar input para permitir subir mismo archivo
           try { input.value = ''; } catch (e) {}
         } catch (procErr) {
