@@ -252,18 +252,35 @@
       ds0.info.layers = [];
       ds0.info.layers.push({ name: imgName.split('.')[0] });
 
-      const optionsWarp = [
+      let optionsWarp = [
         '-of',
         'GTiff',
-        '-s_srs',
-        epsgInput,
-        '-t_srs',
-        'EPSG:3857',
       ];
+      // Solo asignar s_srs si es válido; para muchos COG el CRS puede leerse internamente
+      if (epsgInput && String(epsgInput).trim() !== '') {
+        const srs = String(epsgInput).trim();
+        if (!srs.match(/^(unknown|undefined)$/i)) {
+          optionsWarp.push('-s_srs', srs);
+        }
+      }
+      // No forzamos -t_srs para evitar reproyecciones problemáticas con COG; si falla, probamos con EPSG:3857
+      const optionsWarpT3857 = ['-of', 'GTiff', '-t_srs', 'EPSG:3857'];
+      if (optionsWarp.includes('-s_srs')) {
+        optionsWarpT3857.push('-s_srs', optionsWarp[optionsWarp.indexOf('-s_srs') + 1]);
+      }
       const outputNameGTiff = `GTiff_${dataset.name}`;
 
       try {
-        const filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarp, outputNameGTiff);
+        let filePathExportWarp;
+        try {
+          filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarp, outputNameGTiff);
+        } catch (e1) {
+          try {
+            filePathExportWarp = await window.gdal.gdalwarp(ds0, optionsWarpT3857, outputNameGTiff);
+          } catch (e2) {
+            throw e2;
+          }
+        }
         let blobFile;
         if (window.gdalWorker) {
           const newDatasetBytes = await window.gdal.getFileBytes(filePathExportWarp.local);
@@ -784,6 +801,9 @@
               epsgInputResult = ds0w.info.stac['proj:epsg'];
             } else if (ds0w && ds0w.type === 'raster') {
               epsgInputResult = await showModalAndGetEPSG();
+          } else if (ds0f && ds0f.type === 'raster') {
+            // Intentar no forzar s_srs si no se pudo obtener
+            epsgInputResult = undefined;
             } else {
               epsgInputResult = undefined;
             }
@@ -812,6 +832,9 @@
                     epsgInputResult = ds0z.info.stac['proj:epsg'];
                   } else if (ds0z && ds0z.type === 'raster') {
                     epsgInputResult = await showModalAndGetEPSG();
+          } else if (ds0f && ds0f.type === 'raster') {
+            // Intentar no forzar s_srs si no se pudo obtener
+            epsgInputResult = undefined;
                   }
                   resolve();
                 } catch (e) {
@@ -832,6 +855,9 @@
               epsgInputResult = ds0f.info.stac['proj:epsg'];
             } else if (ds0f && ds0f.type === 'raster') {
               epsgInputResult = await showModalAndGetEPSG();
+          } else if (ds0f && ds0f.type === 'raster') {
+            // Intentar no forzar s_srs si no se pudo obtener
+            epsgInputResult = undefined;
             }
           }
         }
@@ -856,6 +882,9 @@
               epsgInputResult = ds0s.info.stac['proj:epsg'];
             } else if (ds0s && ds0s.type === 'raster') {
               epsgInputResult = await showModalAndGetEPSG();
+          } else if (ds0f && ds0f.type === 'raster') {
+            // Intentar no forzar s_srs si no se pudo obtener
+            epsgInputResult = undefined;
             }
           } catch (errorZip2) {
             const zip = new JSZip();
@@ -874,6 +903,9 @@
                   epsgInputResult = ds0sz.info.stac['proj:epsg'];
                 } else if (ds0sz && ds0sz.type === 'raster') {
                   epsgInputResult = await showModalAndGetEPSG();
+          } else if (ds0f && ds0f.type === 'raster') {
+            // Intentar no forzar s_srs si no se pudo obtener
+            epsgInputResult = undefined;
                 }
                 break;
               } catch (e) {
@@ -900,6 +932,9 @@
               epsgInputResult = ds0sn.info.stac['proj:epsg'];
             } else if (ds0sn && ds0sn.type === 'raster') {
               epsgInputResult = await showModalAndGetEPSG();
+          } else if (ds0f && ds0f.type === 'raster') {
+            // Intentar no forzar s_srs si no se pudo obtener
+            epsgInputResult = undefined;
             }
           }
         }
