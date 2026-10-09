@@ -163,14 +163,26 @@ function mapa() {
     // El color de cada municipio, el mismo ramp en las dos implementaciones.
     const colorPorCodigo = window.crearColorPorCodigo(data);
 
+    // El click es IGUAL en las dos implementaciones: el evento SELECT_FEATURES
+    // llega con `features[0].getAttributes().nationalcode` y `coord`, tanto si
+    // lo ha emitido OpenLayers (2D) como ext/MVTLayer (3D, que dispara el evento
+    // a mano porque la API no llega a detectar el click en Cesium).
+    const alSeleccionar = (features, m) => {
+      // La API dispara SELECT_FEATURES también cuando el click NO ha caído sobre
+      // nada, y entonces llega con la lista vacía de verdad (medido: el gestor de
+      // selección compara `seleccionado[0] === clicked[0]` y con los dos a
+      // `undefined` da "son el mismo municipio", así que entra por ahí). Sin esta
+      // comprobación, `features[0]` es `undefined` y revienta el oyente.
+      if (!features || !features.length || !features[0]) return;
+      const codMuni = features[0].getAttributes().nationalcode.slice(-5);
+      const filtrado = data.filter(obj => obj["Codigo Municipio"] === codMuni);
+      if (!filtrado.length) return;
+      mostrarPopupParo(filtrado[0], m.coord);
+    };
+
     if (!es3D) {
       // 2D: el estilo es un IDEE.style.Polygon con función.
-      capaMVT_Municipios.on(IDEE.evt.SELECT_FEATURES, (features, m) => {
-        const codMuni = features[0].getAttributes().nationalcode.slice(-5);
-        const filtrado = data.filter(obj => obj["Codigo Municipio"] === codMuni);
-        if (!filtrado.length) return;
-        mostrarPopupParo(filtrado[0], m.coord);
-      });
+      capaMVT_Municipios.on(IDEE.evt.SELECT_FEATURES, alSeleccionar);
 
       capaMVT_Municipios.setStyle(new IDEE.style.Polygon({
         fill: {
@@ -192,13 +204,11 @@ function mapa() {
       // plugin: el bundle de Cesium deja su implementación como un módulo
       // vacío, así que no había nada que registrar).
       //
-      // Ahora mismo NO se dibuja: el plugin se ha dejado solo con la lectura, a
-      // propósito, para iterar sin que el render enturbie lo que se mide. De la
-      // capa solo se usa el lector:
-      //
-      //   capaMVT_Municipios.getImpl().cargar(z, x, y).then(console.log)
-      //
-      // Se le da la función de color para que el ramp sea el mismo que en 2D.
+      // El color se lo da el lector de ext/MVTLayer, que rasteriza la tesela a
+      // canvas para dejarla drapeada sobre el MDT. Con `cargar(z, x, y)` se
+      // sigue teniendo acceso a la lectura desde la consola.
+      capaMVT_Municipios.on(IDEE.evt.SELECT_FEATURES, alSeleccionar);
+
       const impl = capaMVT_Municipios.impl_;
       if (impl && typeof impl.setColorFunction === 'function') {
         impl.setColorFunction((codigo) => colorPorCodigo[codigo]);

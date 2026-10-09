@@ -259,6 +259,41 @@
     return [lon, lat];
   }
 
+  // ------------------------------------------------------------------
+  // Punto en polígono, para el click
+  //
+  // Abanico de rayos clásico (even-odd), en coordenadas de tesela. Con el
+  // exterior y los huecos por separado, que es como los devuelve el lector: si
+  // el punto cae dentro de un hueco NO es del municipio.
+  // ------------------------------------------------------------------
+
+  function puntoEnAnillo(px, py, anillo) {
+    let dentro = false;
+    for (let i = 0, j = anillo.length - 1; i < anillo.length; j = i++) {
+      const xi = anillo[i].x;
+      const yi = anillo[i].y;
+      const xj = anillo[j].x;
+      const yj = anillo[j].y;
+      if ((yi > py) !== (yj > py)
+        && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+        dentro = !dentro;
+      }
+    }
+    return dentro;
+  }
+
+  function puntoEnPoligono(px, py, poligonos) {
+    for (const poli of poligonos) {
+      if (!puntoEnAnillo(px, py, poli.exterior)) continue;
+      let enHueco = false;
+      for (const hueco of poli.huecos) {
+        if (puntoEnAnillo(px, py, hueco)) { enHueco = true; break; }
+      }
+      if (!enHueco) return true;
+    }
+    return false;
+  }
+
   /* ------------------------------------------------------------------ *
    * LectorMVT: la algoritmia de lectura
    *
@@ -281,6 +316,14 @@
       this.capas = o.capas || '';
       this.extent = o.extent || 4096;
       this._funcionColor = null;
+
+      // Teselas ya leídas para el click, con su geometría. Es una caché aparte
+      // de la del dibujado porque el dibujado va con el ImageryProvider y no
+      // guarda nada en JS. Aquí sí hace falta: cada click necesita la geometría
+      // en CPU para saber de qué municipio es el punto.
+      this._cache = new Map();      // "z/x/y" -> features[]
+      this._enCurso = new Map();    // "z/x/y" -> Promise, para no duplicar
+      this._maxCache = 60;
     }
 
     /**
@@ -408,11 +451,16 @@
         // código municipal son los 5 últimos (medido: el de Móstoles es
         // 34132828092 -> 28092). Por eso `slice(-5)` siempre acierta.
         const codigoNacional = feature.properties && feature.properties.nationalcode;
-        const codigo = codigoNacional ? String(codigoNacional).slice(-5) : null;
+        const codigoCompleto = codigoNacional ? String(codigoNacional) : null;
+        const codigo = codigoCompleto ? codigoCompleto.slice(-5) : null;
         const nombre = feature.properties && feature.properties.nameunit;
 
         features.push({
           codigo: codigo,
+          // El código entero, tal cual lo entrega el servicio. Lo necesita el
+          // click: el visualizador hace `nationalcode.slice(-5)`, igual que en 2D,
+          // y si aquí solo se guardara el corto se quedaría con 4 caracteres.
+          codigoNacional: codigoCompleto,
           nombre: nombre,
           color: this._colorDe(codigo, nombre),
           z: z, x: x, y: y,
@@ -421,6 +469,78 @@
         });
       }
       return features;
+    }
+
+    /**
+     * Qué municipio hay en un punto. Es lo que necesita el click en 3D.
+     *
+     * Va al zoom alto (ZOOM_MAX) a propósito: la geometría del MVT se generaliza
+     * al bajar de nivel, y con z12 un municipio pequeño ya sale desplazado un
+     * píxel o más. A z14 la tesela es de 2,4 km en España, o sea lo bastante
+     * pequeña para que la precisión del borde sea subpixel en pantalla, y lo
+     * bastante grande para que elMunicipio que contiene el punto venga entero
+     * (el buffer del servicio son 80 unidades, un 2 % de la tesela, así que el
+     * punto nunca cae en la franja recortada).
+     *
+     * @param {number} lon Longitud en grados.
+     * @param {number} lat Latitud en grados.
+     * @param {number} [zoom] Zoom de la tesela a mirar. Por defecto, ZOOM_MAX.
+     * @returns {Promise<Object|null>} El elemento del lector, o null.
+     */
+    async municipioEn(lon, lat, zoom) {
+      const z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom || ZOOM_MAX));
+      const n = Math.pow(2, z);
+      const rect = this.extent;
+
+      const x = Math.max(0, Math.min(n - 1, Math.floor(((lon + 180) / 360) * n)));
+      const r = Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI / 180;
+      const yMerc = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2;
+      const y = Math.max(0, Math.min(n - 1, Math.floor(yMerc * n)));
+
+      const features = await this._teselaEnCache(z, x, y);
+      if (!features.length) return null;
+
+      // Del lon/lat a unidades de esa tesela, que es como vienen los anillos.
+      const px = (((lon + 180) / 360) * n - x) * rect;
+      const py = (yMerc * n - y) * rect;
+
+      for (const feature of features) {
+        if (puntoEnPoligono(px, py, feature.poligonos)) return feature;
+      }
+      return null;
+    }
+
+    /**
+     * Una tesela leída y cacheada, para el click. Descarga la primera vez y
+     * guarda hasta `_maxCache`, con expulsión del más viejo.
+     * @returns {Promise<Array<Object>>} Los elementos, o [] si no se pudo leer.
+     */
+    async _teselaEnCache(z, x, y) {
+      const clave = z + '/' + x + '/' + y;
+      if (this._cache.has(clave)) return this._cache.get(clave);
+      if (this._enCurso.has(clave)) return this._enCurso.get(clave);
+
+      const promesa = (async () => {
+        let features = [];
+        try {
+          const salida = await this.cargarTesela(z, x, y);
+          features = salida.features || [];
+        } catch (err) {
+          features = [];
+        }
+        // El orden de inserción es el de lectura: `Map` las va listing así.
+        this._cache.delete(clave);
+        this._cache.set(clave, features);
+        while (this._cache.size > this._maxCache) {
+          const vieja = this._cache.keys().next().value;
+          this._cache.delete(vieja);
+        }
+        this._enCurso.delete(clave);
+        return features;
+      })();
+
+      this._enCurso.set(clave, promesa);
+      return promesa;
     }
 
     /**
@@ -577,6 +697,7 @@
       this.scene = null;
       this.imageryLayer = null;
       this._visible = true;
+      this._manejadorClic = null;
 
       this.lector.alCambiarColor = () => this.refrescar();
     }
@@ -592,6 +713,7 @@
         hayEscena: Boolean(this.scene),
         hayCapa: Boolean(this.imageryLayer),
         visible: this.isVisible(),
+        hayClic: Boolean(this._manejadorClic),
       };
     }
 
@@ -624,10 +746,142 @@
       }
       if (escena) {
         this.scene = escena;
+        this._engancharClic();
         this.refrescar();
         return;
       }
       if (n > 0) setTimeout(() => this._esperarEscena(n - 1), 100);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * El click
+     *
+     * POR QUÉ NO LO HACE LA API
+     *
+     * La API ya trae el mecanismo de selección (`featuresHandler_`, que escucha
+     * `evt.CLICK` del mapa y llama a `impl.getFeaturesByLayer`), pero en Cesium
+     * no llega a dispararse (medido: `mapajs.featuresHandler_.activated_` vale
+     * `true` y `layers_` trae la capa, pero tras un click real `evt.CLICK` no se
+     * emite ni una vez). Y aunque se emitiera, `getFeaturesByLayer` de Cesium
+     * hace `scene.drillPick()`, que solo ve `entities`: nuestra coropleta es una
+     * capa de imágenes drapeada sobre el terreno, así que no hay nada que
+     * drillear.
+     *
+     * Por eso el click se resuelve aquí: se saca el punto del rayo contra el
+     * globo y se pregunta al LECTOR de qué municipio es. La geometría es la
+     * misma que se pinta, así que el punto sale del municipio que se ve debajo
+     * del ratón.
+     * ------------------------------------------------------------------ */
+
+    _engancharClic() {
+      const Cesium = this.Cesium;
+      const escena = this.scene;
+      if (!Cesium || !escena || !escena.canvas || this._manejadorClic) return;
+      if (typeof Cesium.ScreenSpaceEventHandler !== 'function') return;
+
+      try {
+        this._manejadorClic = new Cesium.ScreenSpaceEventHandler(escena.canvas);
+        this._manejadorClic.setInputAction(
+          (posicion) => { this._alPulsar(posicion); },
+          Cesium.ScreenSpaceEventType.LEFT_CLICK
+        );
+      } catch (e) {
+        this._manejadorClic = null;
+      }
+    }
+
+    _alPulsar(entrada) {
+      const Cesium = this.Cesium;
+      const escena = this.scene;
+      if (!escena || !this.isVisible()) return;
+
+      // OJO con lo que entrega Cesium. Medido en la 1.145 del bundle: el callback
+      // de `LEFT_CLICK` NO recibe un `Cartesian2` pelado, sino un objeto con la
+      // posición dentro (`{ position: Cartesian2 }`). Se acepta cualquiera de
+      // las dos formas por si cambia.
+      const posicion = (entrada && entrada.position) ? entrada.position : entrada;
+      if (!posicion) return;
+
+      let punto = null;
+      try {
+        const rayo = escena.camera.getPickRay(posicion);
+        if (rayo) punto = escena.globe.pick(rayo, escena);
+      } catch (e) {
+        punto = null;
+      }
+      if (!punto) return;
+
+      let lon = 0;
+      let lat = 0;
+      let altura = 0;
+      try {
+        const carto = Cesium.Cartographic.fromCartesian(punto);
+        lon = Cesium.Math.toDegrees(carto.longitude);
+        lat = Cesium.Math.toDegrees(carto.latitude);
+        altura = carto.height;
+      } catch (e) {
+        return;
+      }
+
+      this.lector.municipioEn(lon, lat).then((elemento) => {
+        // El click puede llegar después de que la escena haya cambiado.
+        if (!this.map || !this.scene) return;
+        if (!elemento) {
+          // Click en el mar o en el hueco de un municipio: se cierra el popup,
+          // que es lo que hace la API en 2D al no haber nada debajo.
+          if (typeof this.map.removePopup === 'function') {
+            try { this.map.removePopup(); } catch (e) { /* sin popup */ }
+          }
+          return;
+        }
+        this._seleccionar(elemento, lon, lat, altura, posicion);
+      }).catch(() => { /* una tesela que no se pudo leer no es un fallo */ });
+    }
+
+    _seleccionar(elemento, lon, lat, altura, posicion) {
+      const IDEE = api();
+      const facade = this.impl.facade;
+      if (!facade || typeof facade.fire !== 'function' || !IDEE || !IDEE.evt) return;
+
+      // El visualizador espera lo mismo que en 2D: `features[0].getAttributes()`
+      // con el `nationalcode` completo, y un evento con `.coord`.
+      const atributos = {
+        nationalcode: elemento.codigoNacional || (elemento.codigo || ''),
+        nameunit: elemento.nombre || '',
+      };
+      const feature = {
+        getAttributes() { return atributos; },
+        getId() { return atributos.nationalcode; },
+        getFeature() { return elemento; },
+        equals(otro) {
+          return Boolean(otro) && typeof otro.getAttributes === 'function'
+            && otro.getAttributes().nationalcode === atributos.nationalcode;
+        },
+      };
+
+      // LA COORDENADA LLEVA ALTURA, y no es capricho. La implementación de popup
+      // de Cesium coloca el recuadro en dos ramas (medido en el bundle):
+      //
+      //   coord con 3 valores -> `Cartesian3.fromDegrees(lon, lat, altura)` y se
+      //     reposiciona en cada `preRender`. Funciona siempre.
+      //   coord con 2 valores -> pone la altura a 0 y, si el mapa tiene una capa
+      //     de terreno, se queda ESPERANDO a que termine de cargar para muestrear
+      //     la altura. Y en este visualizador la capa de terreno no se crea (el
+      //     bundle avisa "no puede crear capas Terrain"), así que la espera no
+      //     termina nunca y el popup se queda donde lo deje el CSS, media
+      //     pantalla más arriba (medido: `top: -628px` con el click en el centro).
+      //
+      // O sea: la altura del punto es a la vez lo correcto y lo que lo hace
+      // funcionar.
+      //
+      // OJO también con cómo se llama a `fire`: la API no es `fire(tipo, ...args)`
+      // sino `fire(tipo, [args])`, y reparte ese array entre los oyentes (medido:
+      // con `fire(tipo, [feature], evento)` el oyente recibe la feature suelta y
+      // `features[0]` sale `undefined`). Por eso va anidado.
+      facade.fire(IDEE.evt.SELECT_FEATURES, [[feature], {
+        coord: [lon, lat, altura],
+        pixel: { x: posicion.x, y: posicion.y },
+      }]);
     }
 
     refrescar() {
@@ -650,6 +904,10 @@
     }
 
     destroy() {
+      if (this._manejadorClic) {
+        try { this._manejadorClic.destroy(); } catch (e) { /* ya estaba fuera */ }
+        this._manejadorClic = null;
+      }
       if (this.imageryLayer && this.scene) {
         this.scene.imageryLayers.remove(this.imageryLayer, true);
         this.imageryLayer = null;
@@ -718,6 +976,16 @@
       }
 
       /**
+       * Qué municipio hay en un punto. Lo usa el click del renderizador.
+       * @param {number} lon Longitud en grados.
+       * @param {number} lat Latitud en grados.
+       * @returns {Promise<Object|null>} El elemento leído, o null.
+       */
+      municipioEn(lon, lat) {
+        return this.lector.municipioEn(lon, lat);
+      }
+
+      /**
        * Punto de entrada para iterar sobre la lectura:
        *   capa.getImpl().cargar(5, 16, 12).then(console.log)
        * @returns {Promise<Object>} Lo que devuelve `LectorMVT.cargarTesela`.
@@ -729,9 +997,14 @@
         });
       }
 
-      /** @returns {number} Municipios pintados ahora mismo en pantalla. */
+      /**
+       * Municipios de la última tesela leída, solo para depurar desde la consola.
+       * El dibujado va por `ImageryProvider` y no lleva la cuenta, así que esto
+       * NO es el número de municipios en pantalla.
+       * @returns {number}
+       */
       get pintados() {
-        return this.render.pintados;
+        return (this.featuresLeidas && this.featuresLeidas.length) || 0;
       }
     };
   }
