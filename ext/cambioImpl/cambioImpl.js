@@ -124,6 +124,26 @@ class miPlugin_cambioImpl {
     }
 
     /**
+     * El nodo del mapa que se va a vaciar al reiniciar, o null.
+     *
+     * Es el que calcula `reiniciarMapa()`: dos niveles por encima del
+     * contenedor, o el propio contenedor.
+     * @returns {HTMLElement|null}
+     */
+    _nodoDelMapa() {
+        try {
+            const contenedor = (this._map && typeof this._map.getContainer === 'function')
+                ? this._map.getContainer()
+                : document.getElementById('mapa');
+            if (!contenedor) return null;
+            const arriba = contenedor.parentElement && contenedor.parentElement.parentElement;
+            return (arriba && arriba.id) ? arriba : contenedor;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
      * Pone el engranaje. Idempotente.
      * @param {string} [mensaje] No se pinta: se queda como atributo `title` para
      *   poder leerlo en el inspector sin ensuciar la pantalla.
@@ -167,9 +187,40 @@ class miPlugin_cambioImpl {
             const padre = this._anfitrionDeCarga();
             padre.appendChild(div);
 
+            // Y APAGA EL MAPA VIEJO AHORA MISMO, en el mismo frame del clic.
+            //
+            // El engranaje, solo, no bastaba: se veía el mapa viejo por debajo
+            // (medido: el div del mapa no se vacía hasta 2604 ms, que es cuando
+            // `reiniciarMapa()` lo hace, y el velo del engranaje es
+            // semitransparente). Es decir, parecía que seguía en la
+            // implementación original durante casi tres segundos, que es
+            // justo lo que se quería evitar.
+            //
+            // VACIARLO, NO: se oculta con `visibility: hidden`, y es a
+            // propósito por dos motivos medidos.
+            //
+            //  - Vaciarlo rompe el reinicio. `reiniciarMapa()` saca el id del
+            //    nodo del mapa subiendo desde `map.getContainer()`
+            //    (`parentElement.parentElement.id`). Al vaciar, ese contenedor
+            //    queda sin padre, el id sale `undefined`,
+            //    `getElementById(undefined)` devuelve null y el reinicio revienta.
+            //  - Y no hace falta: `visibility: hidden` saca el mapa de pantalla
+            //    en el mismo frame sin tocar el árbol, así que los objetos de la
+            //    API (que no cuelgan del DOM) siguen vivos mientras
+            //    `capturarTodo` los lee, que es justo lo que va a pasar a
+            //    continuación.
+            const nodoMapa = this._nodoDelMapa();
+            let visibilidadPrevia = '';
+            if (nodoMapa) {
+                visibilidadPrevia = nodoMapa.style.visibility || '';
+                nodoMapa.style.visibility = 'hidden';
+            }
+
             this._carga = {
                 div: div,
                 padre: padre,
+                nodoMapa: nodoMapa,
+                visibilidadPrevia: visibilidadPrevia,
                 mapa: null,
                 stop: false,
                 timer: null,
@@ -197,6 +248,17 @@ class miPlugin_cambioImpl {
         }
         if (c.div && c.div.parentNode) {
             try { c.div.parentNode.removeChild(c.div); } catch (e) { /* ignora */ }
+        }
+        // El mapa viejo se ocultó al poner el engranaje. En el camino normal ya no
+        // está en el DOM (`reiniciarMapa()` lo sustituyó por uno nuevo), así que
+        // esto no hace nada; se deja por si el cambio falla a mitad y se vuelve
+        // al mapa de antes, que entonces tiene que ser visible otra vez.
+        if (c.nodoMapa) {
+            try {
+                if (c.nodoMapa.parentNode) {
+                    c.nodoMapa.style.visibility = c.visibilidadPrevia || '';
+                }
+            } catch (e) { /* ya no está */ }
         }
     }
 
@@ -246,21 +308,26 @@ class miPlugin_cambioImpl {
                     // El globo y las teselas cargadas: es el estado bueno.
                     listo = Boolean(escena.globe.tilesLoaded);
                 } else if (impl) {
-                    // OpenLayers no expone `tilesLoaded`. Antes aquí se devolvía
-                    // `true` en cuanto había implementación, y eso no dice nada
-                    // (medido: `renderer.frameState_` sale SIEMPRE `null` en el
-                    // el bundle minificado, así que no sirve como criterio).
+                    // OpenLayers: `getLoadingOrNotReady()` es su indicador de
+                    // "quedan teselas por pedir o pintar". Es el que vale.
                     //
-                    // El que sí vale es que la vista tenga destino, que es lo
-                    // mínimo que dice "ya se ha inicializado". Y no es una carrera
-                    // contra lo que se ve: medido con capturas, al desaparecer el
-                    // engranaje en 2D el mapa YA está pintado con la coropleta, y
-                    // un segundo después es idéntico.
-                    const vista = typeof impl.getView === 'function' ? impl.getView() : null;
-                    const centro = vista && typeof vista.getCenter === 'function'
-                        ? vista.getCenter()
-                        : null;
-                    listo = Boolean(centro);
+                    // Lo que se probó antes y NO vale, por si vuelve a tentarse:
+                    //  - `impl.loaded()` no existe en el impl de la API.
+                    //  - `renderer.frameState_` sale SIEMPRE `null` en el bundle
+                    //    minificado (medido), así que nunca se cumpliría.
+                    //  - "la vista tiene centro" da por bueno el mapa a los
+                    //    200 ms, con los cuadros de tesela todavía sin pintar
+                    //    (medido en la captura de la vuelta a 2D).
+                    if (typeof impl.getLoadingOrNotReady === 'function') {
+                        listo = !impl.getLoadingOrNotReady();
+                    } else {
+                        // Este impl no lo dice (si alguien cambia de
+                        // implementación): se acepta la vista con destino, que es
+                        // el mínimo, y el tope de seguridad cubre el resto.
+                        const vista = typeof impl.getView === 'function' ? impl.getView() : null;
+                        listo = Boolean(vista && typeof vista.getCenter === 'function'
+                            && vista.getCenter());
+                    }
                 }
             } catch (e) {
                 listo = false;

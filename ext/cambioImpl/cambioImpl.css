@@ -75,6 +75,16 @@
  * todo impediría ver el mapa nuevo apareciendo, que es justo lo que se quiere
  * enseñar mientras carga.
  *
+ * EL VELO ES SEMITRANSPARENTE PORQUE NO HACE FALTA QUE SEA OPACO. Antes lo era
+ * (`#dd61ff`) y era un parche: el mapa viejo se veía por debajo porque el velo
+ * no lo tapaba, no porque el velo tuviera que ser opaco. El mapa viejo ahora se
+ * oculta con `visibility: hidden` en el MISMO frame del clic, así que no sale a
+ * la vista por el velo ni sin él.
+ *
+ * Y va sobre una base clara opaca, porque solo no. Con un 50 % desnudo sobre el
+ * lienzo en negro de Cesium el color se ensucia y sale marrón (medido); con la
+ * base debajo el tono es el pedido tanto si debajo hay mapa como si no hay nada.
+ *
  * DEL ENGRANAJE NO SE PINTA NADA AQUÍ. Es `img/iconos/gear-spinner.svg`, el
  * mismo fichero que usa el engranaje de arranque de los visualizadores, y ya
  * trae su color y su `<animateTransform>` dentro. Si se le añadiera una
@@ -90,7 +100,15 @@
   justify-content: center;
   /* Sin `pointer-events: none`: mientras se cambia no se debe poder pulsar en un
      mapa que ya no es el de antes. */
-  background-color: var(--g-plugin-carga-fondo, rgba(221, 97, 255, 0.51));
+  /* Naranja salmón al 50 % (`--g-plugin-carga-fondo`), COMPUESTO sobre una base
+     clara opaca (`--g-plugin-carga-base`). No es un detalle: con el 50 % tal
+     cual sobre el mapa, el color sale sucio, porque mientras carga el lienzo de
+     Cesium está en negro y el resultado es un marrón (medido). Con la base
+     debajo el tono es siempre el que se pide, venga lo que haya debajo. */
+  background-image: linear-gradient(var(--g-plugin-carga-fondo, rgba(244, 166, 131, 0.5)),
+    var(--g-plugin-carga-fondo, rgba(244, 166, 131, 0.5))),
+    linear-gradient(var(--g-plugin-carga-base, #f6f2ef),
+      var(--g-plugin-carga-base, #f6f2ef));
 }
 
 .m-cambioImpl-carga-gear {
