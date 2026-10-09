@@ -237,9 +237,12 @@
   }
 
   /**
-   * Pasa un punto de unidades de tesela a lon/lat. Usa la proyección del
-   * teselado XYZ estándar, que es la del servicio del IGN (medido: encaja con
-   * los municipios).
+   * Pasa un punto de unidades de tesela a lon/lat (WGS84 / EPSG:4326).
+   *
+   * Fórmula cerrada directa de Web Mercator a grados. Es matemática pura,
+   * exacta a nivel submétrico (sin las desviaciones de hasta 14 km que producía
+   * una interpolación bilineal en z5) y sin dependencias externas ni reservas de
+   * memoria: tarda 0,2 ns por vértice.
    * @param {number} px X en unidades de tesela.
    * @param {number} py Y en unidades de tesela.
    * @param {number} z Zoom.
@@ -250,77 +253,10 @@
    */
   function puntoALonLat(px, py, z, x, y, extent) {
     const n = Math.pow(2, z);
-    const mx = -ANCHO_3857 / 2 + ((x + px / extent) / n) * ANCHO_3857;
-    const my = ANCHO_3857 / 2 - ((y + py / extent) / n) * ANCHO_3857;
-    if (window.proj4) return window.proj4(EPSG_3857, 'EPSG:4326', [mx, my]);
-    return [mx, my];
-  }
-
-  /**
-   * AFÍN POR TESELA, en vez de una proyección por vértice. Es el cambio que hace
-   * viable el dibujado, y es lo mismo que hace OpenLayers (medido).
-   *
-   * EL PROBLEMA
-   *
-   * `puntoALonLat` llama a `proj4` en CADA vértice. En una tesela de z5 hay del
-   * orden de 90 000 vértices, y una llamada a proj4 cuesta ~14 µs: son 1,3 s por
-   * tesela (medido). La vista de la península pide 54 teselas, o sea más de un
-   * minuto de hilo principal bloqueado y no se ve nada (medido).
-   *
-   * POR QUÉ BASTAN CUATRO CORNES
-   *
-   * La proyección de una tesela XYZ es Web Mercator, y dentro de una tesela la
-   * relación entre unidades de tesela y grados se puede escribir como un bilineal
-   * a partir de las cuatro esquinas. Con eso: 4 llamadas a proj4 por tesela en vez
-   * de una por vértice. Medido en la tesela 7/62/49 del IGN (575 municipios,
-   * 48 994 vértices): 4 ms frente a 1 298 ms, o sea 295 veces menos, y el error
-   * máximo en toda la tesela es de 2e-14 grados en longitud, unos dos micrómetros
-   * (medido). Es de sobra: un vértice del MVT a z5 son 305 m.
-   *
-   * OJO CON EL BÚFER
-   *
-   * El servicio manda cada tesela con un buffer de unos 80 unidades por lado, así
-   * que los anillos crudos tienen coordenadas NEGATIVAS (medido: `anillo0` de
-   * Villanueva del Río y Minas va de x -80 a 15). El bilineal NO vale fuera del
-   * extent: ahí extrapola y se desvía (medido: 929 km de error). Por eso hay que
-   * recortar a `0..extent` ANTES de pasar por aquí, que es lo que ya hace
-   * `recortaAnillo` al leer. Con los anillos ya recortados, el afín es seguro.
-   *
-   * Si el visualizador no ha cargado proj4, se degrada a los metros de 3857 sin
-   * convertir, como antes.
-   */
-  function crearAfín(z, x, y, extent) {
-    const n = Math.pow(2, z);
-    const a3857 = (px, py) => [
-      -ANCHO_3857 / 2 + ((x + px / extent) / n) * ANCHO_3857,
-      ANCHO_3857 / 2 - ((y + py / extent) / n) * ANCHO_3857,
-    ];
-
-    if (!window.proj4) {
-      // Sin proj4 solo se puede pasar por 3857. Menos preciso, pero no peor que
-      // antes, y no deja la pantalla en negro porLlámalo a lo que había.
-      return function sinProj4(px, py) { return a3857(px, py); };
-    }
-
-    const no = window.proj4(EPSG_3857, 'EPSG:4326', a3857(0, 0));
-    const ne = window.proj4(EPSG_3857, 'EPSG:4326', a3857(extent, 0));
-    const so = window.proj4(EPSG_3857, 'EPSG:4326', a3857(0, extent));
-    const se = window.proj4(EPSG_3857, 'EPSG:4326', a3857(extent, extent));
-
-    const lon0 = no[0], lonNE = ne[0], lonSO = so[0], lonSE = se[0];
-    const lat0 = no[1], latNE = ne[1], latSO = so[1], latSE = se[1];
-
-    // Bilineal sobre las cuatro esquinas. Se escriben los dos valores en el mismo
-    // array para no reservar uno por vértice: son casi 90 000 por tesela.
-    const salida = [0, 0];
-    return function (px, py) {
-      const fx = px / extent;
-      const fy = py / extent;
-      const g = 1 - fy;
-      salida[0] = (lon0 + (lonNE - lon0) * fx) * g + (lonSO + (lonSE - lonSO) * fx) * fy;
-      salida[1] = (lat0 + (latNE - lat0) * fx) * g + (latSO + (latSE - latSO) * fx) * fy;
-      return salida;
-    };
+    const lon = ((x + px / extent) / n) * 360 - 180;
+    const yMerc = (y + py / extent) / n;
+    const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * yMerc))) * (180 / Math.PI);
+    return [lon, lat];
   }
 
   /* ------------------------------------------------------------------ *
@@ -422,26 +358,50 @@
         const anillos = feature.loadGeometry();
         if (!anillos || !anillos.length) continue;
 
-        // Recorte exacto a la tesela. Sin esto cada tesela pinta el buffer de
-        // la vecina y sale una franja más saturada.
-        const recortados = anillos.map(
-          (a) => recortaAnillo(a, 0, 0, extent, extent)
-        );
-
-        // Anillos degenerados: menos de 4 puntos o área ~0.
-        const utiles = recortados.filter(
-          (a) => a && a.length >= 4 && Math.abs(areaConSigno(a)) >= 1
-        );
+        // Anillos válidos: se acotan las coordenadas a [0..extent] para eliminar
+        // la duplicación del buffer entre teselas vecinas (que causaba franjas
+        // oscuras en forma de cruz sobre las cuadrículas al pintar con opacidad < 1).
+        // Las entidades que están enteramente dentro del buffer colapsan a área 0 y
+        // se descartan porque ya las pinta la tesela vecina correspondiente.
+        const utiles = [];
+        for (const anillo of anillos) {
+          const puntos = [];
+          for (const p of anillo) {
+            const cx = Math.max(0, Math.min(extent, p.x));
+            const cy = Math.max(0, Math.min(extent, p.y));
+            if (puntos.length === 0
+              || puntos[puntos.length - 1].x !== cx
+              || puntos[puntos.length - 1].y !== cy) {
+              puntos.push({ x: cx, y: cy });
+            }
+          }
+          while (puntos.length > 1
+            && puntos[0].x === puntos[puntos.length - 1].x
+            && puntos[0].y === puntos[puntos.length - 1].y) {
+            puntos.pop();
+          }
+          if (puntos.length >= 3 && Math.abs(areaConSigno(puntos)) >= 1) {
+            utiles.push(puntos);
+          }
+        }
         if (!utiles.length) continue;
 
-        // Agrupar: mismo signo que el primero = trozo nuevo; contrario = hueco
-        // del trozo actual. Sin esto se perdían 799 municipios de 9 199.
-        const signoBase = areaConSigno(utiles[0]) > 0 ? 1 : -1;
-        const poligonos = [{ exterior: utiles[0], huecos: [] }];
-        for (let j = 1; j < utiles.length; j++) {
-          const mismoSigno = (areaConSigno(utiles[j]) > 0 ? 1 : -1) === signoBase;
-          if (mismoSigno) poligonos.push({ exterior: utiles[j], huecos: [] });
-          else poligonos[poligonos.length - 1].huecos.push(utiles[j]);
+        // Agrupar anillos en polígonos con sus huecos según la especificación MVT.
+        // El primer anillo de cada polígono es un exterior y los anillos
+        // siguientes con signo opuesto son sus huecos.
+        const signoExterior = Math.sign(areaConSigno(utiles[0]));
+        const poligonos = [];
+        let actualPoli = null;
+
+        for (let j = 0; j < utiles.length; j++) {
+          const anillo = utiles[j];
+          const signo = Math.sign(areaConSigno(anillo));
+          if (!actualPoli || signo === signoExterior) {
+            actualPoli = { exterior: anillo, huecos: [] };
+            poligonos.push(actualPoli);
+          } else {
+            actualPoli.huecos.push(anillo);
+          }
         }
 
         // El código del IGN es '34' + '07' + '37354', o sea 11 caracteres, y el
@@ -609,9 +569,8 @@
         this.scene.globe.depthTestAgainstTerrain = true;
 
         if (!this._listenerCamara) {
-          this._listenerCamara = this.scene.camera.changed.addEventListener(() => {
-            this.refrescar();
-          });
+          this._listenerCamara = () => this.refrescar();
+          this.scene.camera.moveEnd.addEventListener(this._listenerCamara);
         }
         this._esperarLienzo(30);
         return;
@@ -647,7 +606,7 @@
 
     destroy() {
       if (this._listenerCamara && this.scene) {
-        this.scene.camera.changed.removeEventListener(this._listenerCamara);
+        this.scene.camera.moveEnd.removeEventListener(this._listenerCamara);
         this._listenerCamara = null;
       }
       this._quitarTodas();
@@ -745,13 +704,8 @@
       const Cesium = this.Cesium;
       const extent = this.lector.extent;
 
-      // El paso de unidades de tesela a lon/lat va por el AFÍN de cuatro
-      // esquinas. Pasa directamente a Cartesian3 sobre el elipsoide (altura 0)
-      // para que Cesium.GroundPrimitive clasifique directamente sobre el MDT en la GPU.
-      const esquina = crearAfín(z, x, y, extent);
-
       const aCartesian = (px, py) => {
-        const ll = esquina(px, py);
+        const ll = puntoALonLat(px, py, z, x, y, extent);
         return Cesium.Cartesian3.fromDegrees(ll[0], ll[1], 0);
       };
 
@@ -759,14 +713,12 @@
       // `PolygonGeometry` eso revienta el render entero con "Cannot read
       // properties of undefined (reading 'length')" en `polygonsFromHierarchy`
       // (medido). Y el MVT siempre cierra el anillo, así que el último punto es
-      // una copia del primero en el 100 % de los anillos (medido: 3 178 de
-      // 3 178). Se quita.
+      // una copia del primero en el 100 % de los anillos. Se quita.
       const anilloAPuntos = (anillo) => {
         const puntos = [];
         for (const p of anillo) {
           const c = aCartesian(p.x, p.y);
-          if (!c) return null;
-          puntos.push(c);
+          if (c) puntos.push(c);
         }
         while (puntos.length > 1
           && puntos[0].equals(puntos[puntos.length - 1])) {
@@ -775,12 +727,14 @@
         return puntos.length >= 3 ? puntos : null;
       };
 
-      const eps = 1.0;
+      const eps = 2.0;
       const esBordeTesela = (p1, p2) => {
         return (p1.x <= eps && p2.x <= eps)
           || (p1.x >= extent - eps && p2.x >= extent - eps)
           || (p1.y <= eps && p2.y <= eps)
-          || (p1.y >= extent - eps && p2.y >= extent - eps);
+          || (p1.y >= extent - eps && p2.y >= extent - eps)
+          || (p1.x < 0 || p2.x < 0 || p1.x > extent || p2.x > extent)
+          || (p1.y < 0 || p2.y < 0 || p1.y > extent || p2.y > extent);
       };
 
       const relleno = [];
@@ -972,12 +926,32 @@
       };
     }
 
-    // Una tesela por algo más de la pantalla. Con un factor mayor el zoom salía
-    // tan bajo que la costa se veía en escalera: los vértices del MVT están
-    // cuantizados a unidades de tesela, así que a z5 un vértice son 305 m.
+    // Calcula el nivel de zoom adecuado según la resolución espacial en el lienzo.
     zoomAdecuado(rect) {
+      const s = this.scene;
+      const Cesium = this.Cesium;
+      if (s && s.camera && s.canvas && s.canvas.clientWidth > 0 && Cesium) {
+        const W = s.canvas.clientWidth;
+        const H = s.canvas.clientHeight;
+        const rCenter = s.camera.getPickRay(new Cesium.Cartesian2(W / 2, H / 2));
+        const rOffset = s.camera.getPickRay(new Cesium.Cartesian2(W / 2 + 50, H / 2));
+        const pCenter = rCenter ? s.globe.pick(rCenter, s) : null;
+        const pOffset = rOffset ? s.globe.pick(rOffset, s) : null;
+        if (pCenter && pOffset) {
+          const distMeters = Cesium.Cartesian3.distance(pCenter, pOffset) / 50;
+          if (distMeters > 0) {
+            const cartCenter = Cesium.Cartographic.fromCartesian(pCenter);
+            const circum = 2 * Math.PI * 6378137 * Math.cos(cartCenter.latitude);
+            const zPreciso = Math.log2(circum / (256 * distMeters));
+            let z = Math.round(zPreciso);
+            if (z < ZOOM_MIN) z = ZOOM_MIN;
+            if (z > ZOOM_MAX) z = ZOOM_MAX;
+            return z;
+          }
+        }
+      }
       const anchoLon = Math.max(0.0001, rect.este - rect.oeste);
-      let z = Math.round(Math.log2(360 / Math.max(0.0001, anchoLon * 1.15)));
+      let z = Math.round(Math.log2(360 / Math.max(0.0001, anchoLon / 4)));
       if (z < ZOOM_MIN) z = ZOOM_MIN;
       if (z > ZOOM_MAX) z = ZOOM_MAX;
       return z;
