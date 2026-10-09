@@ -104,22 +104,10 @@
  *
  * LO QUE HACE FALTA EN EL index.html
  *
- * El decodificador es ESM puro y necesita un import map:
- *
- *   <script type="importmap">
- *     { "imports": {
- *         "@mapbox/point-geometry": "https://cdn.jsdelivr.net/npm/@mapbox/point-geometry@0.1.0/+esm",
- *         "@mapbox/vector-tile": "https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@2.0.3/index.min.js"
- *     } }
- *   </script>
- *   <script src="../../ext/MVTLayer/MVTLayer.js"></script>
- *
- * Lo de point-geometry tiene su trampa: el `/index.js` del paquete es CommonJS
- * (`module.exports = Point`) y no vale para un import ESM. Pero jsdelivr sirve
- * cualquier paquete como ESM con el sufijo `+esm`, y ahí sí hay `export default`.
- * Medido: con esa URL el decodificador lee una tesela de verdad (157 features) y
- * el primer punto sale en x -80, y -77, que es el buffer del servicio. Antes de
- * esto había un shim propio en el plugin, y ya no hace falta.
+ * Nada más que la API y el plugin. Ni pbf, ni proj4, ni import map: el plugin
+ * se trae sus dependencias con importaciones dinámicas (ver el bloque
+ * "Dependencias", más abajo). Antes todo eso vivía en el HTML del visualizador
+ * y quien quisiera usar el plugin tenía que copiar el bloque entero.
  */
 (function () {
   'use strict';
@@ -128,12 +116,6 @@
   function api() {
     return window.IDEE || window.M;
   }
-
-  // EPSG:3857 tal y como la define proj4, para pasar unidades de tesela a
-  // lon/lat. Solo se usa si el visualizador ha cargado proj4.
-  const EPSG_3857 = '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 ' +
-    '+x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs';
-  const ANCHO_3857 = 40075016.685578488;
 
   const ZOOM_MIN = 5;
   const ZOOM_MAX = 14;
@@ -144,22 +126,37 @@
   const COLOR_SIN_DATO = 'rgba(150, 150, 150, 0.75)';
 
   /* ------------------------------------------------------------------ *
-   * Decodificador
+   * Dependencias: las trae el plugin, NO el visualizador
    *
-   * Va aquí, dentro del plugin, y no en un módulo aparte porque es parte de la
-   * lectura. Aun así tiene que ser una importación DINÁMICA: el bundle de
-   * @mapbox/vector-tile@2.0.3 es ESM puro (empieza por
-   * `import Point from '@mapbox/point-geometry'` y exporta con `export class`), y
-   * un `<script>` normal no lo carga: da `Unexpected token 'export'`.
+   * Antes esto living en el `index.html` del visualizador, con un
+   * `<script>` para pbf, otro para proj4 y un `<script type="importmap">` para
+   * que el navegador resolviera `@mapbox/vector-tile`. Con eso el visualizador
+   * tenía que saber de decodificadores de MVT para poder pintar una coropleta, y
+   * cualquier otro visualizador que quisiera el plugin tenía que copiar el
+   * bloque entero. Ahora el plugin se trae lo suyo y el HTML solo importa la
+   * API y los plugins, que es lo que debería.
    *
-   * Sobre las versiones, medido:
-   * - La 1.3.1 no publica bundle de navegador: /dist/vector-tile.js da 404 y su
-   *   /index.min.js son 528 bytes sin el código. Solo CommonJS.
-   * - La 2.0.3 sí, en /index.min.js, pero es ESM.
-   * - vt-pbf no sirve: serializa MVT, no lo decodifica, y usa require().
+   * LAS DOS IMPORTACIONES SON DINÁMICAS Y A URL ABSOLUTA
+   *
+   * - El decodificador. @mapbox/vector-tile@2.0.3 es ESM puro (empieza por
+   *   `import Point from '@mapbox/point-geometry'` y exporta con `export class`),
+   *   así que un `<script>` normal no lo carga: da `Unexpected token 'export'`.
+   *   La 1.3.1 tampoco sirve: /dist/vector-tile.js da 404 y /index.min.js son
+   *   528 bytes sin el código. Y vt-pbf menos: serializa MVT, no lo decodifica.
+   *
+   * - El sufijo `+esm` de jsDelivr es lo que quita el import map. Es el mismo
+   *   paquete reempaquetado por jsDelivr con sus dependencias METIDAS DENTRO:
+   *   el `+esm` de vector-tile importa `/npm/@mapbox/point-geometry@1.1.0/+esm`
+   *   y el de pbf importa `/npm/ieee754@1.1.13/+esm`, los dos por URL absoluta
+   *   (medido), o sea que al navegador no le queda ningún nombre desnudo por
+   *   resolver y no hace falta declarar nada en la página.
    * ------------------------------------------------------------------ */
 
+  const URL_VECTOR_TILE = 'https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@2.0.3/+esm';
+  const URL_PBF = 'https://cdn.jsdelivr.net/npm/pbf@3.2.1/+esm';
+
   let promesaDecodificador = null;
+  let promesaPbf = null;
 
   /**
    * Devuelve el constructor VectorTile, cargándolo la primera vez.
@@ -167,7 +164,7 @@
    */
   function cargarVectorTile() {
     if (!promesaDecodificador) {
-      promesaDecodificador = import('@mapbox/vector-tile').then(function (mod) {
+      promesaDecodificador = import(URL_VECTOR_TILE).then(function (mod) {
         if (!mod || typeof mod.VectorTile !== 'function') {
           throw new Error('@mapbox/vector-tile no ha exportado VectorTile');
         }
@@ -175,6 +172,28 @@
       });
     }
     return promesaDecodificador;
+  }
+
+  /**
+   * Devuelve el decodificador de Protocol Buffers, cargándolo la primera vez.
+   *
+   * Antes se usaba el `window.Pbf` que el visualizador dejaba puesto con un
+   * `<script>`. Ahora lo trae el propio plugin. Se respeta el global si existe,
+   * por si la página lo carga igualmente, pero no hace falta.
+   * @returns {Promise<Function>} Promesa con el constructor.
+   */
+  function cargarPbf() {
+    if (window.Pbf) return Promise.resolve(window.Pbf);
+    if (!promesaPbf) {
+      promesaPbf = import(URL_PBF).then(function (mod) {
+        const Pbf = (mod && mod.default) || (mod && mod.Pbf);
+        if (typeof Pbf !== 'function') {
+          throw new Error('pbf no ha exportado un constructor');
+        }
+        return Pbf;
+      });
+    }
+    return promesaPbf;
   }
 
   /* ------------------------------------------------------------------ *
@@ -189,51 +208,6 @@
       s += (anillo[i + 1].x - anillo[i].x) * (anillo[i + 1].y + anillo[i].y);
     }
     return s / 2;
-  }
-
-  // Sutherland-Hodgman contra un rectángulo. Exacto cuando la ventana es
-  // convexa, que es el caso aquí: el extent de la tesela.
-  const corteX = (a, b, x) => (b.x === a.x
-    ? { x, y: a.y }
-    : { x, y: a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x) });
-  const corteY = (a, b, y) => (b.y === a.y
-    ? { y, x: a.x }
-    : { y, x: a.x + ((b.x - a.x) * (y - a.y)) / (b.y - a.y) });
-
-  function recortaAnillo(anillo, xmin, ymin, xmax, ymax) {
-    const lados = [
-      { dentro: (p) => p.x >= xmin, corte: (a, b) => corteX(a, b, xmin) },
-      { dentro: (p) => p.x <= xmax, corte: (a, b) => corteX(a, b, xmax) },
-      { dentro: (p) => p.y >= ymin, corte: (a, b) => corteY(a, b, ymin) },
-      { dentro: (p) => p.y <= ymax, corte: (a, b) => corteY(a, b, ymax) },
-    ];
-    let actual = anillo;
-    for (const lado of lados) {
-      if (!actual.length) return [];
-      const siguiente = [];
-      let previo = actual[actual.length - 1];
-      for (const punto of actual) {
-        if (lado.dentro(punto)) {
-          if (!lado.dentro(previo)) siguiente.push(lado.corte(previo, punto));
-          siguiente.push(punto);
-        } else if (lado.dentro(previo)) {
-          siguiente.push(lado.corte(previo, punto));
-        }
-        previo = punto;
-      }
-      actual = siguiente;
-    }
-    return actual;
-  }
-
-  function distanciaM(a, b) {
-    const R = 6371000;
-    const dLat = (b.lat - a.lat) * Math.PI / 180;
-    const dLon = (b.lon - a.lon) * Math.PI / 180;
-    const la1 = a.lat * Math.PI / 180;
-    const la2 = b.lat * Math.PI / 180;
-    const x = dLon * Math.cos((la1 + la2) / 2);
-    return R * Math.sqrt(x * x + dLat * dLat);
   }
 
   /**
@@ -380,7 +354,8 @@
       salida.vacia = false;
 
       const VectorTile = await cargarVectorTile();
-      const tesela = new VectorTile(new window.Pbf(new Uint8Array(buffer)));
+      const Pbf = await cargarPbf();
+      const tesela = new VectorTile(new Pbf(new Uint8Array(buffer)));
       const capa = this.capas
         ? tesela.layers[this.capas]
         : tesela.layers[Object.keys(tesela.layers)[0]];
@@ -637,7 +612,8 @@
         if (!buffer || buffer.byteLength < 40) return obtenerCanvasVacio();
 
         const VectorTile = await cargarVectorTile();
-        const tesela = new VectorTile(new window.Pbf(new Uint8Array(buffer)));
+        const Pbf = await cargarPbf();
+        const tesela = new VectorTile(new Pbf(new Uint8Array(buffer)));
         const capa = this.capas
           ? tesela.layers[this.capas]
           : tesela.layers[Object.keys(tesela.layers)[0]];

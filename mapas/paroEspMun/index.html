@@ -26,34 +26,21 @@
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <!-- proj4: reproyección de coordenadas. En 3D se usa para pasar los vértices
-       del MVT (Web Mercator, EPSG:3857) a lon/lat. Es la misma librería y
-       versión que usa mapas/vueloFotogrametrico. -->
-  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
-
-  <!-- pbf: decodificador de Protocol Buffers, para leer las teselas .pbf -->
-  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/pbf@3.2.1/dist/pbf.min.js"></script>
-
   <!--
-    Import map para el decodificador de MVT, que usa ext/MVTLayer.
+    Lo que necesita el MVT NO va aquí.
 
-    El bundle de @mapbox/vector-tile@2.0.3 es ESM puro y hace
-    "import Point from '@mapbox/point-geometry'", un nombre de paquete que el
-    navegador no sabe resolver por su cuenta, así que hace falta el import map.
+    Ni proj4, ni pbf, ni el import map de @mapbox/vector-tile. Eso vivía en este
+    HTML solo porque ext/MVTLayer se apoyaba en que la página lo dejara puesto,
+    y obligaba a cada visualizador que quisiera la capa a copiar el bloque entero.
 
-    Ojo con point-geometry: el /index.js del paquete es CommonJS y no vale, pero
-    jsdelivr lo sirve como ESM en el sufijo "+esm", y ahí sí hay export default.
-    Medido: con esa URL el decodificador funciona y no hace falta ningún shim
-    propio.
+    Ahora el plugin importa por su cuenta el decodificador de MVT y el de
+    Protocol Buffers, con el sufijo "+esm" de jsDelivr, que es lo que evita que
+    quede algún nombre de paquete por resolver y no haga falta declarar nada
+    aquí. Ver el bloque "Dependencias" de ext/MVTLayer/MVTLayer.js.
+
+    Y el paso de unidades de tesela a lon/lat ya no usa proj4: se hace con la
+    fórmula cerrada de Web Mercator, exacta y sin dependencias.
   -->
-  <script type="importmap">
-    {
-      "imports": {
-        "@mapbox/point-geometry": "https://cdn.jsdelivr.net/npm/@mapbox/point-geometry@0.1.0/+esm",
-        "@mapbox/vector-tile": "https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@2.0.3/index.min.js"
-      }
-    }
-  </script>
 
   <!-- Importación librerías propias -->
   <script type="text/javascript" src="../../js/lib/transforms/formats.js"></script>

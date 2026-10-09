@@ -62,3 +62,40 @@
      que ya no pinta nada porque no hay texto. */
   background-color: var(--g-plugin-icon-color-active, #71A7D3) !important;
 }
+
+
+/* ==================================================================== *
+ * El engranaje de carga del cambio de implementación
+ *
+ * Se cuelga del contenedor PADRE del mapa, no del mapa: `reiniciarMapa()`
+ * sustituye el div del mapa por uno nuevo, así que un overlay puesto dentro se
+ * perdería a mitad del cambio, que es justo cuando hace falta.
+ *
+ * No tapa el mapa entero: es un velo con el engranaje en el centro. Tapar del
+ * todo impediría ver el mapa nuevo apareciendo, que es justo lo que se quiere
+ * enseñar mientras carga.
+ *
+ * DEL ENGRANAJE NO SE PINTA NADA AQUÍ. Es `img/iconos/gear-spinner.svg`, el
+ * mismo fichero que usa el engranaje de arranque de los visualizadores, y ya
+ * trae su color y su `<animateTransform>` dentro. Si se le añadiera una
+ * animación CSS se obtendrían dos giros a la vez, uno encima del otro.
+ * ==================================================================== */
+
+.m-cambioImpl-carga {
+  position: absolute;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Sin `pointer-events: none`: mientras se cambia no se debe poder pulsar en un
+     mapa que ya no es el de antes. */
+  background-color: var(--g-plugin-carga-fondo, rgba(221, 97, 255, 0.51));
+}
+
+.m-cambioImpl-carga-gear {
+  height: 30vh;
+  position: static;
+  display: block;
+  margin: 0 auto;
+}

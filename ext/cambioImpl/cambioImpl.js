@@ -1,4 +1,30 @@
 
+/**
+ * El engranaje: `img/iconos/gear-spinner.svg`, y NO una copia suya.
+ *
+ * Antes aqui iba el `path` del SVG reescrito a mano, en linea y con el `fill`
+ * como `currentColor`. Es un error por partida doble: duplica el dibujo (que se
+ * queda viejo en cuanto se toca el original) y hace que el engranaje de cambio y
+ * el de arranque del visualizador no se parezcan, siendo el mismo dibujo.
+ *
+ * Ahora es el fichero, tal cual, con su `<animateTransform>` dentro: gira solo y
+ * trae su color, sin tocar el CSS.
+ *
+ * LA RUTA SE RESUELVE DESDE EL PROPIO SCRIPT. `img/iconos/...` con ruta relativa
+ * a la pagina solo funciona si cada visualizador la escribe bien, y desde un `.js`
+ * una ruta relativa ni siquiera se sabe contra que se resuelve. Sacandola de
+ * `document.currentScript.src` el plugin funciona igual en la raiz, en un
+ * subdirectorio y en GitHub Pages, sin que nadie tenga que escribirla a mano.
+ */
+const URL_ENGRANAJE = (() => {
+  try {
+    const propio = (document.currentScript && document.currentScript.src) || '';
+    return new URL('../../img/iconos/gear-spinner.svg', propio || location.href).href;
+  } catch (e) {
+    return '/img/iconos/gear-spinner.svg';
+  }
+})();
+
 class miPlugin_cambioImpl {
     constructor(options = {}) {
         this.name = 'miPlugin_cambioImpl';
@@ -29,6 +55,222 @@ class miPlugin_cambioImpl {
         this._panel = null;
         this._control = null;
         this._styleEl = null;
+        this._carga = null;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * EL ENGRANAJE DE CARGA
+     *
+     * Por qué está aquí y no en el visualizador
+     *
+     * El engranaje avisa de UNA sola cosa: de que al cambiar de implementación el
+     * mapa se ha recreado entero y hay que esperar. Y quien sabe eso mejor que
+     * nadie es este plugin, que es el que tira el mapa y lo vuelve a levantar. Si
+     * lo pone el visualizador, cada visualizador con conmutación 2D/3D tiene que
+     * acordarse de mostrarlo y de esconderlo en el sitio correcto, y ese "sitio
+     * correcto" no existe: hasta que el mapa nuevo no está listo no hay evento
+     * al que engancharse.
+     *
+     * Cuándo se quita
+     *
+     * No se quita al terminar el cambio de por sí:
+     *
+     *   - En Cesium, cuando `scene.globe.tilesLoaded` es cierto. Es el aviso de
+     *     que ya se han pedido las teselas de terreno e imagen de lo que se ve.
+     *     Se mira a cada frame, porque `tilesLoaded` también lo anuncia Cesium
+     *     con un evento pero ese evento no está garantizado en este bundle
+     *     (medido) y el sondeo no cuesta nada.
+     *   - En OpenLayers, cuando el mapa emite COMPLETED, y con un tope de
+     *     seguridad por tiempo, porque con `sameMap` el mapa nuevo puede no
+     *     llegar a emitirlo nunca.
+     *
+     * Se quita, en cualquier caso, por `destruirCarga()` desde `destroy()`, para
+     * que no se quede ahí puesto si el plugin se desmonta a mitad del cambio.
+     * ------------------------------------------------------------------ */
+
+    /**
+     * El nodo donde colgar el overlay del engranaje.
+     *
+     * Se sube desde el contenedor del mapa hasta el elemento que tiene su id (el
+     * que `reiniciarMapa()` va a sustituir) y devuelve SU padre, que es lo único
+     * que sobrevive al reinicio. Si no se encuentra ese id, se cae al padre del
+     * contenedor y, si tampoco, al `body`.
+     * @returns {HTMLElement}
+     */
+    _anfitrionDeCarga() {
+        try {
+            const contenedor = (this._map && typeof this._map.getContainer === 'function')
+                ? this._map.getContainer()
+                : document.getElementById('mapa');
+            if (!contenedor) return document.body;
+
+            // El id del nodo que se va a reemplazar. Es el mismo cálculo que hace
+            // `reiniciarMapa()`: dos niveles por encima, o el propio contenedor.
+            const idMapa = (contenedor.parentElement
+                && contenedor.parentElement.parentElement
+                && contenedor.parentElement.parentElement.id)
+                || contenedor.id;
+
+            let nodo = contenedor;
+            while (nodo && nodo.parentElement) {
+                if (idMapa && nodo.id === idMapa) return nodo.parentElement;
+                if (nodo.parentElement === document.body) break;
+                nodo = nodo.parentElement;
+            }
+            return document.body;
+        } catch (e) {
+            return document.body;
+        }
+    }
+
+    /**
+     * Pone el engranaje. Idempotente.
+     * @param {string} [mensaje] No se pinta: se queda como atributo `title` para
+     *   poder leerlo en el inspector sin ensuciar la pantalla.
+     */
+    mostrarCarga(mensaje) {
+        try {
+            this._destruirCarga();
+
+            const div = document.createElement('div');
+            div.className = 'm-cambioImpl-carga';
+            div.setAttribute('role', 'status');
+            div.setAttribute('aria-label', mensaje || 'Cambiando de implementación');
+            if (mensaje) div.title = mensaje;
+
+            // El engranaje es `img/iconos/gear-spinner.svg` y entra tal cual: el
+            // fichero ya trae su `<animateTransform>`, que gira el dibujo dentro
+            // (por eso NO hay animación CSS aquí: sería dos giros encima).
+            const img = document.createElement('img');
+            img.className = 'm-cambioImpl-carga-gear';
+            img.setAttribute('src', URL_ENGRANAJE);
+            img.setAttribute('alt', '');
+            img.setAttribute('aria-hidden', 'true');
+
+            div.appendChild(img);
+
+            // Se cuelga del nodo que `reiniciarMapa()` NO toca.
+            //
+            // `reiniciarMapa()` hace `oldDiv.innerHTML = ''` y luego quita y
+            // vuelve a poner el div del mapa. Ese div es
+            // `map.getContainer().parentElement.parentElement` (o el propio
+            // contenedor si no tiene id), y TODO lo que cuelgue de él se
+            // desaparece con él. Medido: colgar el overlay del
+            // `parentElement` del contenedor, que era lo obvious, no vale de
+            // nada, porque ese padre es el `.ol-viewport` de Cesium/OpenLayers
+            // y está DENTRO de `#mapa`: el engranaje se evaporaba a los
+            // segundos, justo en el tramo en que más hace falta.
+            //
+            // Así que se sube hasta el nodo que tiene el id del mapa (el que se
+            // va a reemplazar) y se cuelga de SU padre, que es lo primero que
+            // sobrevive al reinicio.
+            const padre = this._anfitrionDeCarga();
+            padre.appendChild(div);
+
+            this._carga = {
+                div: div,
+                padre: padre,
+                mapa: null,
+                stop: false,
+                timer: null,
+                alSalir: null,
+            };
+        } catch (e) {
+            // El engranaje es un aviso, nunca un motivo para romper el cambio.
+            console.warn('cambioImpl: no se pudo mostrar el engranaje de carga', e);
+        }
+    }
+
+    /** Quita el engranaje. Idempotente. */
+    ocultarCarga() {
+        this._destruirCarga();
+    }
+
+    _destruirCarga() {
+        const c = this._carga;
+        this._carga = null;
+        if (!c) return;
+        c.stop = true;
+        if (c.timer) { clearTimeout(c.timer); c.timer = null; }
+        if (c.mapa && typeof c.mapa.removeEventListener === 'function' && c.alSalir) {
+            try { c.mapa.removeEventListener(c.alSalir); } catch (e) { /* ignora */ }
+        }
+        if (c.div && c.div.parentNode) {
+            try { c.div.parentNode.removeChild(c.div); } catch (e) { /* ignora */ }
+        }
+    }
+
+    /**
+     * Espera a que el mapa nuevo esté listo y quita el engranaje.
+     * @param {Object} newMap Mapa ya creado.
+     * @param {number} [timeout=25000] Tope de seguridad, en milisegundos.
+     */
+    _esperarMapaListo(newMap, timeout) {
+        const c = this._carga;
+        if (!c) return;
+        const limite = timeout || 25000;
+        const t0 = Date.now();
+
+        c.mapa = newMap;
+        if (this._carga !== c) return;   // se mostró otro en medio: este ya no vale
+
+        const terminar = () => {
+            if (this._carga !== c) return;
+            this._destruirCarga();
+        };
+
+        // OpenLayers avisa con COMPLETED. En Cesium ese mismo evento llega antes
+        // de que las teselas estén, así que no sirve solo: de ahí el sondeo.
+        //
+        // OJO con engancharse TARDE. `reiniciarMapa()` ya ha awaited la creación
+        // del mapa nuevo, así que COMPLETED puede haberse emitido ANTES de que
+        // lleguemos aquí, y engancharse tarde se pierde el evento entero. Por eso
+        // el sondeo no es un extra: es la red que cubre ese hueco.
+        const evt = (window.IDEE || window.M) && (window.IDEE || window.M).evt;
+        if (evt && evt.COMPLETED && newMap && typeof newMap.on === 'function') {
+            c.alSalir = evt.COMPLETED;
+            try { newMap.on(evt.COMPLETED, terminar); } catch (e) { c.alSalir = null; }
+        }
+
+        const comprobar = () => {
+            if (this._carga !== c) return;
+            if (Date.now() - t0 > limite) { this._destruirCarga(); return; }
+
+            let listo = false;
+            try {
+                const impl = newMap && typeof newMap.getMapImpl === 'function'
+                    ? newMap.getMapImpl()
+                    : null;
+                const escena = impl && impl.scene;
+                if (escena && escena.globe) {
+                    // El globo y las teselas cargadas: es el estado bueno.
+                    listo = Boolean(escena.globe.tilesLoaded);
+                } else if (impl) {
+                    // OpenLayers no expone `tilesLoaded`. Antes aquí se devolvía
+                    // `true` en cuanto había implementación, y eso no dice nada
+                    // (medido: `renderer.frameState_` sale SIEMPRE `null` en el
+                    // el bundle minificado, así que no sirve como criterio).
+                    //
+                    // El que sí vale es que la vista tenga destino, que es lo
+                    // mínimo que dice "ya se ha inicializado". Y no es una carrera
+                    // contra lo que se ve: medido con capturas, al desaparecer el
+                    // engranaje en 2D el mapa YA está pintado con la coropleta, y
+                    // un segundo después es idéntico.
+                    const vista = typeof impl.getView === 'function' ? impl.getView() : null;
+                    const centro = vista && typeof vista.getCenter === 'function'
+                        ? vista.getCenter()
+                        : null;
+                    listo = Boolean(centro);
+                }
+            } catch (e) {
+                listo = false;
+            }
+
+            if (listo) this._destruirCarga();
+            else c.timer = setTimeout(comprobar, 120);
+        };
+
+        c.timer = setTimeout(comprobar, 120);
     }
 
     // Devuelve {active, deactive} a partir de un color simple o un objeto.
@@ -389,50 +631,68 @@ class miPlugin_cambioImpl {
             }
         }
 
+        /* Atajos de uso interno, para no repetir `this.` dentro de activate y
+           deactivate. Enganchan el engranaje a esta misma instancia del plugin. */
+        const mostrarEngranaje = (mensaje) => this.mostrarCarga(mensaje);
+        const ocultarEngranaje = () => this.ocultarCarga();
+        const esperarMapaListo = (newMap) => this._esperarMapaListo(newMap);
+
         control_cambImpl.activate = async () => {
             // console.log('Activado');
 
             var tipo = "Cesium"
 
-            // Capturar el estado de los plugins ANTES de destruir el mapa.
-            const estadoPlugins = (window.EstadoPlugins) ? window.EstadoPlugins.capturarTodo(map) : {};
+            // El engranaje va ANTES de nada: a partir de `cambioImpl()` el mapa
+            // viejo deja de existir y durante un rato no hay nada que mirar.
+            mostrarEngranaje('Cambiando a 3D...');
 
-            const shareStateBefore = captureShareViewState('activate');
+            try {
+                // Capturar el estado de los plugins ANTES de destruir el mapa.
+                const estadoPlugins = (window.EstadoPlugins) ? window.EstadoPlugins.capturarTodo(map) : {};
 
-            if (shareLayers) {
-                var Overlaylayers = await map.getOverlayLayers();
-                var BaseLayers = await map.getBaseLayers();
-            }
+                const shareStateBefore = captureShareViewState('activate');
 
-
-            await cambioImpl(tipo);
-            var newMap = await reiniciarMapa(tipo);
-            btn = await document.getElementById('APIIDEE-herramienta-button');
-            await btn.classList.add("activated");
-
-            await applyShareViewState(newMap, shareStateBefore, 'activate');
-
-            if (shareLayers) {
-                var mapaCesium = newMap.getMapImpl()
-                mapaCesium.scene.globe.depthTestAgainstTerrain = true;
-                await transferOverlayLayers(newMap, Overlaylayers, { addExtrusion: true });
-                // Reaplicar el orden que tenian las capas en OL (el reinicio con
-                // sameMap las recrea en orden de creacion original y pierde el
-                // reorden realizado en el selector de capas).
-                await reapplyOverlayOrder(newMap, Overlaylayers);
-                // El panel del selector de capas quedo renderizado en el orden
-                // de creacion (el reapplyOrder solo mueve dataSources, no el
-                // DOM de la lista), asi que se fuerza su re-render para que
-                // muestre el orden por z ya corregido sin necesidad de togglear.
-                if (window.renderLayerList && typeof window.renderLayerList === 'function') {
-                    await window.renderLayerList();
+                if (shareLayers) {
+                    var Overlaylayers = await map.getOverlayLayers();
+                    var BaseLayers = await map.getBaseLayers();
                 }
-            }
 
-            // Restaurar el estado de los plugins sobre el mapa nuevo (despues
-            // de transferir capas para que el selector de capas las encuentre).
-            if (window.EstadoPlugins && Object.keys(estadoPlugins).length) {
-                window.EstadoPlugins.restaurarTodo(newMap, estadoPlugins, true);
+
+                await cambioImpl(tipo);
+                var newMap = await reiniciarMapa(tipo);
+                btn = await document.getElementById('APIIDEE-herramienta-button');
+                await btn.classList.add("activated");
+
+                await applyShareViewState(newMap, shareStateBefore, 'activate');
+
+                if (shareLayers) {
+                    var mapaCesium = newMap.getMapImpl()
+                    mapaCesium.scene.globe.depthTestAgainstTerrain = true;
+                    await transferOverlayLayers(newMap, Overlaylayers, { addExtrusion: true });
+                    // Reaplicar el orden que tenian las capas en OL (el reinicio con
+                    // sameMap las recrea en orden de creacion original y pierde el
+                    // reorden realizado en el selector de capas).
+                    await reapplyOverlayOrder(newMap, Overlaylayers);
+                    // El panel del selector de capas quedo renderizado en el orden
+                    // de creacion (el reapplyOrder solo mueve dataSources, no el
+                    // DOM de la lista), asi que se fuerza su re-render para que
+                    // muestre el orden por z ya corregido sin necesidad de togglear.
+                    if (window.renderLayerList && typeof window.renderLayerList === 'function') {
+                        await window.renderLayerList();
+                    }
+                }
+
+                // Restaurar el estado de los plugins sobre el mapa nuevo (despues
+                // de transferir capas para que el selector de capas las encuentre).
+                if (window.EstadoPlugins && Object.keys(estadoPlugins).length) {
+                    window.EstadoPlugins.restaurarTodo(newMap, estadoPlugins, true);
+                }
+
+                // Y ahora sí, a esperar a que serellenen las teselas del globo.
+                esperarMapaListo(newMap);
+            } catch (e) {
+                ocultarEngranaje();
+                throw e;
             }
         }
 
@@ -443,37 +703,46 @@ class miPlugin_cambioImpl {
             // console.log('Desactivado');
             var tipo = "OL"
 
-            // Capturar el estado de los plugins ANTES de destruir el mapa.
-            const estadoPlugins = (window.EstadoPlugins) ? window.EstadoPlugins.capturarTodo(map) : {};
+            mostrarEngranaje('Cambiando a 2D...');
 
-            const shareStateBefore = captureShareViewState('deactivate');
+            try {
+                // Capturar el estado de los plugins ANTES de destruir el mapa.
+                const estadoPlugins = (window.EstadoPlugins) ? window.EstadoPlugins.capturarTodo(map) : {};
 
-
-
-            map.getMapImpl().scene.globe.pickWorldCoordinates = function () { };
-
-            if (shareLayers) {
-                var Overlaylayers = await map.getOverlayLayers();
-                var BaseLayers = await map.getBaseLayers();
-            }
+                const shareStateBefore = captureShareViewState('deactivate');
 
 
-            await cambioImpl(tipo);
 
-            var newMap = await reiniciarMapa(tipo);
+                map.getMapImpl().scene.globe.pickWorldCoordinates = function () { };
 
-            btn = await document.getElementById('APIIDEE-herramienta-button');
-            await btn.classList.remove("activated");
+                if (shareLayers) {
+                    var Overlaylayers = await map.getOverlayLayers();
+                    var BaseLayers = await map.getBaseLayers();
+                }
 
-            await applyShareViewState(newMap, shareStateBefore, 'deactivate');
 
-            if (shareLayers) {
-                await transferOverlayLayers(newMap, Overlaylayers, { addExtrusion: false });
-            }
+                await cambioImpl(tipo);
 
-            // Restaurar el estado de los plugins sobre el mapa nuevo.
-            if (window.EstadoPlugins && Object.keys(estadoPlugins).length) {
-                window.EstadoPlugins.restaurarTodo(newMap, estadoPlugins, true);
+                var newMap = await reiniciarMapa(tipo);
+
+                btn = await document.getElementById('APIIDEE-herramienta-button');
+                await btn.classList.remove("activated");
+
+                await applyShareViewState(newMap, shareStateBefore, 'deactivate');
+
+                if (shareLayers) {
+                    await transferOverlayLayers(newMap, Overlaylayers, { addExtrusion: false });
+                }
+
+                // Restaurar el estado de los plugins sobre el mapa nuevo.
+                if (window.EstadoPlugins && Object.keys(estadoPlugins).length) {
+                    window.EstadoPlugins.restaurarTodo(newMap, estadoPlugins, true);
+                }
+
+                esperarMapaListo(newMap);
+            } catch (e) {
+                ocultarEngranaje();
+                throw e;
             }
         }
 
@@ -582,6 +851,10 @@ class miPlugin_cambioImpl {
      * <head> con un id propio y se queda ahi para siempre.
      */
     destroy() {
+        // El engranaje es de este plugin: si se desmonta a mitad de un cambio no
+        // se queda puesto tapando el mapa.
+        this._destruirCarga();
+
         try {
             if (this._map && this._control) this._map.removeControls([this._control]);
         } catch (e) { /* Si el mapa o el control ya no estan */ }
