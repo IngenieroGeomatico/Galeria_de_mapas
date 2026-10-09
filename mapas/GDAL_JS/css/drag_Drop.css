@@ -417,20 +417,38 @@
   background-color: #fff3ea;
 }
 
+/*
+  El botón "Exportar".
+
+  Es el MISMO botón que "Sube un fichero" (`custom-btn btn-7`), con el mismo
+  efecto, y solo cambia el tamaño para caber en una celda de tabla. Se conserva
+  todo el efecto de `btn-7` a propósito; lo que hay que quitar aquí es lo que
+  en el botón grande no estorba y en una celda sí:
+
+   - `margin: 20px` de `.custom-btn`: en la celda descuadraba el botón de la fila.
+   - `width: 90%` de `.btn-7` y `height: 40px` de `.custom-btn`: aquí se deja
+     100 % del ancho de la celda y una altura fija, para que varias filas queden
+     alineadas.
+   - `box-shadow` de `.custom-btn` (7px 7px 20px): se salía de la celda.
+
+  NO se toca el `::before`, el `::after`, el hover ni las barras: ese es el efecto
+  pedido, y para que funcione el botón necesita su `<span>` dentro, que es lo que
+  lleva el texto (ver `drag&Drop.js`, que lo crea explícitamente). Con el texto
+  suelto el efecto salía a medias, que es lo que pasaba antes.
+*/
 #containerID .btn-exp {
   margin: 0;
-  width: 60%;
-  padding: 8px 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0;
+  box-shadow: none;
+  /* El degradado del botón grande es vertical (180deg). */
   background: linear-gradient(180deg, #ff7a1a 0%, #fb7d00 100%);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
 }
 
-#containerID .btn-exp:hover {
-  background: #e65c00;
+#containerID .btn-exp:focus-visible {
+  outline: 2px solid #ff7a1a;
+  outline-offset: 2px;
 }
 
 #cargaSVG {

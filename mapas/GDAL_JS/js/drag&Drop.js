@@ -302,100 +302,39 @@
               }
             }
           } else if (implType === 'cesium') {
-            // Cesium 3D
-            const impl = m.getMapImpl ? m.getMapImpl() : null;
-            if (impl && impl.imageryLayers && typeof Cesium !== 'undefined') {
-              let provider = null;
-              const rectCesium = item.rectWgs84 ? Cesium.Rectangle.fromDegrees(
-                item.rectWgs84.west,
-                item.rectWgs84.south,
-                item.rectWgs84.east,
-                item.rectWgs84.north
-              ) : null;
-
-              if (item.blobFile && window.gdal) {
-                try {
-                  let dsRaster;
-                  try {
-                    dsRaster = await window.gdal.open(new Uint8Array(await item.blobFile.arrayBuffer()));
-                  } catch (eOpen1) {
-                    dsRaster = await window.gdal.open(item.blobFile);
-                  }
-
-                  if (dsRaster && dsRaster.datasets && dsRaster.datasets[0]) {
-                    const dsRaster0 = dsRaster.datasets[0];
-                    const nameCesium = `${item.name}_cesium_png`;
-
-                    try {
-                      const filePathPng = await window.gdal.gdal_translate(
-                        dsRaster0,
-                        ['-of', 'PNG', '-ot', 'Byte', '-scale', '-b', '1', '-b', '2', '-b', '3'],
-                        nameCesium
-                      );
-                      let pngBytes;
-                      if (window.gdalWorker) {
-                        pngBytes = await window.gdal.getFileBytes(filePathPng.local);
-                      } else {
-                        pngBytes = window.gdal.Module.FS.readFile(filePathPng.local);
-                      }
-                      const pngBlob = new Blob([pngBytes], { type: 'image/png' });
-                      const pngUrlCesium = URL.createObjectURL(pngBlob);
-                      if (rectCesium) {
-                        provider = new Cesium.SingleTileImageryProvider({
-                          url: pngUrlCesium,
-                          rectangle: rectCesium,
-                        });
-                      }
-                    } catch (eTrans) {
-                      try {
-                        const filePathPng2 = await window.gdal.gdal_translate(
-                          dsRaster0,
-                          ['-of', 'PNG', '-ot', 'Byte', '-scale'],
-                          nameCesium + '_alt'
-                        );
-                        let pngBytes;
-                        if (window.gdalWorker) {
-                          pngBytes = await window.gdal.getFileBytes(filePathPng2.local);
-                        } else {
-                          pngBytes = window.gdal.Module.FS.readFile(filePathPng2.local);
-                        }
-                        const pngBlob = new Blob([pngBytes], { type: 'image/png' });
-                        const pngUrlCesium = URL.createObjectURL(pngBlob);
-                        if (rectCesium) {
-                          provider = new Cesium.SingleTileImageryProvider({
-                            url: pngUrlCesium,
-                            rectangle: rectCesium,
-                          });
-                        }
-                      } catch (eTrans2) {
-                        console.warn('Error generando PNG para Cesium desde Blob:', eTrans2);
-                      }
-                    }
-                  }
-                } catch (eRaster) {
-                  console.warn('Error procesando Blob GeoTIFF para Cesium:', eRaster);
-                }
+            // Cesium 3D. Lo dibuja ext/geotiffLayer, que registra su propia
+            // IDEE.layer.GeoTIFF (el bundle de Cesium la deja sin implementacion,
+            // medido). La capa se crea IGUAL que en 2D: con el blob y el nombre.
+            //
+            // Antes aqui se hacia a mano, con gdal_translate a PNG y un
+            // SingleTileImageryProvider, y no funcionaba: al reabrir el dataset
+            // para traducirlo, gdal3.js petaba por `dataset.path.split` (el
+            // dataset abierto desde un blob no trae path) y la promesa se
+            // quedaba colgada sin resolverse ni rechazar (medido). Ademas
+            // duplicaba la logica de GDAL en el visualizador, que es justo lo
+            // que el plugin evita trayendose el decodificador.
+            if (item.blobFile) {
+              // Se espera a que ext/geotiffLayer haya registrado su fachada.
+              // Sin esto hay una carrera: el visualizador aplica las capas nada
+              // más cambiar de implementacion, y el plugin tarda hasta 3 s en
+              // instalarse (sondea cada 100 ms porque el bundle de Cesium
+              // reemplaza window.IDEE al cargar). Si se llega antes, `new
+              // IDEE.layer.GeoTIFF(...)` sigue siendo la del bundle, que lanza.
+              // Medido: con la espera la capa aparece siempre; sin ella, unas
+              // veces sí y otras no.
+              if (typeof window.geotiffLayerCuandoInstalado === 'function') {
+                await window.geotiffLayerCuandoInstalado();
               }
-
-              if (!provider && rectCesium && item.pngUrl) {
-                provider = new Cesium.SingleTileImageryProvider({
-                  url: item.pngUrl,
-                  rectangle: rectCesium,
+              const layers = (typeof m.getLayers === 'function') ? (await m.getLayers() || []) : [];
+              const existe = layers.some((l) => l && (l.name === item.name || l.legend === item.legend));
+              if (!existe) {
+                const capaGeoTIFF = new IDEE.layer.GeoTIFF({
+                  name: item.name,
+                  legend: item.legend || item.name,
+                  blob: item.blobFile,
                 });
-              }
-
-              if (!provider && Cesium.GeoTIFFImageryProvider && item.blobFile) {
-                try {
-                  if (typeof Cesium.GeoTIFFImageryProvider.fromBlob === 'function') {
-                    provider = await Cesium.GeoTIFFImageryProvider.fromBlob(item.blobFile);
-                  }
-                } catch (eGtiff) {}
-              }
-              if (provider) {
-                try {
-                  impl.imageryLayers.addImageryProvider(provider);
-                } catch (addErr) {
-                  console.warn('Error añadiendo provider ráster a Cesium:', addErr);
+                if (typeof m.addLayers === 'function') {
+                  await m.addLayers(capaGeoTIFF);
                 }
               }
             }
@@ -817,12 +756,26 @@
     celdaOpt2.colSpan = 2;
 
     const botonExp = document.createElement('button');
-    botonExp.textContent = 'Exportar';
     botonExp.id = `buttonExport_${fileIndex - 1}`;
     botonExp.classList = 'custom-btn btn-7 btn-exp';
 
+    // El texto va dentro de un <span>, y no con textContent, porque el efecto del
+    // botón (las barras naranjas que crecen al pasar por encima) está montado
+    // sobre el span: `.btn-7 span`, `.btn-7 span:before` y `.btn-7 span:after`.
+    // El botón grande "Sube un fichero" lo tiene, y este no, así que se quedaba a
+    // medias (medido: solo aparecían las barras de `:before`/`:after` del propio
+    // botón, y el hover ponía el texto naranja sobre fondo transparente, que es
+    // el efecto del botón grande con su span y aquí sin él).
+    const spanExp = document.createElement('span');
+    spanExp.textContent = 'Exportar';
+    botonExp.appendChild(spanExp);
+
     botonExp.onclick = function (e) {
-      const idExport = e.target.id.split('_')[1];
+      // Se sube al botón: el click puede caer en el span que lleva el texto, y
+      // entonces `e.target` no es el botón y `e.target.id` viene vacío (medido:
+      // con el texto plano el botón no hacía nada al pulsarlo).
+      const destino = (e.target && e.target.closest) ? e.target.closest('button') : botonExp;
+      const idExport = destino.id.split('_')[1];
       const datasetInExport = filesObj[idExport];
       if (!datasetInExport) return;
 

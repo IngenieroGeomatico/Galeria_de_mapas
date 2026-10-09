@@ -16,6 +16,11 @@ function initMap() {
     shareView: true,
     shareLayers: true,
   }));
+  // GeoTIFF en 3D. En 2D no hace nada: lo dibuja OpenLayers con
+  // ol.source.GeoTIFF. En 3D registra la implementación de Cesium, que es la que
+  // falta en el bundle (medido: IDEE.impl.layer.GeoTIFF es undefined ahí).
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_geotiffLayer());
+
   mapajs.addPlugin(new IDEE.plugin.miPlugin_baseLayer({ rows: 1 }));
   mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
 
