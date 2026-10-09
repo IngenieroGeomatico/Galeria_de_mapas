@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <title>paroEspMun: MVT en 3D (banco de pruebas)</title>
+
+  <!--
+    BANCO DE PRUEBAS DEL MVT EN 3D.
+
+    Visualizador mínimo que arranca YA en 3D (implementación de Cesium) y carga
+    la extensión ext/MVTLayer. No hay conmutación 2D/3D, ni popup, ni CSV del
+    SEPE: la idea es estudiar cómo OpenLayers consigue leer y pintar las features
+    de un MVT, y replicarlo aquí para Cesium.
+
+    La página solo importa la API y el plugin. Las dependencias del MVT (el
+    decodificador y el de Protocol Buffers) las carga el propio plugin.
+  -->
+
+  <link href="https://componentes-desarrollo.idee.es/api-idee/assets/css/apiidee-1.1.0.cesium.min.css"
+    rel="stylesheet" />
+
+  <!-- Ficheros javascript de la API-CNIG, implementación de Cesium desde el principio -->
+  <script type="text/javascript"
+    src="https://componentes-desarrollo.idee.es/api-idee/api-core/vendor/browser-polyfill.js"></script>
+  <script type="text/javascript"
+    src="https://componentes-desarrollo.idee.es/api-idee/js/apiidee-1.1.0.cesium.min.js"></script>
+  <script type="text/javascript"
+    src="https://componentes-desarrollo.idee.es/api-idee/js/configuration-1.1.0.js"></script>
+
+  <!--
+    Aquí no hay ni pbf, ni proj4, ni import map: se los trae ext/MVTLayer, que
+    es quien los necesita. Ver el bloque "Dependencias" del plugin.
+  -->
+
+  <!-- Extensión propia: da soporte 3D a IDEE.layer.MVT y trae la lectura -->
+  <script src="../../ext/MVTLayer/MVTLayer.js" type="text/javascript"></script>
+
+</head>
+
+<body>
+
+  <div id="mapa"></div>
+
+  <script type="text/javascript">
+    /*
+     * Lo mínimo para tener una capa MVT en 3D y poder mirarla.
+     *
+     * Lo que se va a estudiar es esto:
+     *
+     *   - En 2D la capa es `new IDEE.layer.MVT({...})` y OpenLayers se encarga
+     *     de pedir las teselas que ve, decodificarlas y pintar las features. Eso
+     *     es lo que hay que replicar para Cesium.
+     *   - En 3D la clase `IDEE.layer.MVT` del bundle de la API es la misma, pero
+     *     su implementación está vacía (el módulo 90505 del bundle es un stub),
+     *     y ext/MVTLayer registra una fachada propia que sí trae la lectura.
+     *
+     * Desde la consola:
+     *   capaMunicipios.getImpl()                        la implementación
+     *   capaMunicipios.getImpl().cargar(7, 64, 48)      leer una tesela a pelo
+     *   capaMunicipios.getImpl().render.diagnostico()   por qué sí/no se pinta
+     */
+    mapajs = IDEE.map({
+      container: "mapa",
+      // Ojo: en la implementación de Cesium el centro va en GRADOS. El center de
+      // index.html ({ x: -512140, y: 4552626 }) son metros en EPSG:3857 y aquí se
+      // interpretan como grados: la cámara cae en 139,98 E / 65,90 N, que es
+      // Siberia (medido).
+      center: { x: -3.7038, y: 40.4168 },
+      controls: [],
+      // Zoom 12, no 5, y es a propósito. Con la vista de toda la península
+      // `zoomAdecuado()` cae a z5 y pide 54 teselas, que son del orden de medio
+      // millón de municipios que dibujar de golpe: el visor se queda pillado
+      // (medido). A z12 entran un puñado de teselas y se ve el servicio. Cuando
+      // esto esté lo bastante sólido como para la vista de la península, aquí
+      // se vuelve a bajar.
+      zoom: 13,
+    });
+
+    // El plugin se registra DESPUÉS de crear el mapa pero ANTES de crear la
+    // capa: es él quien sustituye IDEE.layer.MVT por la fachada de Cesium.
+    mapajs.addPlugin(new IDEE.plugin.miPlugin_MVTLayer());
+
+    capaMunicipios = new IDEE.layer.MVT({
+      url: "https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf",
+      name: 'Municipios',
+      layers: 'municipio',
+      visibility: true,
+      extract: false,
+    });
+
+    mapajs.addLayers(capaMunicipios);
+
+    /*
+     * COLOR ALEATORIO POR MUNICIPIO.
+     *
+     * Solo para este banco de pruebas. En el visualizador de verdad el color lo
+     * pone mapa.js con el ramp del paro; aquí no hay CSV del SEPE, así que sin esto
+     * TODO saldría del mismo gris de COLOR_SIN_DATO y no se distinguiría un
+     * municipio de otro.
+     *
+     * Con un color distinto por municipio se ve de un vistazo lo que importa:
+     * que cada uno se pinta entero, que no quedan huecos, que los multipieza (los
+     * que tienen más de un trozo) salen las dos partes del mismo color, y que los
+     * municipios sin polígono se distinguen de los que sí.
+     *
+     * El color es SEMILLA con el código municipal y no aleatorio de verdad: si
+     * fuera aleatorio de verdad, cada recarga daría un color distinto a cada
+     * municipio y no se podrían comparar dos capturas. Con la semilla, el código
+     * 28092 (Móstoles) sale siempre del mismo color.
+     */
+    (function () {
+      // HSL (0..1 en los tres) a RGB en 0..255, sin dependencias.
+      function hslARgb(h, s, l) {
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const hp = h * 6;
+        const x = c * (1 - Math.abs((hp % 2) - 1));
+        let r = 0, g = 0, b = 0;
+        if (hp < 1) { r = c; g = x; }
+        else if (hp < 2) { r = x; g = c; }
+        else if (hp < 3) { g = c; b = x; }
+        else if (hp < 4) { g = x; b = c; }
+        else if (hp < 5) { r = x; b = c; }
+        else { r = c; b = x; }
+        const m = l - c / 2;
+        return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+      }
+
+      const cache = new Map();
+      const colorDe = function (codigo) {
+        if (cache.has(codigo)) return cache.get(codigo);
+        // Hash del código a una semilla, para que sea siempre el mismo.
+        let h = 0;
+        const s = String(codigo);
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        const tono = (h % 360) / 360;
+        const sat = 0.55 + ((h >> 9) % 35) / 100;
+        const val = 0.65 + ((h >> 17) % 30) / 100;
+        // OJO: `Cesium.Color.fromHSV` TIENE que recibir el `result` como cuarto
+        // argumento. Si se omite devuelve `undefined`, y al leer `.red` revienta.
+        // El plugin envuelve la función de color en un try/catch, así que el fallo
+        // se calla y TODOS los municipios salen del gris de COLOR_SIN_DATO (que es
+        // justo el velo lavanda que salía al medir esto).
+        // El color se hace en HSL y se pasa a RGB aquí mismo, sin llamar a nada de
+        // Cesium: se probado que `Cesium.Color.fromHSV` NO existe (medido:
+        // "TypeError: window.Cesium.Color.fromHSV is not a function"), y como el
+        // plugin envuelve esta función en un try/catch, el fallo se callaba y todo
+        // salía del mismo gris de COLOR_SIN_DATO. Por eso la función se试 sola aquí
+        // abajo y avisa si alguna vez deja de devolver un color.
+        const [r, g, b] = hslARgb(tono, sat, val);
+        const css = 'rgba(' + r + ',' + g + ',' + b + ', 0.75)';
+        cache.set(codigo, css);
+        return css;
+      };
+
+      const impl = capaMunicipios.getImpl();
+      if (impl && typeof impl.setColorFunction === 'function') {
+        // Autocomprobación: si colorDe no devuelve un rgba válido, avisar en
+        // consola. Sin esto un fallo se esconde en el try/catch del plugin y solo
+        // se ve como que "todos los municipios son del mismo color".
+        try {
+          const prueba = colorDe('28092');
+          if (!/^rgba\(\d+,\d+,\d+,/.test(prueba)) {
+            console.log('colorDe no devuelve un rgba valido: ' + prueba);
+          } else {
+            console.log('colorDe OK, Móstoles (28092) = ' + prueba);
+          }
+        } catch (e) {
+          console.log('colorDe LANZA: ' + e);
+        }
+        impl.setColorFunction(colorDe);
+      } else {
+        console.log('no hay setColorFunction en el impl de la capa MVT');
+      }
+    })();
+
+    /*
+     * La cámara NO se toca a mano.
+     *
+     * Se probó fijarla con `camera.lookAt` después de crear el mapa, y era un
+     * error: `RenderMVT` calcula qué teselas pintar con `rectanguloVisible()`, que
+     * muestrea el globo con rayos desde los píxeles del lienzo. Si la cámara se
+     * coloca a mano, lo que se ve y lo que el plugin cree que se ve dejan de
+     * cuadrar (medido: pedir solo -4.03..-3.36 mientras la pantalla va de Alcorcón a
+     * Alcalá), y se quedan municipios sin pintar justo en la mitad izquierda.
+     *
+     * Se deja que la API coloque la cámara a partir de `center` y `zoom`, que es lo
+     * que sabe hacer bien, y el plugin se-limita a leer la vista que hay.
+     */
+
+    
+    /*
+     * Publicar el diagnóstico en el título de la página.
+     *
+     * Es una sonda, no parte del visualizador: mvt3d.html es un banco de pruebas
+     * y mientras el hilo principal está ocupado (que es justo lo que pasaba antes
+     * de meter el afín), `page.evaluate` no responde. El título se puede leer
+     * desde fuera sin ejecutar nada en la página.
+     */
+    setInterval(function () {
+      try {
+        const d = capaMunicipios.getImpl().render.diagnostico();
+        document.title = 'zoom=' + d.ultimoZoom + ' teselas=' + d.teselas +
+          ' pintados=' + d.pintados + ' pend=' + d.pendientes +
+          ' vuelo=' + d.enVuelo + ' claves=' + d.ultimasClaves;
+      } catch (e) { /* todavia no */ }
+    }, 500);
+  </script>
+
+</body>
+
+</html>
