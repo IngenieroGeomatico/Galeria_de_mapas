@@ -502,7 +502,6 @@
       this.errorEvent = new Cesium.Event();
       this.ready = true;
       this.readyPromise = Promise.resolve(true);
-      this.credit = new Cesium.Credit('IGN');
       this.hasAlphaChannel = true;
     }
 
@@ -577,6 +576,7 @@
       this.Cesium = null;
       this.scene = null;
       this.imageryLayer = null;
+      this._visible = true;
 
       this.lector.alCambiarColor = () => this.refrescar();
     }
@@ -591,8 +591,25 @@
       return {
         hayEscena: Boolean(this.scene),
         hayCapa: Boolean(this.imageryLayer),
-        visible: this.imageryLayer ? this.imageryLayer.show : false,
+        visible: this.isVisible(),
       };
+    }
+
+    setVisible(visible) {
+      this._visible = Boolean(visible);
+      if (this.imageryLayer) {
+        this.imageryLayer.show = this._visible;
+        if (this.scene && typeof this.scene.requestRender === 'function') {
+          this.scene.requestRender();
+        }
+      }
+    }
+
+    isVisible() {
+      if (this.imageryLayer) {
+        return this.imageryLayer.show;
+      }
+      return this._visible !== false;
     }
 
     _esperarEscena(intentos) {
@@ -626,6 +643,7 @@
         colorDe: (c, n) => this.lector._colorDe(c, n),
       });
       this.imageryLayer = this.scene.imageryLayers.addImageryProvider(provider);
+      this.imageryLayer.show = (this._visible !== false);
       if (typeof this.scene.requestRender === 'function') {
         this.scene.requestRender();
       }
@@ -680,6 +698,15 @@
         this.render.addTo(map);
       }
 
+      setVisible(visible) {
+        try { super.setVisible(visible); } catch (e) {}
+        this.render.setVisible(visible);
+      }
+
+      isVisible() {
+        return this.render.isVisible();
+      }
+
       destroy() {
         this.render.destroy();
         super.destroy();
@@ -732,6 +759,22 @@
 
       getGeometryType() {
         return null;
+      }
+
+      setVisible(visible) {
+        try { super.setVisible(visible); } catch (e) {}
+        const impl = this.getImpl();
+        if (impl && typeof impl.setVisible === 'function') {
+          impl.setVisible(visible);
+        }
+      }
+
+      isVisible() {
+        const impl = this.getImpl();
+        if (impl && typeof impl.isVisible === 'function') {
+          return impl.isVisible();
+        }
+        return super.isVisible ? super.isVisible() : true;
       }
 
       /** El lector, para iterar desde la consola. */
