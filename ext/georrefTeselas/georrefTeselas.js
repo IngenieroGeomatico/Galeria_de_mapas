@@ -51,9 +51,52 @@ function ensureH3_georrefTeselas() {
 }
 
 class miPlugin_georrefTeselas {
+  /**
+   * @param {Object} [options]
+   * @param {string} [options.position='TL'] Esquina de la API donde se coloca el
+   *   panel (clave de `IDEE.ui.position`: TL, TR, BL, BR...).
+   * @param {boolean} [options.collapsible=true] Si el panel se puede plegar.
+   * @param {boolean} [options.collapsed] Si el panel nace plegado. Si no se
+   *   indica, NO se le pasa la opción al panel y manda el default de la API
+   *   (plegado, botón naranja), como layerSwitcher y baseLayer.
+   * @param {string} [options.tooltip='Georreferenciar teselas'] Texto del tooltip del botón.
+   * @param {string} [options.className] Clase ADICIONAL para el panel. La clase
+   *   base `g-herramienta_georrefTeselas` se conserva siempre, porque es la que
+   *   usan las reglas de georrefTeselas.css; esta opción sirve para afinar el
+   *   estilo desde fuera sin romperlas.
+   * @param {number} [options.order] Posición del panel dentro del área de botones
+   *   (valor CSS `order`, no un índice; los paneles sin `order` valen 0).
+   * @param {Object|string} [options.color1={active:'#ffffff',deactive:'orangered'}] Color de fondo ({ active, deactive } o string)
+   * @param {Object|string} [options.color2={active:'#71A7D3',deactive:'#ffffff'}] Color de borde ({ active, deactive } o string)
+   * @param {Object|string} [options.color3={active:'#71A7D3',deactive:'#ffffff'}] Color de icono/texto ({ active, deactive } o string)
+   */
   constructor(options = {}) {
     this.name = 'miPlugin_georrefTeselas';
     this.options = options || {};
+    // Opciones del panel, con el mismo nombre y los mismos valores por defecto que
+    // usa miPlugin_estereoscopia, miPlugin_vueloFotogrametrico y miPlugin_storymap
+    // (y el resto de plugins con panel), para que un visualizador pueda configurar
+    // cualquiera de los dos igual. Antes iban escritas a fuego en addTo().
+    this.position_ = options.position || 'TL';
+    // `collapsed` NO tiene default propio a propósito: si el visualizador no lo
+    // pide, la opción no se le pasa a IDEE.ui.Panel y manda el de la API, que es
+    // plegado. Es lo que hacen miPlugin_layerSwitcher y miPlugin_baseLayer, y
+    // importa más de lo que parece: el botón plegado se pinta con
+    // `color1.deactive` (naranja) y el abierto con `color1.active` +
+    // `color2.active` (azul #71A7D3 de la API). Forzar `collapsed: false` dejaba el
+    // panel siempre abierto y por tanto azul, a diferencia del resto de plugins.
+    this.collapsed_ = (options.collapsed !== undefined) ? options.collapsed : undefined;
+    this.collapsible_ = (options.collapsible !== undefined) ? options.collapsible : true;
+    this.tooltip_ = options.tooltip || 'Georreferenciar teselas';
+    // Clase base del panel. Antes era `g-herramienta` a secas, que NO era única:
+    // la comparten miPlugin_CalidadAireMadridTiempoReal y
+    // miPlugin_FiltroCapasPuntosHistoricos. Se renombra con el sufijo del plugin
+    // como el resto (g-herramienta_estereo, g-herramienta_vuelo,
+    // g-herramienta_baseLayer, g-herramienta_selectorCapa), porque es la que
+    // selectorizan las reglas de georrefTeselas.css y lo que da especificidad
+    // suficiente para que el botón salga naranja en vez de azul. La opción
+    // `className` se AÑADE, no sustituye.
+    this.className_ = ['g-herramienta_georrefTeselas', options.className].filter(Boolean).join(' ');
     // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
     // API monta como flex column). Es un valor CSS `order`, no un índice: lo
     // aplica la propia API haciendo style.order sobre el panel, así que no hay
@@ -103,16 +146,24 @@ class miPlugin_georrefTeselas {
     this.map = map;
     const IDEE = api_georrefTeselas();
 
-    const panelExtra = new IDEE.ui.Panel('toolsExtra_georrefTeselas', {
-      collapsible: true,
-      collapsed: false,
-      className: 'g-herramienta',
+    const opcionesPanel = {
+      className: this.className_,
+      collapsible: this.collapsible_,
       collapsedButtonClass: 'm-tools',
-      position: IDEE.ui.position.TL,
+      position: IDEE.ui.position[this.position_],
+      tooltip: this.tooltip_,
       // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
       // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
       order: this.order,
-    });
+    };
+    // `collapsed` solo se pasa si el visualizador lo ha pedido de verdad. Pasarlo
+    // como `undefined` no es lo mismo que no pasarlo (la API comprueba
+    // `options.collapsed !== undefined` en sitios), asi que se construye el objeto
+    // sin esa propiedad. Asi manda el default de la API y el panel nace plegado,
+    // con su boton en naranja, igual que layerSwitcher y baseLayer.
+    if (this.collapsed_ !== undefined) opcionesPanel.collapsed = this.collapsed_;
+
+    const panelExtra = new IDEE.ui.Panel('toolsExtra_georrefTeselas', opcionesPanel);
 
     const htmlPanel = `
       <div aria-label="Georreferenciar teselas" role="menuitem" id="div-contenedor-herramienta-georrefTeselas" class="m-control m-container m-herramienta">
@@ -153,7 +204,7 @@ class miPlugin_georrefTeselas {
     const c1 = this.resolveColor(this.color1);
     const c2 = this.resolveColor(this.color2);
     const c3 = this.resolveColor(this.color3);
-    const grEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta');
+    const grEl = panelExtra.getElement ? panelExtra.getElement() : document.querySelector('.m-panel.g-herramienta_georrefTeselas');
     if (grEl) {
       grEl.style.setProperty('--g-plugin-bg-color', c1.deactive);
       grEl.style.setProperty('--g-plugin-bg-color-active', c1.active);
@@ -163,8 +214,19 @@ class miPlugin_georrefTeselas {
       grEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
     }
 
-    document.querySelector('.g-herramienta .m-panel-controls').innerHTML = htmlPanel;
-    document.querySelector('#m-herramienta-contents-georrefTeselas').appendChild(control.getElement());
+    // El contenedor de controles del panel. Se busca DENTRO del panel que se acaba
+    // de crear, no con un `document.querySelector` global: al cambiar de
+    // implementacion el panel anterior sigue un momento en el DOM, y el selector
+    // global se podia encontrar con el viejo e inyectar el contenido en el panel
+    // que ya no manda. La clase base `g-herramienta_georrefTeselas` sigue siempre
+    // presente (ver constructor), asi que la busqueda de reserva es equivalente.
+    let panelControles = grEl ? grEl.querySelector('.m-panel-controls') : null;
+    if (!panelControles) panelControles = document.querySelector('.g-herramienta_georrefTeselas .m-panel-controls');
+    if (panelControles) panelControles.innerHTML = htmlPanel;
+    // El id lo pone justo el HTML que se ha inyectado arriba, asi que se busca en
+    // ese mismo contenedor.
+    const contenido = panelControles ? panelControles.querySelector('#m-herramienta-contents-georrefTeselas') : null;
+    if (contenido) contenido.appendChild(control.getElement());
 
     IDEE.utils.draggabillyPlugin(panelExtra, '#m-herramienta-title-georrefTeselas');
 
@@ -198,10 +260,19 @@ class miPlugin_georrefTeselas {
         selectedValue = this._pendingState.gridType;
       }
 
-      document.querySelector('#m-herramienta-contents-georrefTeselas').innerHTML = htmlControl;
+      // El contenido se busca DENTRO del panel de ESTA instancia. Con un
+      // `document.querySelector` global pasaba cualquier cosa: si el panel ya no
+      // estaba (lo quitan al cambiar de implementación) reventaba con "Cannot set
+      // properties of null", y si quedaban dos a la vez, rellenaba el que no
+      // tocaba. `grEl` es el elemento del panel creado justo arriba en este mismo
+      // addTo, asi que ya esta en alcance.
+      const contenedor = (grEl ? grEl.querySelector('#m-herramienta-contents-georrefTeselas') : null)
+        || document.querySelector('#m-herramienta-contents-georrefTeselas');
+      if (!contenedor) return;
+      contenedor.innerHTML = htmlControl;
 
-      const selector = document.querySelector('.seleccionCapasClass');
-      const teselaWrapper = document.getElementById('teselaWrapperID');
+      const selector = contenedor.querySelector('.seleccionCapasClass');
+      const teselaWrapper = contenedor.querySelector('#teselaWrapperID');
       if (selector && teselaWrapper) {
         // Restaura la selección previa
         selector.value = selectedValue;

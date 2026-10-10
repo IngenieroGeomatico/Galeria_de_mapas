@@ -1,6 +1,6 @@
 
 
-.g-herramienta .m-tools:before {
+.g-herramienta_georrefTeselas .m-tools:before {
   content: "\1F5A9";
   font-size: 22px;
   font-family: none;
@@ -49,7 +49,7 @@
 
 /* Cabecera del panel: fondo (color1), borde (color2), icono/flecha (color3).
    El BOTÓN del panel lo estilan las reglas genéricas (ver abajo). */
-.g-herramienta .m-herramienta-header {
+.g-herramienta_georrefTeselas .m-herramienta-header {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #fff) !important;
   border-color: var(--g-plugin-border-color, #fff) !important;
@@ -57,7 +57,7 @@
 
 /* Panel abierto (opened) = estado activo: colores "-active".
    El BOTÓN lo estiliza la regla genérica de botón (ver abajo). */
-.m-areas>div.m-area>div.m-panel.g-herramienta.opened .m-herramienta-header {
+.m-areas>div.m-area>div.m-panel.g-herramienta_georrefTeselas.opened .m-herramienta-header {
   background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
   color: var(--g-plugin-icon-color-active, #71A7D3) !important;
   border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
@@ -74,7 +74,7 @@
 }
 
 /* Botones controles */
-.g-herramienta .m-panel-controls button {
+.g-herramienta_georrefTeselas .m-panel-controls button {
   font-family: 'Times New Roman', Times, serif !important;
   font-size: 16px;  
   font-weight: 700 !important;
@@ -103,7 +103,14 @@
 
 }
 
-/* BOTÓN del panel — GENÉRICO para todos los plugins.
+/* BOTÓN del panel.
+   LA CLASE `g-herramienta_georrefTeselas` EN EL SELECTOR NO ES COSMÉTICA, ES LO
+   QUE HACE QUE FUNCIONE. Sin ella el selector queda en (0,4,3) y la regla que la
+   API aplica al botón de un panel plegado está en (0,5,2): gana la API y el botón
+   se ve del azul del framework (#71a7d3) en lugar del naranja de color1.deactive.
+   Con la clase ambos empatan y, como esta hoja se carga después, gana la del
+   plugin. Es lo mismo que hacen ext_layerSwitcher.css, ext_backgorundLayers.css,
+   estereoscopia.css y vueloFotogrametrico.css.
    Base (cerrado):
      - fondo  = color1.deactive (--g-plugin-bg-color)
      - texto  = color3.deactive (--g-plugin-icon-color)
@@ -112,13 +119,13 @@
      - fondo  = color1.active  (--g-plugin-bg-color-active)
      - texto  = color2.active  (--g-plugin-border-color-active)
      - borde  = color2.active  (--g-plugin-border-color-active) */
-.m-areas>div.m-area>div.m-panel>button.m-panel-btn {
+.m-areas>div.m-area>div.m-panel.g-herramienta_georrefTeselas>button.m-panel-btn {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #fff) !important;
   border-color: var(--g-plugin-border-color, #fff) !important;
 }
 
-.m-areas>div.m-area>div.m-panel.opened>button.m-panel-btn {
+.m-areas>div.m-area>div.m-panel.g-herramienta_georrefTeselas.opened>button.m-panel-btn {
   background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
   color: var(--g-plugin-border-color-active, #71A7D3) !important;
   border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
