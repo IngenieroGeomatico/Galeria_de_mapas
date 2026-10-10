@@ -171,9 +171,39 @@
   //  mapajs.addPlugin(new miPlugin_estereoscopia()).
   // ###################################################################
   class miPlugin_estereoscopia {
+    /**
+     * @param {Object} [options]
+     * @param {string} [options.position='TR'] Esquina de la API donde se coloca el
+     *   panel (clave de `IDEE.ui.position`: TL, TR, BL, BR...).
+     * @param {boolean} [options.collapsible=true] Si el panel se puede plegar.
+     * @param {boolean} [options.collapsed=false] Si el panel nace plegado.
+     * @param {string} [options.tooltip='Estereoscopía'] Texto del tooltip del botón.
+     * @param {string} [options.className] Clase ADICIONAL para el panel. La clase
+     *   base `g-herramienta_estereo` se conserva siempre, porque es la que usan las
+     *   reglas de estereoscopia.css; esta opción sirve para afinar el estilo desde
+     *   fuera sin romperlas.
+     * @param {number} [options.order] Posición del panel dentro del área de botones
+     *   (valor CSS `order`, no un índice; los paneles sin `order` valen 0).
+     * @param {Object|string} [options.color1={active:'#ffffff',deactive:'orangered'}] Color de fondo ({ active, deactive } o string)
+     * @param {Object|string} [options.color2={active:'#71A7D3',deactive:'#ffffff'}] Color de borde ({ active, deactive } o string)
+     * @param {Object|string} [options.color3={active:'#71A7D3',deactive:'#ffffff'}] Color de icono/texto ({ active, deactive } o string)
+     */
     constructor(options = {}) {
     this.name = "miPlugin_estereoscopia";
     this.options = options || {};
+    // Opciones del panel, con el mismo nombre y los mismos valores por defecto que
+    // usa miPlugin_storymap (y el resto de plugins con panel), para que un visualizador
+    // pueda configurar cualquiera de los dos igual. Antes iban escritas a fuego en
+    // buildPanel(), así que este plugin era el único que no se podía colocar ni
+    // plegar desde fuera.
+    this.position_ = options.position || 'TR';
+    this.collapsed_ = (options.collapsed !== undefined) ? options.collapsed : false;
+    this.collapsible_ = (options.collapsible !== undefined) ? options.collapsible : true;
+    this.tooltip_ = options.tooltip || 'Estereoscopía';
+    // Clase base del panel. Es la que usan las reglas de estereoscopia.css, así que
+    // NO se sustituye: la opción `className` se AÑADE.
+    this.className_ = ['g-herramienta_estereo', options.className].filter(Boolean).join(' ');
+
     // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
     // API monta como flex column). Es un valor CSS `order`, no un índice: lo
     // aplica la propia API haciendo style.order sobre el panel, así que no hay
@@ -304,11 +334,12 @@
     var IDEE = api();
 
     var panelEstereo = new IDEE.ui.Panel('toolsExtra_estereo', {
-      collapsible: true,
-      collapsed: false,
-      className: 'g-herramienta_estereo',
+      className: this.className_,
+      collapsible: this.collapsible_,
+      collapsed: this.collapsed_,
       collapsedButtonClass: 'm-tools',
-      position: IDEE.ui.position.TR,
+      position: IDEE.ui.position[this.position_],
+      tooltip: this.tooltip_,
       // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
       // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
       order: this.order,
@@ -352,8 +383,20 @@
       estereoEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
     }
 
-    document.querySelector('.g-herramienta_estereo .m-panel-controls').innerHTML = htmlPanel;
-    document.querySelector('#m-herramienta-contents-estereo').appendChild(controlEstereo.getElement());
+    // El contenedor de controles del panel. Se busca DENTRO del panel que se acaba
+    // de crear, no con un `document.querySelector` global: al cambiar de
+    // implementación el panel anterior sigue un momento en el DOM, y el selector
+    // global se podía encontrar con el viejo e inyectar el contenido en el
+    // panel que ya no manda. La clase base `g-herramienta_estereo` sigue siempre
+    // presente (ver constructor), así que la búsqueda de reserva es la misma de
+    // antes.
+    var panelControles = estereoEl ? estereoEl.querySelector('.m-panel-controls') : null;
+    if (!panelControles) panelControles = document.querySelector('.g-herramienta_estereo .m-panel-controls');
+    if (panelControles) panelControles.innerHTML = htmlPanel;
+    // El id lo pone justo el HTML que se ha inyectado arriba, así que se busca
+    // en ese mismo contenedor.
+    var contenidoEstereo = panelControles ? panelControles.querySelector('#m-herramienta-contents-estereo') : null;
+    if (contenidoEstereo) contenidoEstereo.appendChild(controlEstereo.getElement());
 
     IDEE.utils.draggabillyPlugin(panelEstereo, '#m-herramienta-title-estereo');
 
@@ -848,7 +891,15 @@
         legend: "PNOA Ortofoto",
         matrixSet: "GoogleMapsCompatible",
         format: "image/jpeg"
-      }, { isBase: true });
+      }, {
+        isBase: true,
+        // IMPRESCINDIBLE, y por el mismo motivo que pone el visualizador en su
+        // capa base: el motor sube este canvas a una textura WebGL con
+        // `texImage2D`, y sin crossOrigin el canvas queda "tainted" y WebGL
+        // lanza SecurityError al subirlo. Sin esto la vista partida no pinta el
+        // ojo derecho (el navegador lo avisa con "Access to image at ...").
+        crossOrigin: "anonymous",
+      });
       this.mapRight.addLayers([capaPNOA]);
       var self = this;
       // Comparte la vista con el principal cuando ambos est�n listos.
