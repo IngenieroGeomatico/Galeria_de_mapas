@@ -10,7 +10,7 @@
   <title>Estereoscopía</title>
 
   <!-- fichero estilos de la API (implementación OpenLayers de arranque) -->
-  <link href="https://componentes.idee.es/api-idee/assets/css/apiidee.ol.min.css" rel="stylesheet" />
+  <link href="../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet" />
 
   <!-- CRÍTICO (debe ir ANTES de API-IDEE / MapLibre):
        Fuerza preserveDrawingBuffer:true en TODO contexto WebGL. MapLibre GL
@@ -33,9 +33,9 @@
 
   <!-- Ficheros javascript de la API (arranque en OpenLayers; cambioImpl
        intercambia .ol.min <-> .cesium.min al pulsar el botón). -->
-  <script type="text/javascript" src="https://componentes.idee.es/api-idee/vendor/browser-polyfill.js"></script>
-  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/apiidee.ol.min.js"></script>
-  <script type="text/javascript" src="https://componentes.idee.es/api-idee/js/configuration.js"></script>
+  <script type="text/javascript" src="../../js/api-idee/browser-polyfill.js"></script>
+  <script type="text/javascript" src="../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script type="text/javascript" src="../../js/api-idee/configuration-1.1.0.js"></script>
 
   <!-- geotiff.js (decodificación del MDT del WCS del IGN) lo carga el propio
        plugin de estereoscopía bajo demanda (ensureGeoTIFF). -->
