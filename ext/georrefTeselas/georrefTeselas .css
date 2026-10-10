@@ -1,11 +1,27 @@
 
 
+/* Icono del boton colapsado del panel (m-tools del framework).
+   Es el SVG de img/iconos/tile-layer.svg (pack Calcite Sharp Line Icons de Esri),
+   usado como MASCARA: asi el unico color sale de
+   `--g-plugin-icon-color` y el boton sigue cambiando con el estado activo/
+   inactivo, en vez de un glifo fijo. El `content: ""` vacio es necesario para
+   generar la caja, y el tamano va aqui y no en el SVG. */
 .g-herramienta_georrefTeselas .m-tools:before {
-  content: "\1F5A9";
-  font-size: 22px;
-  font-family: none;
-  color: var(--g-plugin-icon-color, #fff);
+  content: "";
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  background-color: var(--g-plugin-icon-color, #fff);
+  -webkit-mask: url("../../img/iconos/tile-layer.svg") no-repeat center / contain;
+  mask: url("../../img/iconos/tile-layer.svg") no-repeat center / contain;
 }
+
+/* OJO: esta regla se queda en `.m-tools` a proposito y NO se debe estirar a
+   `button.m-panel-btn`. Al abrir el panel, la API cambia la clase del boton de
+   `m-panel-btn m-tools` a `m-panel-btn g-cartografia-flecha-izquierda`, que es la
+   flecha de plegado: son dos botones distintos. Si la regla se aplica tambien al
+   estado abierto, se pinta un cuadrado del color del icono encima de la flecha y
+   la tapa (medido). En abierto lo que debe verse es la flecha de la API. */
 
 
 /* Abrir y cerrar panel */

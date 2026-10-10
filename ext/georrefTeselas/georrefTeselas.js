@@ -17,6 +17,91 @@ function api_georrefTeselas() {
 
 const valueOri_georrefTeselas = "-- Seleccione un tipo de malla --";
 
+/**
+ * Divide en trozos un polígono demasiado grande para el motor 3D.
+ *
+ * POR QUÉ HACE FALTA (medido, no es teoría).
+ *
+ * Las teselas de los primeros zooms cubren medio globo o el globo entero. Al
+ * georreferenciarlas en 3D, el motor de Cesium falla al construir la geometría del
+ * polígono y, como pasa dentro de un worker, **no se puede capturar**: el error
+ * sube a "An error occurred while rendering. Rendering has stopped" y el
+ * visualizador se queda muerto, no solo la capa. Medido:
+ *
+ *   tesela 2/1/1    90 x 66.5 grados  ->  ok
+ *   tesela 1/0/0   180 x 85   grados  ->  DeveloperError: Expected value to be
+ *                                          greater than or equal to 0.0125,
+ *                                          actual value was 0
+ *   tesela 0/0/0   360 x 170  grados  ->  DeveloperError: All attribute lists
+ *                                          must have the same number of attributes
+ *
+ * El GeoJSON que genera DGGS.js es correcto (5 vértices, sin repetir), así que el
+ * problema no está en los datos sino en el tamaño de la figura.
+ *
+ * LA SOLUCIÓN es trocear el rectángulo en celdas manejables y devolver un
+ * MultiPolygon: se pinta igual de grande, pero cada trozo entra en el rango que el
+ * motor sí soporta. Las teselas normales (zoom >= 2) ni llegan al umbral y se
+ * devuelven tal cual, sin tocar nada, para no alterar lo que ya funcionaba.
+ *
+ * @param {Object} gjson Feature con un Polygon de 5 vértices.
+ * @returns {Object} El mismo Feature si es pequeño; un Feature con MultiPolygon si
+ *   ha habido que dividirlo.
+ */
+function dividirSiEnorme(gjson) {
+  // Por debajo de estos grados el motor no se quejaba (90 x 66.5 funciona), así
+  // que el margen queda holgadamente por debajo del salto medido en 180 x 85.
+  const MAX_LON = 120;
+  const MAX_LAT = 80;
+
+  try {
+    if (!gjson || !gjson.geometry || gjson.geometry.type !== 'Polygon') return gjson;
+    const anillo = gjson.geometry.coordinates[0];
+    if (!Array.isArray(anillo) || anillo.length < 4) return gjson;
+
+    const lons = anillo.map((pt) => pt[0]);
+    const lats = anillo.map((pt) => pt[1]);
+    const oeste = Math.min(...lons);
+    const este = Math.max(...lons);
+    const sur = Math.min(...lats);
+    const norte = Math.max(...lats);
+
+    const anchoLon = este - oeste;
+    const altoLat = norte - sur;
+
+    // El anti-meridiano (ancho >= 360) no se puede trocear en lon sin partir la
+    // figura, y es justo el caso de la tesela 0/0/0. Se deja como está: quien lo
+    // reciba verá el aviso del motor, pero no es cosa de esta función.
+    if (anchoLon <= MAX_LON && altoLat <= MAX_LAT) return gjson;
+    if (anchoLon >= 360) return gjson;
+
+    const nLon = Math.max(1, Math.ceil(anchoLon / MAX_LON));
+    const nLat = Math.max(1, Math.ceil(altoLat / MAX_LAT));
+    const trozos = [];
+
+    for (let i = 0; i < nLon; i++) {
+      const o = oeste + (anchoLon * i) / nLon;
+      const e = oeste + (anchoLon * (i + 1)) / nLon;
+      for (let j = 0; j < nLat; j++) {
+        const s = sur + (altoLat * j) / nLat;
+        const n = sur + (altoLat * (j + 1)) / nLat;
+        trozos.push([[
+          [o, s], [e, s], [e, n], [o, n], [o, s],
+        ]]);
+      }
+    }
+
+    return {
+      type: 'Feature',
+      geometry: { type: 'MultiPolygon', coordinates: trozos },
+      properties: gjson.properties,
+    };
+  } catch (e) {
+    // Ante cualquier duda se pasa lo que haya: antes funcionaba, y es preferible
+    // un aviso del motor a una excepción propia.
+    return gjson;
+  }
+}
+
 // ===================================================================
 //  Carga bajo demanda de h3-js (solo para el modo H3)
 //  --------------------------------------------------------------------
@@ -381,7 +466,7 @@ class miPlugin_georrefTeselas {
         break;
     }
     const layer = new IDEE.layer.GeoJSON({
-      source: gjson,
+      source: dividirSiEnorme(gjson),
       extract: true,
     });
     const estilo = new IDEE.style.Generic({
