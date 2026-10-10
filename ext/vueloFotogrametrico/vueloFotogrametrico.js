@@ -1563,9 +1563,46 @@
   //  código específico por motor.
   // ###################################################################
   class miPlugin_vueloFotogrametrico {
+    /**
+     * @param {Object} [options]
+     * @param {string} [options.position='TR'] Esquina de la API donde se coloca el
+     *   panel (clave de `IDEE.ui.position`: TL, TR, BL, BR...).
+     * @param {boolean} [options.collapsible=true] Si el panel se puede plegar.
+     * @param {boolean} [options.collapsed] Si el panel nace plegado. Si no se
+     *   indica, NO se le pasa la opción al panel y manda el default de la API
+     *   (plegado, botón naranja), como layerSwitcher y baseLayer.
+     * @param {string} [options.tooltip='Vuelo fotogramétrico'] Texto del tooltip del botón.
+     * @param {string} [options.className] Clase ADICIONAL para el panel. La clase
+     *   base `g-herramienta_vuelo` se conserva siempre, porque es la que usan las
+     *   reglas de vueloFotogrametrico.css; esta opción sirve para afinar el estilo
+     *   desde fuera sin romperlas.
+     * @param {number} [options.order] Posición del panel dentro del área de botones
+     *   (valor CSS `order`, no un índice; los paneles sin `order` valen 0).
+     * @param {Object|string} [options.color1={active:'#ffffff',deactive:'orangered'}] Color de fondo ({ active, deactive } o string)
+     * @param {Object|string} [options.color2={active:'#71A7D3',deactive:'#ffffff'}] Color de borde ({ active, deactive } o string)
+     * @param {Object|string} [options.color3={active:'#71A7D3',deactive:'#ffffff'}] Color de icono/texto ({ active, deactive } o string)
+     */
     constructor(options = {}) {
     this.name = "miPlugin_vueloFotogrametrico";
     this.options = options || {};
+    // Opciones del panel, con el mismo nombre y los mismos valores por defecto que
+    // usa miPlugin_stereoscopia y miPlugin_storymap (y el resto de plugins con
+    // panel), para que un visualizador pueda configurar cualquiera de los dos igual.
+    // Antes iban escritas a fuego en buildPanel().
+    this.position_ = options.position || 'TR';
+    // `collapsed` NO tiene default propio a proposito: si el visualizador no lo
+    // pide, la opcion no se le pasa a IDEE.ui.Panel y manda el de la API, que es
+    // plegado. Es lo que hacen miPlugin_layerSwitcher y miPlugin_baseLayer, y
+    // importa mas de lo que parece: el boton plegado se pinta con
+    // `color1.deactive` (naranja) y el abierto con `color1.active` +
+    // `color2.active` (azul #71A7D3 de la API). Forzar `collapsed: false` dejaba el
+    // panel siempre abierto y por tanto azul, a diferencia del resto de plugins.
+    this.collapsed_ = (options.collapsed !== undefined) ? options.collapsed : undefined;
+    this.collapsible_ = (options.collapsible !== undefined) ? options.collapsible : true;
+    this.tooltip_ = options.tooltip || 'Vuelo fotogrametrico';
+    // Clase base del panel. Es la que usan las reglas de vueloFotogrametrico.css,
+    // asi que NO se sustituye: la opcion `className` se AÑADE.
+    this.className_ = ['g-herramienta_vuelo', options.className].filter(Boolean).join(' ');
     // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
     // API monta como flex column). Es un valor CSS `order`, no un índice: lo
     // aplica la propia API haciendo style.order sobre el panel, así que no hay
@@ -1660,16 +1697,24 @@
   buildPanel(map) {
     const IDEE = api();
 
-    const panelVuelo = new IDEE.ui.Panel('toolsExtra_vuelo', {
-      collapsible: true,
-      collapsed: false,
-      className: 'g-herramienta_vuelo',
+    const opcionesPanel = {
+      className: this.className_,
+      collapsible: this.collapsible_,
       collapsedButtonClass: 'm-tools',
-      position: IDEE.ui.position.TR,
+      position: IDEE.ui.position[this.position_],
+      tooltip: this.tooltip_,
       // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
       // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
       order: this.order,
-    });
+    };
+    // `collapsed` solo se pasa si el visualizador lo ha pedido de verdad. Pasarlo
+    // como `undefined` no es lo mismo que no pasarlo (la API comprueba
+    // `options.collapsed !== undefined` en sitios), asi que se construye el objeto
+    // sin esa propiedad. Asi manda el default de la API y el panel nace plegado,
+    // con su boton en naranja, igual que layerSwitcher y baseLayer.
+    if (this.collapsed_ !== undefined) opcionesPanel.collapsed = this.collapsed_;
+
+    const panelVuelo = new IDEE.ui.Panel('toolsExtra_vuelo', opcionesPanel);
 
     const htmlPanel =
       '<div aria-label="Vuelo fotogramétrico" role="menuitem" ' +
@@ -1709,8 +1754,19 @@
       vueloEl.style.setProperty('--g-plugin-icon-color-active', c3.active);
     }
 
-    document.querySelector('.g-herramienta_vuelo .m-panel-controls').innerHTML = htmlPanel;
-    document.querySelector('#m-herramienta-contents-vuelo').appendChild(controlVuelo.getElement());
+    // El contenedor de controles del panel. Se busca DENTRO del panel que se acaba
+    // de crear, no con un `document.querySelector` global: al cambiar de
+    // implementacion el panel anterior sigue un momento en el DOM, y el selector
+    // global se podia encontrar con el viejo e inyectar el contenido en el panel
+    // que ya no manda. La clase base `g-herramienta_vuelo` sigue siempre presente
+    // (ver constructor), asi que la busqueda de reserva es la misma de antes.
+    let panelControles = vueloEl ? vueloEl.querySelector('.m-panel-controls') : null;
+    if (!panelControles) panelControles = document.querySelector('.g-herramienta_vuelo .m-panel-controls');
+    if (panelControles) panelControles.innerHTML = htmlPanel;
+    // El id lo pone justo el HTML que se ha inyectado arriba, asi que se busca en
+    // ese mismo contenedor.
+    const contenidoVuelo = panelControles ? panelControles.querySelector('#m-herramienta-contents-vuelo') : null;
+    if (contenidoVuelo) contenidoVuelo.appendChild(controlVuelo.getElement());
 
     IDEE.utils.draggabillyPlugin(panelVuelo, '#m-herramienta-title-vuelo');
 

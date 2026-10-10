@@ -505,10 +505,7 @@
     color: #2f855a;
 }
 
-/* BOTÓN del panel abierto (opened) — GENÉRICO para todos los plugins.
-   Fondo = color1.active, texto y borde = color2.active. Va al final para
-   ganar en caso de empate de especificidad con las reglas por-plugin. */
-/* BOTÓN del panel — GENÉRICO para todos los plugins.
+/* BOTÓN del panel.
    Base (cerrado):
      - fondo  = color1.deactive (--g-plugin-bg-color)
      - texto  = color3.deactive (--g-plugin-icon-color)
@@ -516,14 +513,21 @@
    Abierto (opened) — mayor especificidad gana sobre base:
      - fondo  = color1.active  (--g-plugin-bg-color-active)
      - texto  = color2.active  (--g-plugin-border-color-active)
-     - borde  = color2.active  (--g-plugin-border-color-active) */
-.m-areas>div.m-area>div.m-panel>button.m-panel-btn {
+     - borde  = color2.active  (--g-plugin-border-color-active)
+
+   LA CLASE `g-herramienta_vuelo` EN EL SELECTOR NO ES COSMÉTICA, ES LO QUE HACE
+   QUE FUNCIONE. Sin ella el selector queda en (0,4,3) y la regla que la API aplica
+   al botón de un panel plegado está en (0,5,2): gana la API y el botón se ve del
+   azul del framework (#71a7d3) en lugar del naranja de color1.deactive. Con la
+   clase ambos empatan y, como esta hoja se carga después, gana la del plugin. Es
+   lo mismo que hacen ext_layerSwitcher.css y ext_backgorundLayers.css. */
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo>button.m-panel-btn {
     background-color: var(--g-plugin-bg-color, orangered) !important;
     color: var(--g-plugin-icon-color, #fff) !important;
     border-color: var(--g-plugin-border-color, #fff) !important;
 }
 
-.m-areas>div.m-area>div.m-panel.opened>button.m-panel-btn {
+.m-areas>div.m-area>div.m-panel.g-herramienta_vuelo.opened>button.m-panel-btn {
     background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
     color: var(--g-plugin-border-color-active, #71A7D3) !important;
     border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
