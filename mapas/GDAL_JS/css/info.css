@@ -123,6 +123,13 @@
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
+  /* QUE LA TABLA QUEPA. Sin esto se sale por los DOS lados en móvil: el panel es
+     `display:flex; justify-content:center`, y una tabla con `width:100%` no baja
+     del ancho de su contenido (nombres de formato largos como "MapInfo File and
+     Geometry"), así que se sale por la izquierda y por la derecha a la vez.
+     Medido en 390 px: la tabla de ráster medía 501 px de ancho y empezaba en
+     x = -56, o sea 55 px fuera por cada lado. */
+  table-layout: fixed;
   background: #fff;
   border: 1px solid #e9e9e9;
   border-radius: 12px;
@@ -137,6 +144,9 @@
   padding: 10px 12px;
   font-size: 0.95rem;
   border-bottom: 1px solid #f0f0f0;
+  /* Con `table-layout: fixed` las columnas reparten el ancho, pero sin esto los
+     nombres largos NO bajan de una pieza y rompen su columna. */
+  overflow-wrap: anywhere;
 }
 
 #infoID td:nth-child(3),
@@ -144,6 +154,31 @@
 #infoID th:nth-child(3),
 #infoID th:nth-child(4) {
   text-align: center;
+}
+
+/* Reparto de las cuatro columnas en móvil.
+ *
+ * Sin decir nada, `table-layout: fixed` las reparte a partes iguales y las dos
+ * últimas (que solo llevan un ✓ o un ✗) se quedan con la mitad del ancho que la
+ * primera, que es la que tiene que aguantar nombres como "Cloud optimized
+ * GeoTIFF generator". Aquí la primera se lleva el ancho que le hace falta.
+ *
+ * Solo en móvil: en escritorio la tabla tiene todo el ancho que necesita.
+ */
+@media (max-width: 600px) {
+  #infoID th:nth-child(1),
+  #infoID td:nth-child(1) { width: 42%; }
+  #infoID th:nth-child(2),
+  #infoID td:nth-child(2) { width: 28%; }
+  #infoID th:nth-child(3),
+  #infoID td:nth-child(3) { width: 15%; }
+  #infoID th:nth-child(4),
+  #infoID td:nth-child(4) { width: 15%; }
+
+  #infoID th {
+    /* Que la cabecera parta palabras solo cuando de verdad no caben. */
+    overflow-wrap: break-word;
+  }
 }
 
 #infoID tr:last-child td,
@@ -181,4 +216,59 @@
 
 #infoID td span[style*="#d93025"] {
   font-weight: 700;
+}
+
+/* ==================================================================== *
+ * MÓVIL
+ *
+ * Lo que falla sin esto, medido en 390 px: las tablas de formatos se salen por
+ * los dos lados (la de ráster medía 501 px y empezaba en x = -56). Arriba está
+ * el arreglo de fondo (`table-layout: fixed`); aquí se aprieta el resto para que
+ * además de caber se pueda leer.
+ *
+ * El punto de corte es 600 px, el mismo que usa la navbar para su hamburguesa.
+ * ==================================================================== */
+@media (max-width: 600px) {
+  #infoID {
+    padding: 0 8px 64px;
+    gap: 8px;
+  }
+
+  #infoID .accordion,
+  #infoID .panel {
+    width: 100%;
+  }
+
+  #infoID .panel {
+    padding: 0;
+  }
+
+  #infoID .accordion {
+    padding: 12px 14px;
+    font-size: 0.9rem;
+  }
+
+  #infoID .info-card {
+    padding: 14px;
+    border-radius: 10px;
+  }
+
+  #infoID h2 {
+    font-size: 1.15rem;
+  }
+
+  /* Relleno y letra menores: es lo que hace que las cuatro columnas quepan sin
+     quedarse en un scroll lateral dentro de cada celda. */
+  #infoID th,
+  #infoID td {
+    padding: 8px 6px;
+    font-size: 0.78rem;
+  }
+
+  #infoID .info-lead,
+  #infoID .info-section p,
+  #infoID .info-list,
+  #infoID .info-links {
+    font-size: 0.9rem;
+  }
 }

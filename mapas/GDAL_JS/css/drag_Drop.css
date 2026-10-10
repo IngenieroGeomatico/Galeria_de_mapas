@@ -390,6 +390,10 @@
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
+  /* Lo mismo que en el panel de Info: sin `table-layout: fixed` la tabla no baja
+     del ancho de su contenido y, como el panel es `display:flex;
+     justify-content:center`, se sale por los dos lados a la vez. */
+  table-layout: fixed;
   background: #fff;
   border: 1px solid #e9e9e9;
   border-radius: 12px;
@@ -404,6 +408,9 @@
   padding: 10px 12px;
   font-size: 0.95rem;
   border-bottom: 1px solid #f0f0f0;
+  /* Con las columnas fijadas, sin esto los nombres largos (nombres de fichero,
+     nombres de formato) no bajan de una pieza y revientan su columna. */
+  overflow-wrap: anywhere;
 }
 
 #accordionFiles th {
@@ -411,6 +418,45 @@
   color: #fff;
   font-weight: 600;
   letter-spacing: 0.2px;
+}
+
+/* Reparto de las cinco columnas.
+ *
+ * Con `table-layout: fixed` y sin decir nada, el navegador reparte el ancho a
+ * partes iguales y las cinco columnas quedan estrechas por igual: "Capa" (que es
+ * la que lleva el nombre del fichero, lo único que identifica la fila) se
+ * estrangula y obliga a "test_sample.tif" a partirse en dos líneas, mientras que
+ * "Número de bandas" sobra de espacio. Las proporciones de aquí dan más ancho a
+ * la primera columna y menos a las que solo llevan números.
+ *
+ * Solo dentro del `max-width: 600px`: en escritorio la tabla ya tiene el ancho
+ * que necesita y repartirse a partes iguales queda bien.
+ */
+@media (max-width: 600px) {
+  #accordionFiles th:nth-child(1),
+  #accordionFiles td:nth-child(1) { width: 27%; }
+  #accordionFiles th:nth-child(2),
+  #accordionFiles td:nth-child(2) { width: 19%; }
+  #accordionFiles th:nth-child(3),
+  #accordionFiles td:nth-child(3) { width: 13%; }
+  #accordionFiles th:nth-child(4),
+  #accordionFiles td:nth-child(4) { width: 22%; }
+  #accordionFiles th:nth-child(5),
+  #accordionFiles td:nth-child(5) { width: 19%; }
+
+  /* La fila de exportación se reparte con `colSpan`, no con estos anchos. */
+  #accordionFiles th {
+    /* Sin esto "Compresión" se parte como "Compresió/n": `anywhere` parte la
+       palabra aunque todavía quepa en la línea. `break-word` solo parte cuando
+       de verdad no cabe, que es justo lo que se quiere en una cabecera. */
+    overflow-wrap: break-word;
+  }
+
+  /* La fila de exportación: tres celdas con colSpan 2/2/1. El botón "Exportar"
+     es la que no puede quedarse sin ancho. */
+  #accordionFiles .btn-exp {
+    font-size: 0.78rem;
+  }
 }
 
 #accordionFiles tr:hover {
@@ -482,6 +528,91 @@
 @keyframes spinCarga {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* ==================================================================== *
+ * MÓVIL
+ *
+ * En el escritorio el `width: min(1100px, 94vw)` de los acordeones ya resuelve
+ * casi todo, y por eso no se notaba. En un móvil de 390 px se acumulaban tres
+ * cosas:
+ *
+ *   1. Las tablas de 4 y 5 columnas se salían por los dos lados. Corregido más
+ *      arriba con `table-layout: fixed`; aquí además se aprieta el relleno y la
+ *      letra para que quepan de verdad y no acabe en una columna de 6 px.
+ *   2. El botón "Sube un fichero" se quedaba con el margen de 20 px del
+ *      escritorio y con el `width: 90%` del efecto btn-7, que en 320 px son
+ *      márgenes para un botón que casi no tiene ancho.
+ *   3. La zona de arrastrar se quedaba en el 70 % del ancho, con un borde de
+ *      puntos enorme al lado.
+ *
+ * El punto de corte es 600 px, el mismo que usa la navbar para su hamburguesa.
+ * ==================================================================== */
+@media (max-width: 600px) {
+  /* TODO lo de este bloque va acotado a `#containerID` y a propósito.
+   *
+   * `.container` y `.upload` son nombres de clase genéricos que este CSS ya
+   * usaba sin acotar, y por eso son peligroso tocarlos: si la API-CNIG usa
+   * `.container` en el mapa (o un plugin de `ext/` la usa en su DOM), una regla
+   * móvil como esta le cambia el relleno y el hueco al mapa entero sin que se
+   * note en las pruebas. Acotando a `#containerID` el selector ya no puede salir
+   * de la pestaña de Archivos aunque el nombre coincida con el de otro. */
+  #containerID {
+    padding: 8px 8px 64px;
+    gap: 12px;
+  }
+
+  /* El botón grande, sin márgenes de escritorio y con un ancho útil. */
+  #containerID .custom-btn {
+    margin: 8px 0 !important;
+    width: 100% !important;
+  }
+
+  /* La zona de arrastrar, más ancha y con el borde menos pesado. */
+  #containerID .upload {
+    width: 100%;
+    border-radius: 18px;
+  }
+
+  #containerID .upload .text {
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+  }
+
+  /* Los acordeones, al ancho útil y con el panel pegado al borde. */
+  #accordionFiles .accordion,
+  #accordionFiles .panel {
+    width: 100%;
+  }
+
+  #accordionFiles .panel {
+    padding: 0;
+  }
+
+  #accordionFiles .accordion {
+    padding: 12px 14px;
+    font-size: 0.9rem;
+  }
+
+  /* Tablas: letra y relleno menores, que es lo que de verdad las hace caber. */
+  #accordionFiles th,
+  #accordionFiles td {
+    padding: 8px 6px;
+    font-size: 0.78rem;
+  }
+
+  /* Los desplegables y campos de la fila de exportación también. */
+  #accordionFiles select,
+  #accordionFiles input[type="text"] {
+    max-width: 100%;
+    font-size: 0.8rem;
+  }
+
+  #containerID .btn-exp {
+    /* El texto se queda con el del botón, pero en una columna estrecha. */
+    padding: 0 !important;
+    font-size: 0.8rem;
+  }
 }
 
 .modal {
