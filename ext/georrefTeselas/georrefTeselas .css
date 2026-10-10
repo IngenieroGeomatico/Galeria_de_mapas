@@ -31,8 +31,70 @@
   min-width: 220px;
 }
 
-#seleccionCapasID{
+/* FUENTE DEL PANEL.
+   Antes no se declaraba ninguna, asi que todo lo que no es el header (los h4, las
+   etiquetas, los options del select) caia en la serif por defecto del navegador y
+   se veia Times. Y el button tenia encima un `font-family: 'Times New Roman'
+   !important` explicito. Se usa la misma pila que el resto de la aplicacion. */
+.g-herramienta_georrefTeselas {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #2f2f2f;
+}
+
+/* Titulos de seccion ("Selector de malla", "Selección de tesela"). Eran <h4> pelados:
+   el navegador les ponia margen por defecto y salian a distinto tamano y peso que
+   el resto del panel. */
+.g-herramienta_georrefTeselas .gr-seccion {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  color: #6b6b6b;
+}
+.g-herramienta_georrefTeselas .gr-seccion:not(:first-child) {
+  margin-top: 16px;
+}
+
+/* Filas etiqueta + input. El grid es lo que deja las etiquetas en una columna de
+   ancho fijo, para que "{z}", "{x}" y "{-y}" queden alineados y los inputs
+   empiecen siempre en el mismo sitio. */
+.g-herramienta_georrefTeselas .gr-fila {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.g-herramienta_georrefTeselas .gr-fila + .gr-fila {
+  margin-top: 6px;
+}
+.g-herramienta_georrefTeselas .gr-etiqueta {
+  font-size: 0.9rem;
+  color: #2f2f2f;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Inputs y desplegable: ancho completo del panel y sin el aspecto por defecto
+   del navegador, que era lo que mas desentonaba. */
+.g-herramienta_georrefTeselas #teselaWrapperID input[type="text"],
+.g-herramienta_georrefTeselas #seleccionCapasID {
   width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: #2f2f2f;
+  background: #fff;
+  border: 1px solid #cfcfcf;
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.g-herramienta_georrefTeselas #teselaWrapperID input[type="text"]:focus,
+.g-herramienta_georrefTeselas #seleccionCapasID:focus {
+  border-color: var(--g-plugin-border-color-active, #71a7d3);
+  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.25);
 }
 
 
@@ -73,15 +135,40 @@
     margin:5px;
 }
 
-/* Botones controles */
-.g-herramienta_georrefTeselas .m-panel-controls button {
-  font-family: 'Times New Roman', Times, serif !important;
-  font-size: 16px;  
-  font-weight: 700 !important;
-  -webkit-font-smoothing: antialiased;
+/* Boton "Georreferenciar".
+   La regla de abajo era generica para TODOS los botones del panel y por eso
+   arrastraba un `font-family: 'Times New Roman' !important` y un fondo azul fijo
+   (#71a7d3) que no tenian nada que ver con la paleta del plugin. Aqui se deja
+   solo el boton de accion, con los colores que ya inyecta el plugin, para que sea
+   el naranja de color1.deactive y no un boton gris del navegador. */
+.g-herramienta_georrefTeselas #botonCalcular {
+  width: 100%;
+  padding: 9px 14px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--g-plugin-icon-color, #fff);
+  background-color: var(--g-plugin-bg-color, orangered);
+  border: 1px solid transparent;
+  border-radius: 4px;
   cursor: pointer;
-  background-color: #71a7d3;
-  color:whitesmoke;
+  -webkit-font-smoothing: antialiased;
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+.g-herramienta_georrefTeselas #botonCalcular:hover {
+  filter: brightness(0.94);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.g-herramienta_georrefTeselas #botonCalcular:active {
+  filter: brightness(0.88);
+  box-shadow: none;
+}
+.g-herramienta_georrefTeselas #botonCalcular:focus-visible {
+  outline: 2px solid var(--g-plugin-border-color-active, #71a7d3);
+  outline-offset: 2px;
+}
+.g-herramienta_georrefTeselas .gr-acciones {
+  margin-top: 14px;
 }
 
 
@@ -98,9 +185,14 @@
   color:rgb(118, 118, 118)
 }
 
-#m-herramienta-contents{
-  margin: 0px 10px;
-
+/* Relleno interior del panel.
+   OJO: esta regla estaba como `#m-herramienta-contents`, pero el id que genera el
+   plugin es `#m-herramienta-contents-georrefTeselas`. Al no casar NUNCA se aplico,
+   y por eso todo el contenido (titulos, desplegable, inputs y boton) se veia pegado
+   a los bordes del panel, que es buena parte de lo que lo hacia aspecto tosco. */
+.g-herramienta_georrefTeselas #m-herramienta-contents-georrefTeselas {
+  margin: 0;
+  padding: 14px 14px 16px;
 }
 
 /* BOTÓN del panel.

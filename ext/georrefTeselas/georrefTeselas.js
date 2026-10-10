@@ -233,18 +233,23 @@ class miPlugin_georrefTeselas {
     control.activate = () => { };
     control.deactivate = () => { };
 
+    // Los estilos NO van en linea: todo se define en georrefTeselas.css. Con
+    // `style="font-size: large"` en cada etiqueta el texto quedaba enorme y a
+    // distinta escala del desplegable, y `style="width:auto"` hacia que los
+    // inputs no ocuparan el panel. Las filas son etiqueta + input con clases,
+    // para que el CSS las alinee en rejilla y los dos puntos de las etiquetas
+    // queden en la misma columna.
     const htmlControl = `
-        <h4> Selector de malla: </h4>
-        <div id="selectorWrapperID">
+        <h4 class="gr-seccion">Selector de malla</h4>
+        <div id="selectorWrapperID" class="gr-campo">
         <select class="seleccionCapasClass" id="seleccionCapasID" name="seleccionCapas">
             <option value="TMS">TMS</option>
             <option value="XYZ">XYZ</option>
             <option value="H3">H3</option>
         </select>
-         <h4> Selección de tesela</h4>
-         <div id="teselaWrapperID">
-         </div>
-        <div style="text-align: center;margin: 10px;">
+         <h4 class="gr-seccion">Selección de tesela</h4>
+         <div id="teselaWrapperID"></div>
+        <div class="gr-acciones">
             <button id="botonCalcular" type="button">Georreferenciar</button>
         </div>
     `;
@@ -278,23 +283,26 @@ class miPlugin_georrefTeselas {
         selector.value = selectedValue;
 
         selector.addEventListener('change', function (e) {
+          // Cada fila es `etiqueta + input` y se alinea con el grid de
+          // georrefTeselas.css. Antes era un `<label>` con `font-size: large` y
+          // el input dentro, lo que dejaba los dos puntos desalineados
+          // ("{z} :" frente a "{-y}:") y el input encogido.
           switch (e.target.value) {
             case 'TMS':
-              teselaWrapper.innerHTML = ` <div>
-                                              <label style="font-size: large; display: block;">{z} :  <input id="TMS_z" type="text" placeholder="valor z de la tesela" style="width:auto;"></label>
-                                              <label style="font-size: large; display: block;">{x} :  <input id="TMS_x" type="text" placeholder="valor x de la tesela" style="width:auto;"></label>
-                                              <label style="font-size: large; display: block;">{-y}: <input id="TMS_y" type="text" placeholder="valor -y de la tesela" style="width:auto;"></label>
-                                          </div>`;
+              teselaWrapper.innerHTML =
+                '<div class="gr-fila"><span class="gr-etiqueta">{z}</span><input id="TMS_z" type="text" placeholder="valor z" aria-label="valor z de la tesela"></div>' +
+                '<div class="gr-fila"><span class="gr-etiqueta">{x}</span><input id="TMS_x" type="text" placeholder="valor x" aria-label="valor x de la tesela"></div>' +
+                '<div class="gr-fila"><span class="gr-etiqueta">{-y}</span><input id="TMS_y" type="text" placeholder="valor -y" aria-label="valor -y de la tesela"></div>';
               break;
             case 'XYZ':
-              teselaWrapper.innerHTML = ` <div>
-                                              <label style="font-size: large; display: block;">{z}: <input id="XYZ_z" type="text" placeholder="valor z de la tesela" style="width:auto;"></label>
-                                              <label style="font-size: large; display: block;">{x}: <input id="XYZ_x" type="text" placeholder="valor x de la tesela" style="width:auto;"></label>
-                                              <label style="font-size: large; display: block;">{y}: <input id="XYZ_y" type="text" placeholder="valor y de la tesela" style="width:auto;"></label>
-                                          </div>`;
+              teselaWrapper.innerHTML =
+                '<div class="gr-fila"><span class="gr-etiqueta">{z}</span><input id="XYZ_z" type="text" placeholder="valor z" aria-label="valor z de la tesela"></div>' +
+                '<div class="gr-fila"><span class="gr-etiqueta">{x}</span><input id="XYZ_x" type="text" placeholder="valor x" aria-label="valor x de la tesela"></div>' +
+                '<div class="gr-fila"><span class="gr-etiqueta">{y}</span><input id="XYZ_y" type="text" placeholder="valor y" aria-label="valor y de la tesela"></div>';
               break;
             case 'H3':
-              teselaWrapper.innerHTML = '<label style="font-size: large; display: block;">H3: <input id="H3_id" type="text" placeholder="ID de la tesela H3" style="width:auto;"></label>';
+              teselaWrapper.innerHTML =
+                '<div class="gr-fila"><span class="gr-etiqueta">H3</span><input id="H3_id" type="text" placeholder="ID de la tesela" aria-label="ID de la tesela H3"></div>';
               break;
             default:
               teselaWrapper.innerHTML = '';
