@@ -72,7 +72,30 @@ function dividirSiEnorme(gjson) {
     // figura, y es justo el caso de la tesela 0/0/0. Se deja como está: quien lo
     // reciba verá el aviso del motor, pero no es cosa de esta función.
     if (anchoLon <= MAX_LON && altoLat <= MAX_LAT) return gjson;
-    if (anchoLon >= 360) return gjson;
+
+    // El anti-meridiano (ancho >= 360) no se puede trocear en longitud sin partir
+    // la figura, asi que por aqui no llega una solucion de trozos. Pero medido: si
+    // se recortan los bordes de ±180 a ±179.9, Cesium SI lo acepta (0/0/0 pasa de
+    // "All attribute lists must have the same number of attributes" a pintarse
+    // bien). El recorte es de 0.1 grados en cada lado: la tesela 0/0/0 es el globo
+    // entero y en un solo poligono ya es imposible representarla con exactitud,
+    // asi que el recorte es el precio de poder dibujarla.
+    //
+    // OJO: este recorte NO se aplica a las teselas normales. Medido: 1/0/0, que va
+    // de -180 a 0 y NO cruza el anti-meridiano, sigue fallando aunque se le baje el
+    // borde a 179.9 (queda en 179.9 grados). Alli lo que manda es el TAMAÑO, que
+    // se resuelve troceando, no tocando los bordes. Por eso el recorte va solo en
+    // esta rama y no antes.
+    if (anchoLon >= 360) {
+      return {
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [anillo.map((pt) => [Math.max(-179.9, Math.min(179.9, pt[0])), pt[1]])],
+        },
+        properties: gjson.properties,
+      };
+    }
 
     const nLon = Math.max(1, Math.ceil(anchoLon / MAX_LON));
     const nLat = Math.max(1, Math.ceil(altoLat / MAX_LAT));
