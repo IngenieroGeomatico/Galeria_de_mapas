@@ -176,7 +176,9 @@
      * @param {string} [options.position='TR'] Esquina de la API donde se coloca el
      *   panel (clave de `IDEE.ui.position`: TL, TR, BL, BR...).
      * @param {boolean} [options.collapsible=true] Si el panel se puede plegar.
-     * @param {boolean} [options.collapsed=false] Si el panel nace plegado.
+     * @param {boolean} [options.collapsed] Si el panel nace plegado. Si no se
+     *   indica, NO se le pasa la opción al panel y manda el default de la API
+     *   (plegado, botón naranja), como layerSwitcher y baseLayer.
      * @param {string} [options.tooltip='Estereoscopía'] Texto del tooltip del botón.
      * @param {string} [options.className] Clase ADICIONAL para el panel. La clase
      *   base `g-herramienta_estereo` se conserva siempre, porque es la que usan las
@@ -197,7 +199,14 @@
     // buildPanel(), así que este plugin era el único que no se podía colocar ni
     // plegar desde fuera.
     this.position_ = options.position || 'TR';
-    this.collapsed_ = (options.collapsed !== undefined) ? options.collapsed : false;
+    // `collapsed` NO tiene default propio a proposito: si el visualizador no lo
+    // pide, la opcion no se le pasa a IDEE.ui.Panel y manda el de la API, que es
+    // plegado. Es lo que hacen miPlugin_layerSwitcher y miPlugin_baseLayer, y
+    // importa mas de lo que parece: el boton plegado se pinta con `color1.deactive`
+    // (naranja) y el abierto con `color1.active` + `color2.active` (azul #71A7D3 de
+    // la API). Forzar `collapsed: false` hacia el panel siempre abierto y por tanto
+    // azul, que es justo lo que distingue a este plugin del resto.
+    this.collapsed_ = (options.collapsed !== undefined) ? options.collapsed : undefined;
     this.collapsible_ = (options.collapsible !== undefined) ? options.collapsible : true;
     this.tooltip_ = options.tooltip || 'Estereoscopía';
     // Clase base del panel. Es la que usan las reglas de estereoscopia.css, así que
@@ -333,17 +342,24 @@
   buildPanel(map) {
     var IDEE = api();
 
-    var panelEstereo = new IDEE.ui.Panel('toolsExtra_estereo', {
+    var opcionesPanel = {
       className: this.className_,
       collapsible: this.collapsible_,
-      collapsed: this.collapsed_,
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position[this.position_],
       tooltip: this.tooltip_,
       // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el
       // panel dentro del area (flex column). Es un valor CSS `order`, no un indice.
       order: this.order,
-    });
+    };
+    // `collapsed` solo se pasa si el visualizador lo ha pedido de verdad. Pasarlo
+    // como `undefined` no es lo mismo que no pasarlo (la API comprueba
+    // `options.collapsed !== undefined` en sitios), asi que se construye el objeto
+    // sin esa propiedad. Asi manda el default de la API y el panel nace plegado,
+    // con su boton en naranja, igual que layerSwitcher y baseLayer.
+    if (this.collapsed_ !== undefined) opcionesPanel.collapsed = this.collapsed_;
+
+    var panelEstereo = new IDEE.ui.Panel('toolsExtra_estereo', opcionesPanel);
 
     var htmlPanel =
       '<div aria-label="Estereoscopía" role="menuitem" ' +
