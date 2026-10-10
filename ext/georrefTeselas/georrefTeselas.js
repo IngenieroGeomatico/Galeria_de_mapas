@@ -18,110 +18,70 @@ function api_georrefTeselas() {
 const valueOri_georrefTeselas = "-- Seleccione un tipo de malla --";
 
 /**
- * Divide en trozos un polígono demasiado grande para el motor 3D.
+ * Recorta los extremos de un polígono para que no toque los limites del mundo.
  *
- * POR QUÉ HACE FALTA (medido, no es teoría).
+ * UNA TESELA = UNA FEATURE. Antes esta funcion troceaba los rectangulos grandes en
+ * un MultiPolygon para que el motor 3D no fallara, pero eso hacia que crease una
+ * feature por trozo y salieran cuatro etiquetas para una sola tesela. Ahora no se
+ * trocea nunca: se recorta, y sigue siendo una sola feature.
  *
- * Las teselas de los primeros zooms cubren medio globo o el globo entero. Al
- * georreferenciarlas en 3D, el motor de Cesium falla al construir la geometría del
- * polígono y, como pasa dentro de un worker, **no se puede capturar**: el error
- * sube a "An error occurred while rendering. Rendering has stopped" y el
- * visualizador se queda muerto, no solo la capa. Medido:
+ * LA REGLA: si un valor es ±180 en longitud o ±90 en latitud, pasa a ±179.9 / ±89.9.
+ * Medido: asi la tesela 0/0/0 (360 grados, el globo entero) se pinta bien en 3D,
+ * cuando en crudo reventaba con "All attribute lists must have the same number of
+ * attributes".
  *
- *   tesela 2/1/1    90 x 66.5 grados  ->  ok
- *   tesela 1/0/0   180 x 85   grados  ->  DeveloperError: Expected value to be
- *                                          greater than or equal to 0.0125,
- *                                          actual value was 0
- *   tesela 0/0/0   360 x 170  grados  ->  DeveloperError: All attribute lists
- *                                          must have the same number of attributes
+ * LO QUE NO SE PUEDE EVITAR (medido): las teselas de zoom 1, que abarcan 180
+ * grados justo por la mitad del globo, siguen tumbando el motor 3D ("Expected value
+ * to be greater than or equal to 0.0125"). No es por ser grandes: un poligono de
+ * 160, de 190 o de 359.8 grados se pinta bien y falla el de 179.9. Tampoco lo
+ * arregla cambiar el estilo (probado con y sin `extrudedHeight`). Con una sola
+ * feature y esos bordes no hay solucion dentro de la API, asi que quien las pida
+ * recibe un aviso antes de intentarlo.
  *
- * El GeoJSON que genera DGGS.js es correcto (5 vértices, sin repetir), así que el
- * problema no está en los datos sino en el tamaño de la figura.
- *
- * LA SOLUCIÓN es trocear el rectángulo en celdas manejables y devolver un
- * MultiPolygon: se pinta igual de grande, pero cada trozo entra en el rango que el
- * motor sí soporta. Las teselas normales (zoom >= 2) ni llegan al umbral y se
- * devuelven tal cual, sin tocar nada, para no alterar lo que ya funcionaba.
- *
- * @param {Object} gjson Feature con un Polygon de 5 vértices.
- * @returns {Object} El mismo Feature si es pequeño; un Feature con MultiPolygon si
- *   ha habido que dividirlo.
+ * @param {Object} gjson Feature con un Polygon de 5 vertices.
+ * @returns {Object} El Feature con los extremos recortados.
  */
-function dividirSiEnorme(gjson) {
-  // Por debajo de estos grados el motor no se quejaba (90 x 66.5 funciona), así
-  // que el margen queda holgadamente por debajo del salto medido en 180 x 85.
-  const MAX_LON = 120;
-  const MAX_LAT = 80;
+function recortarExtremos(gjson) {
+  const recorta = (v, tope) => Math.max(-tope, Math.min(tope, v));
 
   try {
     if (!gjson || !gjson.geometry || gjson.geometry.type !== 'Polygon') return gjson;
     const anillo = gjson.geometry.coordinates[0];
     if (!Array.isArray(anillo) || anillo.length < 4) return gjson;
 
-    const lons = anillo.map((pt) => pt[0]);
-    const lats = anillo.map((pt) => pt[1]);
-    const oeste = Math.min(...lons);
-    const este = Math.max(...lons);
-    const sur = Math.min(...lats);
-    const norte = Math.max(...lats);
-
-    const anchoLon = este - oeste;
-    const altoLat = norte - sur;
-
-    // El anti-meridiano (ancho >= 360) no se puede trocear en lon sin partir la
-    // figura, y es justo el caso de la tesela 0/0/0. Se deja como está: quien lo
-    // reciba verá el aviso del motor, pero no es cosa de esta función.
-    if (anchoLon <= MAX_LON && altoLat <= MAX_LAT) return gjson;
-
-    // El anti-meridiano (ancho >= 360) no se puede trocear en longitud sin partir
-    // la figura, asi que por aqui no llega una solucion de trozos. Pero medido: si
-    // se recortan los bordes de ±180 a ±179.9, Cesium SI lo acepta (0/0/0 pasa de
-    // "All attribute lists must have the same number of attributes" a pintarse
-    // bien). El recorte es de 0.1 grados en cada lado: la tesela 0/0/0 es el globo
-    // entero y en un solo poligono ya es imposible representarla con exactitud,
-    // asi que el recorte es el precio de poder dibujarla.
-    //
-    // OJO: este recorte NO se aplica a las teselas normales. Medido: 1/0/0, que va
-    // de -180 a 0 y NO cruza el anti-meridiano, sigue fallando aunque se le baje el
-    // borde a 179.9 (queda en 179.9 grados). Alli lo que manda es el TAMAÑO, que
-    // se resuelve troceando, no tocando los bordes. Por eso el recorte va solo en
-    // esta rama y no antes.
-    if (anchoLon >= 360) {
-      return {
-        type: 'Feature',
-        geometry: {
-          type: 'Polygon',
-          coordinates: [anillo.map((pt) => [Math.max(-179.9, Math.min(179.9, pt[0])), pt[1]])],
-        },
-        properties: gjson.properties,
-      };
-    }
-
-    const nLon = Math.max(1, Math.ceil(anchoLon / MAX_LON));
-    const nLat = Math.max(1, Math.ceil(altoLat / MAX_LAT));
-    const trozos = [];
-
-    for (let i = 0; i < nLon; i++) {
-      const o = oeste + (anchoLon * i) / nLon;
-      const e = oeste + (anchoLon * (i + 1)) / nLon;
-      for (let j = 0; j < nLat; j++) {
-        const s = sur + (altoLat * j) / nLat;
-        const n = sur + (altoLat * (j + 1)) / nLat;
-        trozos.push([[
-          [o, s], [e, s], [e, n], [o, n], [o, s],
-        ]]);
-      }
-    }
-
     return {
       type: 'Feature',
-      geometry: { type: 'MultiPolygon', coordinates: trozos },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [anillo.map((pt) => [recorta(pt[0], 179.9), recorta(pt[1], 89.9)])],
+      },
       properties: gjson.properties,
     };
   } catch (e) {
-    // Ante cualquier duda se pasa lo que haya: antes funcionaba, y es preferible
-    // un aviso del motor a una excepción propia.
     return gjson;
+  }
+}
+
+/**
+ * ¿Esta tesela es de las que el motor 3D no sabe dibujar en una sola feature?
+ *
+ * Medido: solo lo hacen las teselas de zoom 1, que ocupan 180 grados de longitud
+ * (media columna del globo). Un rectangulo de 160, de 190 o de 359.8 grados se
+ * pinta bien, asi que el aviso se pone sobre el ancho real de la tesela y no sobre
+ * un limite inventado.
+ *
+ * @param {Object} gjson Feature con un Polygon.
+ * @returns {boolean} true si hay que avisar antes de intentarlo.
+ */
+function avisaAntesDeIntentar(gjson) {
+  try {
+    const anillo = gjson.geometry.coordinates[0];
+    const lons = anillo.map((pt) => pt[0]);
+    const ancho = Math.max.apply(null, lons) - Math.min.apply(null, lons);
+    // Las teselas de zoom 1 miden 180. Las de zoom >= 2, como mucho 90.
+    return ancho > 150;
+  } catch (e) {
+    return false;
   }
 }
 
@@ -488,10 +448,30 @@ class miPlugin_georrefTeselas {
       default:
         break;
     }
+
+    // Las teselas de zoom 1 ocupan media columna del globo y el motor 3D las tumba
+    // en una sola feature (ver `recortarExtremos`). Se avisa ANTES de intentarlo
+    // para que no se llegue a parar el render sin explicacion. En 2D se añaden
+    // igual: alli solo hay que pintar el poligono.
+    const es3D = (function () {
+      try {
+        const impl = map.getMapImpl();
+        return !!(impl && impl.scene && impl.camera);
+      } catch (e) { return false; }
+    })();
+    if (es3D && avisaAntesDeIntentar(gjson)) {
+      IDEE.toast.warning(
+        'Esta tesela abarca media columna del globo (zoom 1). El motor 3D no ' +
+        'sabe dibujarla en una sola pieza y puede parar el render. Si necesitas ' +
+        'verla en 3D, usa el zoom 2 o superior.',
+        null, 6000);
+    }
+
     const layer = new IDEE.layer.GeoJSON({
-      source: dividirSiEnorme(gjson),
+      source: recortarExtremos(gjson),
       extract: true,
     });
+
     const estilo = new IDEE.style.Generic({
       polygon: {
         fill: {
