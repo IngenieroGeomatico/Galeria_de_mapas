@@ -92,7 +92,7 @@
    * queda ningún nombre de paquete por resolver (medido).
    * ------------------------------------------------------------------ */
 
-  const URL_GEOTIFF = 'https://cdn.jsdelivr.net/npm/geotiff@2.1.3/+esm';
+  const URL_GEOTIFF = 'https://cdn.jsdelivr.net/npm/geotiff@3.0.5/+esm';
   let promesaGeoTIFF = null;
 
   function cargarGeoTIFF() {
@@ -189,15 +189,14 @@
       if (clave && this._cache.has(clave)) return this._cache.get(clave);
 
       const mod = await cargarGeoTIFF();
-      const buffer = await this._bytes();
-      const tif = await mod.fromArrayBuffer(buffer);
-      const imagen = await tif.getImage();
+      const tif = await this._abrir(mod);
+      const principal = await tif.getImage();
 
-      const ancho = imagen.getWidth();
-      const alto = imagen.getHeight();
-      const muestras = imagen.getSamplesPerPixel();
-      const bbox = imagen.getBoundingBox();
-      const claves = imagen.getGeoKeys() || {};
+      const ancho = principal.getWidth();
+      const alto = principal.getHeight();
+      const muestras = principal.getSamplesPerPixel();
+      const bbox = principal.getBoundingBox();
+      const claves = principal.getGeoKeys() || {};
       const epsg = this._epsgDe(claves);
 
       // Extensión en lon/lat. Sin bbox no hay dónde pintarlo: se avisa y ya.
@@ -210,9 +209,24 @@
         [Math.max(esquinas[0][0], esquinas[1][0]), Math.max(esquinas[0][1], esquinas[1][1])],
       ];
 
-      const canvas = await this._pintar(imagen, ancho, alto, muestras);
+      // El escalón con el que pintar. Va DESPUÉS de leer la cabecera, que es
+      // barato, y antes de los píxeles, que es lo caro.
+      const escalon = await this._mejorEscalon(tif);
+      const pintado = await this._pintar(escalon.imagen, muestras);
 
-      const salida = { canvas: canvas, rectangulo: rectangulo, ancho: ancho, alto: alto, epsg: epsg };
+      const salida = {
+        canvas: pintado.canvas,
+        rectangulo: rectangulo,
+        ancho: ancho,
+        alto: alto,
+        epsg: epsg,
+        // Para depurar desde la consola: de dónde salió el lienzo, qué escalón de
+        // la pirámide se usó y a qué resolución. Es lo que explica el peso.
+        origen: this.blob ? 'blob' : 'url',
+        escalonUsado: escalon.indice,
+        escalonesTotales: escalon.escalones,
+        lienzo: [pintado.canvas.width, pintado.canvas.height],
+      };
       if (clave) {
         this._cache.set(clave, salida);
         // Un fichero subido cada vez y sin límite sería una fuga: aquí se
@@ -233,17 +247,100 @@
       return 'EPSG:4326';
     }
 
-    /** Los bytes del fichero, venga de un Blob o de una URL. */
-    async _bytes() {
+    /**
+     * Abre el GeoTIFF, y aquí está la diferencia entre un fichero subido y uno
+     * que está en una URL.
+     *
+     * DE UN BLOB: `fromArrayBuffer`, que es el fichero entero en memoria. No hay
+     * más opción: el usuario ya lo ha subido entero.
+     *
+     * DE UNA URL: `fromUrl`, que NO se baja el fichero entero sino que pide solo
+     * los trozos que necesita (medido: 64 KB para la cabecera).
+     *
+     * Y ESTO ES LO QUE HACE ÚTIL A UN COG. Un COG (Cloud Optimized GeoTIFF) es un
+     * GeoTIFF normal con las teselas internas ordenadas y con una copia
+     * reducida ya calculada de sí mismo en cada escalón (`overviews`). La gracia
+     * del formato es que se puede leer una parte sin traerse el resto por la red.
+     * Con un `fetch` entero se pierde esa ventaja y se descarga entero: medido
+     * sobre un COG real de Sentinel-2 de 112 MB, la versión de "bajarlo todo"
+     * pide los 117 MB, y con lectura por rangos y overview son unos pocos MB.
+     *
+     * OJO: para esto el servidor tiene que permitir peticiones por rango. Un
+     * COG en un bucket sin CORS no se puede leer desde el navegador en absoluto
+     * (ni por URL ni de ninguna otra manera), porque el `fetch` se para en el
+     * CORS y no hay `Access-Control-Allow-Origin`.
+     */
+    async _abrir(mod) {
       if (this.blob) {
-        return (await this.blob.arrayBuffer());
+        return await mod.fromArrayBuffer(await this.blob.arrayBuffer());
       }
       if (this.url) {
-        const r = await fetch(this.url);
-        if (!r.ok) throw new Error('HTTP ' + r.status + ' al bajar ' + this.url);
-        return await r.arrayBuffer();
+        if (typeof mod.fromUrl !== 'function') {
+          throw new Error('geotiff.js no trae fromUrl, no se puede leer por URL');
+        }
+        return await mod.fromUrl(this.url);
       }
       throw new Error('El GeoTIFF no tiene ni blob ni url');
+    }
+
+    /**
+     * Escoge el escalón de la pirámide con el que pintar.
+     *
+     * UNA PIRÁMIDE DE COG SON VARIAS IMÁGENES EN EL MISMO FICHERO. La primera es
+     * la resolución completa y las siguientes son la misma imagen reducida a la
+     * mitad, a la cuarta parte, etc. En geotiff.js no hay un `getOverview(n)`: no
+     * existe en ninguna versión (medido en 2.1.3 y en 3.0.5, el método no está
+     * en el prototipo de la imagen). Cada escalón es una imagen más del fichero y
+     * se llega con `tif.getImage(n)`. En un COG real de Sentinel-2 salen 5:
+     *
+     *   0: 10980x10980    1: 5490x5490    2: 2745x2745
+     *   3: 1373x1373      4: 687x687
+     *
+     * Pintar con la primera es un disparate. Medido sobre ese COG de 112 MB,
+     * pidiendo los 2048 px del lienzo:
+     *
+     *   imagen 0 (10980) -> 82,05 MB en 242 peticiones, 53,5 s
+     *   imagen 3 ( 1373) ->  1,43 MB en   9 peticiones,  2,2 s
+     *
+     * O sea 57 veces menos datos y 24 veces menos tiempo, para un dibujo
+     * INDISTINGUIBLE, porque la 3 ya viene a la resolución del lienzo.
+     *
+     * Se elige el escalón más BAJO que aún cubra el tamaño del lienzo: si se
+     * eligiera uno más pequeño se vería borroso, y si se eligiera uno más grande
+     * se seguiría bajando de más.
+     *
+     * Un GeoTIFF normal no tiene pirámide y sale con un solo paso: se usa la
+     * imagen 0, que es todo lo que hay.
+     *
+     * @param {Object} tif El GeoTIFF abierto.
+     * @returns {Promise<Object>} { imagen, indice, escalones }
+     */
+    async _mejorEscalon(tif) {
+      let cuantos = 1;
+      try {
+        if (typeof tif.getImageCount === 'function') {
+          cuantos = Math.max(1, Number(await tif.getImageCount()) || 1);
+        }
+      } catch (e) {
+        cuantos = 1;
+      }
+
+      // La última de la lista es la imagen principal del fichero: siempre vale.
+      const principal = await tif.getImage(cuantos - 1);
+      const ladoPrincipal = Math.max(principal.getWidth(), principal.getHeight());
+
+      // Primer escalón (empezando por el 0, que es el de más resolución) que ya
+      // quepa en el lienzo.
+      for (let n = 0; n < cuantos; n++) {
+        const img = await tif.getImage(n);
+        if (!img) continue;
+        const lado = Math.max(img.getWidth(), img.getHeight());
+        if (lado <= this.ladoMaximo) {
+          return { imagen: img, indice: n, escalones: cuantos };
+        }
+      }
+      // Ninguno cabe (fichero enano o sin pirámide): la principal.
+      return { imagen: principal, indice: cuantos - 1, escalones: cuantos };
     }
 
     /**
@@ -255,14 +352,32 @@
      * pierde el contenido. Se calcula el mínimo y el máximo de cada banda y se
      * reparte entre 0 y 255, que es justo lo que hace `gdal_translate -scale` en
      * la ruta de GDAL.
+     *
+     * El escalón de la pirámide con el que pintar ya viene elegido desde
+     * `leer()` (`_mejorEscalon`), porque elegirl aquí era tarde: el daño
+     * estaba en lo que se pide por la red, no en cómo se pinta.
+     *
+     * @param {Object} imagen El escalón elegido.
+     * @param {number} muestras Bandas por píxel.
+     * @returns {Object} { canvas }
      */
-    async _pintar(imagen, ancho, alto, muestras) {
-      const datos = await imagen.readRasters({ interleave: true });
+    async _pintar(imagen, muestras) {
+      const fuente = imagen;
+      const w = fuente.getWidth();
+      const h = fuente.getHeight();
 
       // Escala al techo, manteniendo la proporción.
-      const escala = Math.min(1, this.ladoMaximo / Math.max(ancho, alto));
-      const dstW = Math.max(1, Math.round(ancho * escala));
-      const dstH = Math.max(1, Math.round(alto * escala));
+      const escala = Math.min(1, this.ladoMaximo / Math.max(w, h));
+      const dstW = Math.max(1, Math.round(w * escala));
+      const dstH = Math.max(1, Math.round(h * escala));
+
+      // Se le pide a geotiff.js el tamaño final, que es lo que hace que no
+      // materialice en memoria la imagen entera.
+      const datos = await fuente.readRasters({
+        interleave: true,
+        width: dstW,
+        height: dstH,
+      });
 
       const canvas = document.createElement('canvas');
       canvas.width = dstW;
@@ -295,34 +410,28 @@
       const gB = nB >= 3 ? 1 : 0;
       const bB = nB >= 3 ? 2 : 0;
 
-      // Rellenado por bloques: se recorre la fuente píxel a píxel y se escribe en
-      // el destino. Es más lento que `putImageData` sobre un lienzo del tamaño
-      // original y luego escalar con el navegador, pero evita tener en memoria un
-      // PNG del tamaño del fichero, que es justo lo que rompe con rásters grandes.
-      for (let y = 0; y < dstH; y++) {
-        // Índice de origen, redondeando al píxel de la fuente que cae en el centro
-        // del píxel de destino. El `+0.5` es lo que hace que una reducción leve no
-        // se vea sesgada.
-        const fy = Math.min(alto - 1, Math.floor(((y + 0.5) / dstH) * alto));
-        for (let x = 0; x < dstW; x++) {
-          const fx = Math.min(ancho - 1, Math.floor(((x + 0.5) / dstW) * ancho));
-          const i = fy * ancho + fx;
-          const o = (y * dstW + x) * 4;
-          if (i >= nPix) { out[o + 3] = 255; continue; }
+      // Volcado píxel a píxel. `datos` ya viene al tamaño del lienzo (se le ha
+      // pedido arriba con `width`/`height`), así que aquí no hay que remuestrear:
+      // solo estirar cada banda a 0-255 y volcar.
+      //
+      // Antes esto recorría la fuente píxel a píxel buscando el de destino para
+      // reducir, y pintaba a mano. Con el tamaño ya pedido a geotiff.js sobra,
+      // y además quedaba mal: se calculaba el índice con las medidas de la
+      // imagen ORIGINAL y las del overview, que no son las mismas.
+      for (let i = 0; i < nPix; i++) {
+        const o = i * 4;
+        const vr = datos[i * muestras + rB];
+        const vg = datos[i * muestras + gB];
+        const vb = datos[i * muestras + bB];
 
-          const vr = datos[i * muestras + rB];
-          const vg = datos[i * muestras + gB];
-          const vb = datos[i * muestras + bB];
-
-          out[o] = rango[rB] ? Math.round(((vr - min[rB]) / rango[rB]) * 255) : 0;
-          out[o + 1] = rango[gB] ? Math.round(((vg - min[gB]) / rango[gB]) * 255) : 0;
-          out[o + 2] = rango[bB] ? Math.round(((vb - min[bB]) / rango[bB]) * 255) : 0;
-          out[o + 3] = 255;
-        }
+        out[o] = rango[rB] ? Math.round(((vr - min[rB]) / rango[rB]) * 255) : 0;
+        out[o + 1] = rango[gB] ? Math.round(((vg - min[gB]) / rango[gB]) * 255) : 0;
+        out[o + 2] = rango[bB] ? Math.round(((vb - min[bB]) / rango[bB]) * 255) : 0;
+        out[o + 3] = 255;
       }
 
       ctx.putImageData(img, 0, 0);
-      return canvas;
+      return { canvas: canvas };
     }
   }
 
