@@ -254,7 +254,23 @@ class miPlugin_georrefTeselas {
         </div>
     `;
 
-    map.on(IDEE.evt.COMPLETED, () => {
+    // Poblado del contenido del panel.
+    //
+    // ANTES esto solo era el cuerpo del manejador de `evt.COMPLETED`, y en 3D el
+    // panel se quedaba VACÍO: el contenedor quedaba con el `<div>` del control y
+    // sin desplegable ni botón. La causa medida es que la build de Cesium no
+    // dispara `evt.COMPLETED` en absoluto: registrando un listener de prueba nada
+    // más cambiar a 3D, en 15 s no llegó ni una vez, mientras que el contenedor
+    // (`#m-herramienta-contents-georrefTeselas`) YA existía nada más terminar este
+    // addTo. Es decir, se esperaba un evento que en 3D no llega teniendo el
+    // contenedor delante.
+    //
+    // Ahora se puebla en el acto y se vuelve a poblar con COMPLETED, que en 2D es
+    // lo que llega. Poblarlo dos veces es inocuo: se reescribe el `innerHTML`, con
+    // lo que los nodos viejos (y sus listeners) desaparecen, y se engancha a los
+    // nuevos. La seleccion previa se lee antes de sobrescribir, asi que no se
+    // pierde lo que el usuario hubiera elegido.
+    const poblarControles = () => {
       // Guarda la selección actual antes de sobrescribir el HTML
       let selectedValue = "TMS";
       const selectorOld = document.getElementById('seleccionCapasID');
@@ -317,8 +333,15 @@ class miPlugin_georrefTeselas {
         }
       }
 
-      document.getElementById('botonCalcular').addEventListener('click', () => this.myFunctionGetGrid());
-    });
+      const botonCalcular = contenedor.querySelector('#botonCalcular');
+      if (botonCalcular) botonCalcular.addEventListener('click', () => this.myFunctionGetGrid());
+    };
+
+    // Primero, en el acto: es lo que arregla el 3D, donde COMPLETED no llega.
+    poblarControles();
+    // Y despues tambien con COMPLETED, que es lo que ocurre en 2D y repuebla por
+    // si el panel todavia no estaba montado cuando se ha llamado lo de arriba.
+    try { map.on(IDEE.evt.COMPLETED, poblarControles); } catch (e) { /* el mapa ya no esta */ }
   }
 
   async myFunctionGetGrid() {
