@@ -10,9 +10,9 @@
        repositorio, un separador y un control HTML suelto);
      - un SUPRAPLUGIN ANIDADO: en su barra aparece un botón y, al activarlo,
        se despliega otra barra hermana con sus propios items;
-     - el PLEGADO por el "tirador" (los puntitos): con `pinned: false` la
-       barra se pliega y asoma sola mientras el puntero esté encima; con un
-       click se fija abierta o cerrada.
+     - el PLEGADO por el "tirador" (la línea horizontal del borde): con
+       `pinned: false` la barra se pliega y asoma sola mientras el puntero
+       esté encima; con un click se fija abierta o cerrada.
 
    Incluye además los plugins estándar del repositorio:
    - `miPlugin_cambioImpl`: alternancia entre 2D (OpenLayers) y 3D (Cesium),

@@ -17,9 +17,10 @@
    --------------------------------------------------------------------
    La barra se compone de DOS piezas:
 
-     - CABECERA: el TIRADOR, siempre visible. Es la franja fina con los
-       puntitos (los "agarres") con la que en Ubuntu se coge una barra
-       oculta para sacarla a la luz.
+     - CABECERA: el TIRADOR, siempre visible. Es una línea horizontal de
+       10 px pegada al borde de la barra (arriba si la barra va arriba, abajo
+       si va abajo): la marca con la que, al estilo de Ubuntu, se coge una
+       barra oculta para sacarla a la luz.
      - CUERPO: el título y todos los items (controles, plugins, HTML).
 
    El plegado NO es un simple mostrar/ocultar, sino el juego de tres
@@ -71,6 +72,7 @@
      supra.setCollapsed(bool)         -> pliega/despliega
      supra.toggleCollapsed(force)     -> alterna (alias histórico)
      supra.setPinned(bool)            -> fija o deja en modo hover
+     supra.setTheme('light'|'dark')   -> cambia la superficie en caliente
      supra.abrirHijo(sub)             -> abre la barra de un supra anidado
      supra.cerrarHijo(sub)            -> la cierra
      supra.toggleHijo(sub)            -> alterna la barra de un supra anidado
@@ -91,6 +93,10 @@
      peek          Si el hover la despliega mientras esté encima
                    (defecto: true; sólo si collapsible).
      color1/2/3    Colores del esquema (fondo, borde, icono y texto).
+     theme         "light" (defecto) o "dark" (Ambiance). Elige la superficie
+                   de la barra; el color de marca (color1) queda para los
+                   acentos (tirador en hover, botones activos, raya de las
+                   barras anidadas). Se cambia en caliente con setTheme().
 
    Contrato de "item" (cualquiera de estas formas):
      1) HTMLElement                       -> se inserta tal cual.
@@ -136,6 +142,12 @@
       this.title = this.options.title || "";
       this.icon = this.options.icon || "";
       this.className = this.options.className || "";
+
+      // Tema de superficie de la barra: "light" (tarjeta blanca con el mapa
+      // difuminado detrás) o "dark" (Ambiance). Los hijos heredan el del padre
+      // salvo que traigan el suyo propio, que es lo que marca _themePropio.
+      this._themePropio = (this.options.theme !== undefined && this.options.theme !== null);
+      this.theme = (this.options.theme === "dark" || this.options.theme === "light") ? this.options.theme : "light";
 
       // --- Estado de plegado -------------------------------------------------
       // `collapsible`: la barra tiene tirador y se puede plegar.
@@ -232,8 +244,8 @@
             "<p>Barra transversal situada " + (self.position === "bottom" ? "debajo" : "encima") +
             " del mapa. Aloja herramientas que operan por encima del visualizador " +
             "(por ejemplo, la comparación de vistas).</p>" +
-            "<p>Puede plegarse con el <strong>tirador</strong> (los puntitos) " +
-            "(los puntitos): un <em>click</em> la deja abierta o cerrada de " +
+            "<p>Puede plegarse con el <strong>tirador</strong>, la línea " +
+            "horizontal del borde: un <em>click</em> la deja abierta o cerrada de " +
             "forma fija, y si se construye con <code>pinned: false</code> " +
             "asoma sola mientras el puntero esté encima.</p>" +
             "</div>";
@@ -319,6 +331,7 @@
       dock.id = "supra-dock-" + this.id;
       dock.className = "supra-dock supra-dock--" + this.position;
       dock.setAttribute("data-supra", this.id);
+      dock.setAttribute("data-theme", this.theme);
 
       // Inserta el dock arriba (antes del host) o abajo (después del host).
       if (this.position === "top") {
@@ -353,6 +366,7 @@
         + (this.className ? (" " + this.className) : "");
       bar.setAttribute("role", "toolbar");
       bar.setAttribute("aria-label", this.title || "Barra de herramientas");
+      bar.setAttribute("data-theme", this.theme);
 
       // --- Cabecera: el TIRADOR, la única parte que nunca se esconde ---------
       var cab = document.createElement("div");
@@ -591,6 +605,31 @@
       return Boolean(this._fijada);
     }
 
+    /**
+     * Cambia la superficie de la barra en caliente.
+     * @param {("light"|"dark")} tema
+     * @param {boolean} [enCascada=true] Si además se aplica a las barras de los
+     *   supraplugins anidados que NO tengan tema propio.
+     * @returns {miPlugin_supraplugin} this (encadenable)
+     */
+    setTheme(tema, enCascada = true) {
+      this.theme = (tema === "dark") ? "dark" : "light";
+      if (this._dock) this._dock.setAttribute("data-theme", this.theme);
+      if (this.container) this.container.setAttribute("data-theme", this.theme);
+      if (enCascada) {
+        Object.keys(this._hijos).forEach((id) => {
+          var h = this._hijos[id];
+          if (h && h.sub && !h.sub._themePropio) h.sub.setTheme(this.theme, true);
+        });
+      }
+      return this;
+    }
+
+    /** @returns {("light"|"dark")} El tema actual de la barra. */
+    getTheme() {
+      return this.theme;
+    }
+
     // --- Montaje de items ---------------------------------------------------
     _mountAllItems() {
       if (!this.itemsContainer) return;
@@ -704,6 +743,9 @@
       try { if (typeof subSupra._teardownDom === "function") subSupra._teardownDom(); } catch (e) { /* ignora */ }
       subSupra.map = this.map;
       subSupra._padre = this;
+      // El hijo hereda el tema del padre salvo que traiga el suyo propio: una
+      // barra dentro de otra con otro fondo se rompe a la vista.
+      if (!subSupra._themePropio) subSupra.setTheme(this.theme);
       if (this._dock) subSupra._construirBar(this._dock, "supra-bar--hija");
       subSupra._mountAllItems();
 

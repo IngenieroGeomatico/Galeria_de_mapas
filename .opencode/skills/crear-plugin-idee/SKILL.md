@@ -202,7 +202,7 @@ Es un contenedor de herramientas flotante (`miPlugin_supraplugin`) ubicado en `e
 ### Barra con tirador, plegado y supraplugins anidados
 La barra es una dock al estilo de las barras de Ubuntu, con tres piezas y tres estados:
 
-- **Cabecera con el tirador** (`.supra-bar__tirador`, los puntitos): es lo único que nunca se esconde. Plegada, la barra se reduce a esa franja (medido: 24 px frente a 68 px desplegada).
+- **Cabecera con el tirador** (`.supra-bar__tirador`): es una línea horizontal de 10 px pegada al borde de la barra (arriba o abajo según `position`), y es lo único que nunca se esconde. Plegada, la barra se reduce a esa línea.
 - **Cuerpo** (`.supra-bar__cuerpo`): título + items; se pliega con una transición de alto/opacidad.
 - **Asomado (peek)**: plegada pero desplegada mientras el puntero esté encima, y se repliega sola al salir.
 

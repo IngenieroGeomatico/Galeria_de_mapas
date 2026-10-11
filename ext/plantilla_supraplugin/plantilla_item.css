@@ -3,16 +3,16 @@
    Repositorio: Galeria_de_mapas
    --------------------------------------------------------------------
    Los estilos del contenedor transversal, de la barra, del tirador y de
-   los botones de las barras anidadas los aporta `supraplugin.css`. Este
-   fichero estila únicamente la UI del item modelo, con la misma idea
-   visual (píldoras redondeadas, estados de reposo/hover/activo y foco
-   marcado) y la convención de prefijo de clase `plantillaItem__`.
+   los botones de las barras anidadas los aporta `supraplugin.css`, que es
+   quien define las variables de superficie del tema (--supra-fg,
+   --supra-hover, --supra-accent...). Este fichero estila únicamente la UI
+   del item modelo con el mismo lenguaje visual: botón plano y redondeado,
+   superficie tenue en hover, color de marca en el estado ACTIVO y anillo
+   de foco marcado.
 
-   Colores del esquema (color1/color2/color3), los mismos que usa el resto
-   de plugins del repositorio: fondo = color1, borde = color2,
-   icono/texto = color3. Las variables las escribe el item en línea (ver
-   _aplicarColores en plantilla_item.js) y los valores de reserva son los
-   del esquema por defecto.
+   El color de marca entra por el constructor (color1/color2/color3 ->
+   --g-plugin-*, igual que en el resto de plugins del repositorio) y aquí
+   se lee como --supra-accent, que la barra define a partir de ese color.
    ===================================================================== */
 
 /* Contenedor raíz del item */
@@ -25,66 +25,63 @@
   user-select: none;
 }
 
-/* Botón principal del item: píldora, como los botones de las barras.
-   En reposo es blanco (el color1 "active"), que es como se ve el resto de
-   la barra, y el color de marca entra cuando el item está ACTIVO, que es
-   donde el ojo tiene que ir. */
+/* Botón principal del item. En reposo no lleva borde ni fondo propio: se
+   apoya en el de la barra y sólo insinúa su zona pulsable con el hover, que
+   es lo que da el aire limpio de las barras de Ubuntu. El color de marca
+   entra cuando el item está ACTIVO, que es donde tiene que ir el ojo. */
 .plantillaItem__boton {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 30px;
+  gap: 7px;
+  height: 32px;
   padding: 0 12px;
-  background-color: var(--g-plugin-bg-color-active, #ffffff);
-  color: #333333;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  border-radius: 15px;
+  background-color: transparent;
+  color: var(--supra-fg, #2b2b30);
+  border: 1px solid transparent;
+  border-radius: 9px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
-  cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease,
+              box-shadow 0.16s ease, filter 0.16s ease;
   outline: none;
 }
 
 .plantillaItem__boton:hover {
-  background-color: #f2f2f2;
-  border-color: rgba(0, 0, 0, 0.24);
-  color: #111111;
+  background-color: var(--supra-hover, rgba(20, 20, 25, 0.06));
+  border-color: var(--supra-border, rgba(20, 20, 25, 0.10));
 }
 
-/* El anillo de foco lleva el color de marca del esquema. */
+/* El anillo de foco lleva el color de marca. */
 .plantillaItem__boton:focus-visible {
-  box-shadow: 0 0 0 2px var(--g-plugin-bg-color, orangered);
-  border-color: var(--g-plugin-bg-color, orangered);
+  box-shadow: 0 0 0 2px var(--supra-accent, var(--g-plugin-bg-color, orangered));
+  border-color: transparent;
 }
 
-.plantillaItem__boton:active {
-  transform: translateY(1px);
-}
+.plantillaItem__boton:active { transform: translateY(1px); }
 
-/* Estado activo del botón: aquí entra el color de fondo, borde y texto del
-   esquema. */
+/* Estado activo del botón: aquí entra el color de marca del esquema. */
 .plantillaItem__boton--activo {
-  background-color: var(--g-plugin-bg-color, orangered);
-  border-color: var(--g-plugin-bg-color, orangered);
-  color: var(--g-plugin-icon-color, #ffffff);
+  background-color: var(--supra-accent, var(--g-plugin-bg-color, orangered));
+  border-color: var(--supra-accent, var(--g-plugin-bg-color, orangered));
+  color: #ffffff;
 }
 
 /* Al pasar por encima se oscurece un poco con filter y no con un color fijo: así
    el tono depende del color configurado y no hay que mantener una versión
    oscura de cada uno. */
 .plantillaItem__boton--activo:hover {
-  background-color: var(--g-plugin-bg-color, orangered);
-  border-color: var(--g-plugin-bg-color, orangered);
-  color: var(--g-plugin-icon-color, #ffffff);
-  filter: brightness(0.93);
+  background-color: var(--supra-accent, var(--g-plugin-bg-color, orangered));
+  border-color: var(--supra-accent, var(--g-plugin-bg-color, orangered));
+  color: #ffffff;
+  filter: brightness(0.94);
 }
 
 .plantillaItem__boton--activo .plantillaItem__contador {
   background-color: rgba(255, 255, 255, 0.25);
-  color: var(--g-plugin-icon-color, #ffffff);
+  color: #ffffff;
 }
 
 /* Icono dentro del botón */
@@ -92,7 +89,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
 }
 
@@ -110,8 +107,8 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background-color: #eeeeee;
-  color: #555555;
+  background-color: var(--supra-hover, rgba(20, 20, 25, 0.06));
+  color: var(--supra-fg-dim, rgba(43, 43, 48, 0.62));
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
