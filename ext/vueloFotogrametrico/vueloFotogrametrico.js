@@ -4276,10 +4276,26 @@
       this._trazaCoords = coords;
 
       // Oculta las líneas de pasada originales mientras se muestra la traza.
-      if (!this._lineTraceMode) {
+      //
+      // ANTES esto se hacía UNA sola vez, protegido por `if (!this._lineTraceMode)`.
+      // El problema: al crear las capas (_renderWithMDT) ya se ejecuta
+      // applyProgressiveReveal con reveal activo, y esa primera llamada ponía el
+      // flag a true cuando el GeoJSON aún no había cargado (0 entidades), así que
+      // no ocultaba nada. Después el DataSource creaba la entidad de líneas con
+      // show=true y, como el flag ya estaba en true, al reproducir NUNCA se volvía
+      // a intentar ocultar: la línea completa quedaba visible bajo la traza creciente.
+      //
+      // Ahora la ocultación se re-aplica CADA FRAME mientras la animación está
+      // activa (igual que _revealUpTo re-aplica la revelación de puntos/huellas
+      // cada frame, por eso esos sí se revelaban bien). Así, aunque las
+      // entidades tarden en cargar, se ocultan en cuanto aparecen.
+      if (this.data.anim && this.data.anim.playing) {
         this._setLineasPasadaVisible(false);
-        this._lineTraceMode = true;
       }
+      // El flag marca que estamos en modo traza (la línea completa está
+      // sustituida por la traza creciente). Se resetea en showAllGeometries y al
+      // terminar la animación. Ya no condiciona la ocultación (esa va por playing).
+      this._lineTraceMode = true;
 
       var ent = this._trazaEntity;
       if (!ent) {
@@ -4478,6 +4494,11 @@
     var d = this.data;
     if (!d.anim) d.anim = { playing: false, t: 0, reveal: true, speedKmh: AVION_SPEED_KMH_DEFAULT };
     if (!resume && d.anim.t >= 1) d.anim.t = 0; // reinicia si estaba al final
+    // Marcamos playing ANTES de aplicar la revelación: la ocultación de líneas de
+    // pasada en Cesium se re-aplica cada frame mientras playing sea true, así que
+    // conviene que ya lo sea en la llamada inicial (si no, habría un frame en el
+    // que la línea completa seguiría visible antes del primer rAF).
+    d.anim.playing = true;
     // Arranque desde el principio (Reproducir con t=0 o Reiniciar): reactiva la
     // revelación progresiva y oculta todas las geometrías para dibujarlas conforme
     // avance el avión. (Si el usuario había pulsado "Mostrar todo", esto vuelve a
@@ -4490,7 +4511,6 @@
       // Reanudar (p.ej. tras pausa o swap): reaplica el estado revelado hasta t.
       this.applyProgressiveReveal(d.anim.t, true);
     }
-    d.anim.playing = true;
     window.__vueloSharedData = d;
     this.updateAnimUI();
 
