@@ -2,9 +2,17 @@
    ESTILOS DE LA PLANTILLA DE ITEM PARA SUPRAPLUGIN
    Repositorio: Galeria_de_mapas
    --------------------------------------------------------------------
-   Los estilos del contenedor transversal y de la barra los aporta
-   `supraplugin.css`. Este fichero estila únicamente la UI del item
-   modelo utilizando la convención de prefijo de clase `plantillaItem__`.
+   Los estilos del contenedor transversal, de la barra, del tirador y de
+   los botones de las barras anidadas los aporta `supraplugin.css`. Este
+   fichero estila únicamente la UI del item modelo, con la misma idea
+   visual (píldoras redondeadas, estados de reposo/hover/activo y foco
+   marcado) y la convención de prefijo de clase `plantillaItem__`.
+
+   Colores del esquema (color1/color2/color3), los mismos que usa el resto
+   de plugins del repositorio: fondo = color1, borde = color2,
+   icono/texto = color3. Las variables las escribe el item en línea (ver
+   _aplicarColores en plantilla_item.js) y los valores de reserva son los
+   del esquema por defecto.
    ===================================================================== */
 
 /* Contenedor raíz del item */
@@ -17,46 +25,42 @@
   user-select: none;
 }
 
-/* Botón principal del item.
-   Colores del esquema (color1/color2/color3), los mismos que usa el resto de
-   plugins del repositorio: fondo = color1, borde = color2, icono/texto = color3.
-   Las variables las escribe el item en línea (ver _aplicarColores) y los valores
-   de reserva son los del esquema por defecto.
-
-   En reposo el botón es blanco (el color1 "active"), que es como se ve el resto
-   de la barra, y el color de marca entra cuando el item está ACTIVO, que es
+/* Botón principal del item: píldora, como los botones de las barras.
+   En reposo es blanco (el color1 "active"), que es como se ve el resto de
+   la barra, y el color de marca entra cuando el item está ACTIVO, que es
    donde el ojo tiene que ir. */
 .plantillaItem__boton {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
+  height: 30px;
+  padding: 0 12px;
   background-color: var(--g-plugin-bg-color-active, #ffffff);
   color: #333333;
-  border: 1px solid #cccccc;
-  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 15px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
   outline: none;
 }
 
 .plantillaItem__boton:hover {
-  background-color: #f5f5f5;
-  border-color: #bbbbbb;
+  background-color: #f2f2f2;
+  border-color: rgba(0, 0, 0, 0.24);
   color: #111111;
 }
 
 /* El anillo de foco lleva el color de marca del esquema. */
 .plantillaItem__boton:focus-visible {
-  box-shadow: 0 0 0 2px rgba(219, 73, 56, 0.35);
+  box-shadow: 0 0 0 2px var(--g-plugin-bg-color, orangered);
   border-color: var(--g-plugin-bg-color, orangered);
 }
 
 .plantillaItem__boton:active {
-  background-color: #eaeaea;
   transform: translateY(1px);
 }
 
@@ -64,7 +68,7 @@
    esquema. */
 .plantillaItem__boton--activo {
   background-color: var(--g-plugin-bg-color, orangered);
-  border-color: var(--g-plugin-border-color, #ffffff);
+  border-color: var(--g-plugin-bg-color, orangered);
   color: var(--g-plugin-icon-color, #ffffff);
 }
 
@@ -73,9 +77,9 @@
    oscura de cada uno. */
 .plantillaItem__boton--activo:hover {
   background-color: var(--g-plugin-bg-color, orangered);
-  border-color: var(--g-plugin-border-color, #ffffff);
+  border-color: var(--g-plugin-bg-color, orangered);
   color: var(--g-plugin-icon-color, #ffffff);
-  filter: brightness(0.9);
+  filter: brightness(0.93);
 }
 
 .plantillaItem__boton--activo .plantillaItem__contador {
@@ -112,5 +116,5 @@
   font-weight: 700;
   line-height: 1;
   box-sizing: border-box;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.16s ease, color 0.16s ease;
 }

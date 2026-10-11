@@ -3,8 +3,8 @@
    --------------------------------------------------------------------
    Un "supraplugin" es un contenedor (barra) TRANSVERSAL a un mapa: se
    coloca ARRIBA o ABAJO del visualizador y aloja otros objetos que operan
-   por encima del propio mapa (plugins, controles, HTML suelto e incluso
-   otros supraplugins anidados).
+   por encima del propio mapa (controles, plugins, HTML suelto e incluso
+   otros supraplugins).
 
    Motivación: algunos plugins (p. ej. el comparador de vistas) no son
    "de un mapa" sino "sobre un mapa" (crean/gestionan varias instancias de
@@ -12,34 +12,97 @@
    encaja para eso. El supraplugin resuelve esto creando su propia barra como
    hermana del contenedor del visualizador.
 
-   Diseño (consistente con el resto de ext/*.js):
-     - Clase ES6 `miPlugin_supraplugin` con constructor(options) + addTo(map),
-       de modo que se pueda registrar con `mapajs.addPlugin(new miPlugin_supraplugin(...))`.
-     - Se expone como GLOBAL directo (window.miPlugin_supraplugin), NO solo en
-       IDEE.plugin.*, porque el plugin cambioImpl recarga el bundle de la API
-       al alternar OL <-> Cesium y reinicializa IDEE.plugin, borrando ese
-       registro. El global directo persiste.
-     - Singleton por id: si cambioImpl recrea el mapa, el supraplugin se vuelve
-       a añadir; reutilizamos/recreamos su barra de forma idempotente y
-       re-montamos los items registrados.
+   --------------------------------------------------------------------
+   BARRA ESTILO UBUNTU: PLEGADO CON "TIRADOR"
+   --------------------------------------------------------------------
+   La barra se compone de DOS piezas:
 
-   API pública (para que otros objetos se cuelguen del supraplugin):
+     - CABECERA: el TIRADOR, siempre visible. Es la franja fina con los
+       puntitos (los "agarres") con la que en Ubuntu se coge una barra
+       oculta para sacarla a la luz.
+     - CUERPO: el título y todos los items (controles, plugins, HTML).
+
+   El plegado NO es un simple mostrar/ocultar, sino el juego de tres
+   estados de la barra:
+
+     1. ABIERTA         -> cabecera + cuerpo a la vista (uso normal).
+     2. PLEGADA         -> sólo se ve la cabecera, o sea el tirador.
+     3. ASOMANDO (peek) -> plegada pero desplegada mientras el puntero
+                           esté encima; al salir del puntero se repliega.
+
+   Y un cuarto bandillo, el FIJADO, que decide si el estado plegado es
+   definitivo o sólo provisional:
+
+     - `fijada = true`  -> lo que decidas con un click se queda (abierto
+                           fijo o cerrado fijo). El hover no toca nada.
+     - `fijada = false` -> la barra es "de hover": se pliega sola y asoma
+                           mientras el ratón esté encima, sin poder quedar
+                           abierta.
+
+   Regla del click en el tirador (`_onClickTirador`), en tres pasos:
+
+     - si NO está fijada -> se fija ABIERTA (el click "corta" el modo hover);
+     - si está fijada    -> alterna abierta <-> cerrada.
+
+   Con los valores por defecto (`pinned: true`) la barra aparece abierta y
+   fijada; un click la cierra de verdad y entonces, como ya está fijada, hay
+   que volver a clicar el tirador para abrirla. Si se quiere el juego de
+   "asoma al pasar por encima", se construye con `pinned: false` (o
+   `pinned: false, collapsed: true`, que es justo la barra oculta de Ubuntu).
+
+   --------------------------------------------------------------------
+   SUPRAPLUGINS ANIDADOS
+   --------------------------------------------------------------------
+   Un supraplugin puede contener a OTRO supraplugin. El hijo NO se
+   mezcla en la fila del padre: aparece como un botón más de la barra y,
+   al activarlo, se despliega su propia barra HERMANA apilada en el mismo
+   dock (debajo de la del padre; si el dock va abajo, encima del mapa).
+   Cada barra hija tiene su propio tirador y su propio juego de items.
+
+   --------------------------------------------------------------------
+   API pública
+   --------------------------------------------------------------------
      supra.addItem(item, opts)        -> añade un item (ver contrato abajo)
-     supra.addSupraplugin(subSupra)   -> anida otro supraplugin como item
+     supra.addSupraplugin(subSupra)   -> anida otro supraplugin como botón
+     supra.addSeparator(opts)         -> separador vertical entre items
      supra.getContainer()             -> HTMLElement de la barra
      supra.getItemsContainer()        -> HTMLElement donde se montan los items
      supra.getMap()                   -> mapa API-IDEE actual
+     supra.setCollapsed(bool)         -> pliega/despliega
+     supra.toggleCollapsed(force)     -> alterna (alias histórico)
+     supra.setPinned(bool)            -> fija o deja en modo hover
+     supra.abrirHijo(sub)             -> abre la barra de un supra anidado
+     supra.cerrarHijo(sub)            -> la cierra
+     supra.toggleHijo(sub)            -> alterna la barra de un supra anidado
      supra.remove()                   -> desmonta la barra y limpia
+
+   Opciones del constructor:
+
+     id            Id único (idempotencia y estado).
+     position      "top" (defecto) o "bottom".
+     title         Título de la barra.
+     icon          Glifo `g-cartografia` que precede al título.
+     className     Clase CSS extra de la barra.
+     items         Items iniciales (mismo contrato que addItem).
+     order         Orden por defecto de los items que no declaren el suyo.
+     collapsible   Si la barra se puede plegar (defecto: true).
+     collapsed     Si ARRANCA plegada (defecto: false).
+     pinned        Si el estado plegado es fijo o de hover (defecto: true).
+     peek          Si el hover la despliega mientras esté encima
+                   (defecto: true; sólo si collapsible).
+     color1/2/3    Colores del esquema (fondo, borde, icono y texto).
 
    Contrato de "item" (cualquiera de estas formas):
      1) HTMLElement                       -> se inserta tal cual.
      2) string (HTML)                     -> se parsea y se inserta.
      3) { getSupraElement(supra) }        -> función que DEVUELVE un HTMLElement
-                                             (o Promise<HTMLElement>). Es la vía
-                                             recomendada para plugins/controles:
-                                             reciben el supraplugin y devuelven su
-                                             UI. Se re-invoca en cada montaje
-                                             (incluido tras un cambio 2D/3D).
+                                              (o Promise<HTMLElement>). Es la vía
+                                              recomendada para plugins/controles:
+                                              reciben el supraplugin y devuelven su
+                                              UI. Se re-invoca en cada montaje
+                                              (incluido tras un cambio 2D/3D).
+     4) miPlugin_supraplugin              -> barra anidada (ver arriba).
+     5) supra.separator()                 -> separador vertical.
    ===================================================================== */
 (function () {
   "use strict";
@@ -57,48 +120,53 @@
   var _uid = 0;
   function nextUid() { _uid += 1; return _uid; }
 
+  // Marca con la que un item se reconoce como separador.
+  var MARCA_SEPARADOR = "_supraSeparador";
+
   class miPlugin_supraplugin {
     /**
-     * @param {Object} options
-     * @param {string} [options.id]        Id único del supraplugin (para idempotencia).
-     * @param {("top"|"bottom")} [options.position="top"]  Arriba o abajo del mapa.
-     * @param {string} [options.title]     Título opcional mostrado a la izquierda de la barra.
-     * @param {string} [options.className] Clase CSS extra para la barra.
-     * @param {Array}  [options.items]     Items iniciales a montar (ver contrato).
-     * @param {boolean}[options.collapsible=false] Si la barra puede plegarse.
-     * @param {number} [options.order=null] Orden por defecto de los items que no
-     * declaren el suyo (CSS `order` sobre su ranura).
-
-     POSICIÓN DE LOS ITEMS (parámetro `order`)
-     Cada item se cuelga en una ranura (.supra-bar__slot) dentro de una fila
-     flex, así que su posición se fija con un valor CSS `order` sobre la ranura.
-     Hay dos formas de pasarlo, por orden de prioridad:
-       1) supra.addItem(item, { order: 2 })     -> explícito en el montaje.
-       2) new MiPluginItem({ order: 2 })          -> el item se coloca solo.
-          (el supraplugin lee item.order si existe).
-     Semántica (igual que en los plugins con panel; las ranuras sin `order`
-     valen 0): order:-1 => por delante de todos, order:0 => primera posición,
-     order:2 => detrás de las de 0, order:99 => al final,
-     null/undefined => el orden natural de addItem.
+     * @param {Object} options Ver "Opciones del constructor" en la cabecera.
      */
     constructor(options = {}) {
       this.name = "miPlugin_supraplugin";
       this.options = options || {};
       this.id = this.options.id || ("supraplugin-" + nextUid());
+
       this.position = (this.options.position === "bottom") ? "bottom" : "top";
       this.title = this.options.title || "";
+      this.icon = this.options.icon || "";
       this.className = this.options.className || "";
-      this.collapsible = !!this.options.collapsible;
+
+      // --- Estado de plegado -------------------------------------------------
+      // `collapsible`: la barra tiene tirador y se puede plegar.
+      // `collapsed`  : arranca plegada (sólo se ve el tirador).
+      // `pinned`     : el estado plegado es fijo (click) o de hover (peek).
+      // `peek`       : el hover despliega la barra plegada mientras esté encima.
+      this.collapsible = (this.options.collapsible !== undefined) ? !!this.options.collapsible : true;
+      this.peek = (this.options.peek !== undefined) ? !!this.options.peek : true;
+      this._plegada = !!this.options.collapsed;
+      this._fijada = (this.options.pinned !== undefined) ? !!this.options.pinned : true;
+      this._asomando = false;
+
       // Orden por defecto de los items que no declaren el suyo (CSS `order`
       // sobre su ranura). Mismo parámetro que en los plugins con panel.
       this.order = (this.options.order !== undefined && this.options.order !== null
         && !isNaN(Number(this.options.order))) ? Number(this.options.order) : null;
 
       this.map = null;
-      this.container = null;      // barra raíz
-      this.itemsContainer = null; // zona donde se montan los items
-      this.items = [];            // lista de items registrados {item, opts, mountedEl}
-      this._collapsed = false;
+      this._host = null;        // contenedor del visualizador
+      this._dock = null;        // caja donde se apilan esta barra y las hijas
+      this.container = null;    // barra raíz (nodo .supra-bar)
+      this.cabecera = null;     // .supra-bar__cabecera (siempre visible)
+      this.tirador = null;      // botón del tirador
+      this.cuerpo = null;       // .supra-bar__cuerpo (lo que se pliega)
+      this.itemsContainer = null;
+      this.items = [];          // {item, opts, mountedEl, slot}
+
+      this._padre = null;       // supraplugin anfitrión si es anidado
+      this._hijos = {};         // idHijo -> {sub, boton, abierta}
+      this._observer = null;    // ResizeObserver de la barra
+      this._resizeTimer = null;
 
       // Colores configurables, con el mismo reparto y los mismos valores por
       // defecto que el resto de plugins del repositorio (color1 = fondo,
@@ -119,10 +187,11 @@
             this.items.push({
               item: it.item,
               opts: (it.order !== undefined && it.order !== null) ? { order: it.order } : {},
-              mountedEl: null
+              mountedEl: null,
+              slot: null
             });
           } else {
-            this.items.push({ item: it, opts: {}, mountedEl: null });
+            this.items.push({ item: it, opts: {}, mountedEl: null, slot: null });
           }
         });
       }
@@ -140,7 +209,7 @@
         // Heredamos los items registrados por el anterior para no perderlos en
         // el swap (el mapa se destruyó, pero la intención del usuario persiste).
         if (Array.isArray(prev.items) && prev.items.length && !this.items.length) {
-          this.items = prev.items.map((r) => ({ item: r.item, opts: r.opts, mountedEl: null }));
+          this.items = prev.items.map((r) => ({ item: r.item, opts: r.opts, mountedEl: null, slot: null }));
         }
         try { prev._teardownDom(); } catch (e) { /* ignora */ }
       }
@@ -163,6 +232,10 @@
             "<p>Barra transversal situada " + (self.position === "bottom" ? "debajo" : "encima") +
             " del mapa. Aloja herramientas que operan por encima del visualizador " +
             "(por ejemplo, la comparación de vistas).</p>" +
+            "<p>Puede plegarse con el <strong>tirador</strong> (los puntitos) " +
+            "(los puntitos): un <em>click</em> la deja abierta o cerrada de " +
+            "forma fija, y si se construye con <code>pinned: false</code> " +
+            "asoma sola mientras el puntero esté encima.</p>" +
             "</div>";
           try { html = IDEE.utils.stringToHtml(html); } catch (e) { /* string plano */ }
           success(html);
@@ -172,11 +245,23 @@
 
     /**
      * Captura el estado serializable del supraplugin para preservarlo entre cambios 2D/3D.
-     * @returns {{ collapsed: boolean }} Estado actual de plegado
+     * @returns {Object} {plegada, fijada, hijos: {idHijo: {abierta, plegada, fijada}}}
      */
     getState() {
+      var hijos = {};
+      Object.keys(this._hijos).forEach((id) => {
+        var h = this._hijos[id];
+        if (!h || !h.sub) return;
+        hijos[id] = {
+          abierta: !!h.abierta,
+          plegada: !!h.sub._plegada,
+          fijada: !!h.sub._fijada
+        };
+      });
       return {
-        collapsed: Boolean(this._collapsed)
+        plegada: Boolean(this._plegada),
+        fijada: Boolean(this._fijada),
+        hijos: hijos
       };
     }
 
@@ -187,14 +272,35 @@
      */
     setState(state, map) {
       if (!state || typeof state !== "object") return;
-      if (typeof state.collapsed === "boolean" && state.collapsed !== this._collapsed) {
-        this.toggleCollapsed(state.collapsed);
+      if (typeof state.plegada === "boolean") this._plegada = state.plegada;
+      if (typeof state.fijada === "boolean") this._fijada = state.fijada;
+      // Estado heredado del nombre antiguo de la clave, por si alguien lo guardó
+      // con la versión previa del plugin.
+      if (typeof state.collapsed === "boolean" && typeof state.plegada !== "boolean") {
+        this._plegada = state.collapsed;
       }
+      this._asomando = false;
+
+      if (state.hijos && typeof state.hijos === "object") {
+        Object.keys(state.hijos).forEach((id) => {
+          var h = state.hijos[id] || {};
+          var hijo = this._hijos[id];
+          if (!hijo || !hijo.sub) return;
+          if (typeof h.plegada === "boolean") hijo.sub._plegada = h.plegada;
+          if (typeof h.fijada === "boolean") hijo.sub._fijada = h.fijada;
+          hijo.sub._asomando = false;
+          hijo.sub._reflejarEstadoBarra();
+          this._setHijoVisible(hijo.sub, !!h.abierta);
+        });
+      }
+      this._reflejarEstadoBarra();
     }
 
     // --- Construcción de la barra ------------------------------------------
     // La barra se inserta como HERMANA del contenedor raíz del visualizador,
     // no dentro del viewport del mapa: así es transversal y sobrevive al mapa.
+    // Todas las barras (la del supraplugin y las de sus hijos anidados) viven en
+    // un mismo DOCK, para que se apilen unas debajo de otras.
     _buildBar() {
       // Localiza el div raíz del visualizador (el que contiene el mapa).
       var host = this._resolveHost();
@@ -204,60 +310,112 @@
       }
       this._host = host;
 
-      // El host necesita ser un contexto flex en columna para que la barra y el
+      // El host necesita ser un contexto flex en columna para que el dock y el
       // mapa se apilen (top/bottom). Marcamos su padre como layout de supraplugin.
       var layoutParent = host.parentElement || document.body;
       layoutParent.classList.add("supra-layout");
 
+      var dock = document.createElement("div");
+      dock.id = "supra-dock-" + this.id;
+      dock.className = "supra-dock supra-dock--" + this.position;
+      dock.setAttribute("data-supra", this.id);
+
+      // Inserta el dock arriba (antes del host) o abajo (después del host).
+      if (this.position === "top") {
+        layoutParent.insertBefore(dock, host);
+      } else {
+        if (host.nextSibling) layoutParent.insertBefore(dock, host.nextSibling);
+        else layoutParent.appendChild(dock);
+      }
+      this._dock = dock;
+
+      this._construirBar(dock, "");
+
+      // Reajusta el tamaño del mapa cuando la barra cambia el alto disponible.
+      this._notifyMapResize();
+    }
+
+    /**
+     * Construye el DOM de la barra (cabecera con el tirador + cuerpo con los
+     * items) y la deja como última hija de `dock`.
+     *
+     * @param {HTMLElement} dock  Contenedor donde apilar la barra.
+     * @param {string} claseExtra  Clases extra (p. ej. "supra-bar--hija").
+     * @returns {HTMLElement} La barra creada.
+     */
+    _construirBar(dock, claseExtra) {
+      var self = this;
+
       var bar = document.createElement("div");
       bar.id = "supra-bar-" + this.id;
-      bar.className = "supra-bar supra-bar--" + this.position + (this.className ? (" " + this.className) : "");
+      bar.className = "supra-bar supra-bar--" + this.position
+        + (claseExtra ? (" " + claseExtra) : "")
+        + (this.className ? (" " + this.className) : "");
       bar.setAttribute("role", "toolbar");
       bar.setAttribute("aria-label", this.title || "Barra de herramientas");
 
-      var inner = document.createElement("div");
-      inner.className = "supra-bar__inner";
+      // --- Cabecera: el TIRADOR, la única parte que nunca se esconde ---------
+      var cab = document.createElement("div");
+      cab.className = "supra-bar__cabecera";
+
+      var tir = document.createElement("button");
+      tir.type = "button";
+      tir.className = "supra-bar__tirador";
+      var agarre = document.createElement("span");
+      agarre.className = "supra-bar__agarre";
+      agarre.setAttribute("aria-hidden", "true");
+      tir.appendChild(agarre);
+      tir.addEventListener("click", function (evt) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        self._onClickTirador();
+      });
+      cab.appendChild(tir);
+      bar.appendChild(cab);
+
+      // --- Cuerpo: título + items, es lo que se pliega -----------------------
+      var cuerpo = document.createElement("div");
+      cuerpo.className = "supra-bar__cuerpo";
 
       if (this.title) {
-        var titleEl = document.createElement("span");
-        titleEl.className = "supra-bar__title";
-        titleEl.textContent = this.title;
-        inner.appendChild(titleEl);
+        var titulo = document.createElement("span");
+        titulo.className = "supra-bar__titulo";
+        if (this.icon) {
+          var ic = document.createElement("span");
+          ic.className = "supra-bar__icono";
+          ic.setAttribute("aria-hidden", "true");
+          ic.textContent = this.icon;
+          titulo.appendChild(ic);
+        }
+        titulo.appendChild(document.createTextNode(this.title));
+        cuerpo.appendChild(titulo);
       }
 
       var itemsEl = document.createElement("div");
       itemsEl.className = "supra-bar__items";
-      inner.appendChild(itemsEl);
+      cuerpo.appendChild(itemsEl);
 
-      if (this.collapsible) {
-        var toggle = document.createElement("button");
-        toggle.type = "button";
-        toggle.className = "supra-bar__toggle";
-        toggle.title = "Plegar/desplegar";
-        toggle.setAttribute("aria-expanded", "true");
-        toggle.textContent = "▾";
-        var self = this;
-        toggle.addEventListener("click", function () { self.toggleCollapsed(); });
-        inner.appendChild(toggle);
-        this._toggleBtn = toggle;
-      }
-
-      bar.appendChild(inner);
-
-      // Inserta la barra arriba (antes del host) o abajo (después del host).
-      if (this.position === "top") {
-        layoutParent.insertBefore(bar, host);
-      } else {
-        if (host.nextSibling) layoutParent.insertBefore(bar, host.nextSibling);
-        else layoutParent.appendChild(bar);
-      }
+      bar.appendChild(cuerpo);
+      dock.appendChild(bar);
 
       this.container = bar;
+      this.cabecera = cab;
+      this.tirador = tir;
+      this.cuerpo = cuerpo;
       this.itemsContainer = itemsEl;
-      this._aplicarColores();
 
-      // Reajusta el tamaño del mapa cuando la barra cambia el alto disponible.
-      this._notifyMapResize();
+      this._aplicarColores();
+      this._reflejarEstadoBarra();
+      this._observarTamano();
+
+      // El asomado: al entrar el puntero en la barra plegada se despliega, y al
+      // salir se repliega. Sólo tiene efecto si la barra no está fijada.
+      if (this.peek) {
+        bar.addEventListener("mouseenter", function () { self._setAsomando(true); });
+        bar.addEventListener("mouseleave", function () { self._setAsomando(false); });
+      }
+
+      return bar;
     }
 
     /**
@@ -328,14 +486,109 @@
     _notifyMapResize() {
       var self = this;
       // API-IDEE/OL/Cesium recalculan al hacer resize del window; forzamos uno.
-      setTimeout(function () {
+      if (this._resizeTimer) clearTimeout(this._resizeTimer);
+      this._resizeTimer = setTimeout(function () {
+        self._resizeTimer = null;
         try {
           var impl = self.map && self.map.getMapImpl && self.map.getMapImpl();
           if (impl && typeof impl.updateSize === "function") impl.updateSize();       // ol.Map
           else if (impl && impl.scene && impl.scene.requestRender) impl.scene.requestRender(); // Cesium
         } catch (e) { /* ignora */ }
         try { window.dispatchEvent(new Event("resize")); } catch (e) { /* ignora */ }
-      }, 60);
+      }, 80);
+    }
+
+    // Avisa al mapa cuando la barra cambia de alto. Se usa un ResizeObserver
+    // porque el alto cambia sin que nosotros lo pidamos: al plegarse, al
+    // asomarse con el hover, al abrir una barra hija y también cuando los
+    // items envolviendo obligan a la barra a crecer.
+    _observarTamano() {
+      var self = this;
+      if (typeof ResizeObserver === "undefined" || !this.container) return;
+      if (this._observer) {
+        try { this._observer.disconnect(); } catch (e) { /* ignora */ }
+      }
+      this._observer = new ResizeObserver(function () {
+        self._notifyMapResize();
+      });
+      try { this._observer.observe(this.container); } catch (e) { /* ignora */ }
+    }
+
+    // --- Estado de plegado --------------------------------------------------
+    /**
+     * Click en el tirador. Si la barra estaba en modo hover la click la fija
+     * abierta; si ya estaba fijada, alterna abierta <-> cerrada.
+     */
+    _onClickTirador() {
+      if (!this.collapsible) return;
+      // El click zanja el estado, así que el asomado (que era provisional) se
+      // apaga: si no, su clase --asomando mantendría el cuerpo desplegado y el
+      // siguiente click no llegaría a plegar de verdad.
+      this._asomando = false;
+      if (!this._fijada) {
+        this._fijada = true;
+        this._plegada = false;
+      } else {
+        this._plegada = !this._plegada;
+      }
+      this._reflejarEstadoBarra();
+      this._notifyMapResize();
+    }
+
+    /** Asomado: sólo si está plegada, no está fijada y se permite el peek. */
+    _setAsomando(valor) {
+      var debe = !!valor && this.collapsible && this._plegada && !this._fijada && this.peek;
+      if (debe === this._asomando) return;
+      this._asomando = debe;
+      this._reflejarEstadoBarra();
+    }
+
+    /** Pasa el estado interno a las clases CSS y al aria-expanded del tirador. */
+    _reflejarEstadoBarra() {
+      if (!this.container) return;
+      // Visualmente plegada es "no se ve el cuerpo": o está plegada de verdad o
+      // está asomando y hay que fingir que no lo está para que la animation
+      // entre y salga del estado plegado.
+      var plegada = this._plegada && !this._asomando;
+      this.container.classList.toggle("supra-bar--plegable", this.collapsible);
+      this.container.classList.toggle("supra-bar--plegada", plegada);
+      this.container.classList.toggle("supra-bar--asomando", this._asomando);
+      this.container.classList.toggle("supra-bar--fijada", this._fijada);
+      if (this.tirador) {
+        this.tirador.setAttribute("aria-expanded", String(!plegada));
+        this.tirador.title = plegada ? "Desplegar la barra" : "Plegar la barra";
+        this.tirador.setAttribute("aria-label", plegada ? "Desplegar la barra" : "Plegar la barra");
+      }
+    }
+
+    /** Pliega o despliega la barra. */
+    setCollapsed(force) {
+      this._plegada = (typeof force === "boolean") ? force : !this._plegada;
+      if (!this._plegada) this._asomando = false;
+      this._reflejarEstadoBarra();
+      this._notifyMapResize();
+      return this;
+    }
+
+    /** Alias histórico: alterna el plegado. */
+    toggleCollapsed(force) {
+      return this.setCollapsed(typeof force === "boolean" ? force : !this._plegada);
+    }
+
+    isCollapsed() {
+      return Boolean(this._plegada);
+    }
+
+    /** Fija el estado de plegado (true) o lo deja en modo hover (false). */
+    setPinned(force) {
+      this._fijada = (typeof force === "boolean") ? force : !this._fijada;
+      if (this._fijada) this._asomando = false;
+      this._reflejarEstadoBarra();
+      return this;
+    }
+
+    isPinned() {
+      return Boolean(this._fijada);
     }
 
     // --- Montaje de items ---------------------------------------------------
@@ -347,15 +600,17 @@
 
     _mountItem(record) {
       if (!this.itemsContainer) return;
+      var item = record.item;
+
       var slot = document.createElement("div");
-      slot.className = "supra-bar__slot";
+      slot.className = "supra-bar__ranura";
       // Posición del item dentro de la barra (CSS order sobre la ranura).
       // Prioridad: opts.order del addItem > item.order del propio item >
       // this.order (orden por defecto de la barra).
       var orden = (record.opts && record.opts.order !== undefined && record.opts.order !== null)
         ? record.opts.order
-        : (record.item && typeof record.item.order !== "undefined" && record.item.order !== null)
-          ? record.item.order
+        : (item && typeof item.order !== "undefined" && item.order !== null)
+          ? item.order
           : this.order;
       if (orden !== null && !isNaN(Number(orden))) {
         slot.style.order = String(Number(orden));
@@ -363,7 +618,24 @@
       this.itemsContainer.appendChild(slot);
       record.slot = slot;
 
-      var el = this._resolveItemElement(record.item);
+      // Separador vertical.
+      if (item && item[MARCA_SEPARADOR]) {
+        var sep = document.createElement("span");
+        sep.className = "supra-bar__separador";
+        sep.setAttribute("aria-hidden", "true");
+        slot.classList.add("supra-bar__ranura--separador");
+        slot.appendChild(sep);
+        record.mountedEl = sep;
+        return;
+      }
+
+      // Supraplugin anidado: botón en esta barra + barra hermana en el dock.
+      if (item instanceof miPlugin_supraplugin) {
+        this._mountSubSupraplugin(item, record, slot);
+        return;
+      }
+
+      var el = this._resolveItemElement(item);
       if (el && typeof el.then === "function") {
         // Promise<HTMLElement>
         var self = this;
@@ -384,10 +656,6 @@
       if (typeof item === "object" && typeof item.getSupraElement === "function") {
         return item.getSupraElement(this);
       }
-      // Objeto que ES otro supraplugin -> lo montamos como sub-barra embebida.
-      if (typeof item === "object" && item instanceof miPlugin_supraplugin) {
-        return this._embedSupraplugin(item);
-      }
       // 1) HTMLElement directo
       if (item instanceof HTMLElement) return item;
       // 2) string HTML
@@ -401,22 +669,87 @@
       return null;
     }
 
-    // Embebe otro supraplugin como item de este (anidamiento). El sub-supra no
-    // crea su propia barra hermana del mapa: se monta dentro de una ranura.
-    _embedSupraplugin(subSupra) {
-      var box = document.createElement("div");
-      box.className = "supra-bar__nested supra-bar__nested--" + subSupra.position;
-      // Reutiliza la construcción de la sub-barra pero anclada a `box`.
+    /**
+     * Monta un supraplugin anidado: un botón en esta barra y una barra hermana
+     * apilada en el MISMO dock (debajo de la del padre). Activar el botón
+     * muestra u oculta esa barra hermana.
+     */
+    _mountSubSupraplugin(subSupra, record, slot) {
+      var self = this;
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "supra-bar__boton supra-bar__boton--supra";
+      btn.title = subSupra.title || subSupra.id;
+      if (subSupra.icon) {
+        var ic = document.createElement("span");
+        ic.className = "supra-bar__boton-icono";
+        ic.setAttribute("aria-hidden", "true");
+        ic.textContent = subSupra.icon;
+        btn.appendChild(ic);
+      }
+      var txt = document.createElement("span");
+      txt.className = "supra-bar__boton-texto";
+      txt.textContent = subSupra.title || subSupra.id;
+      btn.appendChild(txt);
+      btn.addEventListener("click", function (evt) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        self.toggleHijo(subSupra);
+      });
+      slot.appendChild(btn);
+
+      // La barra del hijo: se desmonta la anterior (venía del mapa previo, tras
+      // un cambio 2D/3D) y se construye de nuevo en el dock de este padre.
+      try { if (typeof subSupra._teardownDom === "function") subSupra._teardownDom(); } catch (e) { /* ignora */ }
       subSupra.map = this.map;
-      subSupra._host = box;
-      subSupra.container = box;
-      var itemsEl = document.createElement("div");
-      itemsEl.className = "supra-bar__items";
-      box.appendChild(itemsEl);
-      subSupra.itemsContainer = itemsEl;
-      window.__supraplugins[subSupra.id] = subSupra;
+      subSupra._padre = this;
+      if (this._dock) subSupra._construirBar(this._dock, "supra-bar--hija");
       subSupra._mountAllItems();
-      return box;
+
+      this._hijos[subSupra.id] = { sub: subSupra, boton: btn, barra: subSupra.container, abierta: false };
+      window.__supraplugins[subSupra.id] = subSupra;
+      this._setHijoVisible(subSupra, false);
+
+      record.mountedEl = btn;
+      record.subSupra = subSupra;
+    }
+
+    /** Muestra u oculta la barra hermana de un supraplugin anidado. */
+    _setHijoVisible(subSupra, visible) {
+      var h = this._hijos[subSupra && subSupra.id];
+      if (!h) return;
+      h.abierta = !!visible;
+      if (h.barra || (h.sub && h.sub.container)) {
+        var barra = h.barra || h.sub.container;
+        barra.classList.toggle("supra-bar--oculta", !h.abierta);
+      }
+      if (h.boton) {
+        h.boton.classList.toggle("supra-bar__boton--activo", h.abierta);
+        h.boton.setAttribute("aria-expanded", String(h.abierta));
+        h.boton.title = (h.abierta ? "Ocultar " : "Mostrar ") + (h.sub.title || h.sub.id);
+      }
+      this._notifyMapResize();
+    }
+
+    /** Abre la barra hermana de un supraplugin anidado. */
+    abrirHijo(subSupra) { this._setHijoVisible(subSupra, true); return this; }
+
+    /** Cierra la barra hermana de un supraplugin anidado. */
+    cerrarHijo(subSupra) { this._setHijoVisible(subSupra, false); return this; }
+
+    /** Alterna la barra hermana de un supraplugin anidado. */
+    toggleHijo(subSupra) {
+      var h = this._hijos[subSupra && subSupra.id];
+      if (!h) return this;
+      this._setHijoVisible(subSupra, !h.abierta);
+      return this;
+    }
+
+    /** @returns {boolean} Si la barra hermana de ese supraplugin está abierta. */
+    isHijoAbierto(subSupra) {
+      var h = this._hijos[subSupra && subSupra.id];
+      return !!(h && h.abierta);
     }
 
     // --- API pública para colgar objetos -----------------------------------
@@ -430,16 +763,23 @@
      * @returns {miPlugin_supraplugin} this (encadenable)
      */
     addItem(item, opts = {}) {
-      var record = { item: item, opts: opts || {}, mountedEl: null };
+      var record = { item: item, opts: opts || {}, mountedEl: null, slot: null };
       this.items.push(record);
       // Si ya estamos montados, monta el item en caliente.
       if (this.itemsContainer) this._mountItem(record);
       return this;
     }
 
-    /** Anida otro supraplugin como item de este. */
+    /** Anida otro supraplugin como item de este (barra hermana con su botón). */
     addSupraplugin(subSupra) {
       return this.addItem(subSupra);
+    }
+
+    /** Añade un separador vertical entre items. */
+    addSeparator(opts = {}) {
+      var sep = {};
+      sep[MARCA_SEPARADOR] = true;
+      return this.addItem(sep, opts);
     }
 
     // --- Estado / utilidades -----------------------------------------------
@@ -447,16 +787,8 @@
     getItemsContainer() { return this.itemsContainer; }
     getMap() { return this.map; }
     getPosition() { return this.position; }
-
-    toggleCollapsed(force) {
-      this._collapsed = (typeof force === "boolean") ? force : !this._collapsed;
-      if (this.container) this.container.classList.toggle("supra-bar--collapsed", this._collapsed);
-      if (this._toggleBtn) {
-        this._toggleBtn.setAttribute("aria-expanded", String(!this._collapsed));
-        this._toggleBtn.textContent = this._collapsed ? "▸" : "▾";
-      }
-      this._notifyMapResize();
-    }
+    /** @returns {HTMLElement|null} El dock donde se apilan esta barra y las hijas. */
+    getDock() { return this._dock; }
 
     /**
      * Retira la barra del DOM.
@@ -466,11 +798,38 @@
      *   items ya desmontados. Solo remove()/destroy() los destruyen de verdad.
      */
     _teardownDom(conItems) {
-      if (this.container && this.container.parentNode) {
+      if (this._observer) {
+        try { this._observer.disconnect(); } catch (e) { /* ignora */ }
+        this._observer = null;
+      }
+      if (this._resizeTimer) {
+        clearTimeout(this._resizeTimer);
+        this._resizeTimer = null;
+      }
+
+      // Primero las barras hijas, que cuelgan del dock de esta barra.
+      Object.keys(this._hijos).forEach((id) => {
+        var h = this._hijos[id];
+        if (h && h.sub && typeof h.sub._teardownDom === "function") {
+          try { h.sub._teardownDom(conItems); } catch (e) { console.warn("[supraplugin] al desmontar la barra hija:", e); }
+        }
+      });
+      this._hijos = {};
+
+      // El dock es nuestro: se quita entero (cubre la barra y las hijas).
+      if (this._dock && this._dock.parentNode) {
+        this._dock.parentNode.removeChild(this._dock);
+      } else if (this.container && this.container.parentNode) {
         this.container.parentNode.removeChild(this.container);
       }
+
+      this._dock = null;
       this.container = null;
+      this.cabecera = null;
+      this.tirador = null;
+      this.cuerpo = null;
       this.itemsContainer = null;
+
       // Los items que se hayan montado se desmontan ellos mismos: quitar el
       // DOM no basta para los que tengan recursos fuera de él (oyentes en
       // window, BroadcastChannel, temporizadores...). Solo se llama a los que
@@ -506,7 +865,7 @@
       this.remove();
       this.map = null;
       this._host = null;
-      this._toggleBtn = null;
+      this._padre = null;
     }
   }
 

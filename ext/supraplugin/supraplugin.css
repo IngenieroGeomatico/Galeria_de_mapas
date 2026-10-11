@@ -1,14 +1,27 @@
 /* =====================================================================
    Estilos del supraplugin (barra transversal sobre el mapa)
    --------------------------------------------------------------------
-   El supraplugin marca el PADRE del contenedor del visualizador como
-   .supra-layout (flex en columna) e inserta su barra como hermana del
-   mapa, arriba (--top) o abajo (--bottom). Así la barra y el mapa se
-   apilan sin solaparse y el mapa recibe el alto restante.
+   Idea general: la barra es una "dock" de Ubuntu. Tiene dos piezas:
+
+     - CABECERA (.supra-bar__cabecera): el TIRADOR, siempre visible. Es la
+       franja fina con los puntitos; es lo único que se ve cuando la barra
+       está plegada, y justo por eso hace falta para volver a abrirla.
+     - CUERPO (.supra-bar__cuerpo): título + items. Se pliega con una
+       transición de alto, y se despliega solo (ASOMANDO) al pasar el
+       puntero por encima cuando la barra no está fijada.
+
+   La barra y las de sus supraplugins anidados se apilan en un DOCK
+   (.supra-dock), que es hermano del contenedor del mapa: así el mapa
+   recibe el alto restante y las barras hijas quedan encima o debajo de la
+   del padre según dónde esté el dock.
+
+   Colores: ninguno escrito aquí. Todo sale de las variables que la barra
+   escribe en línea desde el constructor (color1/color2/color3 -> --g-plugin-*),
+   con el naranja del esquema como valor de reserva.
    ===================================================================== */
 
 /* El contenedor host del visualizador (p. ej. #mapaDIV) debe ocupar el
-   espacio restante cuando hay una barra hermana. */
+   espacio restante cuando hay un dock hermano. */
 .supra-layout {
   display: flex;
   flex-direction: column;
@@ -23,92 +36,269 @@
   min-height: 0; /* imprescindible en flex para que el mapa pueda encoger */
 }
 
+/* ---- Dock: la caja donde se apilan la barra y las de sus hijos ------- */
+.supra-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  position: relative;
+  z-index: 30; /* por encima de los controles del mapa */
+  font-family: "Muli", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--g-plugin-icon-color, #1a1a1a);
+}
+
 /* ---- Barra ---------------------------------------------------------- */
 .supra-bar {
-  flex: 0 0 auto;
+  position: relative;
   box-sizing: border-box;
   width: 100%;
-  background: #ffffff;
-  border-bottom: 1px solid #d9d9d9;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  z-index: 30; /* por encima de los controles del mapa */
-  font-family: "Muli", "Segoe UI", system-ui, sans-serif;
-  color: #1a1a1a;
+  display: flex;
+  flex-direction: column; /* cabecera arriba, cuerpo debajo */
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  backdrop-filter: blur(10px) saturate(1.3);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+/* Abajo del mapa: el tirador queda pegado al borde inferior y el cuerpo
+   crece hacia arriba, que es como se despliega una barra inferior. */
 .supra-bar--bottom {
+  flex-direction: column-reverse; /* cabecera abajo */
   border-bottom: none;
-  border-top: 1px solid #d9d9d9;
-  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.10);
 }
 
-.supra-bar__inner {
+/* Las barras de los supraplugins anidados son un pelín más densas y llevan
+   una raya de color a la izquierda, para distinguir de un vistazo que no
+   son la barra principal. */
+.supra-bar--hija {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.supra-bar--hija::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--g-plugin-bg-color, orangered);
+  opacity: 0.65;
+}
+
+.supra-bar--bottom.supra-bar--hija::before {
+  top: 0;
+  bottom: 0;
+}
+
+.supra-bar--oculta { display: none; }
+
+/* ---- Cabecera y tirador ---------------------------------------------- */
+.supra-bar__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 22px; /* franja fina: lo que se ve al plegar */
+  padding: 0 10px;
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.supra-bar--bottom .supra-bar__cabecera {
+  border-bottom: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.supra-bar__tirador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;          /* zona de pulsación cómoda */
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.18s ease;
+}
+
+.supra-bar__tirador:hover { background: rgba(0, 0, 0, 0.06); }
+
+.supra-bar__tirador:focus-visible {
+  box-shadow: 0 0 0 2px var(--g-plugin-bg-color, orangered);
+}
+
+/* Los "agarres": seis puntitos en dos columnas y tres filas, como el tirador
+   de las barras de Ubuntu. Se pintan con radial-gradient para no depender de
+   ninguna imagen externa. */
+.supra-bar__agarre {
+  display: block;
+  width: 10px;
+  height: 15px;
+  background-image: radial-gradient(circle, var(--g-plugin-bg-color, orangered) 1.35px, transparent 1.45px);
+  background-size: 5px 5px;
+  background-position: 0 0;
+  opacity: 0.55;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.supra-bar__tirador:hover .supra-bar__agarre { opacity: 1; }
+.supra-bar__tirador:active .supra-bar__agarre { transform: scale(0.88); }
+
+/* Si la barra no es plegable, el tirador no pinta: el cuerpo va siempre
+   visible (regla de _reflejarEstadoBarra: sin --plegable no hay plegado). */
+.supra-bar:not(.supra-bar--plegable) .supra-bar__cabecera { display: none; }
+
+/* ---- Cuerpo: lo que se pliega y se despliega ------------------------- */
+.supra-bar__cuerpo {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 44px;
-  padding: 4px 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 70vh; /* techo para que un cuerpo enorme no se salga */
   overflow-x: auto;
+  overflow-y: hidden;
+  padding: 7px 12px;
+  transition: max-height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+              opacity 0.2s ease,
+              padding 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.supra-bar__title {
+/* PLEGADA: el cuerpo se colapsa y sólo queda la cabecera con el tirador. */
+.supra-bar--plegada .supra-bar__cuerpo {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+/* ASOMANDO: plegada pero desplegada porque el puntero está encima. La clase
+   la quita _setAsomando() en cuanto el ratón sale de la barra. */
+.supra-bar--asomando .supra-bar__cuerpo {
+  max-height: 70vh;
+  opacity: 1;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  pointer-events: auto;
+}
+
+/* Plegada y ASOMANDO a la vez no puede ocurrir (el asomado implica no
+   plegada visualmente), pero si arrivea, gana el asomado. */
+.supra-bar--plegada.supra-bar--asomando .supra-bar__cuerpo {
+  max-height: 70vh;
+  opacity: 1;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  pointer-events: auto;
+}
+
+/* ---- Título ----------------------------------------------------------- */
+.supra-bar__titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
+  letter-spacing: 0.2px;
   white-space: nowrap;
-  /* El título es el color de icono del esquema en su estado ACTIVO (era el rojo de
-     marca del repo). Va el "active" y no el de reposo a propósito: la barra es
-     blanca y el color de reposo del esquema es blanco, así que con ese el título
-     no se vería (medido: salía blanco sobre blanco). */
   color: var(--g-plugin-icon-color-active, #db4938);
 }
 
+.supra-bar__icono {
+  font-family: g-cartografia;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ---- Items ------------------------------------------------------------ */
 .supra-bar__items {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.supra-bar__slot {
+.supra-bar__ranura {
   display: flex;
   align-items: center;
 }
 
-/* El botón de plegado lleva el borde y el texto del esquema. */
-.supra-bar__toggle {
-  margin-left: auto;
-  border: 1px solid var(--g-plugin-border-color-active, #ccc);
-  background: #f7f7f7;
-  color: var(--g-plugin-icon-color, inherit);
-  border-radius: 4px;
-  cursor: pointer;
-  width: 26px;
-  height: 26px;
-  line-height: 1;
-  font-size: 14px;
-}
-.supra-bar__toggle:hover { background: #eee; }
-
-/* Plegado: oculta los items y reduce la barra a su cabecera. */
-.supra-bar--collapsed .supra-bar__items { display: none; }
-
-/* ---- Supraplugin anidado ------------------------------------------- */
-.supra-bar__nested {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 8px;
-  border-left: 1px solid #e5e5e5;
+.supra-bar__separador {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: rgba(0, 0, 0, 0.16);
 }
 
-/* ---- HTML suelto insertado como item ------------------------------- */
 .supra-bar__html {
   display: flex;
   align-items: center;
 }
 
-/* ---- Responsive ---------------------------------------------------- */
+/* ---- Botón de un supraplugin anidado ---------------------------------- */
+.supra-bar__boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 15px; /* píldora, como los botones de las barras Ubuntu */
+  background: #ffffff;
+  color: #333333;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, border-color 0.16s ease,
+              color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.supra-bar__boton:hover {
+  background: #f2f2f2;
+  border-color: rgba(0, 0, 0, 0.24);
+}
+
+.supra-bar__boton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--g-plugin-bg-color, orangered);
+}
+
+.supra-bar__boton--activo {
+  background: var(--g-plugin-bg-color, orangered);
+  border-color: var(--g-plugin-bg-color, orangered);
+  color: var(--g-plugin-icon-color, #ffffff);
+}
+
+.supra-bar__boton--activo:hover {
+  background: var(--g-plugin-bg-color, orangered);
+  border-color: var(--g-plugin-bg-color, orangered);
+  color: var(--g-plugin-icon-color, #ffffff);
+  filter: brightness(0.93);
+}
+
+.supra-bar__boton-icono {
+  font-family: g-cartografia;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ---- Responsive ------------------------------------------------------- */
 @media (max-width: 640px) {
-  .supra-bar__inner { gap: 8px; padding: 4px 8px; }
-  .supra-bar__title { font-size: 13px; }
+  .supra-bar__cuerpo { gap: 8px; padding: 6px 8px; }
+  .supra-bar__titulo { font-size: 12px; }
 }
