@@ -132,6 +132,13 @@ function mapa2() {
   });
 
   mapajs2.addPlugin(pluginCambioImplFunc());
+  // Plugins de selección de capas (base + overlay). Se instancian desde los
+  // globales directos (window.miPlugin_*) en lugar de IDEE.plugin.* porque al
+  // cambiar a Cesium se recarga el bundle de la API y se reinicializa
+  // IDEE.plugin, perdiendo el registro de los scripts de extensión. Los
+  // globales directos persisten (mismo patrón que pluginVueloFotogrametricoFunc).
+  mapajs2.addPlugin(new window.miPlugin_baseLayer({ rows: 1 }));
+  mapajs2.addPlugin(new window.miPlugin_layerSwitcher());
   mapajs2.addPlugin(pluginVueloFotogrametricoFunc());
 
   SVGCarga.hidden = true;
