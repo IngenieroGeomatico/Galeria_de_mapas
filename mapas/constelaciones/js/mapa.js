@@ -6,55 +6,71 @@ const SVGCarga = document.getElementById("cargaSVG")
 // };
 
 
-Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
-  url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
-  legend: 'IGNBaseTodo_2',
-  visible: true,
-  isBase: true,
-  tileGridMaxZoom: 17,
-  name: 'IGNBaseTodo_2',
-  attribution: '<p><b>Mapa base</b>: <a style="color: #0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
-}, {
-  crossOrigin: 'anonymous',
-  displayInLayerSwitcher: false,
-})
+// ===================================================================
+//  Capas base del visualizador (capa rápida + config.backgroundlayers)
+//  ------------------------------------------------------------------
+//  Esto se define en una función y se vuelve a aplicar en CADA creación del
+//  mapa, porque mapa() se ejecuta otra vez en cada cambio 2D/3D y el swap
+//  recarga el bundle de la API. Al recargarlo, cambioImpl conserva el objeto
+//  IDEE.config (hace IDEE.config = config_c), así que config.backgroundlayers
+//  sí sobrevive, pero el REGISTRO de capas rápidas no: el mapa nuevo intenta
+//  resolver `QUICK*Base_IGNBaseTodo_TMS_2` y falla con "No se encuentra
+//  definida Base_IGNBaseTodo_TMS_2 como capa rápida", quedándose sin capa base.
+//  Por eso hay que registrar la capa rápida con el IDEE de la implementación
+//  activa ANTES de IDEE.map(), que es quien resuelve los `QUICK*`.
+// ===================================================================
+function configurarCapasBase() {
+  Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
+    url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
+    legend: 'IGNBaseTodo_2',
+    visible: true,
+    isBase: true,
+    tileGridMaxZoom: 17,
+    name: 'IGNBaseTodo_2',
+    attribution: '<p><b>Mapa base</b>: <a style="color: #0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
+  }, {
+    crossOrigin: 'anonymous',
+    displayInLayerSwitcher: false,
+  })
 
-IDEE.addQuickLayers({
-  Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2
-})
+  IDEE.addQuickLayers({
+    Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2
+  })
 
-tms_2 = {
-  "base": "QUICK*Base_IGNBaseTodo_TMS_2"
-}
-
-IDEE.config("tms", tms_2)
-
-IDEE.config.backgroundlayers = [
-  {
-    "id": "mapa",
-    "title": "Callejero",
-    "imgPreview": "img/IGNBase.png",
-    "layers": [
-      "QUICK*Base_IGNBaseTodo_TMS_2"
-    ]
-  },
-  {
-    "id": "imagen",
-    "title": "Imagen",
-    "imgPreview": "img/imagen.png",
-    "layers": [
-      "QUICK*BASE_PNOA_MA_TMS"
-    ]
-  },
-  {
-    "id": "ning",
-    "title": "Ninguno",
-    "imgPreview": "img/hibrido.png",
-    "layers": [
-      ""
-    ]
+  tms_2 = {
+    "base": "QUICK*Base_IGNBaseTodo_TMS_2"
   }
-]
+
+  IDEE.config("tms", tms_2)
+  // Selector de capas base (ext/selectorCapas/ext_backgorundLayers.js): las
+  // miniaturas son rutas relativas a este index.html.
+  IDEE.config.backgroundlayers = [
+    {
+      "id": "mapa",
+      "title": "Callejero",
+      "imgPreview": "img/IGNBase.png",
+      "layers": [
+        "QUICK*Base_IGNBaseTodo_TMS_2"
+      ]
+    },
+    {
+      "id": "imagen",
+      "title": "Imagen",
+      "imgPreview": "img/imagen.png",
+      "layers": [
+        "QUICK*BASE_PNOA_MA_TMS"
+      ]
+    },
+    {
+      "id": "ning",
+      "title": "Ninguno",
+      "imgPreview": "img/hibrido.png",
+      "layers": [
+        ""
+      ]
+    }
+  ]
+}
 
 
 // Configuración del mapa
@@ -113,8 +129,57 @@ function directionICRFtoLLHWithMatrix(dirICRF, R_icrf2ecef, shellAltMeters) {
 }
 
 
+/**************************************************************************
+ * IMPLEMENTACIÓN ACTIVA (2D OpenLayers / 3D Cesium) Y ALTURA DEL CIELO
+ **************************************************************************/
+
+// Discriminante canónico de implementación: el impl de OpenLayers (2D) no
+// tiene escena ni cámara de Cesium; el de Cesium (3D) sí.
+function esCielo3D() {
+  const impl = (typeof mapajs !== 'undefined' && mapajs && mapajs.getMapImpl)
+    ? mapajs.getMapImpl()
+    : null;
+  return !!(impl && impl.scene && impl.scene.camera && typeof Cesium !== 'undefined');
+}
+
+// Quita la componente de altura de unas coordenadas GeoJSON, recursivamente:
+// un punto [lon, lat, h] queda en [lon, lat] y una línea o multiparte en sus
+// mismos vértices sin la h.
+function coordenadasSinAlturas(coords) {
+  if (!Array.isArray(coords)) return coords;
+  if (typeof coords[0] === 'number') return coords.slice(0, 2);
+  return coords.map(coordenadasSinAlturas);
+}
+
+// El mismo GeoJSON con la geometría "en plano" (sin alturas).
+function geojsonSinAlturas(geojson) {
+  if (!geojson || !Array.isArray(geojson.features)) return geojson;
+  return Object.assign({}, geojson, {
+    features: geojson.features.map(f => (f && f.geometry) ? Object.assign({}, f, {
+      geometry: Object.assign({}, f.geometry, {
+        coordinates: coordenadasSinAlturas(f.geometry.coordinates)
+      })
+    }) : f)
+  });
+}
+
+// Vuelca el cielo en una capa respetando la implementación activa. En 3D las
+// coordenadas llevan la altura de la cúpula (SHELL_ALT_METERS, que Cesium sí
+// representa) y en 2D van "en plano": el mismo GeoJSON sin alturas, dibujado
+// directamente sobre el plano del mapa en vez de sobre una cúpula de 9.500 km
+// que OpenLayers no puede representar.
+function setSourceCielo(layer, geojson) {
+  layer.setSource(esCielo3D() ? geojson : geojsonSinAlturas(geojson));
+}
+
+
 
 function mapa() {
+
+// Las capas rápidas de la API no sobreviven al cambio 2D/3D: se registran con
+// el IDEE de la implementación activa antes de crear el mapa (ver
+// configurarCapasBase).
+configurarCapasBase();
 
 mapajs = IDEE.map({
   container: "mapa", //id del contenedor del mapa
@@ -382,11 +447,16 @@ mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
   shareLayers: true
 }));
 
+// Las capas GeoJSON se recrean vacías en cada mapa nuevo y el cambio 2D/3D
+// vuelve a llamar a mapa(), así que se vuelca el cielo sobre las capas recién
+// creadas en vez de esperar hasta 5 minutos al refresco periódico. Los datos
+// (constellationsICRF, starsICRF, ...) no se pierden porque se cargan una sola
+// vez fuera de mapa(): solo hay que volver a pintarlos.
+actualizarCielo();
+
 return mapajs;
 
 }
-
-mapajs_0 = mapa();
 
 
 
@@ -479,7 +549,7 @@ async function cargarPlanetas() {
 async function actualizarSolYLuna(alturaCero = false) {
   const geojsonSolLuna = await getSunAndMoonGeoJSON(alturaCero = alturaCero);
   if (geojsonSolLuna && geojsonSolLuna.features.length > 0) {
-    layerSolLuna.setSource(geojsonSolLuna);
+    setSourceCielo(layerSolLuna, geojsonSolLuna);
   } else {
     console.warn("No se pudo actualizar la capa Sol/Luna: GeoJSON vacío o inválido");
   }
@@ -699,19 +769,19 @@ function actualizarCielo(fechaJulian = null) {
 
     if (constellationsICRF) {
       const gjsonC = buildConstellationsGeojsonAtTime_withMatrix(R, SHELL_ALT_METERS);
-      layerConstelaciones.setSource(gjsonC);
+      setSourceCielo(layerConstelaciones, gjsonC);
     }
     if (starsICRF) {
       const gjsonS = buildStarsGeojsonAtTime_withMatrix(R, SHELL_ALT_METERS);
-      layerEstrellas.setSource(gjsonS);
+      setSourceCielo(layerEstrellas, gjsonS);
     }
     if (equatorICRF) {
       const gjsonE = buildEquatorGeojsonAtTime_withMatrix(R, SHELL_ALT_METERS);
-      layerEcuador.setSource(gjsonE);
+      setSourceCielo(layerEcuador, gjsonE);
     }
     if (rawPlanetas) {
       geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
-      layerPlanetas.setSource(geojsonPlanets);
+      setSourceCielo(layerPlanetas, geojsonPlanets);
     }
     actualizarSolYLuna()
     return;
@@ -729,19 +799,19 @@ function actualizarCielo(fechaJulian = null) {
 
       if (constellationsICRF) {
         const gjsonC2 = buildConstellationsGeojsonAtTime_withMatrix(R2, SHELL_ALT_METERS);
-        layerConstelaciones.setSource(gjsonC2);
+        setSourceCielo(layerConstelaciones, gjsonC2);
       }
       if (starsICRF) {
         const gjsonS2 = buildStarsGeojsonAtTime_withMatrix(R2, SHELL_ALT_METERS);
-        layerEstrellas.setSource(gjsonS2);
+        setSourceCielo(layerEstrellas, gjsonS2);
       }
       if (equatorICRF) {
         const gjsonE2 = buildEquatorGeojsonAtTime_withMatrix(R2, SHELL_ALT_METERS);
-        layerEcuador.setSource(gjsonE2);
+        setSourceCielo(layerEcuador, gjsonE2);
       }
       if (rawPlanetas) {
         geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
-        layerPlanetas.setSource(geojsonPlanets);
+        setSourceCielo(layerPlanetas, geojsonPlanets);
       }
       actualizarSolYLuna()
     }, 1000);
@@ -750,8 +820,16 @@ function actualizarCielo(fechaJulian = null) {
 
 
 /**************************************************************************
- * INICIALIZACIÓN
+ * ARRANQUE (creación del mapa, carga de datos y ciclo celeste)
  **************************************************************************/
+// El mapa se crea AQUÍ, después de todas las declaraciones `let` de las que
+// depende actualizarCielo() (los datos ICRF y el id del sondeo), porque mapa()
+// rellena el cielo llamando a actualizarCielo(); si la creación del mapa
+// siguiera estando antes de esas declaraciones, la primera llamada estaría en
+// zona muerta temporal y lanzaría
+// "ReferenceError: Cannot access 'icrfPollId' before initialization".
+mapajs_0 = mapa();
+
 (async function init() {
   await Promise.all([cargarConstelacionesICRF(), cargarEstrellasICRF(), cargarPlanetas(), actualizarSolYLuna()]);
   prepararEcuadorICRF(5); // resolución 5°
