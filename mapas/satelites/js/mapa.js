@@ -39,6 +39,61 @@ function ensureSatellite() {
 
 
 // ===================================================================
+//  Trazas orbitales sin el salto del antimeridiano
+//  ------------------------------------------------------------------
+//  Las órbitas se propagan en longitud [-180, 180], así que al pasar de +179.9
+//  a -179.9 la polilínea recorre todo el mapa de lado a lado (en 2D, una línea
+//  horizontal que no es real) y en 3D da un salto por encima del globo. Aquí se
+//  parte la traza en ese salto y cada tramo se cierra con el punto interpolado
+//  exacto del meridiano ±180 (para no dejar hueco), devolviendo una
+//  MultiLineString; si la órbita no cruza el antimeridiano, una LineString.
+// ===================================================================
+function geometriaTrazaSinSalto(positions) {
+  if (!positions || positions.length < 2) {
+    return { type: "LineString", coordinates: positions || [] }
+  }
+
+  const partes = []
+  let parte = [positions[0]]
+
+  for (let i = 1; i < positions.length; i++) {
+    const anterior = positions[i - 1]
+    const actual = positions[i]
+    const salto = actual[0] - anterior[0]
+
+    if (Math.abs(salto) > 180) {
+      // Longitud "desenvuelta" del punto siguiente y meridiano donde se corta.
+      const destino = actual[0] + (salto > 0 ? -360 : 360)
+      const meridiano = salto > 0 ? -180 : 180
+      const f = (meridiano - anterior[0]) / (destino - anterior[0])
+      const latCorte = anterior[1] + f * (actual[1] - anterior[1])
+      // El tramo que llega se cierra en el meridiano por su lado (+180 si venía
+      // de longitudes positivas) y el siguiente arranca en la otra representación
+      // del mismo meridiano (-180), que es su orilla correspondiente. Así ningún
+      // tramo cruza de -180 a +180.
+      const corteFinal = [meridiano, latCorte]
+      const corteInicial = [meridiano + (salto > 0 ? 360 : -360), latCorte]
+      if (anterior.length > 2 && actual.length > 2) {
+        const altCorte = anterior[2] + f * (actual[2] - anterior[2])
+        corteFinal.push(altCorte)
+        corteInicial.push(altCorte)
+      }
+      parte.push(corteFinal)
+      partes.push(parte)
+      parte = [corteInicial]
+    }
+
+    parte.push(actual)
+  }
+  partes.push(parte)
+
+  if (partes.length === 1) {
+    return { type: "LineString", coordinates: partes[0] }
+  }
+  return { type: "MultiLineString", coordinates: partes }
+}
+
+// ===================================================================
 //  Capas base del visualizador (capa rápida + config.backgroundlayers)
 //  ------------------------------------------------------------------
 //  Esto se define en una función y se vuelve a aplicar en CADA creación del
@@ -201,7 +256,7 @@ OrbitISS = function () {
       type: "FeatureCollection",
       features: [{
         type: "Feature",
-        geometry: { type: "LineString", coordinates: positions },
+        geometry: geometriaTrazaSinSalto(positions),
         properties: { name: "ISS", id: "25544" }
       }]
     };
@@ -282,7 +337,7 @@ GalileoPosition = function (Orbit = false) {
         }
         feature = {
           type: "Feature",
-          geometry: { type: "LineString", coordinates: positions },
+          geometry: geometriaTrazaSinSalto(positions),
           properties: obj
         }
         geojsonGalileoOrbit.features.push(feature)
@@ -365,7 +420,7 @@ GalileoPositionByTime = function (Orbit = false) {
       }
       feature = {
         type: "Feature",
-        geometry: { type: "LineString", coordinates: positions },
+        geometry: geometriaTrazaSinSalto(positions),
         properties: obj
       }
       geojsonGalileoOrbit.features.push(feature)
