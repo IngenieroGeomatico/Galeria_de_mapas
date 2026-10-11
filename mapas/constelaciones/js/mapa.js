@@ -112,6 +112,22 @@ function raDecToUnitICRF(raDeg, decDeg) {
   );
 }
 
+// Polo de la eclíptica en ICRF. La eclíptica es el plano en que se mueve el Sol
+// visto desde la Tierra, de modo que su normal se deduce de dos posiciones del
+// Sol separadas un día con la misma efemérides que usa la capa Sol/Luna de este
+// visualizador (Cesium.Simon1994PlanetaryPositions): no hay inclinación escrita
+// a mano, sale de la órbita real.
+function poloEclipticoICRF(julianDate) {
+  const jd = julianDate || Cesium.JulianDate.now();
+  const jdSiguiente = Cesium.JulianDate.addDays(jd, 1, new Cesium.JulianDate());
+  const solHoy = Cesium.Simon1994PlanetaryPositions.computeSunPositionInEarthInertialFrame(jd, new Cesium.Cartesian3());
+  const solManana = Cesium.Simon1994PlanetaryPositions.computeSunPositionInEarthInertialFrame(jdSiguiente, new Cesium.Cartesian3());
+  return Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.cross(solHoy, solManana, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+}
+
 // Usa una matriz R (ICRF->ECEF) para llevar la dirección a ECEF, proyectarla
 // sobre una esfera a altura fija y devolver [lon_deg, lat_deg, altura_m]
 function directionICRFtoLLHWithMatrix(dirICRF, R_icrf2ecef, shellAltMeters) {
@@ -408,6 +424,36 @@ let estilo_layerEcuador = new IDEE.style.Generic({
 layerEcuador.setStyle(estilo_layerEcuador);
 
 
+layerEcliptica = new IDEE.layer.GeoJSON({
+  name: "layerEcliptica",
+  legend: "Eclíptica",
+  source: {}
+}, {
+  clampToGround: false
+});
+layerEcliptica.proj = true
+
+let estilo_layerEcliptica = new IDEE.style.Generic({
+  point: {
+    // Definición atributos para puntos
+  },
+  polygon: {
+    // Definición atributos para polígonos
+  },
+  line: {
+    // El camino aparente del Sol: es la referencia celeste que NO coincide con
+    // el ecuador terrestre (su latitud oscila, de ahí el color propio, distinto
+    // del amarillo del ecuador).
+    fill: {
+      color: '#ff0066ff',
+      width: 2,
+      opacity: 0.9,
+    },
+  }
+});
+layerEcliptica.setStyle(estilo_layerEcliptica);
+
+
 layerPlanetas = new IDEE.layer.GeoJSON({
   name: "layerPlanetas",
   legend: "Planetas",
@@ -509,7 +555,7 @@ const estilo_layerSolLuna = new IDEE.style.Generic({
 layerSolLuna.setStyle(estilo_layerSolLuna);
 
 
-mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador, layerPlanetas, layerSolLuna]);
+mapajs.addLayers([layerConstelaciones, layerEstrellas, layerEcuador, layerEcliptica, layerPlanetas, layerSolLuna]);
 
 pluglinCambioCapaBase = new IDEE.plugin.miPlugin_baseLayer({ rows: 1 })
 mapajs.addPlugin(pluglinCambioCapaBase)
@@ -646,6 +692,49 @@ function buildEquatorGeojsonAtTime_withMatrix(R_icrf2ecef, shellAlt) {
       // horizontal falsa que atraviesa el mapa.
       geometry: geometriaTrazaSinSalto(coords),
       properties: { name: "Ecuador" }
+    }]
+  };
+}
+
+// Eclíptica: círculo máximo del plano en que se mueve el Sol. A diferencia del
+// ecuador celeste NO cae sobre el ecuador terrestre, sino que su latitud oscila
+// ±23.4°, y esa oblicuidad sale de la efemérides (poloEclipticoICRF), no de una
+// constante escrita a mano.
+function buildEclipticGeojsonAtTime_withMatrix(R_icrf2ecef, shellAlt, julianDate, stepDeg = 5) {
+  const jd = julianDate || Cesium.JulianDate.now();
+  const n = poloEclipticoICRF(jd);
+
+  // Base del círculo: e1 es la proyección del eje x (punto Aries), que es el
+  // nodo común con el ecuador celeste, y e2 = n x e1 completa el plano.
+  const ejeX = new Cesium.Cartesian3(1, 0, 0);
+  const e1 = Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.subtract(
+      ejeX,
+      Cesium.Cartesian3.multiplyByScalar(n, Cesium.Cartesian3.dot(ejeX, n), new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    ),
+    new Cesium.Cartesian3()
+  );
+  const e2 = Cesium.Cartesian3.cross(n, e1, new Cesium.Cartesian3());
+
+  const coords = [];
+  for (let lon = 0; lon <= 360; lon += stepDeg) {
+    const l = Cesium.Math.toRadians(lon);
+    const dir = Cesium.Cartesian3.add(
+      Cesium.Cartesian3.multiplyByScalar(e1, Math.cos(l), new Cesium.Cartesian3()),
+      Cesium.Cartesian3.multiplyByScalar(e2, Math.sin(l), new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+    coords.push(directionICRFtoLLHWithMatrix(dir, R_icrf2ecef, shellAlt));
+  }
+
+  return {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      // La eclíptica también da la vuelta al globo: mismo recorte que el ecuador.
+      geometry: geometriaTrazaSinSalto(coords),
+      properties: { name: "Eclíptica" }
     }]
   };
 }
@@ -862,6 +951,8 @@ function actualizarCielo(fechaJulian = null) {
       const gjsonE = buildEquatorGeojsonAtTime_withMatrix(R, SHELL_ALT_METERS);
       setSourceCielo(layerEcuador, gjsonE);
     }
+    const gjsonEcl = buildEclipticGeojsonAtTime_withMatrix(R, SHELL_ALT_METERS, t);
+    setSourceCielo(layerEcliptica, gjsonEcl);
     if (rawPlanetas) {
       geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
       setSourceCielo(layerPlanetas, geojsonPlanets);
@@ -892,6 +983,8 @@ function actualizarCielo(fechaJulian = null) {
         const gjsonE2 = buildEquatorGeojsonAtTime_withMatrix(R2, SHELL_ALT_METERS);
         setSourceCielo(layerEcuador, gjsonE2);
       }
+      const gjsonEcl2 = buildEclipticGeojsonAtTime_withMatrix(R2, SHELL_ALT_METERS, t2);
+      setSourceCielo(layerEcliptica, gjsonEcl2);
       if (rawPlanetas) {
         geojsonPlanets = getPlanetsGeoJSON(rawPlanetas, new Date(), true); // altura 0
         setSourceCielo(layerPlanetas, geojsonPlanets);
