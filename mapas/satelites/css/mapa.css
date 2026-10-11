@@ -5,6 +5,30 @@ body {
     height: 100%;
 }
 
+/* Div de carga inicial (el engranaje).
+   Este visualizador NO tenia reglas para #cargaSVG, y por eso el engranaje se
+   veía enorme: sin `height: 30vh` la <img> cogia el tamaño natural del SVG y, sin
+   `position`, se colocaba en el flujo normal. Mismas reglas que el resto de
+   visualizadores (estereoscopia, GDAL_JS, MapaBase...). */
+#cargaSVG {
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    z-index: 9999;
+    background-color: #dd61ff82;
+}
+
+#cargaSVG img {
+    height: 30vh;
+    position: sticky;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: auto;
+    margin-bottom: auto;
+    top: 30%;
+}
+
 .m-panel > button {
     background-color: orangered !important;
 }
