@@ -38,46 +38,63 @@ function ensureSatellite() {
 }
 
 
-Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
-  url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
-  legend: 'IGNBaseTodo_2',
-  visible: true,
-  isBase: true,
-  tileGridMaxZoom: 17,
-  name: 'IGNBaseTodo_2',
-  attribution: '<p><b>Mapa base</b>: <a style="color: #0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
-}, {
-  crossOrigin: 'anonymous',
-  displayInLayerSwitcher: false,
-})
+// ===================================================================
+//  Capas base del visualizador (capa rápida + config.backgroundlayers)
+//  ------------------------------------------------------------------
+//  Esto se define en una función y se vuelve a aplicar en CADA creación del
+//  mapa, porque mapa() se ejecuta otra vez en cada cambio 2D/3D y el swap
+//  recarga el bundle de la API. Al recargarlo, cambioImpl conserva el objeto
+//  IDEE.config (hace IDEE.config = config_c), así que config.backgroundlayers
+//  sí sobrevive, pero el REGISTRO de capas rápidas no: el mapa nuevo intenta
+//  resolver `QUICK*Base_IGNBaseTodo_TMS_2` y falla con "No se encuentra
+//  definida Base_IGNBaseTodo_TMS_2 como capa rápida", quedándose sin capa base.
+//  Por eso hay que registrar la capa rápida con el IDEE de la implementación
+//  activa ANTES de IDEE.map(), que es quien resuelve los `QUICK*`.
+// ===================================================================
+function configurarCapasBase() {
+  Base_IGNBaseTodo_TMS_2 = new IDEE.layer.TMS({
+    url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
+    legend: 'IGNBaseTodo_2',
+    visible: true,
+    isBase: true,
+    tileGridMaxZoom: 17,
+    name: 'IGNBaseTodo_2',
+    attribution: '<p><b>Mapa base</b>: <a style="color: #0000FF" href="https://www.scne.es" target="_blank">SCNE</a></p>',
+  }, {
+    crossOrigin: 'anonymous',
+    displayInLayerSwitcher: false,
+  })
 
-IDEE.addQuickLayers({
-  Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2
-})
+  IDEE.addQuickLayers({
+    Base_IGNBaseTodo_TMS_2: Base_IGNBaseTodo_TMS_2
+  })
 
-tms_2 = {
-  "base": "QUICK*Base_IGNBaseTodo_TMS_2"
-}
-
-IDEE.config("tms", tms_2)
-IDEE.config.backgroundlayers = [
-  {
-    "id": "mapa",
-    "title": "Callejero",
-    "imgPreview": "img/IGNBase.png",
-    "layers": [
-      "QUICK*Base_IGNBaseTodo_TMS_2"
-    ]
-  },
-  {
-    "id": "imagen",
-    "title": "Imagen",
-    "imgPreview": "img/imagen.png",
-    "layers": [
-      "QUICK*BASE_PNOA_MA_TMS"
-    ]
+  tms_2 = {
+    "base": "QUICK*Base_IGNBaseTodo_TMS_2"
   }
-]
+
+  IDEE.config("tms", tms_2)
+  // Selector de capas base (ext/selectorCapas/ext_backgorundLayers.js): las
+  // miniaturas son rutas relativas a este index.html.
+  IDEE.config.backgroundlayers = [
+    {
+      "id": "mapa",
+      "title": "Callejero",
+      "imgPreview": "img/IGNBase.png",
+      "layers": [
+        "QUICK*Base_IGNBaseTodo_TMS_2"
+      ]
+    },
+    {
+      "id": "imagen",
+      "title": "Imagen",
+      "imgPreview": "img/imagen.png",
+      "layers": [
+        "QUICK*BASE_PNOA_MA_TMS"
+      ]
+    }
+  ]
+}
 
 // Configuración del mapa
 IDEE.proxy(false);
@@ -387,7 +404,44 @@ GalileoPositionByTime = function (Orbit = false) {
 
 }
 
+// ===================================================================
+//  Arranque/refresco de los cálculos orbitales
+//  ------------------------------------------------------------------
+//  Se llama al final de mapa(), es decir, también cada vez que se recrea el
+//  mapa al cambiar de implementación (2D<->3D). Las capas GeoJSON se recrean
+//  vacías en el mapa nuevo y las de órbita solo se recalculan cada 120 s en el
+//  intervalo de refresco, así que sin este arranque al pasar a 2D desaparecen
+//  los satélites y las dos órbitas hasta el siguiente recálculo.
+//  La primera vez la vista se centra en la ISS; en las recreaciones no, porque
+//  cambioImpl restaura después el centro y el zoom que tenía el mapa anterior.
+//  El segundo parámetro de ISSPosition (soloPosicion) va siempre a false: en
+//  Cesium hay que recrear la fuente en cada mapa nuevo para que se cree otra
+//  vez la entidad con el modelo 3D de la ISS (con soloPosicion=true el
+//  intervalo de refresco únicamente mueve una entidad que ya no existe y la
+//  ISS desaparece al volver de 2D a 3D).
+// ===================================================================
+function arrancarCalculosOrbitales() {
+  ensureSatellite().then(function () {
+    const primeraVez = !window.__satelitesArrancados;
+    window.__satelitesArrancados = true;
+
+    OrbitISS()
+    ISSPosition(primeraVez, false)
+    GalileoPosition(true)
+
+    SVGCarga.hidden = true
+  }).catch(function (err) {
+    console.error("[satelites] No se pudo cargar satellite.js:", err && err.message);
+    SVGCarga.hidden = true
+  });
+}
+
 function mapa() {
+
+// Las capas rápidas de la API no sobreviven al cambio 2D/3D: se registran con
+// el IDEE de la implementación activa antes de crear el mapa (ver
+// configurarCapasBase).
+configurarCapasBase();
 
 mapajs = IDEE.map({
   container: "mapa", //id del contenedor del mapa
@@ -537,35 +591,34 @@ if (mapaCesium.scene) {
   mapaCesium.terrainProvider = new Cesium.EllipsoidTerrainProvider();
 }
 
+// Deja los satélites y las órbitas dibujados sobre las capas recién creadas.
+arrancarCalculosOrbitales();
+
 return mapajs;
 
 }
 
 mapajs_0 = mapa();
 
-// Carga satellite.js bajo demanda y arranca los cálculos orbitales cuando esté
-// disponible (propagación de la ISS y Galileo).
+// Refresco continuo (una sola vez por página): cada 5 s actualiza las
+// posiciones y cada 120 s recalcula las dos órbitas (1 hora antes / 1 hora
+// después). El intervalo no se recrea al cambiar de implementación y siempre
+// trabaja con las variables globales de capa, que mapa() reasigna a las capas
+// nuevas, así que sigue apuntando a las capas vigentes tras un cambio 2D/3D.
 ensureSatellite().then(function () {
-  OrbitISS()
-  ISSPosition(centerMap = true)
-  GalileoPosition(Orbit = true)
-
   let iter = 0;
   setInterval(() => {
 
     if (iter >= 60) { // cada 120 s recalculamos órbita (1 hora antes / 1 hora después)
       iter = 0;
       OrbitISS()
-      GalileoPositionByTime(Orbit = true)
+      GalileoPositionByTime(true)
     }
     iter += 1
-    ISSPosition(centerMap = false, onlyPosition = true)
-    GalileoPositionByTime(Orbit = false)
-
+    ISSPosition(false, true)
+    GalileoPositionByTime(false)
 
   }, 5 * 1000);
-
-  SVGCarga.hidden = true
 }).catch(function (err) {
   console.error("[satelites] No se pudo cargar satellite.js:", err && err.message);
   SVGCarga.hidden = true
