@@ -18,9 +18,10 @@
    La barra se compone de DOS piezas:
 
      - CABECERA: el TIRADOR, siempre visible. Es una línea horizontal de
-       10 px pegada al borde de la barra (arriba si la barra va arriba, abajo
-       si va abajo): la marca con la que, al estilo de Ubuntu, se coge una
-       barra oculta para sacarla a la luz.
+       10 px en el borde de la barra que MIRA AL MAPA (abajo si la barra va
+       arriba, arriba si va abajo): es el borde por el que la barra se pliega y
+       se despliega, y por tanto donde se agarra para cerrarla, como en las
+       barras de Ubuntu.
      - CUERPO: el título y todos los items (controles, plugins, HTML).
 
    El plegado NO es un simple mostrar/ocultar, sino el juego de tres

@@ -4,9 +4,11 @@
    La barra es una dock al estilo de las barras de Ubuntu, con dos piezas:
 
      - CABECERA (.supra-bar__cabecera): el TIRADOR, siempre visible. Es una
-       línea horizontal de 10 px en el borde de la barra (arriba si va arriba,
-       abajo si va abajo); es lo único que se ve cuando la barra está plegada,
-       y justo por eso hace falta para volver a abrirla.
+       línea horizontal de 10 px en el borde de la barra que MIRA AL MAPA
+       (abajo si la barra va arriba, arriba si va abajo): es el borde por el que
+       la barra se pliega y se despliega, así que es donde se agarra para
+       cerrarla. Es lo único que se ve cuando la barra está plegada, y justo
+       por eso hace falta para volver a abrirla.
      - CUERPO (.supra-bar__cuerpo): título + items. Se pliega con una
        transición de alto, y se despliega solo (ASOMANDO) al pasar el
        puntero por encima cuando la barra no está fijada.
@@ -86,7 +88,13 @@
   width: 100%;
   margin: 7px 0; /* la tarjeta respira con el mapa; plegada, se pega al borde */
   display: flex;
-  flex-direction: column; /* cabecera arriba, cuerpo debajo */
+  /* La cabecera va SIEMPRE en el borde que mira al mapa, que es el borde por el
+     que la barra se pliega y se despliega: abajo si la barra está arriba, arriba
+     si está abajo. Así, desplegada, el tirador queda en el borde por el que se
+     agarra para cerrarla, como el frente de un cajón, en vez de escondido en el
+     borde exterior de la pantalla. column-reverse pone la última hija (la
+     cabecera) la primera. */
+  flex-direction: column-reverse;
   border: 1px solid var(--supra-border);
   border-radius: 12px;
   background: var(--supra-bg);
@@ -110,10 +118,11 @@
    escribe las mismas variables --supra-* con la paleta carbón. Aquí no hay
    ninguna regla[data-theme]: el color no se decide en el CSS. */
 
-/* Abajo del mapa: el tirador queda pegado al borde inferior y el cuerpo
-   crece hacia arriba, que es como se despliega una barra inferior. */
+/* Abajo del mapa: el tirador queda pegado al borde SUPERIOR de la barra (el que
+   mira al mapa) y el cuerpo crece hacia abajo, que es como se despliega una
+   barra inferior. Es el reflejo exacto de la barra de arriba. */
 .supra-bar--bottom {
-  flex-direction: column-reverse; /* cabecera abajo */
+  flex-direction: column; /* cabecera arriba */
 }
 
 /* Las barras de los supraplugins anidados son una tarjeta algo más sólida,
@@ -150,10 +159,10 @@
   flex: 0 0 auto;
   height: 10px;
   padding: 0 10px;
-  border-radius: 11px 11px 0 0;
+  border-radius: 0 0 11px 11px; /* abajo del todo en una barra de arriba */
 }
 
-.supra-bar--bottom .supra-bar__cabecera { border-radius: 0 0 11px 11px; }
+.supra-bar--bottom .supra-bar__cabecera { border-radius: 11px 11px 0 0; }
 
 .supra-bar__tirador {
   display: inline-flex;
@@ -184,11 +193,20 @@
   background: currentColor;
   color: var(--supra-fg);
   opacity: 0.35;
-  transition: opacity 0.18s ease, transform 0.18s ease, color 0.18s ease, width 0.18s ease;
+  /* El desplazamiento lo fija el estado de plegado (ver más abajo). */
+  transform: translateY(var(--supra-grip, 0px));
+  transition: opacity 0.18s ease, transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+              color 0.18s ease, width 0.18s ease;
 }
 
+/* PLEGADA no hace falta mover la línea: la cabecera es toda la barra, así que
+   centrada en la cabecera ya está centrada en la tarjeta. Desplegada, la línea
+   se queda en el borde que mira al mapa, que es donde se agarra para plegar.
+   El desplazamiento queda como enganche por si algún visualizador lo quiere
+   fino (--supra-grip). */
+
 .supra-bar__tirador:hover .supra-bar__agarre { color: var(--supra-accent); opacity: 1; width: 38px; }
-.supra-bar__tirador:active .supra-bar__agarre { transform: scale(0.9); }
+.supra-bar__tirador:active .supra-bar__agarre { transform: translateY(var(--supra-grip, 0px)) scale(0.9); }
 
 /* Si la barra no es plegable, el tirador no pinta: el cuerpo va siempre
    visible (regla de _reflejarEstadoBarra: sin --plegable no hay plegado). */
@@ -211,7 +229,7 @@
               padding 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.supra-bar--bottom .supra-bar__cuerpo { border-radius: 11px 11px 0 0; padding: 8px 10px 6px; }
+.supra-bar--bottom .supra-bar__cuerpo { border-radius: 0 0 11px 11px; padding: 6px 10px 8px; }
 
 /* PLEGADA: el cuerpo se colapsa y sólo queda la cabecera con el tirador. */
 .supra-bar--plegada .supra-bar__cuerpo {
