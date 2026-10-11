@@ -1220,6 +1220,121 @@ class miPlugin_layerSwitcher {
       return vectorTypes.includes(t) ? 'vector' : 'raster';
     };
 
+    // ── Repintado de capas vectoriales en Cesium (3D) ───────────────────
+    // POR QUE HACE FALTA: en la implementacion 3D las capas vectoriales con
+    // coordenadas 2D (lon/lat, el caso normal) se dibujan como "primitivas de
+    // suelo" (GroundPrimitive: Cesium las drapea sobre el terreno) y Cesium las
+    // construye UNA sola vez: los cambios posteriores del material no se
+    // reflejan. Medido con capturas del parche central de la pantalla: tras
+    // setOpacity el color de la entidad ya tiene el alfa nuevo (la API SI lo
+    // muta) pero los pixeles siguen con el alfa viejo, y no lo arreglan ni
+    // `scene.requestRender()`, ni un ciclo `entity.show`, ni reasignar
+    // `polygon.material`, ni quitar y volver a anadir el dataSource. Lo unico
+    // que reconstruye las primitivas con el material actual -y por tanto hace
+    // visible el cambio- es sacar las entidades del dataSource y volver a
+    // meterlas (medido: alfa 1 -> [255,0,0] en el centro; alfa 0.5 -> [240,53,57]).
+    //
+    // El coste va con el numero de entidades, asi que se agrupan las rafagas del
+    // slider (emite un `input` por pixel arrastrado) y se omite en capas
+    // enormes, donde reconstruir varias veces por segundo congelaria el
+    // navegador. En 2D no se hace nada: alli la API repinta por su cuenta.
+    const RECONSTRUCCION_CESIO_MS = 150;
+    const MAX_ENTIDADES_RECONSTRUIBLES = 5000;
+    let reconstruccionCesioUltima = 0;
+    let reconstruccionCesioTimer = null;
+    let reconstruccionCesioCapa = null;
+    let reconstruccionCesioAvisada = false;
+
+    // Escena de Cesium, o null si estamos en 2D.
+    function escenaCesio() {
+      try {
+        const impl = map.getMapImpl ? map.getMapImpl() : null;
+        return (impl && impl.scene && impl.scene.camera) ? impl.scene : null;
+      } catch (e) { return null; }
+    }
+
+    // DataSources de Cesium que contienen las entidades de una capa. Por su
+    // impl y, si no hubiera, por nombre en el Viewer: los idLayer se regeneran
+    // en cada reinicio del mapa (cambio 2D/3D), legend/name son estables.
+    function datasourcesCesioDeCapa(layer) {
+      const datasources = [];
+      const anade = (ds) => { if (ds && datasources.indexOf(ds) === -1) datasources.push(ds); };
+      try {
+        const impl = layer.getImpl ? layer.getImpl() : null;
+        if (impl) {
+          if (typeof impl.getLayer === 'function') anade(impl.getLayer());
+          anade(impl.cesiumLayer);
+        }
+      } catch (e) { /* la capa puede no tener impl todavia */ }
+      try {
+        const viewer = (map && typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
+        const datasourcesViewer = viewer && viewer.dataSources;
+        const ident = String(layer.legend || layer.name || '');
+        if (datasourcesViewer && datasourcesViewer.length !== undefined && ident) {
+          for (let i = 0; i < datasourcesViewer.length; i++) {
+            const ds = datasourcesViewer.get(i);
+            if (ds && String(ds.name || '') === ident) anade(ds);
+          }
+        }
+      } catch (e) { /* sin Viewer (2D) */ }
+      return datasources;
+    }
+
+    // Saca del dataSource y vuelve a meter las entidades de una capa: es lo que
+    // obliga a Cesium a reconstruir sus primitivas con el material actual. Se
+    // conservan los MISMOS objetos Entity, asi que las referencias que guarda la
+    // API (facade de features, getFeatures...) siguen siendo validas.
+    function reconstruirEntidadesCesio(layer) {
+      if (!layer || !escenaCesio()) return;
+      const datasources = datasourcesCesioDeCapa(layer);
+      let total = 0;
+      datasources.forEach((ds) => {
+        try { total += ds.entities ? ds.entities.values.length : 0; } catch (e) { /* ignorar */ }
+      });
+      if (!total) return;
+      if (total > MAX_ENTIDADES_RECONSTRUIBLES) {
+        // Aviso unico: en 3D la opacidad de una capa tan grande no se puede
+        // refrescar (reconstruirla bloquea el hilo principal).
+        if (!reconstruccionCesioAvisada) {
+          reconstruccionCesioAvisada = true;
+          console.warn('layerSwitcher: la capa "' + (layer.legend || layer.name || '')
+            + '" tiene ' + total + ' entidades; en 3D el cambio de opacidad no se refresca'
+            + ' (limite ' + MAX_ENTIDADES_RECONSTRUIBLES + ').');
+        }
+        return;
+      }
+      datasources.forEach((ds) => {
+        try {
+          const entidades = ds.entities ? ds.entities.values.slice() : [];
+          if (!entidades.length) return;
+          ds.entities.removeAll();
+          entidades.forEach((e) => { ds.entities.add(e); });
+        } catch (e) { /* dataSource no reconstruible */ }
+      });
+    }
+
+    // Igual que reconstruirEntidadesCesio, pero agrupando rafagas: durante el
+    // arrastre del slider se reconstruye en cuanto se puede y despues como
+    // mucho una vez por ventana, sin perder nunca el valor final.
+    function reconstruirEntidadesCesioDiferido(layer) {
+      if (!layer || !escenaCesio()) return;
+      const ahora = Date.now();
+      const transcurrido = ahora - reconstruccionCesioUltima;
+      reconstruccionCesioCapa = layer;
+      if (transcurrido >= RECONSTRUCCION_CESIO_MS) {
+        reconstruccionCesioUltima = ahora;
+        reconstruirEntidadesCesio(reconstruccionCesioCapa);
+        return;
+      }
+      if (reconstruccionCesioTimer === null) {
+        reconstruccionCesioTimer = window.setTimeout(() => {
+          reconstruccionCesioTimer = null;
+          reconstruccionCesioUltima = Date.now();
+          reconstruirEntidadesCesio(reconstruccionCesioCapa);
+        }, RECONSTRUCCION_CESIO_MS - transcurrido);
+      }
+    }
+
     // ── Slider de transparencia ─────────────────────────────────────────
     // transpPct es 0..100 (0 = opaco, 100 = totalmente transparente). La API
     // usa opacidad 0..1, asi que transladamos: opacity = 1 - transp/100.
@@ -1228,6 +1343,9 @@ class miPlugin_layerSwitcher {
       const pct = Math.max(0, Math.min(100, Number(transpPct) || 0));
       if (layer && layer.setOpacity) {
         layer.setOpacity(1 - pct / 100);
+        // En Cesium la API deja el material nuevo en la entidad pero la
+        // primitiva de suelo no se reconstruye (ver reconstruirEntidadesCesio).
+        reconstruirEntidadesCesioDiferido(layer);
       }
       // Actualiza solo el texto del valor y el relleno del track del slider,
       // sin re-render (re-renderizar perderia el foco mientras se arrastra).
@@ -1434,7 +1552,10 @@ class miPlugin_layerSwitcher {
     function matchFeatureToTable(target) {
       const feats = sheetCtx.features;
       for (let i = 0; i < feats.length; i++) {
+        // Coincidencia directa y, si la fila agrupa varias partes (tesela
+        // troceada), cualquiera de esas partes vale.
         if (feats[i].feature === target) return i;
+        if (feats[i].partes && feats[i].partes.indexOf(target) !== -1) return i;
       }
       // Fallback por geometria/atributos (referencias distintas).
       let tGeom = null, tExt = null, tProp = null;
@@ -1711,8 +1832,30 @@ class miPlugin_layerSwitcher {
 
       // Reunir el conjunto de columnas a partir de los atributos.
       // Los features OL exponen getProperties(); los de API-IDEE, getAttributes().
+      // Las claves que empiezan por "_" son metadatos que pone la propia capa
+      // (no atributos del dato) y no se pintan como columna.
+      const esMetadato = (clave) => typeof clave === 'string' && clave.charAt(0) === '_';
+      // Clave con la que una capa puede declarar que VARIAS features son en
+      // realidad un solo elemento. La usa el georreferenciador de teselas: una
+      // tesela grande se trocea en N franjas de relleno + 1 contorno + 1 punto
+      // de etiqueta, y sin agrupar la tabla mostraba una fila por cada trozo.
+      // Ver CLAVE_GRUPO_TESELA en ext/georrefTeselas/georrefTeselas.js.
+      const CLAVE_GRUPO = '_grupo';
+      // Peso de una geometria para elegir la representativa del grupo. El
+      // contorno (LineString) representa la tesela entera mejor que una franja
+      // suelta, asi que se prefiere para centrar/resaltar al pulsar la fila.
+      const pesoGeometria = (geom) => {
+        let tipo = '';
+        try { tipo = (geom && geom.getType) ? String(geom.getType()) : ''; } catch (e) { tipo = ''; }
+        if (/LineString/i.test(tipo)) return 3;
+        if (/Polygon/i.test(tipo)) return 2;
+        if (/Point/i.test(tipo)) return 1;
+        return 0;
+      };
       const columns = [];
-      const rows = features.slice(0, 500).map(f => {
+      const rows = [];
+      const rowsPorGrupo = Object.create(null);
+      features.slice(0, 500).forEach(f => {
         let props = {};
         try {
           props = (f.getProperties ? f.getProperties() : null) ||
@@ -1721,9 +1864,22 @@ class miPlugin_layerSwitcher {
         if (typeof props !== 'object' || props === null) props = {};
         const geom = (f.getGeometry ? f.getGeometry() : null);
         for (const key in props) {
-          if (!columns.includes(key)) columns.push(key);
+          if (!esMetadato(key) && !columns.includes(key)) columns.push(key);
         }
-        return { props, geom, feature: f };
+        const valorGrupo = props[CLAVE_GRUPO];
+        const grupo = (valorGrupo === undefined || valorGrupo === null || valorGrupo === '')
+          ? null : String(valorGrupo);
+        // Si el grupo ya tiene fila, esta feature es otra parte del mismo
+        // elemento: se acumula (no genera fila propia).
+        if (grupo && rowsPorGrupo[grupo]) {
+          const acumulada = rowsPorGrupo[grupo];
+          acumulada.features.push(f);
+          if (pesoGeometria(geom) > pesoGeometria(acumulada.geom)) acumulada.geom = geom;
+          return;
+        }
+        const row = { props, geom, feature: f, features: [f] };
+        if (grupo) rowsPorGrupo[grupo] = row;
+        rows.push(row);
       });
 
       // Asegurar columnas utiles aunque no haya propiedades.
@@ -1732,6 +1888,9 @@ class miPlugin_layerSwitcher {
       // Cachear los features (orden = filas de la tabla) para la sincronia
       // bidireccional tabla<->mapa. Se almacena la geometria OL (si existe) y
       // el primer atributo no vacio para poder casar un feature del mapa.
+      // `partes` son todas las features que resume la fila (una sola cuando la
+      // capa no agrupa), para que el clic en cualquiera de ellas resalte la
+      // fila correcta en el sentido mapa->tabla.
       const cached = rows.map((row, i) => {
         let extent = null;
         try { extent = row.geom && row.geom.getExtent ? row.geom.getExtent() : null; } catch (e) { extent = null; }
@@ -1740,7 +1899,7 @@ class miPlugin_layerSwitcher {
           const v = row.props[c];
           if (v !== undefined && v !== null && v !== '' && c !== '(sin atributos)') { firstProp = v; break; }
         }
-        return { feature: row.feature, geometry: row.geom, extent, firstProp, idx: i };
+        return { feature: row.feature, geometry: row.geom, extent, firstProp, idx: i, partes: row.features };
       });
       sheetCtx = {
         layerId: layer.idLayer,
@@ -1766,8 +1925,13 @@ class miPlugin_layerSwitcher {
       });
       html += `</tbody></table>`;
       const shown = rows.length;
-      const more = featCount > shown ? `<p class="ls-sheet-note">Mostrando ${shown} de ${featCount} features.</p>` : `<p class="ls-sheet-note">${featCount} features (${columns.length} atributos).</p>`;
-      return `${more}${html}`;
+      // Nota informativa: si la capa agrupa partes, el numero de filas no
+      // coincide con el de features de la capa (una tesela troceada son varias
+      // features en una sola fila); se indican las dos cifras.
+      let nota = `${shown} ${shown === 1 ? 'elemento' : 'elementos'} (${columns.length} ${columns.length === 1 ? 'atributo' : 'atributos'})`;
+      if (featCount !== shown) nota += ` a partir de ${featCount} features`;
+      if (featCount > shown && featCount > 500) nota += `; solo se inspeccionan las 500 primeras`;
+      return `<p class="ls-sheet-note">${nota}.</p>${html}`;
     }
 
     // ── Capas MapLibre / vector-tiles (p.ej. BTN) ─────────────────────

@@ -18,25 +18,33 @@ function api_georrefTeselas() {
 const valueOri_georrefTeselas = "-- Seleccione un tipo de malla --";
 
 /**
+ * Propiedad con la que se marcan TODAS las partes de una misma tesela.
+ *
+ * Una tesela grande son en realidad N franjas de relleno + 1 contorno + 1 punto
+ * de etiqueta (ver trocearParaCesium), y la tabla de atributos del selector de
+ * capas pintaba una fila por cada una (p. ej. 8 filas por una sola tesela). Con
+ * esta clave la tabla sabe que todas esas features son un unico elemento y las
+ * muestra en una sola fila.
+ *
+ * El prefijo "_" marca la propiedad como metadato de la propia capa (no es un
+ * atributo del dato): el selector la usa para agrupar y la oculta como columna.
+ */
+const CLAVE_GRUPO_TESELA = '_grupo';
+
+
+/**
  * Recorta los extremos de un polígono para que no toque los limites del mundo.
  *
- * UNA TESELA = UNA FEATURE. Antes esta funcion troceaba los rectangulos grandes en
- * un MultiPolygon para que el motor 3D no fallara, pero eso hacia que crease una
- * feature por trozo y salieran cuatro etiquetas para una sola tesela. Ahora no se
- * trocea nunca: se recorta, y sigue siendo una sola feature.
+ * AQUI NO SE TROCEA: solo se recorta y se devuelve una sola feature. El troceo en
+ * franjas de las teselas grandes (zoom 0-1) lo hace despues trocearParaCesium,
+ * controlando etiqueta y contorno para que siga pareciendo una unica tesela.
  *
- * LA REGLA: si un valor es ±180 en longitud o ±90 en latitud, pasa a ±179.9 / ±89.9.
- * Medido: asi la tesela 0/0/0 (360 grados, el globo entero) se pinta bien en 3D,
- * cuando en crudo reventaba con "All attribute lists must have the same number of
- * attributes".
- *
- * LO QUE NO SE PUEDE EVITAR (medido): las teselas de zoom 1, que abarcan 180
- * grados justo por la mitad del globo, siguen tumbando el motor 3D ("Expected value
- * to be greater than or equal to 0.0125"). No es por ser grandes: un poligono de
- * 160, de 190 o de 359.8 grados se pinta bien y falla el de 179.9. Tampoco lo
- * arregla cambiar el estilo (probado con y sin `extrudedHeight`). Con una sola
- * feature y esos bordes no hay solucion dentro de la API, asi que quien las pida
- * recibe un aviso antes de intentarlo.
+ * LA REGLA: un valor que toque el limite del mundo (±180 en longitud, ±90 en
+ * latitud) se lleva a ±179.99999 / ±89.99999, para que el anillo no caiga justo
+ * sobre la linea internacional de cambio de fecha ni sobre los polos, donde el
+ * motor 3D invierte el relleno o lo descarta. El otro fallo de esas teselas (los
+ * arcos de 180°-360° que hacian saltar a Cesium con "Expected value to be greater
+ * than or equal to 0.0125") lo corrige trocearParaCesium interpolando vertices.
  *
  * @param {Object} gjson Feature con un Polygon de 5 vertices.
  * @returns {Object} El Feature con los extremos recortados.
@@ -53,7 +61,7 @@ function recortarExtremos(gjson) {
       type: 'Feature',
       geometry: {
         type: 'Polygon',
-        coordinates: [anillo.map((pt) => [recorta(pt[0], 179.9), recorta(pt[1], 89.9)])],
+        coordinates: [anillo.map((pt) => [recorta(pt[0], 179.99999), recorta(pt[1], 89.99999)])],
       },
       properties: gjson.properties,
     };
@@ -63,25 +71,146 @@ function recortarExtremos(gjson) {
 }
 
 /**
- * ¿Esta tesela es de las que el motor 3D no sabe dibujar en una sola feature?
+ * Prepara una tesela para Cesium: si es grande (ancho > 90°, las de zoom 0-1)
+ * la trocea en franjas verticales de <= 60° e interpola vertices intermedios
+ * cada 5°. Las teselas pequenas se devuelven tal cual.
  *
- * Medido: solo lo hacen las teselas de zoom 1, que ocupan 180 grados de longitud
- * (media columna del globo). Un rectangulo de 160, de 190 o de 359.8 grados se
- * pinta bien, asi que el aviso se pone sobre el ancho real de la tesela y no sobre
- * un limite inventado.
+ * POR QUE HAY QUE TROCEAR. Cesium no sabe pintar un poligono que abarca mas de
+ * 90° de longitud: el relleno sale recortado, invertido (pinta el complemento,
+ * "lo que justo no deberia ocupar") o directamente no sale. Medido con la build
+ * apiidee-1.1.0.cesium: un rectangulo de 90° de ancho pinta exactamente igual
+ * que uno de 358°, y el poligono global de la tesela 0/0/0 no pinta nada. Es la
+ * limitacion conocida del "projection to tangent plane" (blog oficial de Cesium
+ * "Large Polygons in CesiumJS" e issue CesiumGS/cesium#4871), y la
+ * recomendacion oficial es partir el poligono en trozos de <= 90°. Aqui se
+ * parte en franjas de <= 60° por margen de seguridad.
  *
- * @param {Object} gjson Feature con un Polygon.
- * @returns {boolean} true si hay que avisar antes de intentarlo.
+ * La interpolacion de vertices cada 5° evita el otro fallo del motor: cuando
+ * dos vertices estaban muy separados (p. ej. 180° o 360°), la granularidad de
+ * arco calculada caia por debajo del minimo que admite Cesium (0.0125 rad) y
+ * lanzaba "DeveloperError: Expected value to be greater than or equal to
+ * 0.0125", parando el render. Con los bordes interpolados nunca hay arcos
+ * largos.
+ *
+ * ETIQUETA Y CONTORNO SIN COSTURAS. Si se devolvieran N poligonos sueltos, la
+ * API pondria una etiqueta por trozo y dibujaria el contorno alrededor de cada
+ * franja (lineas internas visibles en la tesela). Por eso se devuelve una
+ * FeatureCollection con tres tipos de geometria, y el estilo se aplica por
+ * tipo (IDEE.style.Generic con polygon/line/point):
+ *   - N Polygon: las franjas con SOLO relleno (sin stroke).
+ *   - 1 LineString: el contorno exterior de la tesela (el borde naranja).
+ *   - 1 Point en el centro de la tesela: la etiqueta (el centro de una franja
+ *     no es el centro de la tesela; por eso la etiqueta va en un punto propio).
+ *
+ * @param {Object} gjson Feature con un Polygon ya recortado (recortarExtremos).
+ * @returns {Object} Feature (tesela pequena) o FeatureCollection (tesela grande).
  */
-function avisaAntesDeIntentar(gjson) {
+function trocearParaCesium(gjson) {
   try {
+    if (!gjson || !gjson.geometry || gjson.geometry.type !== 'Polygon') return gjson;
     const anillo = gjson.geometry.coordinates[0];
-    const lons = anillo.map((pt) => pt[0]);
-    const ancho = Math.max.apply(null, lons) - Math.min.apply(null, lons);
-    // Las teselas de zoom 1 miden 180. Las de zoom >= 2, como mucho 90.
-    return ancho > 150;
+    if (!Array.isArray(anillo) || anillo.length < 4) return gjson;
+
+    const lons = anillo.map(pt => pt[0]);
+    const lats = anillo.map(pt => pt[1]);
+    const oeste = Math.min.apply(null, lons);
+    const este = Math.max.apply(null, lons);
+    const sur = Math.min.apply(null, lats);
+    const norte = Math.max.apply(null, lats);
+    const ancho = este - oeste;
+    // Solo trocear cuando el ancho > 90° (zoom 0-1). Las pequenas no.
+    if (ancho <= 90) return gjson;
+
+    // Clave de agrupacion: la llevan TODAS las partes (franjas, contorno y
+    // etiqueta) para que la tabla de atributos del selector de capas las
+    // muestre como un unico elemento (ver CLAVE_GRUPO_TESELA). Se usa la
+    // etiqueta de la tesela ("0/0/0") porque es estable y legible; todas las
+    // partes de esta FeatureCollection comparten valor, y cada tesela vive en
+    // su propia capa, asi que no puede colisionar con otra.
+    const claveGrupo = (gjson.properties && gjson.properties.label)
+      ? String(gjson.properties.label) : 'tesela';
+    // Copia propia de las propiedades para cada parte (no compartir el mismo
+    // objeto entre features) mas la clave de agrupacion.
+    const propiedadesParte = () => Object.assign({}, gjson.properties, { [CLAVE_GRUPO_TESELA]: claveGrupo });
+
+    const MAX_ANCHO = 60; // franjas de <= 60°: Cesium falla a partir de 90°
+    const paso = 5; // vertices intermedios cada 5°
+    const n = Math.max(2, Math.ceil(ancho / MAX_ANCHO));
+
+    // Interpola un borde [x1,y1] -> [x2,y2] con vertices cada `paso` grados.
+    const interpolar = (x1, y1, x2, y2) => {
+      const puntos = [];
+      const dx = x2 - x1, dy = y2 - y1;
+      const dist = Math.max(Math.abs(dx), Math.abs(dy));
+      const pasos = Math.max(1, Math.round(dist / paso));
+      for (let j = 0; j < pasos; j++) {
+        const t = j / pasos;
+        puntos.push([+(x1 + dx * t).toFixed(6), +(y1 + dy * t).toFixed(6)]);
+      }
+      return puntos;
+    };
+
+    // Rectangulo exterior de la tesela: borde inferior, derecho, superior e
+    // izquierdo con los vertices interpolados (sirve para las franjas y para
+    // el contorno).
+    const rectanguloInterpolado = () => {
+      const pts = [];
+      pts.push(...interpolar(oeste, sur, este, sur));
+      pts.push(...interpolar(este, sur, este, norte));
+      pts.push(...interpolar(este, norte, oeste, norte));
+      pts.push(...interpolar(oeste, norte, oeste, sur));
+      return pts;
+    };
+
+    // Franjas verticales de <= MAX_ANCHO: el relleno. El estilo `polygon` del
+    // troceado no lleva stroke, asi que no salen lineas internas.
+    const franjas = [];
+    const dw = ancho / n;
+    for (let k = 0; k < n; k++) {
+      const w = +(oeste + k * dw).toFixed(6);
+      const e = +(oeste + (k + 1) * dw).toFixed(6);
+      const anilloFranja = [];
+      anilloFranja.push(...interpolar(w, sur, e, sur));
+      anilloFranja.push(...interpolar(e, sur, e, norte));
+      anilloFranja.push(...interpolar(e, norte, w, norte));
+      anilloFranja.push(...interpolar(w, norte, w, sur));
+      anilloFranja.push(anilloFranja[0]); // cerrar el anillo (GeoJSON)
+      franjas.push({
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [anilloFranja] },
+        properties: propiedadesParte(),
+      });
+    }
+
+    // Contorno exterior (LineString): el borde naranja de la tesela.
+    const contorno = rectanguloInterpolado();
+    contorno.push(contorno[0]); // cerrar la linea
+
+    return {
+      type: 'FeatureCollection',
+      features: [
+        ...franjas,
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: contorno },
+          // El contorno tambien lleva la clave de grupo (aunque no lleve la
+          // etiqueta): sin ella la tabla lo contaria como un elemento aparte.
+          properties: { [CLAVE_GRUPO_TESELA]: claveGrupo },
+        },
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [+((oeste + este) / 2).toFixed(6), +((sur + norte) / 2).toFixed(6)],
+          },
+          // Esta feature lleva la propiedad `label`: el estilo `point` de la
+          // tesela grande es el unico que pone etiqueta (en el centro).
+          properties: propiedadesParte(),
+        },
+      ],
+    };
   } catch (e) {
-    return false;
+    return gjson;
   }
 }
 
@@ -449,49 +578,62 @@ class miPlugin_georrefTeselas {
         break;
     }
 
-    // Las teselas de zoom 1 ocupan media columna del globo y el motor 3D las tumba
-    // en una sola feature (ver `recortarExtremos`). Se avisa ANTES de intentarlo
-    // para que no se llegue a parar el render sin explicacion. En 2D se añaden
-    // igual: alli solo hay que pintar el poligono.
-    const es3D = (function () {
-      try {
-        const impl = map.getMapImpl();
-        return !!(impl && impl.scene && impl.camera);
-      } catch (e) { return false; }
-    })();
-    if (es3D && avisaAntesDeIntentar(gjson)) {
-      IDEE.toast.warning(
-        'Esta tesela abarca media columna del globo (zoom 1). El motor 3D no ' +
-        'sabe dibujarla en una sola pieza y puede parar el render. Si necesitas ' +
-        'verla en 3D, usa el zoom 2 o superior.',
-        null, 6000);
-    }
+    // Antes se avisaba aqui de que las teselas grandes podian parar el render
+    // 3D. Ya no hace falta: trocearParaCesium (aplicado al source mas abajo)
+    // lo resuelve, asi que se intenta siempre y funciona en 2D y 3D.
+
+    // recortarExtremos lleva los extremos a ±179.99999 / ±89.99999, y trocearParaCesium
+    // trocea en franjas de <= 60° las teselas grandes (zoom 0-1), interpolando
+    // vertices cada 5°. Las teselas grandes devuelven una FeatureCollection con
+    // N poligonos (relleno), una LineString (contorno) y un Point (etiqueta);
+    // las pequenas siguen siendo una sola feature con su etiqueta en el centro.
+    const limiteRecortado = recortarExtremos(gjson);
+    const preparado = trocearParaCesium(limiteRecortado);
+    const esTeselaGrande = !!(preparado && preparado.type === 'FeatureCollection');
+
+    // Con nombre propio (no el generico "layer_<n>") para que la capa
+    // aparezca en el selector de capas (selectorCapas excluye las capas cuyo
+    // nombre interno es layer_<n> por considerarlas auxiliares de Mapea).
+    const nombreCapa = (gjson.properties && gjson.properties.label)
+      ? ('Tesela ' + gjson.properties.label)
+      : 'Tesela georreferenciada';
 
     const layer = new IDEE.layer.GeoJSON({
-      source: recortarExtremos(gjson),
+      name: nombreCapa,
+      source: preparado,
       extract: true,
     });
 
-    const estilo = new IDEE.style.Generic({
-      polygon: {
-        fill: {
-          color: 'red',
-          opacity: 0.2,
-        },
-        stroke: {
-          color: 'orange',
-          width: 4
-        },
-        label: {
-          // Texto etiqueta. fijo|función|atributo
-          text: '{{label}}',
-          scale: 5,
-          color: 'white',
-          align: IDEE.style.align.CENTER,
-          baseline: IDEE.style.baseline.MIDDLE,
-        }
-      }
-    });
+    // Etiqueta comun: en las pequenas va sobre el poligono; en las grandes va
+    // sobre el Point central de la FeatureCollection.
+    const configEtiqueta = {
+      // Texto etiqueta. fijo|función|atributo
+      text: '{{label}}',
+      scale: 5,
+      color: 'white',
+      align: IDEE.style.align.CENTER,
+      baseline: IDEE.style.baseline.MIDDLE,
+    };
+
+    const estilo = esTeselaGrande
+      ? new IDEE.style.Generic({
+          polygon: {
+            fill: { color: 'red', opacity: 0.2 },
+            // Sin stroke a proposito: el contorno va en la LineString aparte,
+            // para que las franjas no dibujen las lineas internas de union.
+          },
+          line: {
+            stroke: { color: 'orange', width: 4 },
+          },
+          point: { label: configEtiqueta },
+        })
+      : new IDEE.style.Generic({
+          polygon: {
+            fill: { color: 'red', opacity: 0.2 },
+            stroke: { color: 'orange', width: 4 },
+            label: configEtiqueta,
+          },
+        });
 
     layer.setStyle(estilo);
 
