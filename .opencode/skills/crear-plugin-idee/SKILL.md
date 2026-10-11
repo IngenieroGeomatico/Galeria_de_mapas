@@ -199,6 +199,19 @@ Las herramientas transversales o paneles flotantes globales se agrupan frecuente
 ### Qué es un Supraplugin
 Es un contenedor de herramientas flotante (`miPlugin_supraplugin`) ubicado en `ext/supraplugin/supraplugin.js`. Permite inyectar elementos de menú o botones de acceso rápido de manera modular. Ejemplos reales en el repositorio incluyen `ext/comparacionVistas/`. El visualizador de referencia para su uso se encuentra en `mapas/plantilla_supra/`.
 
+### Barra con tirador, plegado y supraplugins anidados
+La barra es una dock al estilo de las barras de Ubuntu, con tres piezas y tres estados:
+
+- **Cabecera con el tirador** (`.supra-bar__tirador`, los puntitos): es lo único que nunca se esconde. Plegada, la barra se reduce a esa franja (medido: 24 px frente a 68 px desplegada).
+- **Cuerpo** (`.supra-bar__cuerpo`): título + items; se pliega con una transición de alto/opacidad.
+- **Asomado (peek)**: plegada pero desplegada mientras el puntero esté encima, y se repliega sola al salir.
+
+El click en el tirador zanja el estado: si la barra no está fijada, la fija abierta (corta el modo hover); si ya lo está, alterna abierta ↔ cerrada. Todo se decide por constructor: `collapsible` (defecto `true`), `collapsed` (arranca plegada), `pinned` (estado fijo o de hover; defecto `true`) y `peek`. La barra oculta "de Ubuntu" es `pinned: false, collapsed: true`.
+
+Un supraplugin puede contener a otro con `supra.addSupraplugin(sub)`: el hijo aparece como un botón y, al activarlo, despliega su **propia barra hermana** apilada en el mismo `.supra-dock`, con sus items y su propio tirador. No se registra en el mapa con `addPlugin()`: lo monta la barra que lo contiene.
+
+Otros métodos: `addItem`, `addSeparator`, `setCollapsed`, `toggleCollapsed`, `setPinned`, `abrirHijo`/`cerrarHijo`/`toggleHijo`, `getDock`. El `getState`/`setState` guarda `plegada`, `fijada` y, por cada hijo, si su barra está `abierta`, `plegada` y `fijada` (sobrevive al cambio 2D/3D).
+
 ### Contrato de Item del Supraplugin
 Cualquier módulo que desee aportar un elemento a la barra del supraplugin expone una clase cuyo elemento visual se obtiene mediante el método `getSupraElement(supra)`:
 
