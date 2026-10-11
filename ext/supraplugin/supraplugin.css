@@ -21,13 +21,14 @@
      dark   -> Ambiance: gris carbón con el naranja de Ubuntu de acento.
    Se cambian en caliente con supra.setTheme('dark'|'light').
 
-   COLORES: los de superficie y texto son variables de este fichero
-   (--supra-*), que el constructor NO toca. El único color que entra de
-   fuera es el de acento, que la barra escribe en línea desde el
-   constructor (color1/color2/color3 -> --g-plugin-*) y que aquí se llama
-   --supra-accent. El fondo de la barra, por tanto, no lo decide el
-   constructor: lo decide el tema, y el color de marca se usa para lo que
-   tiene que standout (agarres, botones activos, raya de las barras hijas).
+   COLORES: no están en este fichero. supraplugin.js escribe en línea las
+   variables --supra-* (bg, bgSolid, fg, fgDim, border, hover, shadow y
+   sheen) con lo que le pasa el constructor: la paleta del `theme` por
+   defecto (light/dark) y, encima, las opciones de superficie. Aquí sólo
+   hay valores de reserva. El único color que además entra por el esquema
+   del repositorio es el de acento (color1 -> --g-plugin-bg-color), que
+   aquí se llama --supra-accent y se usa para lo que tiene que destacar:
+   tirador en hover, botones activos y raya de las barras anidadas.
    ===================================================================== */
 
 /* El contenedor host del visualizador (p. ej. #mapaDIV) debe ocupar el
@@ -65,15 +66,19 @@
 }
 
 /* ---- Barra: temas --------------------------------------------------- */
+/* Los COLORES de la barra no viven aquí: supraplugin.js escribe en línea las
+   variables --supra-* a partir del constructor (opciones `theme` y `surface`),
+   que es donde se parametrizan. Estas son sólo reservas, para que la barra
+   tenga aspecto aunque se cargue sin su JS. */
 .supra-bar {
-  /* Paleta de superficie (tema claro) */
-  --supra-fg: #2b2b30;
-  --supra-fg-dim: rgba(43, 43, 48, 0.62);
   --supra-bg: rgba(255, 255, 255, 0.80);
   --supra-bg-solid: rgba(255, 255, 255, 0.94);
+  --supra-fg: #2b2b30;
+  --supra-fg-dim: rgba(43, 43, 48, 0.62);
   --supra-border: rgba(20, 20, 25, 0.10);
   --supra-hover: rgba(20, 20, 25, 0.06);
   --supra-shadow: 0 10px 30px rgba(15, 20, 30, 0.14), 0 2px 6px rgba(15, 20, 30, 0.06);
+  --supra-sheen: rgba(255, 255, 255, 0.35);
   --supra-accent: var(--g-plugin-bg-color, orangered);
 
   position: relative;
@@ -85,7 +90,7 @@
   border: 1px solid var(--supra-border);
   border-radius: 12px;
   background: var(--supra-bg);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
+  background-image: linear-gradient(180deg, var(--supra-sheen), rgba(255, 255, 255, 0));
   -webkit-backdrop-filter: blur(14px) saturate(1.6);
   backdrop-filter: blur(14px) saturate(1.6);
   box-shadow: var(--supra-shadow);
@@ -101,17 +106,9 @@
   box-shadow: none;
 }
 
-/* Ambiance: barra oscura con el naranja de Ubuntu como acento. */
-.supra-bar[data-theme="dark"] {
-  --supra-fg: #f2f1f0;
-  --supra-fg-dim: rgba(242, 241, 240, 0.62);
-  --supra-bg: rgba(44, 44, 48, 0.84);
-  --supra-bg-solid: rgba(44, 44, 48, 0.95);
-  --supra-border: rgba(255, 255, 255, 0.10);
-  --supra-hover: rgba(255, 255, 255, 0.10);
-  --supra-shadow: 0 12px 34px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.26);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
-}
+/* Ambiance (tema oscuro): lo pinta supraplugin.js con `theme: 'dark'`, que
+   escribe las mismas variables --supra-* con la paleta carbón. Aquí no hay
+   ninguna regla[data-theme]: el color no se decide en el CSS. */
 
 /* Abajo del mapa: el tirador queda pegado al borde inferior y el cuerpo
    crece hacia arriba, que es como se despliega una barra inferior. */
@@ -120,9 +117,11 @@
 }
 
 /* Las barras de los supraplugins anidados son una tarjeta algo más sólida,
-   con una raya de acento a la izquierda para distinguirlas de un vistazo. */
+   con una raya de acento a la izquierda para distinguirlas de un vistazo.
+   Ojo: background-color y no el atajo `background`, que pondría
+   background-image a none y se comería el brillo de .supra-bar. */
 .supra-bar--hija {
-  background: var(--supra-bg-solid);
+  background-color: var(--supra-bg-solid);
 }
 
 .supra-bar--hija::before {

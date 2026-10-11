@@ -92,11 +92,17 @@
      pinned        Si el estado plegado es fijo o de hover (defecto: true).
      peek          Si el hover la despliega mientras esté encima
                    (defecto: true; sólo si collapsible).
-     color1/2/3    Colores del esquema (fondo, borde, icono y texto).
-     theme         "light" (defecto) o "dark" (Ambiance). Elige la superficie
-                   de la barra; el color de marca (color1) queda para los
-                   acentos (tirador en hover, botones activos, raya de las
-                   barras anidadas). Se cambia en caliente con setTheme().
+     color1/2/3    Colores del esquema (fondo, borde, icono y texto). Los
+                   usan sobre todo los ITEMS (que los heredan por CSS); en
+                   la barra, color1 es el color de marca: tirador en hover,
+                   botones activos y raya de las barras anidadas.
+     theme         Paleta de superficie de la barra: "light" (defecto) o
+                   "dark" (Ambiance). Se cambia en caliente con setTheme().
+     surface       Colores de superficie de la barra, que SÍ se escriben
+                   aquí: { bg, bgSolid, fg, fgDim, border, hover, shadow }.
+                   También se pueden dar sueltos (bg, fg, border, hover,
+                   shadow...) sin envoltura. Lo que no se declare sale del
+                   tema. En caliente con setSurface({...}).
 
    Contrato de "item" (cualquiera de estas formas):
      1) HTMLElement                       -> se inserta tal cual.
@@ -129,6 +135,50 @@
   // Marca con la que un item se reconoce como separador.
   var MARCA_SEPARADOR = "_supraSeparador";
 
+  // Paletas de SUPERFICIE de la barra, una por tema. Son el valor por defecto
+  // de las variables --supra-*: el constructor las escribe EN LÍNEA sobre cada
+  // barra, de modo que quien monte un supraplugin decide sus colores sin tocar
+  // el CSS (el CSS sólo deja valores de reserva, por si se carga sin su JS).
+  var PALETAS = {
+    light: {
+      bg: "rgba(255, 255, 255, 0.80)",
+      bgSolid: "rgba(255, 255, 255, 0.94)",
+      fg: "#2b2b30",
+      fgDim: "rgba(43, 43, 48, 0.62)",
+      border: "rgba(20, 20, 25, 0.10)",
+      hover: "rgba(20, 20, 25, 0.06)",
+      shadow: "0 10px 30px rgba(15, 20, 30, 0.14), 0 2px 6px rgba(15, 20, 30, 0.06)",
+      sheen: "rgba(255, 255, 255, 0.35)"
+    },
+    dark: {
+      bg: "rgba(44, 44, 48, 0.84)",
+      bgSolid: "rgba(44, 44, 48, 0.95)",
+      fg: "#f2f1f0",
+      fgDim: "rgba(242, 241, 240, 0.62)",
+      border: "rgba(255, 255, 255, 0.10)",
+      hover: "rgba(255, 255, 255, 0.10)",
+      shadow: "0 12px 34px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.26)",
+      sheen: "rgba(255, 255, 255, 0.08)"
+    }
+  };
+
+  // Claves de superficie que el constructor puede pisar, con la variable CSS
+  // donde se escriben. El mapeo es explícito porque los nombres de opción son
+  // camelCase (bgSolid) y los de variable kebab-case (--supra-bg-solid): si se
+  // concatenara '--supra-' + clave, las de camelCase se escribirían con otra
+  // variable (--supra-bgSolid), no se usarían en el CSS y la barra se quedaría
+  // con la reserva del tema claro (medido: la barra hija salía blanca en dark).
+  var CLAVES_SUPERFICIE = [
+    { opcion: "bg", css: "--supra-bg" },
+    { opcion: "bgSolid", css: "--supra-bg-solid" },
+    { opcion: "fg", css: "--supra-fg" },
+    { opcion: "fgDim", css: "--supra-fg-dim" },
+    { opcion: "border", css: "--supra-border" },
+    { opcion: "hover", css: "--supra-hover" },
+    { opcion: "shadow", css: "--supra-shadow" },
+    { opcion: "sheen", css: "--supra-sheen" }
+  ];
+
   class miPlugin_supraplugin {
     /**
      * @param {Object} options Ver "Opciones del constructor" en la cabecera.
@@ -148,6 +198,21 @@
       // salvo que traigan el suyo propio, que es lo que marca _themePropio.
       this._themePropio = (this.options.theme !== undefined && this.options.theme !== null);
       this.theme = (this.options.theme === "dark" || this.options.theme === "light") ? this.options.theme : "light";
+
+      // Superficie propia: los colores con los que se pinta ESTA barra. El
+      // tema pone los suyos y encima se pisan, o todos de golpe con
+      // `surface: {...}` o sueltos con bg/bgSolid/fg/fgDim/border/hover/shadow.
+      // Así los colores de la barra se parametrizan en el constructor, que es
+      // de donde salen todos los del repositorio, y no del CSS.
+      this._superficie = {};
+      if (this.options.surface && typeof this.options.surface === "object") {
+        CLAVES_SUPERFICIE.forEach((k) => {
+          if (this.options.surface[k.opcion] !== undefined) this._superficie[k.opcion] = this.options.surface[k.opcion];
+        });
+      }
+      CLAVES_SUPERFICIE.forEach((k) => {
+        if (this.options[k.opcion] !== undefined) this._superficie[k.opcion] = this.options[k.opcion];
+      });
 
       // --- Estado de plegado -------------------------------------------------
       // `collapsible`: la barra tiene tirador y se puede plegar.
@@ -466,6 +531,16 @@
         this.container.style.setProperty("--g-plugin-border-color-active", c2.active);
         this.container.style.setProperty("--g-plugin-icon-color", c3.deactive);
         this.container.style.setProperty("--g-plugin-icon-color-active", c3.active);
+
+        // Superficie de la barra: la paleta del tema, con las opciones del
+        // constructor por encima. Se escribe en línea para que cada barra
+        // pueda llevar su propio color sin tocar el CSS.
+        var pal = PALETAS[this.theme] || PALETAS.light;
+        var s = this._superficie || {};
+        var valor = (k) => (s[k] !== undefined && s[k] !== null) ? s[k] : pal[k];
+        CLAVES_SUPERFICIE.forEach((k) => {
+          this.container.style.setProperty(k.css, valor(k.opcion));
+        });
         return true;
       } catch (e) {
         console.warn("[" + this.name + "] no se pudieron aplicar los colores.", e);
@@ -616,10 +691,38 @@
       this.theme = (tema === "dark") ? "dark" : "light";
       if (this._dock) this._dock.setAttribute("data-theme", this.theme);
       if (this.container) this.container.setAttribute("data-theme", this.theme);
+      // La paleta del tema son valores por defecto: si el constructor fijó
+      // alguna clave de superficie, esa manda y el cambio de tema no la pisa.
+      if (this.container) this._aplicarColores();
       if (enCascada) {
         Object.keys(this._hijos).forEach((id) => {
           var h = this._hijos[id];
           if (h && h.sub && !h.sub._themePropio) h.sub.setTheme(this.theme, true);
+        });
+      }
+      return this;
+    }
+
+    /**
+     * Cambia en caliente los colores de superficie de la barra.
+     * @param {Object} parcial {bg, bgSolid, fg, fgDim, border, hover, shadow}
+     *   (sólo las claves indicadas; el resto sigue como estaba).
+     * @param {boolean} [enCascada=true] Si se propaga a las barras anidadas que
+     *   no traigan superficie propia.
+     * @returns {miPlugin_supraplugin} this (encadenable)
+     */
+    setSurface(parcial, enCascada = true) {
+      this._superficie = this._superficie || {};
+      CLAVES_SUPERFICIE.forEach((k) => {
+        if (parcial && parcial[k.opcion] !== undefined) this._superficie[k.opcion] = parcial[k.opcion];
+      });
+      if (this.container) this._aplicarColores();
+      if (enCascada) {
+        Object.keys(this._hijos).forEach((id) => {
+          var h = this._hijos[id];
+          if (h && h.sub && (!h.sub._superficie || !Object.keys(h.sub._superficie).length)) {
+            h.sub.setSurface(parcial, true);
+          }
         });
       }
       return this;
