@@ -1512,14 +1512,20 @@
         '  </div>' +
 
         // ---- Acciones (acordeón) -------------------------------------------
+        // Los botones "Visualizar vuelo" y "Limpiar" se han quitado: sobraban.
+        // `render()` ya se dispara solo al elegir un vuelo, al cambiar cualquier
+        // opción y al importar el fichero (7 llamadas en el propio plugin), así que
+        // el vuelo ya estaba dibujado antes de pulsar nada. Y el de "Limpiar" era
+        // el único que llamaba a `clearData()`, que por eso queda sin uso.
         '  <div class="vuelo-section vf-accordion" id="vf-section-actions" data-acc="acciones" hidden>' +
         '    <div class="vuelo-accordion-header" role="button" tabindex="0">' +
         '      <span class="vuelo-section-title">Acciones</span>' +
         '      <span class="vuelo-chevron">▸</span>' +
         '    </div>' +
         '    <div class="vuelo-accordion-body">' +
-        '      <button type="button" id="vf-render" class="vuelo-btn primary">Visualizar vuelo</button>' +
-        '      <button type="button" id="vf-clear" class="vuelo-btn">Limpiar</button>' +
+        '      <p class="vuelo-nota">El vuelo se dibuja y se repinta solo: al elegir ' +
+        '      un vuelo, al cambiar cualquier opción o al importar el fichero. No hay ' +
+        '      que pulsar nada.</p>' +
         '    </div>' +
         '  </div>' +
 
@@ -1945,9 +1951,9 @@
     // La visibilidad de las capas la gestiona el plugin externo de gestión de
     // capas (layerswitcher); el plugin ya no expone checks de visibilidad.
 
-    // Acciones.
-    bind("vf-render", "click", function () { self.render(); });
-    bind("vf-clear", "click", function () { self.clearData(); });
+    // Acciones: ya no hay botones que enlazar aqui. Se quitaron "Visualizar vuelo"
+    // y "Limpiar" porque el repintado es automatico (ver el HTML del panel). Se
+    // deja `render()`, que el resto del plugin sigue llamando desde 7 sitios.
 
     // Controles de animación del avión.
     bind("vf-anim-play", "click", function () { self.togglePlay(); });
@@ -4623,31 +4629,7 @@
     this._lineTraceMode = false;
   };
 
-  clearData() {
-    this.removeLayers();
-    this.data.rows = null;
-    this.data.headers = null;
-    this.data.mapping = {};
-    this._mdtCache = undefined; // sin datos: invalida el MDT cacheado
-    this.data.zoomDone = false; // sin datos: el próximo vuelo re-encuadrará
-    // Detiene y reinicia la animación del avión.
-    this._stopRAF();
-    this.data.anim = { playing: false, t: 0, reveal: true, speedKmh: (this.data.anim && this.data.anim.speedKmh) || AVION_SPEED_KMH_DEFAULT };
-    this._flightLine = null;
-    this.updateAnimUI();
-    // Deselecciona el vuelo pero conserva la lista de vuelos encontrados, para
-    // poder elegir otro sin repetir la búsqueda. En CSV no hay vuelos.
-    this.data.vueloSel = null;
-    var selV = this.panel && this.panel.querySelector("#vf-ogc-vuelos");
-    if (selV) selV.value = "";
-    window.__vueloSharedData = this.data;
-    this.showConfigSections(false);
-    var input = this.panel && this.panel.querySelector("#vf-file");
-    if (input) input.value = "";
-    this.setStatus(this.data.source === "ogc"
-      ? "Vuelo ocultado. Elige otro vuelo de la lista."
-      : "Datos limpiados. Carga un nuevo archivo.");
-  };
+;
 
   // ---- Ciclo de vida y preservación de estado ----------------------------
   /**

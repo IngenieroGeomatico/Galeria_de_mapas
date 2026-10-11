@@ -451,6 +451,15 @@
    externo (p.ej. calculo expandido) afectaba al chevron/cuerpo del acordeón
    interno (Cámara), desincronizando el icono. Con ">", cada acordeón solo
    estiliza SU header y SU cuerpo directos, inmune al anidamiento. */
+/* Texto informativo dentro de un acordeón. Sin esto sale con el margen por
+   defecto del <p>, que en un panel estrecho queda desproporcionado. */
+.g-herramienta_vuelo .vuelo-nota {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #6b6b6b;
+}
+
 .g-herramienta_vuelo .vf-accordion > .vuelo-accordion-body {
     display: flex;
     flex-direction: column;
