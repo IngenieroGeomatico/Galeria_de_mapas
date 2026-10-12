@@ -19,24 +19,28 @@
 
    LOS TIPOS DE CATÁLOGO (objeto IDEE.catalog)
    ---------------------------------------------------------------------
-   `IDEE.catalog` es el registro de tipos. Cada tipo sabe dos cosas:
-     - listar()        -> sus servicios predefinidos
-     - cargarUrl(url)  -> qué capa crea a partir de una URL
+   `IDEE.catalog` es el registro de tipos. Cada tipo sabe:
+     - listar()        -> sus secciones (IDEE) o sus servicios fijos (STAC...)
+     - cargarUrl(...)  -> qué capas crea a partir de una URL
 
-   Tipos previstos (ver CATALOGOS más abajo):
-     - 'idee'           Catálogo IDEE (servicios del IGN-CNIG)
+   Tipos (ver CATALOGOS más abajo):
+     - 'idee'           Catálogo IDEE, por secciones y tipo de servicio
      - 'stac'           STAC (SpatioTemporal Asset Catalog)
      - 'ogcapi-records' OGC API Records
 
-   ESTADO DE DESARROLLO (importante)
+   FICHEROS DEL PLUGIN
    ---------------------------------------------------------------------
-   Hoy está hecha TODA la interfaz: el selector de catálogo, la lista de
-   servicios predefinidos y el cuadro de "añadir por URL". Lo que NO está
-   hecho todavía es la ALGORITMIA que decide qué tipo de capa es una URL
-   (`detectarTipoDeCapa`): ahora mismo es un esqueleto que devuelve null y
-   avisa en el cuadro de estado. Cuando se implemente, el resto del plugin
-   (añadir la capa al mapa, el estado, el cambio 2D/3D) ya está preparado
-   para ello: solo hay que rellenar esa función.
+     - catalogo.js      El plugin: interfaz, estado y carga.
+     - catalogo_idee.js Cliente del catálogo de la IDEE (secciones y parseo),
+                        adaptación del complemento de QGIS serviciosIDEE2QGIS.
+     - catalogo_url.js  Detección del tipo de capa a partir de una URL, lectura
+                        del documento de capacidades y creación de la capa.
+
+   ESTADO DE DESARROLLO
+   ---------------------------------------------------------------------
+   Está hecho el circuito completo: el catálogo de la IDEE se pide por secciones
+   al portal y se filtra; una URL se analiza, se lee su documento de
+   capacidades y se eligen las capas y el nombre antes de cargarla.
 
    PATRONES DEL REPOSITORIO (ver ext/plantilla_plugin)
    ---------------------------------------------------------------------
@@ -130,70 +134,9 @@
   // lista y el estado lo cogen solos.
   // =====================================================================
 
-  /**
-   * Servicios predefinidos del catálogo IDEE.
-   * Fuentes: el complemento serviciosIDEE2QGIS
-   * (https://github.com/IngenieroGeomatico/serviciosIDEE2QGIS), que es la
-   * referencia de este tipo de catálogo.
-   */
-  const SERVICIOS_IDEE = [
-    {
-      nombre: 'Callejero (WMS)',
-      url: 'https://www.ign.es/wms-inspire/ign-base',
-      tipo: 'WMS',
-      capa: 'IGNBaseTodo',
-      descripcion: 'Callejero y toponimia de España'
-    },
-    {
-      nombre: 'Mapa base (WMS)',
-      url: 'https://www.ign.es/wms-inspire/mapa-raster',
-      tipo: 'WMS',
-      capa: 'mtn_rasterizado',
-      descripcion: 'Mapa base raster del IGN'
-    },
-    {
-      nombre: 'Ortofoto PNOA (WMS)',
-      url: 'https://www.ign.es/wms-inspire/pnoa-ma',
-      tipo: 'WMS',
-      capa: 'OI.OrthoimageCoverage',
-      descripcion: 'Ortofoto del Plan Nacional de Ortofotografía Aérea'
-    },
-    {
-      nombre: 'Unidades administrativas (WMS)',
-      url: 'https://www.ign.es/wms-inspire/unidades-administrativas',
-      tipo: 'WMS',
-      capa: 'AU.AdministrativeUnit',
-      descripcion: 'Límites provinciales y municipales'
-    },
-    {
-      nombre: 'Catálogo de PNOA (WMS)',
-      url: 'https://www.ign.es/wms-inspire/pnoa-ma',
-      tipo: 'WMS',
-      capa: 'OI.OrthoimageCoverage',
-      descripcion: 'Cobertura de ortofotos PNOA'
-    },
-    {
-      nombre: 'Red de transportes (WMS)',
-      url: 'https://www.ign.es/wms-inspire/transportes',
-      tipo: 'WMS',
-      capa: 'TN.RoadLink',
-      descripcion: 'Carreteras y red viaria'
-    },
-    {
-      nombre: 'Hidrografía (WMS)',
-      url: 'https://www.ign.es/wms-inspire/hidrografia',
-      tipo: 'WMS',
-      capa: 'HY.PhysicalWaters.Waterbodies',
-      descripcion: 'Ríos, embalses y masas de agua'
-    },
-    {
-      nombre: 'Ocupación del suelo (WMS)',
-      url: 'https://www.ign.es/wms-inspire/ocupacion-suelo',
-      tipo: 'WMS',
-      capa: 'LC.LandCoverSurfaces',
-      descripcion: 'Corine Land Cover y SIOSE'
-    }
-  ];
+  // El catálogo IDEE ya NO lleva una lista escrita a mano: se pide al portal
+  // de la IDEE por secciones (ver catalogo_idee.js). Lo que aquí queda son los
+  // catálogos que son una lista corta y fija: STAC y OGC API Records.
 
   /**
    * Servicios predefinidos de STAC.
@@ -252,59 +195,82 @@
   ];
 
   /**
-   * Los tipos de catálogo. Cada uno con su lista y su cargador de URLs.
-   * `cargarUrl` es lo que habrá que implementar por tipo cuando se haga la
-   * algoritmia de detección (hoy es el mismo esqueleto para todos).
+   * Los tipos de catálogo.
+   *
+   * Cada tipo declara cómo se pinta su sección de gestión en el panel:
+   *
+   *   - modo 'secciones'  El catálogo se pide por secciones (tipo de servicio).
+   *                       Debajo del <select> sale un buscador y un acordeón
+   *                       con las secciones; cada una, al abrirse, se pide.
+   *                       Es lo que hace la IDEE, con sus diez secciones.
+   *   - modo 'lista'      El catálogo es una lista corta y fija y se pinta
+   *                       tal cual, como hasta ahora.
+   *
+   * Para añadir un tipo nuevo basta con meterlo en CATALOGOS: el <select>, la
+   * sección de gestión y el estado lo cogen solos.
    */
   const CATALOGOS = {
     idee: {
       id: 'idee',
       nombre: 'Catálogo IDEE',
-      listar: function () { return SERVICIOS_IDEE; },
-      cargarUrl: function (url, mapa) { return cargarUrlGenerica(url, mapa, 'idee'); }
+      modo: 'secciones',
+      descripcion: 'Servicios publicados en el catálogo de la IDEE, por tipo.',
+      listar: function () {
+        // Las secciones las trae el cliente del catálogo (ver catalogo_idee.js).
+        return (window.CatalogoIDEE && window.CatalogoIDEE.SECCIONES) || [];
+      },
+      cargarUrl: function (url, mapa, opciones) {
+        return cargarUrlGenerica(url, mapa, opciones);
+      }
     },
     stac: {
       id: 'stac',
       nombre: 'STAC',
+      modo: 'lista',
+      descripcion: 'Catálogos STAC con colecciones de imágenes.',
       listar: function () { return SERVICIOS_STAC; },
-      cargarUrl: function (url, mapa) { return cargarUrlGenerica(url, mapa, 'stac'); }
+      cargarUrl: function (url, mapa, opciones) {
+        return cargarUrlGenerica(url, mapa, opciones);
+      }
     },
     'ogcapi-records': {
       id: 'ogcapi-records',
       nombre: 'OGC API Records',
+      modo: 'lista',
+      descripcion: 'Catálogos de metadatos (CSW moderno).',
       listar: function () { return SERVICIOS_OGCAPI; },
-      cargarUrl: function (url, mapa) { return cargarUrlGenerica(url, mapa, 'ogcapi-records'); }
+      cargarUrl: function (url, mapa, opciones) {
+        return cargarUrlGenerica(url, mapa, opciones);
+      }
     }
   };
 
   /**
    * Carga una URL en el mapa.
    *
-   *  ESTA ES LA FUNCIÓN QUE HABRÁ QUE ESCRIBIR CON LA ALGORITMIA DE DETECCIÓN.
-   *  Hoy es un esqueleto: no decide nada y devuelve null. Cuando se
-   *  implemente, tendrá que:
-   *    1. Mirar la URL (¿termina en .geojson? ¿es un GetCapabilities? ¿lleva
-   *       SERVICE=WMS?).
-   *    2. Si hace falta, pedir el documento (capabilities, colección STAC,
-   *       registro OGC API) y leerlo.
-   *    3. Crear la capa correspondiente con IDEE.layer.<tipo>({...}) y
-   *       añadirla al mapa con mapajs.addLayers(capa).
-   *    4. Devolver la capa creada (o null si no se pudo).
-   *
-   *  Mientras tanto, el resto del plugin ya está preparado: el cuadro de
-   *  estado, el refresco de la lista y el cambio 2D/3D funcionan igual.
+   * La detección de tipo y la lectura de las capas del servicio están en
+   * catalogo_url.js; aquí solo se le pasa lo que el usuario ha elegido en el
+   * panel (qué capas y con qué nombre).
    *
    * @param {string} url URL pegada por el usuario.
    * @param {Object} mapa Instancia del mapa API-IDEE.
-   * @param {string} tipoCatalogo Tipo de catálogo activo (pista, no obligación).
-   * @returns {Object|null} La capa creada, o null.
+   * @param {Object} [opciones] { tipo, capas, nombre }.
+   * @returns {Array<Object>} Las capas creadas, o [].
    */
-  function cargarUrlGenerica(url, mapa, tipoCatalogo) {
-    // TODO(algoritmia): decidir el tipo de capa a partir de la URL y cargarla.
-    // Por ahora solo se anota en el estado para que el usuario vea que el
-    // plugin ha entendido la petición.
-    console.info('[catalogo] cargarUrl pendiente de la algoritmia:', url, '(catálogo ' + tipoCatalogo + ')');
-    return null;
+  function cargarUrlGenerica(url, mapa, opciones) {
+    const opts = opciones || {};
+    const urlTool = window.CatalogoURL;
+    if (!urlTool) {
+      console.error('[catalogo] no está cargado catalogo_url.js');
+      return [];
+    }
+    return urlTool.cargar({
+      url: url,
+      mapa: mapa,
+      tipo: opts.tipo || urlTool.detectarTipo(url),
+      capas: opts.capas && opts.capas.length ? opts.capas : null,
+      nombre: opts.nombre || ''
+    });
   }
 
   /**
@@ -381,6 +347,21 @@
       this._pestanas = {};
       this._panelCatalogos = null;
       this._panelCapa = null;
+
+      // Catálogo: secciones abiertas, filtro de texto y datos ya pedidos.
+      this._seccionesAbiertas = Array.isArray(options.secciones) ? options.secciones.slice() : [];
+      this._filtro = options.filtro || '';
+      this._seccionesDom = {};
+      this._estadoSecciones = {};
+      this._analisis = null;
+
+      // Referencias a la interfaz (se rellenan en _construirUI).
+      this._gestorEl = null;
+      this._opcionesEl = null;
+      this._urlInputEl = null;
+      this._selectorEl = null;
+      this._capasListaEl = null;
+      this._buscadorEl = null;
     }
 
     /** Normaliza un color a {active, deactive}. */
@@ -414,11 +395,17 @@
         content: new Promise((resolve) => {
           let html =
             '<div>' +
-            '<p>Catálogo de servicios y capas para cargar en el mapa.</p>' +
-            '<p>Elige un tipo de catálogo en el desplegable (Catálogo IDEE, STAC ' +
-            'u OGC API Records) y pulsa <strong>Cargar</strong> en cualquiera de ' +
-            'sus servicios, o pega la URL de un servicio o archivo publicado ' +
-            'por http/https en <strong>Añadir por URL</strong>.</p>' +
+            '<p>Catálogo de servicios y capas para cargar en el visualizador.</p>' +
+            '<p><strong>Catálogos</strong>: elige un tipo de catálogo y ' +
+            'gestiónalo en la sección que sale debajo. El catálogo de la IDEE se ' +
+            'pide por secciones (WMS estatal, WMS autonómico, WMS local, planos ' +
+            'verticales, WMTS, XYZ, MVT, WFS, WCS y OGC API) al portal de la IDEE, ' +
+            'y se filtra por servicio u organismo. Pulsa <strong>Cargar</strong> ' +
+            'en el servicio que quieras.</p>' +
+            '<p><strong>Añadir capa</strong>: pega la URL de un servicio o de un ' +
+            'archivo publicado por http/https y pulsa <strong>Analizar</strong>. El ' +
+            'plugin deduce el tipo de capa, lee las capas que ofrece el servicio y ' +
+            'deja elegir cuáles cargar y con qué nombre.</p>' +
             '</div>';
           if (IDEE && IDEE.utils && typeof IDEE.utils.stringToHtml === 'function') {
             try { html = IDEE.utils.stringToHtml(html); } catch (e) { /* string plano */ }
@@ -496,9 +483,9 @@
     }
 
     /** Construye la interfaz del plugin dentro del control. */
+    /** Construye la interfaz del plugin dentro del control. */
     _construirUI() {
       const self = this;
-      const IDEE = api();
 
       // Contenedor con las clases del framework, igual que plantilla_plugin y
       // baseLayer: .m-control.m-container.m-herramienta, y dentro la CABECERA
@@ -524,14 +511,14 @@
       contents.className = 'm-herramienta-contents catalogo__contenido';
       container.appendChild(contents);
 
-      // --- Pestañas: "Gestión de catálogos" y "Añadir nueva capa"
+      // --- Pestañas: "Gestión de catálogos" y "Añadir nueva capa" -------
       const tabs = document.createElement('div');
       tabs.className = 'catalogo__pestanas';
       tabs.setAttribute('role', 'tablist');
       this._pestanas = {};
       [
-        { id: 'catalogos', nombre: 'Gestión de catálogos' },
-        { id: 'capa', nombre: 'Añadir nueva capa' }
+        { id: 'catalogos', nombre: 'Catálogos' },
+        { id: 'capa', nombre: 'Añadir capa' }
       ].forEach(function (p) {
         const b = document.createElement('button');
         b.type = 'button';
@@ -546,13 +533,14 @@
       });
       contents.appendChild(tabs);
 
-      // --- Panel de "Gestión de catálogos": selector + lista
+      // --- Pestaña 1: selector de catálogo + su sección de gestión --------
+      // El selector arriba y, DEBAJO, la sección donde se gestiona el
+      // catálogo elegido: el acordeón de secciones (IDEE) o la lista fija.
       const panelCatalogos = document.createElement('div');
       panelCatalogos.className = 'catalogo__panel';
       panelCatalogos.setAttribute('role', 'tabpanel');
       panelCatalogos.setAttribute('data-panel', 'catalogos');
 
-      // Selector de catálogo
       const selector = document.createElement('select');
       selector.className = 'catalogo__selector';
       selector.setAttribute('aria-label', 'Tipo de catálogo');
@@ -565,20 +553,20 @@
       });
       selector.addEventListener('change', function () {
         self._tipoSeleccionado = this.value;
-        self._refrescarLista();
+        self._pintarCatalogo();
       });
       panelCatalogos.appendChild(selector);
 
-      // Lista de servicios predefinidos del catálogo activo
-      const lista = document.createElement('div');
-      lista.className = 'catalogo__lista';
-      panelCatalogos.appendChild(lista);
-      this._listaEl = lista;
+      const gestor = document.createElement('div');
+      gestor.className = 'catalogo__gestor';
+      panelCatalogos.appendChild(gestor);
+      this._gestorEl = gestor;
 
       contents.appendChild(panelCatalogos);
       this._panelCatalogos = panelCatalogos;
+      this._selectorEl = selector;
 
-      // --- Panel de "Añadir nueva capa": URL
+      // --- Pestaña 2: URL + opciones de carga ----------------------------
       const panelCapa = document.createElement('div');
       panelCapa.className = 'catalogo__panel';
       panelCapa.setAttribute('role', 'tabpanel');
@@ -590,43 +578,57 @@
       const input = document.createElement('input');
       input.type = 'text';
       input.className = 'catalogo__url-input';
-      input.placeholder = 'https://... (servicio o archivo)';
+      input.placeholder = 'https://servicio/wms?request=GetCapabilities';
       input.value = this._urlIntroducida;
       input.setAttribute('aria-label', 'URL del servicio o archivo');
       input.addEventListener('input', function () { self._urlIntroducida = this.value; });
+      // Intro en el campo = analizar, que es lo que se espera de un campo de
+      // texto y no del botón.
+      input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); self._analizarUrl(); }
+      });
       cajaUrl.appendChild(input);
+      this._urlInputEl = input;
 
       const boton = document.createElement('button');
       boton.type = 'button';
       boton.className = 'catalogo__url-boton';
-      boton.textContent = 'Añadir por URL';
-      boton.addEventListener('click', function () { self._cargarUrl(input.value); });
+      boton.textContent = 'Analizar';
+      boton.addEventListener('click', function () { self._analizarUrl(); });
       cajaUrl.appendChild(boton);
 
       panelCapa.appendChild(cajaUrl);
+
+      // Debajo del campo, y solo cuando ya hay algo que decidir, las opciones
+      // de carga: tipo, capas y nombre.
+      const opciones = document.createElement('div');
+      opciones.className = 'catalogo__gestor';
+      panelCapa.appendChild(opciones);
+      this._opcionesEl = opciones;
+
       contents.appendChild(panelCapa);
       this._panelCapa = panelCapa;
 
-      // --- Cuadro de estado (éxitos, avisos y errores)
+      // --- Cuadro de estado (éxitos, avisos y errores) --------------------
       const estado = document.createElement('div');
       estado.className = 'catalogo__estado';
       estado.setAttribute('role', 'status');
       contents.appendChild(estado);
       this._estadoEl = estado;
 
-      // La lista se pinta aquí y no en addTo: addTo se llama antes de que la
-      // API construya la vista del control, así que _listaEl aún sería null.
-      // Primero la pestaña (que decide qué panel se ve) y después la lista del
-      // catálogo activo.
+      // Ni la lista ni las opciones se pintan en addTo: addTo se llama antes
+      // de que la API construya la vista del control, así que los contenedores
+      // aún serían null.
       this._verPestana(this._pestanaActiva);
-      this._refrescarLista();
+      this._pintarCatalogo();
+      if (this._analisis) this._pintarOpciones();
 
       return container;
     }
 
     /**
-     * Muestra una pestaña del catálogo (botón y panel). Un solo método para que
-     * el marcado del botón y el panel visible no puedan desincronizarse.
+     * Muestra una pestaña (botón y panel). Un solo método para que el marcado
+     * del botón y la visibilidad del panel no puedan desincronizarse.
      * @param {("catalogos"|"capa")} id
      */
     _verPestana(id) {
@@ -640,87 +642,642 @@
       if (this._panelCapa) this._panelCapa.hidden = (id !== 'capa');
     }
 
-    /** (Re)dibuja la lista de servicios del catálogo activo. */
-    _refrescarLista() {
-      const self = this; // el forEach de abajo es function(), no flecha: sin esto 'this' no es el plugin
-      if (!this._listaEl) return;
+    // =====================================================================
+    //  Pestaña 1: gestión del catálogo
+    // =====================================================================
+
+    /**
+     * Pinta la sección de gestión del catálogo activo. Debajo del selector,
+     * como se pidió: el acordeón de secciones o la lista fija, según el tipo.
+     */
+    _pintarCatalogo() {
+      const cont = this._gestorEl;
+      if (!cont) return;
+      cont.innerHTML = '';
+      this._seccionesDom = {};
+
       const tipo = CATALOGOS[this._tipoSeleccionado];
       if (!tipo) return;
 
-      this._listaEl.innerHTML = '';
-      const servicios = tipo.listar();
+      const desc = document.createElement('p');
+      desc.className = 'catalogo__descripcion';
+      desc.textContent = tipo.descripcion || '';
+      cont.appendChild(desc);
 
-      if (!servicios.length) {
-        const vacio = document.createElement('p');
-        vacio.className = 'catalogo__vacio';
-        vacio.textContent = 'Este catálogo todavía no tiene servicios predefinidos.';
-        this._listaEl.appendChild(vacio);
-        return;
+      if (tipo.modo === 'secciones') {
+        this._pintarSecciones(cont, tipo);
+      } else {
+        this._pintarLista(cont, tipo.listar() || []);
       }
-
-      servicios.forEach(function (servicio) {
-        const fila = document.createElement('div');
-        fila.className = 'catalogo__item';
-
-        const texto = document.createElement('div');
-        texto.className = 'catalogo__item-texto';
-        const nombre = document.createElement('span');
-        nombre.className = 'catalogo__item-nombre';
-        nombre.textContent = servicio.nombre;
-        texto.appendChild(nombre);
-        if (servicio.descripcion) {
-          const desc = document.createElement('span');
-          desc.className = 'catalogo__item-desc';
-          desc.textContent = servicio.descripcion;
-          texto.appendChild(desc);
-        }
-        fila.appendChild(texto);
-
-        const boton = document.createElement('button');
-        boton.type = 'button';
-        boton.className = 'catalogo__item-boton';
-        boton.textContent = 'Cargar';
-        boton.addEventListener('click', function () { self._cargarServicio(servicio); });
-        fila.appendChild(boton);
-
-        self._listaEl.appendChild(fila);
-      });
-    }
-
-    /** Carga uno de los servicios predefinidos del catálogo activo. */
-    _cargarServicio(servicio) {
-      this._decir('Cargando ' + servicio.nombre + '…');
-      // Los servicios predefinidos ya saben lo que son, así que se cargan
-      // directamente por URL: la algoritmia de detección es la misma.
-      const capa = this._cargarUrl(servicio.url, servicio.nombre);
-      if (capa) this._decir('Cargado: ' + servicio.nombre);
     }
 
     /**
-     * Carga una URL en el mapa.
-     * @param {string} url URL pegada por el usuario (o de un servicio predefinido).
-     * @param {string} [nombre] Nombre opcional para la capa.
-     * @returns {Object|null} La capa creada, o null.
+     * Acordeón de secciones del catálogo, con buscador. Cada sección se pide
+     * al abrirse y se cachea, porque son datos que no cambian.
      */
-    _cargarUrl(url, nombre) {
-      const limpio = String(url || '').trim();
-      if (!limpio) {
-        this._decir('Pega primero una URL.', 'aviso');
-        return null;
-      }
-      if (!/^https?:\/\//i.test(limpio)) {
-        this._decir('La URL tiene que empezar por http:// o https://', 'aviso');
-        return null;
+    _pintarSecciones(cont, tipo) {
+      const self = this;
+      const secciones = tipo.listar() || [];
+
+      const buscador = document.createElement('div');
+      buscador.className = 'catalogo__buscador';
+      const input = document.createElement('input');
+      input.type = 'search';
+      input.className = 'catalogo__buscador-input';
+      input.placeholder = 'Filtrar por servicio u organismo…';
+      input.value = this._filtro || '';
+      input.setAttribute('aria-label', 'Filtrar servicios del catálogo');
+      input.addEventListener('input', function () {
+        self._filtro = this.value;
+        self._filtrarSecciones();
+      });
+      buscador.appendChild(input);
+      cont.appendChild(buscador);
+      this._buscadorEl = input;
+
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__secciones';
+      cont.appendChild(caja);
+      this._seccionesEl = caja;
+
+      if (!secciones.length) {
+        this._pintarAviso(caja, 'No se ha podido cargar el catálogo de la IDEE.');
+        return;
       }
 
-      const tipo = CATALOGOS[this._tipoSeleccionado];
-      const capa = tipo.cargarUrl(limpio, this._map);
-      if (!capa) {
-        // La algoritmia todavía no decide: se avisa y se deja la URL guardada
-        // para cuando esté.
-        this._decir('URL anotada: ' + limpio + ' (pendiente de la algoritmia de detección)', 'aviso');
+      secciones.forEach(function (sec) {
+        const det = document.createElement('details');
+        det.className = 'catalogo__seccion';
+
+        const sum = document.createElement('summary');
+        sum.className = 'catalogo__seccion-cabecera';
+
+        const nombre = document.createElement('span');
+        nombre.className = 'catalogo__seccion-nombre';
+        nombre.textContent = sec.nombre;
+
+        const insignia = document.createElement('span');
+        insignia.className = 'catalogo__seccion-tipo';
+        insignia.textContent = sec.tipo;
+
+        const cuenta = document.createElement('span');
+        cuenta.className = 'catalogo__seccion-cuenta';
+
+        sum.appendChild(nombre);
+        sum.appendChild(insignia);
+        sum.appendChild(cuenta);
+        det.appendChild(sum);
+
+        const cuerpo = document.createElement('div');
+        cuerpo.className = 'catalogo__seccion-cuerpo';
+        det.appendChild(cuerpo);
+
+        det.addEventListener('toggle', function () {
+          if (det.open) {
+            if (self._seccionesAbiertas.indexOf(sec.id) === -1) self._seccionesAbiertas.push(sec.id);
+            self._cargarSeccion(sec, cuerpo, cuenta);
+          } else {
+            const pos = self._seccionesAbiertas.indexOf(sec.id);
+            if (pos > -1) self._seccionesAbiertas.splice(pos, 1);
+          }
+        });
+
+        self._seccionesDom[sec.id] = { det: det, cuerpo: cuerpo, cuenta: cuenta, sec: sec };
+        caja.appendChild(det);
+      });
+
+      // Las secciones que estaban abiertas antes (cambio 2D/3D, o filtro que
+      // ya se estaba aplicando) se reabren y se piden.
+      this._seccionesAbiertas.forEach(function (id) {
+        const s = this._seccionesDom[id];
+        if (s) { s.det.open = true; this._cargarSeccion(s.sec, s.cuerpo, s.cuenta); }
+      }, this);
+
+      if ((this._filtro || '').trim()) this._filtrarSecciones();
+    }
+
+    /**
+     * Aplica el filtro de texto. Las secciones ya cargadas se filtran en
+     * local; las que no, se piden en segundo plano y se filtran al llegar, que
+     * es la única forma de buscar en todo el catálogo (el WMS estatal del
+     * IGN tiene más de setecientos servicios).
+     */
+    _filtrarSecciones() {
+      const self = this;
+      const filtro = (this._filtro || '').trim().toLowerCase();
+
+      Object.keys(this._seccionesDom).forEach(function (id) {
+        const s = self._seccionesDom[id];
+        const st = self._estadoSecciones[id];
+
+        if (!filtro) {
+          // Sin filtro vuelve todo: la sección se reaparece y su cuerpo se
+          // repinta entero, que se quedó con solo las coincidencias.
+          s.det.hidden = false;
+          if (st && st.datos) self._pintarSeccion(st.datos, s.cuerpo, '');
+          return;
+        }
+
+        if (st && st.datos) {
+          s.det.hidden = !self._pintarSeccion(st.datos, s.cuerpo, filtro);
+        } else if (!st || !st.promesa) {
+          // Sin datos todavía: se pide para poder filtrarla (queda cacheada).
+          self._cargarSeccion(s.sec, s.cuerpo, s.cuenta, filtro);
+        }
+      });
+    }
+
+    /**
+     * Pide una sección al catálogo y la pinta en su <details>.
+     * @param {Object} sec Sección de CatalogoIDEE.SECCIONES.
+     * @param {HTMLElement} cuerpo Donde se pinta.
+     * @param {HTMLElement} cuenta Contador de la cabecera.
+     * @param {string} [filtro] Filtro a aplicar al pintarla.
+     * @returns {Promise<Object|null>}
+     */
+    _cargarSeccion(sec, cuerpo, cuenta, filtro) {
+      const self = this;
+      const st = this._estadoSecciones[sec.id] || (this._estadoSecciones[sec.id] = {});
+
+      if (st.datos) {
+        this._pintarSeccion(st.datos, cuerpo, filtro);
+        return Promise.resolve(st.datos);
       }
-      return capa;
+      if (st.promesa) {
+        return st.promesa.then(function () {
+          if (filtro) self._pintarSeccion(st.datos, cuerpo, filtro);
+        });
+      }
+
+      cuerpo.innerHTML = '';
+      this._pintarAviso(cuerpo, 'Pidiendo «' + sec.nombre + '» al catálogo de la IDEE…');
+
+      st.promesa = window.CatalogoIDEE.listarSeccion(sec.id).then(function (datos) {
+        st.datos = datos;
+        st.promesa = null;
+        cuenta.textContent = datos.total + (datos.total === 1 ? ' servicio' : ' servicios');
+        const queda = self._pintarSeccion(datos, cuerpo, filtro);
+        // Si la sección se pidió solo para filtrar, se esconde si en ella no
+        // hay nada que ver: si no, el filtro deja diez secciones vacías.
+        const dom = self._seccionesDom[sec.id];
+        if (filtro && dom) dom.det.hidden = !queda;
+        return datos;
+      }).catch(function (err) {
+        st.promesa = null;
+        cuerpo.innerHTML = '';
+        self._pintarAviso(cuerpo,
+          'No se ha podido pedir esta sección: ' + (err && err.message ? err.message : err), 'error');
+        return null;
+      });
+
+      return st.promesa;
+    }
+
+    /**
+     * Pinta los servicios de una sección ya pedida, agrupados por organismo.
+     * @param {Object} datos { seccion, familias, total }.
+     * @param {HTMLElement} cuerpo
+     * @param {string} [filtro] Texto a filtrar.
+     * @returns {boolean} Si queda algo visible (para decidir si esconder la
+     *   sección entera cuando el filtro no encuentra nada).
+     */
+    _pintarSeccion(datos, cuerpo, filtro) {
+      const self = this;
+      const f = (filtro || '').trim().toLowerCase();
+      cuerpo.innerHTML = '';
+
+      let encontrados = 0;
+      const fragmentos = document.createDocumentFragment();
+
+      datos.familias.forEach(function (fam) {
+        const servicios = f
+          ? fam.servicios.filter(function (s) {
+            return (s.nombre || '').toLowerCase().indexOf(f) > -1
+              || (fam.nombre || '').toLowerCase().indexOf(f) > -1
+              || (s.url || '').toLowerCase().indexOf(f) > -1;
+          })
+          : fam.servicios;
+
+        if (!servicios.length) return;
+        encontrados += servicios.length;
+
+        // Cabecera del organismo, con su número de servicios.
+        const org = document.createElement('div');
+        org.className = 'catalogo__organismo';
+        const orgNombre = document.createElement('span');
+        orgNombre.textContent = fam.nombre;
+        const orgCuenta = document.createElement('span');
+        orgCuenta.className = 'catalogo__organismo-cuenta';
+        orgCuenta.textContent = servicios.length;
+        org.appendChild(orgNombre);
+        org.appendChild(orgCuenta);
+        fragmentos.appendChild(org);
+
+        servicios.forEach(function (srv) {
+          fragmentos.appendChild(self._filaServicio(srv, datos.seccion));
+        });
+      });
+
+      if (!encontrados) {
+        this._pintarAviso(cuerpo,
+          f ? 'Ninguna sección contiene «' + filtro + '».' : 'La sección no tiene servicios.');
+        return false;
+      }
+
+      cuerpo.appendChild(fragmentos);
+      return true;
+    }
+
+    /** Una fila de servicio con su botón de carga. */
+    _filaServicio(srv, sec) {
+      const self = this;
+      const fila = document.createElement('div');
+      fila.className = 'catalogo__item';
+
+      const texto = document.createElement('div');
+      texto.className = 'catalogo__item-texto';
+
+      const nombre = document.createElement('span');
+      nombre.className = 'catalogo__item-nombre';
+      nombre.textContent = srv.nombre;
+      nombre.title = srv.nombre;
+      texto.appendChild(nombre);
+
+      const url = document.createElement('span');
+      url.className = 'catalogo__item-url';
+      url.textContent = srv.url;
+      url.title = srv.url;
+      texto.appendChild(url);
+
+      fila.appendChild(texto);
+
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'catalogo__item-boton';
+      boton.textContent = 'Cargar';
+      boton.addEventListener('click', function () { self._cargarServicio(srv, sec); });
+      fila.appendChild(boton);
+
+      return fila;
+    }
+
+    /** Lista plana de servicios (catálogos STAC y OGC API Records). */
+    _pintarLista(cont, servicios) {
+      const self = this;
+      if (!servicios.length) {
+        this._pintarAviso(cont, 'Este catálogo todavía no tiene servicios predefinidos.');
+        return;
+      }
+      servicios.forEach(function (srv) {
+        cont.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
+      });
+    }
+
+    // =====================================================================
+    //  Pestaña 2: añadir una capa por URL
+    // =====================================================================
+
+    /** Analiza la URL escrita y, si puede, monta las opciones de carga. */
+    _analizarUrl() {
+      const self = this;
+      const input = this._urlInputEl;
+      const cont = this._opcionesEl;
+      const url = input ? String(input.value || '').trim() : '';
+
+      if (!cont) return;
+      cont.innerHTML = '';
+
+      if (!url) {
+        this._decir('Escribe primero una URL.', 'aviso');
+        return;
+      }
+      if (!/^https?:\/\//i.test(url)) {
+        this._decir('La URL tiene que empezar por http:// o https://', 'aviso');
+        return;
+      }
+
+      const urlTool = window.CatalogoURL;
+      if (!urlTool) {
+        this._decir('No está cargado catalogo_url.js.', 'error');
+        return;
+      }
+
+      this._urlIntroducida = url;
+      this._analisis = { url: url, tipo: urlTool.detectarTipo(url), capas: [], elegidas: [], nombre: '' };
+      this._pintarAviso(cont, 'Analizando el servicio…');
+
+      urlTool.leerCapas(url).then(function (info) {
+        self._analisis = {
+          url: url,
+          tipo: info.tipo,
+          capas: info.capas || [],
+          elegidas: (info.capas || []).map(function (c) { return c.id; }),
+          nombre: info.nombre || '',
+          aviso: info.aviso || null
+        };
+        self._pintarOpciones();
+        self._decir('Servicio analizado: ' + (info.capas || []).length + ' capa(s).');
+      }).catch(function (err) {
+        cont.innerHTML = '';
+        // La URL se queda escrita y el tipo deducio a la vista, para que se
+        // pueda probar a cargar a mano aunque no se haya podido leer nada.
+        self._analisis = {
+          url: url,
+          tipo: urlTool.detectarTipo(url),
+          capas: [],
+          elegidas: [],
+          nombre: urlTool.nombreDeUrl(url),
+          aviso: null,
+          error: (err && err.message) ? err.message : String(err)
+        };
+        self._pintarOpciones();
+        self._decir('No se ha podido leer el servicio: ' + self._analisis.error, 'aviso');
+      });
+    }
+
+    /** Pinta el bloque de opciones de carga de la URL analizada. */
+    _pintarOpciones() {
+      const self = this;
+      const cont = this._opcionesEl;
+      const info = this._analisis;
+      if (!cont || !info) return;
+
+      const urlTool = window.CatalogoURL;
+      cont.innerHTML = '';
+
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__opciones';
+
+      // --- Tipo detectado (editable) --------------------------------------
+      const filaTipo = document.createElement('label');
+      filaTipo.className = 'catalogo__campo';
+      const etiquetaTipo = document.createElement('span');
+      etiquetaTipo.className = 'catalogo__campo-etiqueta';
+      etiquetaTipo.textContent = 'Tipo de capa';
+      const selTipo = document.createElement('select');
+      selTipo.className = 'catalogo__campo-control';
+      Object.keys(urlTool.TIPOS).forEach(function (t) {
+        const op = document.createElement('option');
+        op.value = t;
+        op.textContent = urlTool.ETIQUETAS[t] || t;
+        if (t === info.tipo) op.selected = true;
+        selTipo.appendChild(op);
+      });
+      if (info.tipo === 'desconocido') {
+        const op = document.createElement('option');
+        op.value = 'desconocido';
+        op.textContent = urlTool.ETIQUETAS.desconocido;
+        op.selected = true;
+        selTipo.insertBefore(op, selTipo.firstChild);
+      }
+      selTipo.addEventListener('change', function () {
+        self._analisis.tipo = this.value;
+      });
+      filaTipo.appendChild(etiquetaTipo);
+      filaTipo.appendChild(selTipo);
+      caja.appendChild(filaTipo);
+
+      // --- Nombre que se le quiere dar -------------------------------------
+      const filaNombre = document.createElement('label');
+      filaNombre.className = 'catalogo__campo';
+      const etiquetaNombre = document.createElement('span');
+      etiquetaNombre.className = 'catalogo__campo-etiqueta';
+      etiquetaNombre.textContent = 'Nombre de la capa';
+      const inputNombre = document.createElement('input');
+      inputNombre.type = 'text';
+      inputNombre.className = 'catalogo__campo-control';
+      inputNombre.value = info.nombre || '';
+      inputNombre.placeholder = 'Cómo se verá en el panel de capas';
+      inputNombre.addEventListener('input', function () { self._analisis.nombre = this.value; });
+      filaNombre.appendChild(etiquetaNombre);
+      filaNombre.appendChild(inputNombre);
+      caja.appendChild(filaNombre);
+
+      // --- Capas del servicio ----------------------------------------------
+      if (info.capas && info.capas.length) {
+        const bloqueCapas = document.createElement('div');
+        bloqueCapas.className = 'catalogo__capas';
+
+        const cabecera = document.createElement('div');
+        cabecera.className = 'catalogo__capas-cabecera';
+
+        const titulo = document.createElement('span');
+        titulo.className = 'catalogo__capas-titulo';
+        titulo.textContent = 'Capas del servicio (' + info.capas.length + ')';
+        cabecera.appendChild(titulo);
+
+        const acciones = document.createElement('span');
+        acciones.className = 'catalogo__capas-acciones';
+        const todas = document.createElement('button');
+        todas.type = 'button';
+        todas.className = 'catalogo__enlace';
+        todas.textContent = 'Todas';
+        todas.addEventListener('click', function () {
+          self._analisis.elegidas = info.capas.map(function (c) { return c.id; });
+          self._pintarCapasElejidas();
+          self._pintarOpciones();
+        });
+        const ninguna = document.createElement('button');
+        ninguna.type = 'button';
+        ninguna.className = 'catalogo__enlace';
+        ninguna.textContent = 'Ninguna';
+        ninguna.addEventListener('click', function () {
+          self._analisis.elegidas = [];
+          self._pintarCapasElejidas();
+          self._pintarOpciones();
+        });
+        acciones.appendChild(todas);
+        acciones.appendChild(ninguna);
+        cabecera.appendChild(acciones);
+        bloqueCapas.appendChild(cabecera);
+
+        const lista = document.createElement('div');
+        lista.className = 'catalogo__capas-lista';
+        bloqueCapas.appendChild(lista);
+        this._capasListaEl = lista;
+
+        caja.appendChild(bloqueCapas);
+        this._pintarCapasElejidas();
+      }
+
+      // --- Avisos ----------------------------------------------------------
+      if (info.error) {
+        this._pintarAviso(caja,
+          'No se ha podido leer el documento del servicio (' + info.error + '). ' +
+          'Se puede probar a cargarlo igualmente.', 'aviso');
+      } else if (info.aviso) {
+        this._pintarAviso(caja, info.aviso, 'aviso');
+      }
+
+      // --- Botón de cargar ---------------------------------------------------
+      const pie = document.createElement('div');
+      pie.className = 'catalogo__opciones-pie';
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'catalogo__cargar';
+      const elegidas = (info.elegidas || []).length;
+      boton.textContent = (elegidas > 1)
+        ? 'Cargar ' + elegidas + ' capas'
+        : 'Cargar en el mapa';
+      boton.addEventListener('click', function () {
+        self._cargarDesdeAnalisis();
+      });
+      this._botonCargarEl = boton;
+      pie.appendChild(boton);
+      caja.appendChild(pie);
+
+      cont.appendChild(caja);
+      this._actualizarBotonCargar();
+    }
+
+    /** El botón de carga dice cuántas capas hay elegidas. */
+    _actualizarBotonCargar() {
+      const boton = this._botonCargarEl;
+      if (!boton || !this._analisis) return;
+      const elegidas = (this._analisis.elegidas || []).length;
+      boton.textContent = (elegidas > 1)
+        ? 'Cargar ' + elegidas + ' capas'
+        : 'Cargar en el mapa';
+      boton.disabled = (elegidas === 0);
+    }
+
+    /** Marca o desmarca una capa del servicio. */
+    _alternarCapa(id, marcada) {
+      const self = this;
+      const elegidas = (this._analisis.elegidas || []).slice();
+      const pos = elegidas.indexOf(id);
+      if (marcada && pos === -1) elegidas.push(id);
+      if (!marcada && pos > -1) elegidas.splice(pos, 1);
+      self._analisis.elegidas = elegidas;
+      self._actualizarBotonCargar();
+    }
+
+    /** Redibuja la lista de capas con su casilla de selección. */
+    _pintarCapasElejidas() {
+      const self = this;
+      const lista = this._capasListaEl;
+      const info = this._analisis;
+      if (!lista || !info) return;
+
+      lista.innerHTML = '';
+      info.capas.forEach(function (c) {
+        const marcada = (info.elegidas || []).indexOf(c.id) > -1;
+        const fila = document.createElement('label');
+        fila.className = 'catalogo__capa' + (marcada ? ' catalogo__capa--marcada' : '');
+
+        const caja = document.createElement('input');
+        caja.type = 'checkbox';
+        caja.className = 'catalogo__capa-casilla';
+        caja.checked = marcada;
+        caja.addEventListener('change', function () {
+          self._alternarCapa(c.id, this.checked);
+          fila.classList.toggle('catalogo__capa--marcada', this.checked);
+        });
+
+        const textos = document.createElement('span');
+        textos.className = 'catalogo__capa-textos';
+        const nombre = document.createElement('span');
+        nombre.className = 'catalogo__capa-nombre';
+        nombre.textContent = c.nombre;
+        nombre.title = c.nombre;
+        const id = document.createElement('span');
+        id.className = 'catalogo__capa-id';
+        id.textContent = c.id;
+        id.title = c.id;
+        textos.appendChild(nombre);
+        textos.appendChild(id);
+
+        fila.appendChild(caja);
+        fila.appendChild(textos);
+        lista.appendChild(fila);
+      });
+    }
+
+    /** Carga lo que haya elegido en el bloque de opciones. */
+    _cargarDesdeAnalisis() {
+      const info = this._analisis;
+      if (!info) return;
+      if (!info.elegidas || !info.elegidas.length) {
+        this._decir('Elige al menos una capa del servicio.', 'aviso');
+        return;
+      }
+      this._decir('Cargando…');
+      try {
+        const capas = CATALOGOS[this._tipoSeleccionado].cargarUrl(info.url, this._map, {
+          tipo: info.tipo,
+          capas: info.elegidas,
+          nombre: info.nombre
+        });
+        const cuantas = (capas && capas.length) || 0;
+        this._decir('Cargada' + (cuantas > 1 ? 's ' + cuantas + ' capas' : '') + ': ' + info.nombre);
+      } catch (err) {
+        this._decir('No se ha podido cargar: ' + (err && err.message ? err.message : err), 'error');
+      }
+    }
+
+    // =====================================================================
+    //  Carga de servicios
+    // =====================================================================
+
+    /**
+     * Carga un servicio del catálogo.
+     *
+     * La URL del catálogo es el GetCapabilities del SERVICIO, no de una capa
+     * concreta, así que hay que leer el documento para saber qué capas ofrece.
+     * Si ofrece una sola, se carga directamente; si ofrece varias, se salta a
+     * la pestaña de opciones con la URL ya puesta, que es donde se decide.
+     *
+     * @param {Object} srv Servicio del catálogo.
+     * @param {Object} sec Sección a la que pertenece.
+     */
+    _cargarServicio(srv, sec) {
+      const self = this;
+      const urlTool = window.CatalogoURL;
+      const tipo = (sec && sec.tipo) || srv.tipo || (urlTool ? urlTool.detectarTipo(srv.url) : 'WMS');
+
+      if (!urlTool) return;
+      this._decir('Leyendo el servicio «' + srv.nombre + '»…');
+
+      urlTool.leerCapas(srv.url, tipo).then(function (info) {
+        if (!info.capas || info.capas.length <= 1) {
+          const capas = CATALOGOS[self._tipoSeleccionado].cargarUrl(srv.url, self._map, {
+            tipo: info.tipo || tipo,
+            capas: (info.capas || []).map(function (c) { return c.id; }),
+            nombre: srv.nombre
+          });
+          const cuantas = (capas && capas.length) || 0;
+          self._decir('Cargada' + (cuantas > 1 ? 's ' + cuantas + ' capas' : '') + ': ' + srv.nombre);
+          return;
+        }
+
+        // Varias capas: a la pestaña de opciones, con todo puesto.
+        self._urlIntroducida = srv.url;
+        if (self._urlInputEl) self._urlInputEl.value = srv.url;
+        self._analisis = {
+          url: srv.url,
+          tipo: info.tipo || tipo,
+          capas: info.capas,
+          elegidas: info.capas.map(function (c) { return c.id; }),
+          nombre: srv.nombre,
+          aviso: null
+        };
+        self._verPestana('capa');
+        self._pintarOpciones();
+        self._decir('«' + srv.nombre + '» ofrece ' + info.capas.length +
+          ' capas: elige cuáles cargar en la pestaña de opciones.', 'aviso');
+      }).catch(function (err) {
+        self._decir('No se ha podido leer «' + srv.nombre + '»: ' +
+          (err && err.message ? err.message : err), 'error');
+      });
+    }
+
+    /** Mensaje o error dentro de un contenedor de la interfaz. */
+    _pintarAviso(contenedor, texto, clase) {
+      const aviso = document.createElement('p');
+      aviso.className = 'catalogo__aviso' + (clase ? ' catalogo__aviso--' + clase : '');
+      aviso.textContent = texto;
+      contenedor.appendChild(aviso);
+      return aviso;
     }
 
     /** Escribe un mensaje en el cuadro de estado. */
@@ -749,6 +1306,20 @@
         url: this._urlIntroducida,
         mensaje: this._ultimoMensaje,
         pestana: this._pestanaActiva,
+        // Secciones del catálogo abiertas y filtro de texto: son lo que el
+        // usuario estaba mirando, y abrirlas de nuevo cuesta una petición.
+        secciones: this._seccionesAbiertas.slice(),
+        filtro: this._filtro || '',
+        // Lo último analizado, para que la pestaña de opciones siga montada
+        // después del cambio 2D/3D sin tener que volver a pedir el servicio.
+        analisis: this._analisis ? {
+          url: this._analisis.url,
+          tipo: this._analisis.tipo,
+          nombre: this._analisis.nombre,
+          capas: (this._analisis.capas || []).map(function (c) { return { id: c.id, nombre: c.nombre }; }),
+          elegidas: (this._analisis.elegidas || []).slice(),
+          aviso: this._analisis.aviso || null
+        } : null,
         panelCollapsed: panelCollapsed
       };
     }
@@ -763,6 +1334,23 @@
       }
       if (typeof state.mensaje === 'string') {
         this._ultimoMensaje = state.mensaje;
+      }
+      if (Array.isArray(state.secciones)) {
+        this._seccionesAbiertas = state.secciones.filter(function (id) { return typeof id === 'string'; });
+      }
+      if (typeof state.filtro === 'string') {
+        this._filtro = state.filtro;
+      }
+      if (state.analisis && typeof state.analisis.url === 'string') {
+        this._analisis = {
+          url: state.analisis.url,
+          tipo: state.analisis.tipo,
+          nombre: state.analisis.nombre || '',
+          capas: Array.isArray(state.analisis.capas) ? state.analisis.capas : [],
+          elegidas: Array.isArray(state.analisis.elegidas) ? state.analisis.elegidas : [],
+          aviso: state.analisis.aviso || null,
+          error: null
+        };
       }
       if (state.pestana && this._pestanas[state.pestana]) {
         this._verPestana(state.pestana);
@@ -793,14 +1381,19 @@
      * elegido otro.
      */
     _sincronizarUI() {
-      const raiz = this._listaEl ? this._listaEl.parentNode : null;
+      const raiz = this._control && typeof this._control.getElement === 'function'
+        ? this._control.getElement()
+        : null;
       if (!raiz) return;
       const selector = raiz.querySelector('.catalogo__selector');
       if (selector) selector.value = this._tipoSeleccionado;
       const input = raiz.querySelector('.catalogo__url-input');
       if (input) input.value = this._urlIntroducida;
+      const buscador = raiz.querySelector('.catalogo__buscador-input');
+      if (buscador) buscador.value = this._filtro || '';
       this._verPestana(this._pestanaActiva);
-      this._refrescarLista();
+      this._pintarCatalogo();
+      if (this._analisis) this._pintarOpciones();
       if (this._estadoEl && this._ultimoMensaje) {
         this._estadoEl.textContent = this._ultimoMensaje;
         this._estadoEl.className = 'catalogo__estado';
@@ -814,8 +1407,17 @@
       this._panel = null;
       this._control = null;
       this._map = null;
-      this._listaEl = null;
       this._estadoEl = null;
+      // Las referencias a la interfaz se sueltan todas: el panel se va con el
+      // DOM y dejarlas puestas daría acceso a nodos huérfanos.
+      this._gestorEl = null;
+      this._opcionesEl = null;
+      this._urlInputEl = null;
+      this._selectorEl = null;
+      this._capasListaEl = null;
+      this._buscadorEl = null;
+      this._seccionesDom = {};
+      this._estadoSecciones = {};
     }
   }
 
