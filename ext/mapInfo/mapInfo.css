@@ -966,6 +966,13 @@
 
    La compensación de la cabecera se scopea a la esquina TR por la clase que
    el API pone al área (m-top m-right), así que solo actúa ahí.
+
+   OJO: el selector del contenedor de controles es GENÉRICO y este bloque está
+   repetido en la hoja de cada plugin, así que entre hojas con el mismo selector
+   gana la ÚLTIMA que se carga, no la más específica. Cualquier variación para
+   un plugin concreto (un fondo transparente, por ejemplo) tiene que ir en SU
+   selector, con más especificidad, nunca dejando el genérico con otro valor.
+   Es lo que hace ext/cambioImpl/cambioImpl.css con su panel.
    ==================================================================== */
 
 .m-areas > div.m-area > div.m-panel > div.m-panel-controls > div {

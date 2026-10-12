@@ -136,16 +136,38 @@
 
    La compensación de la cabecera se scopea a la esquina TR por la clase que
    el API pone al área (m-top m-right), así que solo actúa ahí.
+
+   OJO: el selector del contenedor de controles es GENÉRICO y este bloque está
+   repetido en la hoja de cada plugin, así que entre hojas con el mismo selector
+   gana la ÚLTIMA que se carga, no la más específica. Cualquier variación para
+   un plugin concreto (un fondo transparente, por ejemplo) tiene que ir en SU
+   selector, con más especificidad, nunca dejando el genérico con otro valor.
+   Es lo que hace ext/cambioImpl/cambioImpl.css con su panel.
    ==================================================================== */
 
 .m-areas > div.m-area > div.m-panel > div.m-panel-controls > div {
-  background-color: #fff0;
+  background-color: #fff;
   border-radius: 0;
   box-shadow: none;
   display: table;
   overflow: hidden;
   padding: 0;
   position: inherit !important;
+}
+
+/* ESTE plugin es la excepción: su panel no tiene contenido, solo el botón, así
+   que el contenedor se deja transparente para que no se vea un rectángulo
+   blanco detrás del círculo.
+
+   La regla va SCOPEADA al panel de cambioImpl y con más especificidad que la
+   genérica de arriba (0,5,3 frente a 0,4,3). No puede quedarse en la genérica
+   con el fondo transparente: como el selector es el mismo para todos los
+   paneles y esta hoja es la ÚLTIMA que se carga, ganaba por orden de documento
+   y dejaba transparentes los paneles del selector de capas y del catálogo, que
+   se veían con el mapa de fondo. Al gana por especificidad da igual en qué
+   orden se carguen las hojas. */
+.m-areas > div.m-area > div.m-panel.m-herramienta_cambImpl > div.m-panel-controls > div {
+  background-color: #fff0;
 }
 
 .m-areas > div.m-area > div.m-panel.opened {
