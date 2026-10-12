@@ -39,6 +39,120 @@ function ensureSatellite() {
 
 
 // ===================================================================
+//  Datos remotos con caché en localStorage
+//  ------------------------------------------------------------------
+//  Las dos fuentes de este visualizador (Celestrak para los TLE de Galileo y
+//  wheretheiss.at para los de la ISS) son públicas y se acaban bloqueando si se
+//  les llama sin parar. Antes la posición de la ISS se pedía cada 5 s (720
+//  llamadas a la hora) y los TLE se releían cada 120 s.
+//
+//  Ahora hay UNA sola llamada por fuente y por su periodo: los TLE y el JSON de
+//  Galileo y el TLE de la ISS se guardan en localStorage, y todo lo demás (la
+//  posición de cada satélite y todas las órbitas) se propaga en local con
+//  satellite.js, que ya está cargado. Los periodos son distintos porque las
+//  fuentes no lo son:
+//
+//    - ISS: 5 minutos. Es la que más se mueve y la que se consulta desde hace
+//      más años, así que no se le estira el refresco.
+//    - Galileo: 2 horas. Es el periodo que dice el propio Celestrak ("orbital
+//      data files are only checked for updates every 2 hours and most orbital
+//      data only updates 2-3 times a day"), o sea que antes era tirar
+//      descargas. Con 5 minutos se pasó de 64 peticiones a Celestrak cada 120 s
+//      y el servidor bloqueó la IP con un 403 temporal; a 2 horas son 12
+//      peticiones al día.
+//
+//  Si la petición falla pero había una copia en localStorage, se usa la copia
+//  (aunque esté caducada): es preferible un dato de hace un rato a dejar el
+//  visualizador en blanco. Y para los TLE de Galileo hay además una SEGUNDA
+//  fuente (ver obtenerTleGalileo), porque quedarse sin datos un rato tampoco
+//  era buena idea con un bloqueo en medio.
+// ===================================================================
+const CACHE_TTL_ISS_MS = 5 * 60 * 1000;          // 5 minutos
+const CACHE_TTL_GALILEO_MS = 2 * 60 * 60 * 1000;  // 2 horas
+// Margen que se recuerda un fallo, para no reintentar contra un servidor que
+// acaba de decir que no (el bloqueo de Celestrak dura 2 h).
+const CACHE_TTL_ERROR_MS = 30 * 60 * 1000;        // 30 minutos
+const CACHE_PREFIJO = "satelites.v1.";
+const URL_GALILEO_TLE = "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=tle";
+const URL_GALILEO_JSON = "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=json";
+const URL_ISS_TLE = "https://api.wheretheiss.at/v1/satellites/25544/tles";
+
+/** Lee {ts, datos} de localStorage, o null si no está o no se puede leer. */
+function cacheLee(clave) {
+  try {
+    const guardado = window.localStorage.getItem(clave);
+    return guardado ? JSON.parse(guardado) : null;
+  } catch (e) {
+    return null; // modo privado, cuota llena o JSON corrupto
+  }
+}
+
+/** Guarda {ts, datos, error} en localStorage. Silenciosamente si no se puede. */
+function cacheEscribe(clave, datos, error) {
+  try {
+    window.localStorage.setItem(clave, JSON.stringify({ ts: Date.now(), datos: datos, error: error || null }));
+  } catch (e) { /* sin caché disponible: se descarga cada vez, como estaba antes */ }
+}
+
+/**
+ * Pide una URL con IDEE.remote.get y convierte los errores HTTP en rechazos de
+ * verdad. Sin esto NO FUNCIONA: remote.get no rechaza cuando el servidor
+ * contesta con error, resuelve con el cuerpo del error y el estado va en
+ * `code`. Así que un 403 de Celestrak (el aviso de bloqueo por exceso de
+ * descargas) llegaba como si fueran los TLE, se cacheaba el HTML y se quedaba
+ * el visualizador sin Galileo, sin llegar siquiera al mirror de respaldo.
+ * @param {string} url
+ * @returns {Promise<Object>} La respuesta de remote.get, con .text.
+ */
+function getRemoto(url) {
+  return IDEE.remote.get(url, {}).then(function (res) {
+    const codigo = (typeof res.code === "number") ? res.code : 0;
+    if (res.error || (codigo && (codigo < 200 || codigo >= 300))) {
+      throw new Error("HTTP " + codigo + " al pedir " + url);
+    }
+    return res;
+  });
+}
+
+/**
+ * Datos de `clave`: de la caché si son recientes, si no se piden a `obtener`.
+ * Si la petición falla, se devuelve la copia caducada si la hay.
+ *
+ * También recuerda los FRACASOS: si una fuente falla (típicamente el bloqueo
+ * temporal de Celestrak, que dura 2 h) no se vuelve a preguntar hasta pasado un
+ * rato. Sin esto, cada recarga de la página insistía contra un servidor que ya
+ * había dicho que no, que es justo lo que provoca el bloqueo.
+ * @param {string} clave
+ * @param {number} ttl Antigüedad máxima en ms para usar la copia.
+ * @param {Function} obtener Devuelve una Promise con los datos frescos.
+ * @returns {Promise} Datos (frescos o de caché).
+ */
+function datosConCache(clave, ttl, obtener) {
+  const guardado = cacheLee(clave);
+  if (guardado) {
+    const edad = Date.now() - guardado.ts;
+    if (guardado.datos && edad < ttl) return Promise.resolve(guardado.datos);
+    // Último intento fallido: no se reintenta hasta que pase el margen.
+    if (!guardado.datos && edad < CACHE_TTL_ERROR_MS) {
+      return Promise.reject(new Error(guardado.error || "sin datos (intento fallido reciente)"));
+    }
+  }
+  return obtener()
+    .then(function (datos) {
+      cacheEscribe(clave, datos, null);
+      return datos;
+    })
+    .catch(function (err) {
+      if (guardado && guardado.datos) {
+        console.warn("[satelites] No se pudo refrescar " + clave + "; se usa la copia en caché:", err && err.message);
+        return guardado.datos;
+      }
+      cacheEscribe(clave, null, String((err && err.message) || err));
+      throw err;
+    });
+}
+
+// ===================================================================
 //  Trazas orbitales sin el salto del antimeridiano
 //  ------------------------------------------------------------------
 //  Las órbitas se propagan en longitud [-180, 180], así que al pasar de +179.9
@@ -155,14 +269,53 @@ function configurarCapasBase() {
 IDEE.proxy(false);
 
 let alturaISS = 0; // metros (solo marcador puntual, no para órbita)
+let satrecISS = null; // TLE de la ISS ya parseado, para no rehacerlo cada 5 s
+let promesaSatrecISS = null; // petición en vuelo, para no pedirla dos veces a la vez
 
+/**
+ * TLE de la ISS desde la caché (o descargado si no hay o caducó). El satrec
+ * derivado se guarda, porque parsearlo cada 5 s era tirar CPU, y la petición se
+ * memoiza, porque al arrancar piden el TLE a la vez la posición y la órbita y
+ * las dos veían la caché vacía (medido: dos descargas idénticas en la primera
+ * carga).
+ * @returns {Promise<Object>} satrec válido.
+ */
+function obtenerSatrecISS() {
+  if (satrecISS) return Promise.resolve(satrecISS);
+  if (promesaSatrecISS) return promesaSatrecISS;
+  promesaSatrecISS = datosConCache(CACHE_PREFIJO + "iss.tle", CACHE_TTL_ISS_MS, function () {
+    return getRemoto(URL_ISS_TLE).then(function (res) {
+      const json = JSON.parse(res.text);
+      if (!json || !json.line1 || !json.line2) throw new Error("TLE de la ISS incompleto");
+      return json;
+    });
+  }).then(function (tle) {
+    satrecISS = satrecDeObjeto({ OBJECT_NAME: "ISS", line1: tle.line1, line2: tle.line2 });
+    if (!satrecISS) throw new Error("No se pudo construir el TLE de la ISS");
+    return satrecISS;
+  });
+  return promesaSatrecISS.then(
+    function (r) { promesaSatrecISS = null; return r; },
+    function (e) { promesaSatrecISS = null; throw e; }
+  );
+}
+
+/**
+ * Posición de la ISS. Ya NO se pregunta a wheretheiss.at cada 5 s: se propaga
+ * en local desde el TLE cacheado, que es lo que hacía 720 llamadas a la hora
+ * contra su API pública. El resultado es el mismo punto (unos kilómetros de
+ * diferencia, que a escala de mapa no se ven) y el refresco de datos se limita
+ * al TLE, cada 5 minutos.
+ */
 ISSPosition = function (centerMap = false, onlyPosition = false) {
 
-  IDEE.remote.get("https://api.wheretheiss.at/v1/satellites/25544",
-    {}
-  ).then(function (res) {
-    const jsonParser = JSON.parse(res.text);
-    alturaISS = jsonParser.altitude * 1000; // km -> m (solo punto actual)
+  obtenerSatrecISS().then(function (satrec) {
+    const pos = posicionDeSatelite(satrec, new Date());
+    if (!pos) {
+      console.warn("[satelites] No se pudo calcular la posición de la ISS");
+      return;
+    }
+    alturaISS = pos[2]; // metros
     const ISS = {
       "type": "FeatureCollection",
       "features": [{
@@ -170,7 +323,7 @@ ISSPosition = function (centerMap = false, onlyPosition = false) {
         "properties": { "name": "ISS" },
         "geometry": {
           "type": "Point",
-          "coordinates": [jsonParser.longitude, jsonParser.latitude, alturaISS]
+          "coordinates": pos
         }
       }]
     };
@@ -178,7 +331,7 @@ ISSPosition = function (centerMap = false, onlyPosition = false) {
     // En OL la capa no tiene entidades 3D que mover (solo-posición Cesium):
     // el punto ISS se refresca siempre vía setSource.
     if (!onlyPosition || !(mapaCesium && mapaCesium.scene)) {
-      layerISS.setSource(ISS);
+      setSourceSeguro(layerISS, ISS, "la capa de la ISS");
     }
 
 
@@ -197,7 +350,7 @@ ISSPosition = function (centerMap = false, onlyPosition = false) {
         entity = layerISS_Cesium.entities.values[0]
 
         if (onlyPosition) {
-          entity.position = Cesium.Cartesian3.fromDegrees(jsonParser.longitude, jsonParser.latitude, alturaISS);
+          entity.position = Cesium.Cartesian3.fromDegrees(pos[0], pos[1], alturaISS);
           clearInterval(checkVar);
           return
         }
@@ -218,38 +371,29 @@ ISSPosition = function (centerMap = false, onlyPosition = false) {
     }, 500);
 
     if (centerMap) {
-      mapajs.setCenter({ x: jsonParser.longitude, y: jsonParser.latitude });
+      mapajs.setCenter({ x: pos[0], y: pos[1] });
     }
-  })
+  }).catch(function (err) {
+    console.error("[satelites] No se pudo obtener el TLE de la ISS:", err && err.message);
+  });
 
 };
 
 OrbitISS = function () {
-  // Ahora calculamos la altura con satellite.js para cada instante
-  IDEE.remote.get("https://api.wheretheiss.at/v1/satellites/25544/tles",
-    {}
-  ).then(function (res) {
-    const jsonParser = JSON.parse(res.text);
-    const satrec = satellite.twoline2satrec(jsonParser.line1, jsonParser.line2);
-
-
+  obtenerSatrecISS().then(function (satrec) {
+    // Ahora calculamos la altura con satellite.js para cada instante
     // Ventana -60 min a +60 min (120 muestras por minuto)
     const startDate = new Date(Date.now() - 60 * 60 * 1000);
     const positions = [];
 
     for (let i = 0; i < 120; i++) {
-      const time = new Date(startDate.getTime() + i * 60 * 1000);
-      const pv = satellite.propagate(satrec, time);
-      const positionEci = pv.position;
-      if (!positionEci) continue;
+      const pos = posicionDeSatelite(satrec, new Date(startDate.getTime() + i * 60 * 1000));
+      if (pos) positions.push(pos);
+    }
 
-      const gmst = satellite.gstimeFromDate(time);
-      const positionGd = satellite.eciToGeodetic(positionEci, gmst);
-      const longitude = satellite.degreesLong(positionGd.longitude);
-      const latitude = satellite.degreesLat(positionGd.latitude);
-      // positionGd.height está en km -> convertir a metros
-      const altitudeMeters = positionGd.height * 1000;
-      positions.push([longitude, latitude, altitudeMeters]);
+    if (positions.length < 2) {
+      console.warn("[satelites] La órbita de la ISS salió vacía");
+      return;
     }
 
     const geojson = {
@@ -260,8 +404,11 @@ OrbitISS = function () {
         properties: { name: "ISS", id: "25544" }
       }]
     };
-    layerOrbit.setSource(geojson)
+    setSourceSeguro(layerOrbit, geojson, "la capa de órbita de la ISS");
+  }).catch(function (err) {
+    console.error("[satelites] No se pudo calcular la órbita de la ISS:", err && err.message);
   })
+
 }
 
 // ===================================================================
@@ -281,21 +428,102 @@ OrbitISS = function () {
 //  radianes/minuto), se reparte en un número fijo de muestras y se cierra el
 //  anillo con el punto de partida.
 // ===================================================================
-const GALILEO_TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=tle";
-const GALILEO_JSON_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=json";
-// Muestras por órbita: ~1,25° de arco en Galileo, de sobra para la elipse y la
-// mitad de propagaciones que antes.
 const GALILEO_MUESTRAS_ORBITA = 360;
+// Segunda fuente de TLE, para cuando Celestrak contesta un 403 por bloqueo
+// temporal (su propio aviso: "access has been temporarily blocked... restored
+// once the excessive downloads have ceased for 2 hours"). Es un mirror
+// público con CORS abierto y los mismos TLE en formato JSON.
+const GALILEO_TLE_ALT_URL = "https://tle.ivanstanojevic.me/api/tle?search=galileo";
 
 jsonGalileo = [];
 tleGalileo = [];
 tleMap = {};
 
-/** satrec de un objeto de Galileo, o null si le faltan las líneas del TLE. */
+/**
+ * El mirror entrega 20 registros por página (totalItems 34), así que hay que
+ * recorrerlas todas: con la petición suelta llegaban 20 de 34 satélites.
+ * @param {string} urlBase
+ * @param {number} [maxPaginas=6] Tope de seguridad.
+ * @returns {Promise<Array<{name, line1, line2}>>}
+ */
+function pedirTleAlMirror(urlBase, maxPaginas = 6) {
+  const salida = [];
+  let total = null;
+  let pagina = 0;
+  const pedir = function () {
+    if (pagina >= maxPaginas) return Promise.resolve(salida);
+    if (total !== null && salida.length >= total) return Promise.resolve(salida);
+    pagina += 1;
+    const url = urlBase + (urlBase.indexOf('?') > -1 ? '&' : '?') + 'page=' + pagina;
+    return getRemoto(url).then(function (res) {
+      const cuerpo = JSON.parse(res.text);
+      const miembros = (cuerpo && cuerpo.member) || [];
+      if (total === null) total = (cuerpo && cuerpo.totalItems) ? cuerpo.totalItems : miembros.length;
+      if (!miembros.length) return salida;
+      miembros.forEach(function (m) {
+        if (m && m.line1 && m.line2) salida.push({ name: m.name, line1: m.line1, line2: m.line2 });
+      });
+      return pedir();
+    });
+  };
+  return pedir().then(function (lista) {
+    if (!lista.length) throw new Error("El mirror no devolvió TLE de Galileo");
+    return lista;
+  });
+}
+
+/**
+ * TLE de Galileo desde la caché de 2 h; si no hay o caducó, se pide a
+ * Celestrak y, si ese falla (403 por bloqueo), al mirror de respaldo.
+ * @returns {Promise<Array<{name, line1, line2}>>}
+ */
+function obtenerTleGalileo() {
+  return datosConCache(CACHE_PREFIJO + "galileo.tle", CACHE_TTL_GALILEO_MS, function () {
+    return getRemoto(URL_GALILEO_TLE)
+      .then(function (res) {
+        const lista = parseTLEtoJSON(res.text);
+        if (!lista.length) throw new Error("Celestrak devolvió la lista de TLE vacía");
+        return lista;
+      })
+      .catch(function (err) {
+        console.warn("[satelites] Celestrak no sirve los TLE de Galileo (" + (err && err.message) + "); se usa el mirror de respaldo.");
+        return pedirTleAlMirror(GALILEO_TLE_ALT_URL);
+      });
+  });
+}
+
+/**
+ * Metadatos de los satélites Galileo (tabla de atributos). Van en la misma caché
+ * de 2 h y, si no se pueden conseguir, se sigue con lo que dan los TLE.
+ */
+function obtenerJsonGalileo() {
+  return datosConCache(CACHE_PREFIJO + "galileo.json", CACHE_TTL_GALILEO_MS, function () {
+    return getRemoto(URL_GALILEO_JSON).then(function (res) {
+      const lista = JSON.parse(res.text);
+      if (!Array.isArray(lista) || !lista.length) throw new Error("JSON de Galileo vacío");
+      return lista;
+    });
+  });
+}
+
+/**
+ * satrec de un objeto de Galileo, o null si sus TLE no sirven.
+ *
+ * satellite.js no lanza al parsear un TLE corrupto: devuelve un satrec con la
+ * propiedad `error` puesta y, si el movimiento medio quedó a cero, sin periodo
+ * con el que propagar nada. Si eso llega al GeoJSON, Cesium revienta al leerlo
+ * ("normalized result is not a number") y la capa se queda vacía, así que aquí
+ * se descarta de entrada.
+ */
 function satrecDeObjeto(obj) {
   if (!obj || !obj.line1 || !obj.line2) return null;
   try {
-    return satellite.twoline2satrec(obj.line1, obj.line2);
+    const s = satellite.twoline2satrec(obj.line1, obj.line2);
+    if (!s || s.error || !(s.no > 0)) {
+      console.warn("[satelites] TLE no utilizable en", obj.OBJECT_NAME, ":", s && (s.msg || s.error));
+      return null;
+    }
+    return s;
   } catch (e) {
     console.warn("[satelites] TLE inválido en", obj.OBJECT_NAME, e && e.message);
     return null;
@@ -303,7 +531,8 @@ function satrecDeObjeto(obj) {
 }
 
 /**
- * Posición [lon, lat, altura_m] de un satélite en un instante dado.
+ * Posición [lon, lat, altura_m] de un satélite en un instante dado, o null si no
+ * se puede calcular o el resultado no es un número.
  * @param {Object} satrec
  * @param {Date} fecha
  * @param {number} [gmst] Si se pasa, se usa ESE giro terrestre para todos los
@@ -316,11 +545,18 @@ function posicionDeSatelite(satrec, fecha, gmst) {
   const g = (gmst === undefined || gmst === null) ? satellite.gstimeFromDate(fecha) : gmst;
   const geod = satellite.eciToGeodetic(pv.position, g);
   if (!geod) return null;
-  return [
-    satellite.degreesLong(geod.longitude),
-    satellite.degreesLat(geod.latitude),
-    geod.height * 1000 // km -> m
-  ];
+
+  const lon = satellite.degreesLong(geod.longitude);
+  const lat = satellite.degreesLat(geod.latitude);
+  const alt = geod.height * 1000; // km -> m
+
+  // Una coordenada no finita (NaN o Infinity) no se puede dibujar: Cesium lanza
+  // DeveloperError al leerla y la capa entera se queda sin pintar, así que
+  // aquí se descarta el punto y en ese instante no se dibuja ese satélite.
+  if (!isFinite(lon) || !isFinite(lat) || !isFinite(alt)) return null;
+  if (lat < -90 || lat > 90) return null;
+
+  return [lon, lat, alt];
 }
 
 /**
@@ -357,6 +593,22 @@ function orbitaCompleta(satrec, muestras = GALILEO_MUESTRAS_ORBITA) {
   return { periodoMin, pasoMin, posiciones };
 }
 
+/**
+ * Pinta una fuente en una capa sin reventar si algún feature viene raro. Un NaN
+ * o un Infinity en una coordenada hace que Cesium lance al leer el GeoJSON y la
+ * capa se queda VACÍA (sin Galileo en pantalla), con el error lanzado desde el
+ * intervalo de 5 s; con esta funda el resto de los satélites sigue saliendo.
+ */
+function setSourceSeguro(capa, geojson, etiqueta) {
+  try {
+    capa.setSource(geojson);
+    return true;
+  } catch (e) {
+    console.warn("[satelites] No se pudo pintar " + etiqueta + ":", e && e.message);
+    return false;
+  }
+}
+
 /** FeatureCollection con una órbita completa por satélite. */
 function construirOrbitasGalileo(objetos) {
   const fc = { type: "FeatureCollection", features: [] };
@@ -389,31 +641,33 @@ function parseTLEtoJSON(tleText) {
   return result;
 }
 
-/** Descarga los TLE (y el JSON si puede) y pinta las capas. */
+/**
+ * Pinta las capas de Galileo con los datos cacheados (2 h), descargándolos solo
+ * si no hay copia o la copia caducó. En el arranque del mapa y en cada cambio
+ * 2D/3D; el intervalo de refresco ya no vuelve a pedir nada (solo propaga).
+ */
 GalileoPosition = function (Orbit = false) {
 
-  IDEE.remote.get(GALILEO_TLE_URL, {})
-    .then(function (resTle) {
-      tleGalileo = parseTLEtoJSON(resTle.text);
+  obtenerTleGalileo()
+    .then(function (lista) {
+      tleGalileo = lista;
       // Mapa para emparejar rápido por nombre.
       tleMap = {};
       tleGalileo.forEach(function (tle) {
-        tleMap[tle.name.trim()] = tle;
+        tleMap[String(tle.name || "").trim()] = tle;
       });
 
       // El JSON solo aporta metadatos: si falla, seguimos con los TLE.
-      return IDEE.remote.get(GALILEO_JSON_URL, {})
-        .then(function (resJson) {
-          jsonGalileo = JSON.parse(resJson.text);
-        })
+      return obtenerJsonGalileo()
         .catch(function (err) {
           console.warn("[satelites] No se pudo leer el JSON de Galileo; se dibuja solo con los TLE:", err && err.message);
-          jsonGalileo = [];
+          return [];
         });
     })
-    .then(function () {
+    .then(function (listaJson) {
+      jsonGalileo = listaJson || [];
       // Añadimos line1 y line2 a cada objeto del JSON si hay coincidencia.
-      (jsonGalileo || []).forEach(function (obj) {
+      jsonGalileo.forEach(function (obj) {
         const tle = tleMap[String(obj.OBJECT_NAME || "").trim()];
         if (tle) {
           obj.line1 = tle.line1;
@@ -421,7 +675,7 @@ GalileoPosition = function (Orbit = false) {
         }
       });
       // Sin JSON, los propios TLE dan la lista de satélites.
-      if (!jsonGalileo || !jsonGalileo.length) {
+      if (!jsonGalileo.length) {
         jsonGalileo = tleGalileo.map(function (tle) {
           return {
             OBJECT_NAME: tle.name,
@@ -434,7 +688,7 @@ GalileoPosition = function (Orbit = false) {
       GalileoPositionByTime(Orbit);
     })
     .catch(function (err) {
-      console.error("[satelites] No se pudieron descargar los TLE de Galileo:", err && err.message);
+      console.error("[satelites] No se pudieron obtener los TLE de Galileo:", err && err.message);
     });
 
 }
@@ -464,14 +718,14 @@ GalileoPositionByTime = function (Orbit = false) {
     });
   });
 
-  layerGalileo.setSource(geojsonGalileo);
+  setSourceSeguro(layerGalileo, geojsonGalileo, "la capa de satélites Galileo");
 
   // La colección de órbitas solo se rehace cuando toca (cada 120 s). Antes se
   // vaciaba aquí en cada pasada de 5 s aunque no se recalculara nada, así que la
   // variable global quedaba con 0 features y no se podía ni inspeccionar.
   if (Orbit) {
     geojsonGalileoOrbit = construirOrbitasGalileo(jsonGalileo);
-    layerGalileoOrbit.setSource(geojsonGalileoOrbit);
+    setSourceSeguro(layerGalileoOrbit, geojsonGalileoOrbit, "la capa de órbitas Galileo");
   }
 
 }
