@@ -110,6 +110,53 @@
   box-sizing: border-box;
 }
 
+/* ---- Pestañas y sus paneles ---- */
+.catalogo__pestanas {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e3e3e3;
+}
+
+.catalogo__pestana {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #f5f5f5;
+  color: #555555;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.catalogo__pestana:hover { background: #ececec; }
+
+/* La pestaña activa lleva el color de marca del esquema, que es lo que tiene
+   que destacar. */
+.catalogo__pestana--activa,
+.catalogo__pestana--activa:hover {
+  background: var(--g-plugin-bg-color, orangered);
+  border-color: var(--g-plugin-bg-color, orangered);
+  color: var(--g-plugin-icon-color, #ffffff);
+}
+
+.catalogo__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* El atributo hidden no basta: el display:flex de arriba le gana. */
+.catalogo__panel[hidden] {
+  display: none;
+}
+
 /* ---- Cabecera: título + selector de catálogo ---- */
 .catalogo__cabecera {
   display: flex;

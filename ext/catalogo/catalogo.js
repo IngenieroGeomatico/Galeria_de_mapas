@@ -376,6 +376,11 @@
       this._tipoSeleccionado = 'idee';
       this._urlIntroducida = '';
       this._ultimoMensaje = null;
+      // Pestaña activa del panel ('catalogos' o 'capa').
+      this._pestanaActiva = options.pestana || 'catalogos';
+      this._pestanas = {};
+      this._panelCatalogos = null;
+      this._panelCapa = null;
     }
 
     /** Normaliza un color a {active, deactive}. */
@@ -504,7 +509,35 @@
       contents.className = 'm-herramienta-contents catalogo__contenido';
       container.appendChild(contents);
 
-      // --- Selector de catálogo
+      // --- Pestañas: "Gestión de catálogos" y "Añadir nueva capa"
+      const tabs = document.createElement('div');
+      tabs.className = 'catalogo__pestanas';
+      tabs.setAttribute('role', 'tablist');
+      this._pestanas = {};
+      [
+        { id: 'catalogos', nombre: 'Gestión de catálogos' },
+        { id: 'capa', nombre: 'Añadir nueva capa' }
+      ].forEach(function (p) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'catalogo__pestana';
+        b.id = 'catalogo-pestana-' + p.id;
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-selected', 'false');
+        b.textContent = p.nombre;
+        b.addEventListener('click', function () { self._verPestana(p.id); });
+        self._pestanas[p.id] = b;
+        tabs.appendChild(b);
+      });
+      contents.appendChild(tabs);
+
+      // --- Panel de "Gestión de catálogos": selector + lista
+      const panelCatalogos = document.createElement('div');
+      panelCatalogos.className = 'catalogo__panel';
+      panelCatalogos.setAttribute('role', 'tabpanel');
+      panelCatalogos.setAttribute('data-panel', 'catalogos');
+
+      // Selector de catálogo
       const selector = document.createElement('select');
       selector.className = 'catalogo__selector';
       selector.setAttribute('aria-label', 'Tipo de catálogo');
@@ -519,15 +552,23 @@
         self._tipoSeleccionado = this.value;
         self._refrescarLista();
       });
-      contents.appendChild(selector);
+      panelCatalogos.appendChild(selector);
 
-      // --- Lista de servicios predefinidos del catálogo activo
+      // Lista de servicios predefinidos del catálogo activo
       const lista = document.createElement('div');
       lista.className = 'catalogo__lista';
-      contents.appendChild(lista);
+      panelCatalogos.appendChild(lista);
       this._listaEl = lista;
 
-      // --- Añadir por URL
+      contents.appendChild(panelCatalogos);
+      this._panelCatalogos = panelCatalogos;
+
+      // --- Panel de "Añadir nueva capa": URL
+      const panelCapa = document.createElement('div');
+      panelCapa.className = 'catalogo__panel';
+      panelCapa.setAttribute('role', 'tabpanel');
+      panelCapa.setAttribute('data-panel', 'capa');
+
       const cajaUrl = document.createElement('div');
       cajaUrl.className = 'catalogo__url';
 
@@ -547,7 +588,9 @@
       boton.addEventListener('click', function () { self._cargarUrl(input.value); });
       cajaUrl.appendChild(boton);
 
-      contents.appendChild(cajaUrl);
+      panelCapa.appendChild(cajaUrl);
+      contents.appendChild(panelCapa);
+      this._panelCapa = panelCapa;
 
       // --- Cuadro de estado (éxitos, avisos y errores)
       const estado = document.createElement('div');
@@ -558,9 +601,28 @@
 
       // La lista se pinta aquí y no en addTo: addTo se llama antes de que la
       // API construya la vista del control, así que _listaEl aún sería null.
+      // Primero la pestaña (que decide qué panel se ve) y después la lista del
+      // catálogo activo.
+      this._verPestana(this._pestanaActiva);
       this._refrescarLista();
 
       return container;
+    }
+
+    /**
+     * Muestra una pestaña del catálogo (botón y panel). Un solo método para que
+     * el marcado del botón y el panel visible no puedan desincronizarse.
+     * @param {("catalogos"|"capa")} id
+     */
+    _verPestana(id) {
+      this._pestanaActiva = id;
+      Object.keys(this._pestanas).forEach(function (k) {
+        const activo = (k === id);
+        this._pestanas[k].classList.toggle('catalogo__pestana--activa', activo);
+        this._pestanas[k].setAttribute('aria-selected', String(activo));
+      }, this);
+      if (this._panelCatalogos) this._panelCatalogos.hidden = (id !== 'catalogos');
+      if (this._panelCapa) this._panelCapa.hidden = (id !== 'capa');
     }
 
     /** (Re)dibuja la lista de servicios del catálogo activo. */
@@ -671,6 +733,7 @@
         tipo: this._tipoSeleccionado,
         url: this._urlIntroducida,
         mensaje: this._ultimoMensaje,
+        pestana: this._pestanaActiva,
         panelCollapsed: panelCollapsed
       };
     }
@@ -685,6 +748,9 @@
       }
       if (typeof state.mensaje === 'string') {
         this._ultimoMensaje = state.mensaje;
+      }
+      if (state.pestana && this._pestanas[state.pestana]) {
+        this._verPestana(state.pestana);
       }
       if (typeof state.panelCollapsed === 'boolean' && this._panel) {
         try {
@@ -718,6 +784,7 @@
       if (selector) selector.value = this._tipoSeleccionado;
       const input = raiz.querySelector('.catalogo__url-input');
       if (input) input.value = this._urlIntroducida;
+      this._verPestana(this._pestanaActiva);
       this._refrescarLista();
       if (this._estadoEl && this._ultimoMensaje) {
         this._estadoEl.textContent = this._ultimoMensaje;
