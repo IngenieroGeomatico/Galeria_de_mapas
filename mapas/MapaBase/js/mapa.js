@@ -72,6 +72,11 @@ function mapa() {
   // un div a todo el ancho donde esta lectura ancha sí encaja.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
 
+  // ── Catálogo de servicios y capas ──────────────────────────────────
+  // Listado predefinido por tipo de catálogo (IDEE, STAC, OGC API Records) y
+  // botón de "Añadir por URL". Ver ext/catalogo.
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_catalogo({ position: 'TR', order: 2 }));
+
   // ── Plugin cambio de implementación (OL <-> Cesium) ───────────────
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',
