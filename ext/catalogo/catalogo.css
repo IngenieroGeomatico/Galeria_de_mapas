@@ -1,0 +1,213 @@
+/* =====================================================================
+   ESTILOS DEL PLUGIN CATALOGO (API-IDEE / API-CNIG)
+   Repositorio: Galeria_de_mapas
+   --------------------------------------------------------------------
+   El plugin pinta un panel plegable con:
+     - un <select> para cambiar de tipo de catálogo (IDEE, STAC, OGC API
+       Records), cada uno con su propia sección de servicios;
+     - la lista de servicios predefinidos de ese catálogo, cada uno con su
+       botón "Cargar";
+     - un cuadro de "Añadir por URL" con su botón;
+     - un cuadro de estado para avisos y errores.
+
+   La hoja sigue la convención de variables del esquema del repositorio
+   (--g-plugin-*): los colores entran por el constructor y aquí solo se
+   aplican. El icono del botón es una MÁSCARA (--g-plugin-icon-mask), como
+   en el resto de plugins con panel.
+   ===================================================================== */
+
+/* Raíz del panel */
+.g-herramienta_catalogo .catalogo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 10px 12px 12px;
+  box-sizing: border-box;
+  font-family: "Muli", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  color: #2b2b30;
+}
+
+/* ---- Cabecera: título + selector de catálogo ---- */
+.catalogo__cabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.catalogo__titulo {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  color: #2b2b30;
+}
+
+.catalogo__selector {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #cccccc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2b2b30;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.catalogo__selector:focus-visible {
+  border-color: var(--g-plugin-border-color-active, #71A7D3);
+  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.35);
+}
+
+/* ---- Lista de servicios predefinidos ---- */
+.catalogo__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.catalogo__vacio {
+  margin: 4px 0;
+  color: #777777;
+  font-size: 12px;
+}
+
+.catalogo__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #e3e3e3;
+  border-radius: 6px;
+  background: #fafafa;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.catalogo__item:hover {
+  background: #f0f4f8;
+  border-color: #c9d6e2;
+}
+
+.catalogo__item-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.catalogo__item-nombre {
+  font-weight: 600;
+  font-size: 12px;
+  color: #2b2b30;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalogo__item-desc {
+  font-size: 11px;
+  color: #777777;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalogo__item-boton {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--g-plugin-border-color-active, #71A7D3);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--g-plugin-icon-color-active, #71A7D3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.catalogo__item-boton:hover {
+  background: var(--g-plugin-bg-color, orangered);
+  border-color: var(--g-plugin-bg-color, orangered);
+  color: #ffffff;
+}
+
+/* ---- Añadir por URL ---- */
+.catalogo__url {
+  display: flex;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.catalogo__url-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #cccccc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2b2b30;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.catalogo__url-input:focus-visible {
+  border-color: var(--g-plugin-border-color-active, #71A7D3);
+  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.35);
+}
+
+.catalogo__url-boton {
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--g-plugin-bg-color, orangered);
+  border-radius: 6px;
+  background: var(--g-plugin-bg-color, orangered);
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.catalogo__url-boton:hover { filter: brightness(0.92); }
+.catalogo__url-boton:active { transform: translateY(1px); }
+
+/* ---- Cuadro de estado ---- */
+.catalogo__estado {
+  min-height: 16px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: #f4f4f4;
+  color: #555555;
+  font-size: 11px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.catalogo__estado:empty {
+  display: none;
+}
+
+.catalogo__estado--aviso {
+  background: #fff7e6;
+  color: #8a5a00;
+}
+
+.catalogo__estado--error {
+  background: #fdecea;
+  color: #b3261e;
+}
