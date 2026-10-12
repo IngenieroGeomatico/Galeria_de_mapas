@@ -264,198 +264,215 @@ OrbitISS = function () {
   })
 }
 
-jsonGalileo = {}
-tleGalileo = {}
+// ===================================================================
+//  Galileo: datos, posiciones y órbitas
+//  ------------------------------------------------------------------
+//  Los TLE son Obligatorios: son las dos líneas que satellite.js necesita para
+//  propagar. El JSON es un PLUS (metadatos para la tabla de atributos): si
+//  falla, se sigue dibujando todo con lo que traen los TLE, en vez de perder
+//  los 32 satélites entero.
+//
+//  La órbita se traza durante UNA REVOLUCIÓN COMPLETA, no en una ventana de
+//  tiempo fija. Antes eran 600 muestras de un minuto desde una hora antes (10 h)
+//  y, como el período de Galileo es de unas 14,5 h, la traza se quedaba en el
+//  71% de la elipse: ninguna órbita cerraba, todas quedaban como un arco ancho
+//  (medido: 600 puntos, lat -57,2..57,2, lon -180..180 y sin cerrar). Ahora el
+//  período sale del movimiento medio de cada satélite (satrec.no va en
+//  radianes/minuto), se reparte en un número fijo de muestras y se cierra el
+//  anillo con el punto de partida.
+// ===================================================================
+const GALILEO_TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=tle";
+const GALILEO_JSON_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=json";
+// Muestras por órbita: ~1,25° de arco en Galileo, de sobra para la elipse y la
+// mitad de propagaciones que antes.
+const GALILEO_MUESTRAS_ORBITA = 360;
+
+jsonGalileo = [];
+tleGalileo = [];
 tleMap = {};
+
+/** satrec de un objeto de Galileo, o null si le faltan las líneas del TLE. */
+function satrecDeObjeto(obj) {
+  if (!obj || !obj.line1 || !obj.line2) return null;
+  try {
+    return satellite.twoline2satrec(obj.line1, obj.line2);
+  } catch (e) {
+    console.warn("[satelites] TLE inválido en", obj.OBJECT_NAME, e && e.message);
+    return null;
+  }
+}
+
+/**
+ * Posición [lon, lat, altura_m] de un satélite en un instante dado.
+ * @param {Object} satrec
+ * @param {Date} fecha
+ * @param {number} [gmst] Si se pasa, se usa ESE giro terrestre para todos los
+ *   puntos en vez del correspondiente a la fecha. Es lo que permite congelar el
+ *   marco (ver orbitaCompleta).
+ */
+function posicionDeSatelite(satrec, fecha, gmst) {
+  const pv = satellite.propagate(satrec, fecha);
+  if (!pv || !pv.position) return null;
+  const g = (gmst === undefined || gmst === null) ? satellite.gstimeFromDate(fecha) : gmst;
+  const geod = satellite.eciToGeodetic(pv.position, g);
+  if (!geod) return null;
+  return [
+    satellite.degreesLong(geod.longitude),
+    satellite.degreesLat(geod.latitude),
+    geod.height * 1000 // km -> m
+  ];
+}
+
+/**
+ * Órbita completa de un satélite: una revolución a partir de ahora, muestreada
+ * en `muestras` puntos y cerrada con el punto de partida (i va hasta `muestras`
+ * inclusive), para que la elipse quede cerrada y no un arco.
+ *
+ * MARCO CONGELADO. La revolución es INERCIAL: en los 14 h 05 min que tarda un
+ * Galileo en dar una vuelta, la Tierra gira 211°, así que si cada punto se
+ * convierte con el giro terrestre de SU instante, la traza sobre el suelo no se
+ * cierra nunca (medido: vuelta completa con 148° de longitud entre el primer y
+ * el último punto, con la latitud y la altura clavadas): sale un roseta, que en
+ * el mapa parece una órbita rota. Para dibujar la ÓRBITA se usa un único
+ * gmst, el del instante inicial, que es el marco en el que la elipse es una
+ * elipse: el mismo criterio con el que se dibujan los diagramas de forma
+ * orbital. El punto del satélite sigue siendo su posición real, de modo que
+ * queda sobre su elipse (con el desfase del Earth rotation de los segundos
+ * transcurridos desde el último refresco de la órbita, 0,5° como mucho).
+ *
+ * @returns {{periodoMin:number, pasoMin:number, posiciones:Array<Array<number>>}}
+ */
+function orbitaCompleta(satrec, muestras = GALILEO_MUESTRAS_ORBITA) {
+  const revPorMinuto = satrec.no / (2 * Math.PI); // satrec.no va en radianes/minuto
+  const periodoMin = revPorMinuto > 0 ? 1 / revPorMinuto : 90;
+  const pasoMin = periodoMin / muestras;
+  const ahora = new Date();
+  const gmstInicial = satellite.gstimeFromDate(ahora);
+  const posiciones = [];
+  for (let i = 0; i <= muestras; i++) {
+    const fecha = new Date(ahora.getTime() + i * pasoMin * 60 * 1000);
+    const pos = posicionDeSatelite(satrec, fecha, gmstInicial);
+    if (pos) posiciones.push(pos);
+  }
+  return { periodoMin, pasoMin, posiciones };
+}
+
+/** FeatureCollection con una órbita completa por satélite. */
+function construirOrbitasGalileo(objetos) {
+  const fc = { type: "FeatureCollection", features: [] };
+  (objetos || []).forEach(function (obj) {
+    const satrec = satrecDeObjeto(obj);
+    if (!satrec) return;
+    const orbita = orbitaCompleta(satrec);
+    if (orbita.posiciones.length < 2) return;
+    fc.features.push({
+      type: "Feature",
+      geometry: geometriaTrazaSinSalto(orbita.posiciones),
+      properties: obj
+    });
+  });
+  return fc;
+}
+
+/** Trocea el texto TLE de Celestrak ennombre + línea1 + línea2. */
+function parseTLEtoJSON(tleText) {
+  const lines = String(tleText || "").trim().split('\n');
+  const result = [];
+  for (let i = 0; i < lines.length; i += 3) {
+    const name = lines[i].trim();
+    const line1 = (lines[i + 1] || '').trim();
+    const line2 = (lines[i + 2] || '').trim();
+    if (name && line1 && line2) {
+      result.push({ name, line1, line2 });
+    }
+  }
+  return result;
+}
+
+/** Descarga los TLE (y el JSON si puede) y pinta las capas. */
 GalileoPosition = function (Orbit = false) {
 
-  function parseTLEtoJSON(tleText) {
-    const lines = tleText.trim().split('\n');
-    const result = [];
-    for (let i = 0; i < lines.length; i += 3) {
-      const name = lines[i].trim();
-      const line1 = lines[i + 1]?.trim();
-      const line2 = lines[i + 2]?.trim();
-      if (name && line1 && line2) {
-        result.push({ name, line1, line2 });
-      }
-    }
-    return result;
-  }
+  IDEE.remote.get(GALILEO_TLE_URL, {})
+    .then(function (resTle) {
+      tleGalileo = parseTLEtoJSON(resTle.text);
+      // Mapa para emparejar rápido por nombre.
+      tleMap = {};
+      tleGalileo.forEach(function (tle) {
+        tleMap[tle.name.trim()] = tle;
+      });
 
-  Promise.all([
-    IDEE.remote.get("https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=json", {}),
-    IDEE.remote.get("https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=tle", {})
-  ]).then(([res1_json, res2_tle]) => {
-    // Ambos resultados están disponibles aquí
-    jsonGalileo = JSON.parse(res1_json.text);
-    tleGalileo = parseTLEtoJSON(res2_tle.text);
-    // Creamos un mapa para buscar rápido por nombre
-
-    tleGalileo.forEach(tle => {
-      tleMap[tle.name.trim()] = tle;
-    });
-
-    // Añadimos line1 y line2 a cada objeto del JSON si hay coincidencia
-    geojsonGalileoOrbit = {
-      type: "FeatureCollection",
-      features: []
-    };
-
-    geojsonGalileo = {
-      type: "FeatureCollection",
-      features: []
-    };
-
-    jsonGalileo.forEach(obj => {
-      const tle = tleMap[obj.OBJECT_NAME.trim()];
-      if (tle) {
-        obj.line1 = tle.line1;
-        obj.line2 = tle.line2;
-      }
-
-      satrec = satellite.twoline2satrec(obj.line1, obj.line2);
-
-      if (Orbit) {
-
-        startDate = new Date(Date.now() - 60 * 60 * 1000);
-        const positions = [];
-
-        for (let i = 0; i < 120 * 5; i++) {
-          const time = new Date(startDate.getTime() + i * 60 * 1000);
-          const pv = satellite.propagate(satrec, time);
-          const positionEci = pv.position;
-          if (!positionEci) continue;
-
-          const gmst = satellite.gstimeFromDate(time);
-          const positionGd = satellite.eciToGeodetic(positionEci, gmst);
-          const longitude = satellite.degreesLong(positionGd.longitude);
-          const latitude = satellite.degreesLat(positionGd.latitude);
-          // positionGd.height está en km -> convertir a metros
-          const altitudeMeters = positionGd.height * 1000;
-          positions.push([longitude, latitude, altitudeMeters]);
+      // El JSON solo aporta metadatos: si falla, seguimos con los TLE.
+      return IDEE.remote.get(GALILEO_JSON_URL, {})
+        .then(function (resJson) {
+          jsonGalileo = JSON.parse(resJson.text);
+        })
+        .catch(function (err) {
+          console.warn("[satelites] No se pudo leer el JSON de Galileo; se dibuja solo con los TLE:", err && err.message);
+          jsonGalileo = [];
+        });
+    })
+    .then(function () {
+      // Añadimos line1 y line2 a cada objeto del JSON si hay coincidencia.
+      (jsonGalileo || []).forEach(function (obj) {
+        const tle = tleMap[String(obj.OBJECT_NAME || "").trim()];
+        if (tle) {
+          obj.line1 = tle.line1;
+          obj.line2 = tle.line2;
         }
-        feature = {
-          type: "Feature",
-          geometry: geometriaTrazaSinSalto(positions),
-          properties: obj
-        }
-        geojsonGalileoOrbit.features.push(feature)
-
-
-
+      });
+      // Sin JSON, los propios TLE dan la lista de satélites.
+      if (!jsonGalileo || !jsonGalileo.length) {
+        jsonGalileo = tleGalileo.map(function (tle) {
+          return {
+            OBJECT_NAME: tle.name,
+            OBJECT_ID: tle.line1.slice(2, 7),
+            line1: tle.line1,
+            line2: tle.line2
+          };
+        });
       }
-
-      DateNow = new Date(Date.now());
-      const pv2 = satellite.propagate(satrec, DateNow);
-      const positionEci2 = pv2.position;
-
-      const gmst2 = satellite.gstimeFromDate(DateNow);
-      const positionGd2 = satellite.eciToGeodetic(positionEci2, gmst2);
-      const longitude2 = satellite.degreesLong(positionGd2.longitude);
-      const latitude2 = satellite.degreesLat(positionGd2.latitude);
-      // positionGd.height está en km -> convertir a metros
-      const altitudeMeters2 = positionGd2.height * 1000;
-
-      feature2 = {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [longitude2, latitude2, altitudeMeters2] },
-        properties: obj
-      }
-      geojsonGalileo.features.push(feature2)
-
-
+      GalileoPositionByTime(Orbit);
+    })
+    .catch(function (err) {
+      console.error("[satelites] No se pudieron descargar los TLE de Galileo:", err && err.message);
     });
-
-
-    if (Orbit) {
-      layerGalileoOrbit.setSource(geojsonGalileoOrbit)
-    }
-    layerGalileo.setSource(geojsonGalileo)
-
-  });
 
 }
 
+/**
+ * Pinta las posiciones (y, si se pide, las órbitas) con lo ya descargado. Se
+ * llama cada 5 s para las posiciones y cada 120 s para las órbitas.
+ */
 GalileoPositionByTime = function (Orbit = false) {
+  if (!jsonGalileo || !jsonGalileo.length) return;
 
-  // Añadimos line1 y line2 a cada objeto del JSON si hay coincidencia
-  geojsonGalileoOrbit = {
-    type: "FeatureCollection",
-    features: []
-  };
-
+  const ahora = new Date();
   geojsonGalileo = {
     type: "FeatureCollection",
     features: []
   };
 
-  jsonGalileo.forEach(obj => {
-    const tle = tleMap[obj.OBJECT_NAME.trim()];
-    if (tle) {
-      obj.line1 = tle.line1;
-      obj.line2 = tle.line2;
-    }
-
-    satrec = satellite.twoline2satrec(obj.line1, obj.line2);
-
-    if (Orbit) {
-
-      startDate = new Date(Date.now() - 60 * 60 * 1000);
-      const positions = [];
-
-      for (let i = 0; i < 120 * 5; i++) {
-        const time = new Date(startDate.getTime() + i * 60 * 1000);
-        const pv = satellite.propagate(satrec, time);
-        const positionEci = pv.position;
-        if (!positionEci) continue;
-
-        const gmst = satellite.gstimeFromDate(time);
-        const positionGd = satellite.eciToGeodetic(positionEci, gmst);
-        const longitude = satellite.degreesLong(positionGd.longitude);
-        const latitude = satellite.degreesLat(positionGd.latitude);
-        // positionGd.height está en km -> convertir a metros
-        const altitudeMeters = positionGd.height * 1000;
-        positions.push([longitude, latitude, altitudeMeters]);
-      }
-      feature = {
-        type: "Feature",
-        geometry: geometriaTrazaSinSalto(positions),
-        properties: obj
-      }
-      geojsonGalileoOrbit.features.push(feature)
-
-
-
-    }
-
-    DateNow = new Date(Date.now());
-    const pv2 = satellite.propagate(satrec, DateNow);
-    const positionEci2 = pv2.position;
-
-    const gmst2 = satellite.gstimeFromDate(DateNow);
-    const positionGd2 = satellite.eciToGeodetic(positionEci2, gmst2);
-    const longitude2 = satellite.degreesLong(positionGd2.longitude);
-    const latitude2 = satellite.degreesLat(positionGd2.latitude);
-    // positionGd.height está en km -> convertir a metros
-    const altitudeMeters2 = positionGd2.height * 1000;
-
-    feature2 = {
+  jsonGalileo.forEach(function (obj) {
+    const satrec = satrecDeObjeto(obj);
+    if (!satrec) return;
+    const pos = posicionDeSatelite(satrec, ahora);
+    if (!pos) return;
+    geojsonGalileo.features.push({
       type: "Feature",
-      geometry: { type: "Point", coordinates: [longitude2, latitude2, altitudeMeters2] },
+      geometry: { type: "Point", coordinates: pos },
       properties: obj
-    }
-    geojsonGalileo.features.push(feature2)
-
-
+    });
   });
 
+  layerGalileo.setSource(geojsonGalileo);
 
+  // La colección de órbitas solo se rehace cuando toca (cada 120 s). Antes se
+  // vaciaba aquí en cada pasada de 5 s aunque no se recalculara nada, así que la
+  // variable global quedaba con 0 features y no se podía ni inspeccionar.
   if (Orbit) {
-    layerGalileoOrbit.setSource(geojsonGalileoOrbit)
+    geojsonGalileoOrbit = construirOrbitasGalileo(jsonGalileo);
+    layerGalileoOrbit.setSource(geojsonGalileoOrbit);
   }
-  layerGalileo.setSource(geojsonGalileo)
-
 
 }
 
@@ -613,10 +630,14 @@ let estilo_orbGalileo = new IDEE.style.Generic({
   },
   line: {
     // Definición atributos para líneas
+    // 32 elipses superpuestas, así que van finas y semitransparentes. El color
+    // va en la familia del punto del satélite (azul) y no en blanco: sobre el
+    // mapa base claro, blanco al 30% no se veía casi nada (medido: los píxeles
+    // que pintaba la capa salían 224,224,224, casi el propio color del mapa).
     stroke: {
-      color: 'white',
+      color: '#2f6fd0',
       width: 2,
-      opacity: 0.3
+      opacity: 0.45
     }
   }
 });
@@ -656,15 +677,16 @@ return mapajs;
 mapajs_0 = mapa();
 
 // Refresco continuo (una sola vez por página): cada 5 s actualiza las
-// posiciones y cada 120 s recalcula las dos órbitas (1 hora antes / 1 hora
-// después). El intervalo no se recrea al cambiar de implementación y siempre
-// trabaja con las variables globales de capa, que mapa() reasigna a las capas
-// nuevas, así que sigue apuntando a las capas vigentes tras un cambio 2D/3D.
+// posiciones y cada 120 s recalcula las órbitas (la ISS en su ventana de 2 h y
+// las de Galileo en una revolución completa). El intervalo no se recrea al
+// cambiar de implementación y siempre trabaja con las variables globales de
+// capa, que mapa() reasigna a las capas nuevas, así que sigue apuntando a las
+// capas vigentes tras un cambio 2D/3D.
 ensureSatellite().then(function () {
   let iter = 0;
   setInterval(() => {
 
-    if (iter >= 60) { // cada 120 s recalculamos órbita (1 hora antes / 1 hora después)
+    if (iter >= 60) { // cada 120 s recalculamos la órbita de la ISS y las de Galileo
       iter = 0;
       OrbitISS()
       GalileoPositionByTime(true)
