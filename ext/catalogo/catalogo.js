@@ -363,6 +363,15 @@
 
       this.icon = options.icon || options.icono || options.svg || null;
 
+      // Título de la barra del panel (la cabecera .m-herramienta-header).
+      this.title = options.title || 'Catálogo';
+
+      // En TR el API mete el botón DENTRO del panel (a la izquierda) y la
+      // cabecera queda partida; en TL lo deja fuera y la cabecera es a todo
+      // ancho. Con esta marca el CSS recoloca la cabecera en TR para que el
+      // panel se vea igual que los demás.
+      this._esTR = (this.options.position === 'TR');
+
       // Estado interno
       this._tipoSeleccionado = 'idee';
       this._urlIntroducida = '';
@@ -453,6 +462,15 @@
       panel.addControls(control);
       map.addPanels(panel);
 
+      // La barra de título se puede arrastrar, igual que en baseLayer.
+      try {
+        if (IDEE.utils && typeof IDEE.utils.draggabillyPlugin === 'function') {
+          IDEE.utils.draggabillyPlugin(panel, '#m-herramienta-title-catalogo');
+        }
+      } catch (e) {
+        console.warn(this.name + ': no se pudo hacer arrastrable la barra de título.', e);
+      }
+
       this._aplicarIcono(panel.getElement ? panel.getElement() : null);
       // No se refresca la lista aquí: la vista del control todavía no existe.
     }
@@ -462,18 +480,31 @@
       const self = this;
       const IDEE = api();
 
-      const raiz = document.createElement('div');
-      raiz.className = 'catalogo';
+      // Contenedor con las clases del framework, igual que plantilla_plugin y
+      // baseLayer: .m-control.m-container.m-herramienta, y dentro la CABECERA
+      // .m-herramienta-header (la barra de título, arrastrable con
+      // IDEE.utils.draggabillyPlugin) y el CONTENIDO .m-herramienta-contents.
+      const container = document.createElement('div');
+      container.setAttribute('aria-label', this.title);
+      container.setAttribute('role', 'region');
+      container.className = 'm-control m-container m-herramienta catalogo' + (this._esTR ? ' catalogo--tr' : '');
 
-      // --- Cabecera: título + selector de catálogo
-      const cabecera = document.createElement('div');
-      cabecera.className = 'catalogo__cabecera';
-
+      const header = document.createElement('header');
+      header.setAttribute('role', 'heading');
+      header.setAttribute('aria-level', '3');
+      header.setAttribute('tabindex', '0');
+      header.id = 'm-herramienta-title-catalogo';
+      header.className = 'm-herramienta-header';
       const titulo = document.createElement('span');
-      titulo.className = 'catalogo__titulo';
-      titulo.textContent = 'Catálogo';
-      cabecera.appendChild(titulo);
+      titulo.textContent = this.title;
+      header.appendChild(titulo);
+      container.appendChild(header);
 
+      const contents = document.createElement('div');
+      contents.className = 'm-herramienta-contents catalogo__contenido';
+      container.appendChild(contents);
+
+      // --- Selector de catálogo
       const selector = document.createElement('select');
       selector.className = 'catalogo__selector';
       selector.setAttribute('aria-label', 'Tipo de catálogo');
@@ -488,14 +519,12 @@
         self._tipoSeleccionado = this.value;
         self._refrescarLista();
       });
-      cabecera.appendChild(selector);
-
-      raiz.appendChild(cabecera);
+      contents.appendChild(selector);
 
       // --- Lista de servicios predefinidos del catálogo activo
       const lista = document.createElement('div');
       lista.className = 'catalogo__lista';
-      raiz.appendChild(lista);
+      contents.appendChild(lista);
       this._listaEl = lista;
 
       // --- Añadir por URL
@@ -518,20 +547,20 @@
       boton.addEventListener('click', function () { self._cargarUrl(input.value); });
       cajaUrl.appendChild(boton);
 
-      raiz.appendChild(cajaUrl);
+      contents.appendChild(cajaUrl);
 
       // --- Cuadro de estado (éxitos, avisos y errores)
       const estado = document.createElement('div');
       estado.className = 'catalogo__estado';
       estado.setAttribute('role', 'status');
-      raiz.appendChild(estado);
+      contents.appendChild(estado);
       this._estadoEl = estado;
 
       // La lista se pinta aquí y no en addTo: addTo se llama antes de que la
       // API construya la vista del control, así que _listaEl aún sería null.
       this._refrescarLista();
 
-      return raiz;
+      return container;
     }
 
     /** (Re)dibuja la lista de servicios del catálogo activo. */

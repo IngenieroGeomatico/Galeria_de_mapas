@@ -75,6 +75,9 @@ function mapa() {
   // ── Catálogo de servicios y capas ──────────────────────────────────
   // Listado predefinido por tipo de catálogo (IDEE, STAC, OGC API Records) y
   // botón de "Añadir por URL". Ver ext/catalogo.
+  // Va en la esquina TR (arriba a la derecha) con order 2. El CSS recoloca la
+  // barra de título (margin-left:-40px) porque en TR el API mete el botón
+  // dentro del panel y sin eso la cabecera sale partida.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_catalogo({ position: 'TR', order: 2 }));
 
   // ── Plugin cambio de implementación (OL <-> Cesium) ───────────────

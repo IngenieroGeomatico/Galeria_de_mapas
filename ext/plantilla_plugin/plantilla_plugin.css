@@ -123,3 +123,45 @@
 .plantilla-btn:active {
   background-color: #005a9e;
 }
+
+/* ====================================================================
+   PANEL EN LA ESQUINA TR
+   --------------------------------------------------------------------
+   Cuando un panel se coloca arriba a la derecha, el API mete el botón
+   DENTRO del panel (pegado al borde izquierdo) y la cabecera
+   .m-herramienta-header sale PARTIDA: empieza donde acaba el botón, así que
+   el título queda descentrado y la cabecera parece sobrar por la derecha
+   a la altura del botón. En TL no pasa (el botón queda fuera, a la derecha)
+   y la cabecera es a todo ancho.
+
+   Estas reglas dejan el panel de TR igual que el de TL:
+     - el contenedor de controles, plano y sin sombra;
+     - el fondo del panel, transparente;
+     - la cabecera, a todo ancho del panel (el botón se pinta por encima de
+       su extremo izquierdo).
+
+   La compensación de la cabecera se scopea a la esquina TR por la clase que
+   el API pone al área (m-top m-right), así que solo actúa ahí.
+   ==================================================================== */
+
+.m-areas > div.m-area > div.m-panel > div.m-panel-controls > div {
+  background-color: #fff;
+  border-radius: 0;
+  box-shadow: none;
+  display: table;
+  overflow: hidden;
+  padding: 0;
+  position: inherit !important;
+}
+
+.m-areas > div.m-area > div.m-panel.opened {
+  background-color: #fdfdfd00 !important;
+}
+
+/* La compensación se scopea a la esquina TR por la clase que el API pone
+   al área (m-top m-right): así solo actúa ahí y no en TL, donde el botón va
+   fuera del panel y la cabecera ya es a todo ancho. */
+.m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
+  margin-left: -40px;
+  width: calc(100% + 40px);
+}
