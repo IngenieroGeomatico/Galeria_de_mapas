@@ -40,9 +40,12 @@ function mapa() {
   IDEE.proxy(false);
 
   // ── Mapa ──────────────────────────────────────────────────────────
+  // Sin controls: el control 'scale' de la API lo pide el visualizador, pero
+  // Cesium no sabe construirlo y lanza "La implementación usada no puede crear
+  // controles Scale", abortando la creación del mapa al pasar a 3D. La lectura
+  // de escala y nivel de zoom la pone el plugin mapInfo (ver abajo).
   mapajs = IDEE.map({
     container: "mapaDIV",
-    controls: ["scale*true"],
   });
 
   // ── Plugin selector de capas base (grid de imágenes) ──────────────
@@ -61,6 +64,13 @@ function mapa() {
   // ── Plugin selector de capas overlay (checkboxes) ─────────────────
   var layerSwitcherPlugin = new IDEE.plugin.miPlugin_layerSwitcher();
   mapajs.addPlugin(layerSwitcherPlugin);
+
+  // ── Lectura de escala y nivel de zoom ──────────────────────────────
+  // Sustituye al control 'scale' de la API: en 2D da el nivel de zoom y la
+  // escala 1:n, y en 3D la altura de la cámara y la escala calculada desde el
+  // campo de visión (ver ext/mapInfo). Va en la banda de areaControls, que es
+  // un div a todo el ancho donde esta lectura ancha sí encaja.
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
 
   // ── Plugin cambio de implementación (OL <-> Cesium) ───────────────
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
