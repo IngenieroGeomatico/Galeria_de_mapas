@@ -2,22 +2,89 @@
    ESTILOS DEL PLUGIN CATALOGO (API-IDEE / API-CNIG)
    Repositorio: Galeria_de_mapas
    --------------------------------------------------------------------
-   El plugin pinta un panel plegable con:
-     - un <select> para cambiar de tipo de catálogo (IDEE, STAC, OGC API
-       Records), cada uno con su propia sección de servicios;
-     - la lista de servicios predefinidos de ese catálogo, cada uno con su
-       botón "Cargar";
-     - un cuadro de "Añadir por URL" con su botón;
-     - un cuadro de estado para avisos y errores.
+   La hoja sigue la filosofía del resto de plugins con panel del repo:
 
-   La hoja sigue la convención de variables del esquema del repositorio
-   (--g-plugin-*): los colores entran por el constructor y aquí solo se
-   aplican. El icono del botón es una MÁSCARA (--g-plugin-icon-mask), como
-   en el resto de plugins con panel.
+   1. La CROMÁTICA del panel (cabecera y botón) NO se escribe aquí con
+      colores: usa las variables del esquema (--g-plugin-bg-color,
+      --g-plugin-border-color, --g-plugin-icon-color y sus variantes
+      -active), que el JS inyecta en el panel desde el constructor
+      (color1/color2/color3). Se scopean con la clase del panel y llevan
+      !important, porque la API escribe sus estilos en línea y sin eso
+      pierden (medido en baseLayer: el botón salía en el azul de la API,
+      rgb 113,167,211, aunque la variable valiera orangered).
+
+   2. El ICONO del botón es una MÁSCARA (--g-plugin-icon-mask): solo cuenta
+      el alfa, así que el color lo pone --g-plugin-icon-color.
+
+   3. El CONTENIDO interior (selector, lista de servicios, cuadro de URL y
+      estado) usa clases con prefijo catalogo__ y colores neutros, igual que
+      el resto de plugins (bl-* en baseLayer, plantilla-* en la plantilla).
+
+   4. Los botones de la lista y el de "Añadir por URL" sí llevan el color de
+      marca del esquema, que es lo que tiene que destacar.
    ===================================================================== */
 
-/* Raíz del panel */
-.g-herramienta_catalogo .catalogo {
+/* ── Icono del botón colapsado (máscara, como en plantilla_plugin) ────── */
+.g-herramienta_catalogo .m-tools:before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: var(--g-plugin-icon-mask, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"));
+  mask-image: var(--g-plugin-icon-mask, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>"));
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* ── Cabecera del panel: fondo (color1), texto (color3), borde (color2) ── */
+.g-herramienta_catalogo .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* Panel abierto (opened) = estado activo: entran los colores "-active". */
+.g-herramienta_catalogo.opened .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
+}
+
+/* ── Botón del panel ────────────────────────────────────────────────── */
+/* Regla GENÉRICA de botón, pero con la clase del panel: sin ella pierde
+   contra el azul en línea de la API (medido en baseLayer). */
+.m-areas>div.m-area>div.m-panel.g-herramienta_catalogo>button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #fff) !important;
+  border-color: var(--g-plugin-border-color, #fff) !important;
+}
+
+.m-areas>div.m-area>div.m-panel.g-herramienta_catalogo.opened>button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-border-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
+}
+
+/* ── Contenido del plugin (estructura del framework) ─────────────────── */
+.g-herramienta_catalogo .m-control.m-container.m-herramienta {
+  display: flex !important;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #1a1a1a;
+}
+
+.g-herramienta_catalogo .m-panel-controls {
+  max-height: none !important;
+}
+
+/* ── Raíz del plugin ────────────────────────────────────────────────── */
+.catalogo {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -25,9 +92,6 @@
   max-width: 340px;
   padding: 10px 12px 12px;
   box-sizing: border-box;
-  font-family: "Muli", "Segoe UI", system-ui, sans-serif;
-  font-size: 13px;
-  color: #2b2b30;
 }
 
 /* ---- Cabecera: título + selector de catálogo ---- */
@@ -42,7 +106,7 @@
   font-size: 13px;
   letter-spacing: 0.2px;
   white-space: nowrap;
-  color: #2b2b30;
+  color: #1a1a1a;
 }
 
 .catalogo__selector {
@@ -53,7 +117,7 @@
   border: 1px solid #cccccc;
   border-radius: 6px;
   background: #ffffff;
-  color: #2b2b30;
+  color: #1a1a1a;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
@@ -107,7 +171,7 @@
 .catalogo__item-nombre {
   font-weight: 600;
   font-size: 12px;
-  color: #2b2b30;
+  color: #1a1a1a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -121,26 +185,25 @@
   text-overflow: ellipsis;
 }
 
+/* Botón "Cargar" de cada servicio: el color de marca del esquema, que es lo
+   que tiene que destacar. */
 .catalogo__item-boton {
   flex: 0 0 auto;
   height: 26px;
   padding: 0 10px;
-  border: 1px solid var(--g-plugin-border-color-active, #71A7D3);
+  border: 1px solid var(--g-plugin-bg-color, orangered);
   border-radius: 5px;
-  background: #ffffff;
-  color: var(--g-plugin-icon-color-active, #71A7D3);
+  background: var(--g-plugin-bg-color, orangered);
+  color: var(--g-plugin-icon-color, #ffffff);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: filter 0.15s ease;
 }
 
-.catalogo__item-boton:hover {
-  background: var(--g-plugin-bg-color, orangered);
-  border-color: var(--g-plugin-bg-color, orangered);
-  color: #ffffff;
-}
+.catalogo__item-boton:hover { filter: brightness(0.92); }
+.catalogo__item-boton:active { transform: translateY(1px); }
 
 /* ---- Añadir por URL ---- */
 .catalogo__url {
@@ -157,7 +220,7 @@
   border: 1px solid #cccccc;
   border-radius: 6px;
   background: #ffffff;
-  color: #2b2b30;
+  color: #1a1a1a;
   font: inherit;
   font-size: 12px;
   outline: none;
@@ -175,7 +238,7 @@
   border: 1px solid var(--g-plugin-bg-color, orangered);
   border-radius: 6px;
   background: var(--g-plugin-bg-color, orangered);
-  color: #ffffff;
+  color: var(--g-plugin-icon-color, #ffffff);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
