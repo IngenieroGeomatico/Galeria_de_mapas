@@ -275,7 +275,15 @@
       return await r.text();
     }
 
-    const r = await fetch(base + '?url=' + encodeURIComponent(url));
+    let r;
+    try {
+      r = await fetch(base + '?url=' + encodeURIComponent(url));
+    } catch (e) {
+      // El navegador solo dice "Failed to fetch", que no dice nada. Suele ser
+      // que el proxy no trae ese servidor o que no manda cabeceras CORS.
+      throw new Error('No se ha podido conectar con el proxy de la API. Puede que ' +
+        'su servidor no esté entre los que el proxy trae.');
+    }
     if (!r.ok) throw new Error('HTTP ' + r.status + ' (proxy)');
     const texto = await r.text();
 
@@ -289,6 +297,34 @@
       if (e && e.message && /proxy no ha podido/.test(e.message)) throw e;
     }
     return texto;
+  }
+
+  /**
+   * Convierte un cuerpo de respuesta en JSON, con un mensaje que se entienda
+   * cuando lo que llega no es JSON.
+   *
+   * El proxy de la API no trae todos los servidores: para los que no trae
+   * devuelve su propia página HTML, y un JSON.parse de eso da un
+   * "Unexpected token '<'" que no explica nada.
+   *
+   * @param {string} texto
+   * @param {string} url Para poder nombrar el documento en el mensaje.
+   * @returns {Object}
+   */
+  function parsearJson(texto, url) {
+    const limpio = String(texto || '').trim();
+    if (!limpio) {
+      throw new Error('El documento de «' + url + '» ha llegado vacío a través del proxy.');
+    }
+    try {
+      return JSON.parse(limpio);
+    } catch (e) {
+      if (/^</.test(limpio)) {
+        throw new Error('El proxy de la API ha devuelto una página web en vez del JSON de «' +
+          url + '»: su servidor no está entre los que el proxy trae.');
+      }
+      throw new Error('La respuesta de «' + url + '» no es JSON válido.');
+    }
   }
 
   /**
@@ -467,6 +503,7 @@
     leerCapas: leerCapas,
     urlCapabilities: urlCapabilities,
     pedir: pedir,
+    parsearJson: parsearJson,
     nombreDeUrl: nombreDeUrl,
     cargar: cargar
   };

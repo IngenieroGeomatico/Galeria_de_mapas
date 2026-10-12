@@ -353,6 +353,11 @@
       this._filtro = options.filtro || '';
       this._seccionesDom = {};
       this._estadoSecciones = {};
+      // Grupos plegables de la pestaña de catálogos ("disponibles" y "nuevo").
+      this._gruposAbiertos = Array.isArray(options.grupos) ? options.grupos.slice() : ['disponibles', 'nuevo'];
+      this._gruposDom = {};
+      // Entradas ya consultadas de los catálogos dados de alta por el usuario.
+      this._entradasPropias = {};
       this._analisis = null;
 
       // Referencias a la interfaz (se rellenan en _construirUI).
@@ -541,26 +546,45 @@
       panelCatalogos.setAttribute('role', 'tabpanel');
       panelCatalogos.setAttribute('data-panel', 'catalogos');
 
+      // La pestaña son dos secciones plegables: los catálogos disponibles (con
+      // el selector y su contenido) y el alta de un catálogo nuevo. Las dos
+      // usan el mismo acordeón que las secciones de tipo de servicio.
+      const grupoDisponibles = this._crearAcordeon('Catálogos disponibles', 'disponibles');
+      const grupoNuevo = this._crearAcordeon('Añadir un catálogo nuevo', 'nuevo');
+      panelCatalogos.appendChild(grupoDisponibles.caja);
+      panelCatalogos.appendChild(grupoNuevo.caja);
+
       const selector = document.createElement('select');
       selector.className = 'catalogo__selector';
       selector.setAttribute('aria-label', 'Tipo de catálogo');
-      Object.keys(CATALOGOS).forEach(function (id) {
-        const op = document.createElement('option');
-        op.value = id;
-        op.textContent = CATALOGOS[id].nombre;
-        if (id === self._tipoSeleccionado) op.selected = true;
-        selector.appendChild(op);
+      // Primero los de serie y después los que ha dado de alta el usuario, que
+      // se marcan para que se distinguan de un vistazo.
+      const opcionesCatalogo = Object.keys(CATALOGOS).map(function (id) {
+        return { id: id, nombre: CATALOGOS[id].nombre, propio: false };
+      });
+      (window.CatalogoRegistro ? window.CatalogoRegistro.todos() : []).forEach(function (c) {
+        opcionesCatalogo.push({ id: c.id, nombre: c.nombre, propio: true });
+      });
+      opcionesCatalogo.forEach(function (op) {
+        const el = document.createElement('option');
+        el.value = op.id;
+        el.textContent = op.propio ? (op.nombre + ' (tuyo)') : op.nombre;
+        if (op.id === self._tipoSeleccionado) el.selected = true;
+        selector.appendChild(el);
       });
       selector.addEventListener('change', function () {
         self._tipoSeleccionado = this.value;
         self._pintarCatalogo();
       });
-      panelCatalogos.appendChild(selector);
+      grupoDisponibles.cuerpo.appendChild(selector);
 
       const gestor = document.createElement('div');
       gestor.className = 'catalogo__gestor';
-      panelCatalogos.appendChild(gestor);
+      grupoDisponibles.cuerpo.appendChild(gestor);
       this._gestorEl = gestor;
+
+      // El alta va dentro de la segunda sección.
+      this._construirAlta(grupoNuevo.cuerpo);
 
       contents.appendChild(panelCatalogos);
       this._panelCatalogos = panelCatalogos;
@@ -648,7 +672,8 @@
 
     /**
      * Pinta la sección de gestión del catálogo activo. Debajo del selector,
-     * como se pidió: el acordeón de secciones o la lista fija, según el tipo.
+     * como se pidió: el acordeón de secciones, la lista de un catálogo propio,
+     * o la lista corta, según el tipo.
      */
     _pintarCatalogo() {
       const cont = this._gestorEl;
@@ -656,7 +681,7 @@
       cont.innerHTML = '';
       this._seccionesDom = {};
 
-      const tipo = CATALOGOS[this._tipoSeleccionado];
+      const tipo = this._catalogoActual();
       if (!tipo) return;
 
       const desc = document.createElement('p');
@@ -666,9 +691,324 @@
 
       if (tipo.modo === 'secciones') {
         this._pintarSecciones(cont, tipo);
+      } else if (tipo.esPropio) {
+        this._pintarCatalogoPropio(cont, tipo);
       } else {
         this._pintarLista(cont, tipo.listar() || []);
       }
+    }
+
+    /**
+     * El catálogo activo, tanto si es de serie como si lo ha dado de alta el
+     * usuario. Todos los usos de CATALOGOS[...] pasan por aquí, porque un
+     * catálogo del usuario no está en CATALOGOS.
+     * @returns {Object|null}
+     */
+    _catalogoActual() {
+      const registro = window.CatalogoRegistro;
+      const propio = registro ? registro.porId(this._tipoSeleccionado) : null;
+      if (propio) {
+        const self = this;
+        return {
+          id: propio.id,
+          nombre: propio.nombre,
+          modo: 'lista',
+          esPropio: true,
+          tipoCatalogo: propio.tipo,
+          url: propio.url,
+          descripcion: 'Catálogo añadido por ti: ' + propio.url,
+          cargarUrl: function (url, mapa, opciones) { return cargarUrlGenerica(url, mapa, opciones); },
+          listar: function () { return self._entradasPropias[propio.id] || []; }
+        };
+      }
+      return CATALOGOS[this._tipoSeleccionado] || null;
+    }
+
+    /**
+     * Pinta las entradas de un catálogo dado de alta por el usuario. Se piden
+     * al seleccionarlo y se cachean, como las secciones de la IDEE.
+     */
+    _pintarCatalogoPropio(cont, tipo) {
+      const self = this;
+      const cache = this._entradasPropias[tipo.id] || (this._entradasPropias[tipo.id] = {});
+
+      if (cache.datos) {
+        this._pintarLista(cont, cache.datos);
+        return;
+      }
+      if (cache.promesa) return;   // ya se está pidiendo
+
+      this._pintarAviso(cont, 'Consultando «' + tipo.nombre + '»…');
+
+      cache.promesa = window.CatalogoRegistro.leer(tipo.tipoCatalogo, tipo.url).then(function (entradas) {
+        cache.datos = entradas;
+        cache.promesa = null;
+        // Si mientras tanto el usuario ha cambiado de catálogo, este nodo ya no
+        // está en la página y no hay que pintar nada.
+        if (!document.contains(cont)) return;
+        self._pintarLista(cont, entradas);
+        self._decir('«' + tipo.nombre + '»: ' + entradas.length + ' entrada(s).');
+      }).catch(function (err) {
+        cache.promesa = null;
+        if (!document.contains(cont)) return;
+        cont.innerHTML = '';
+        self._pintarAviso(cont,
+          'No se ha podido consultar el catálogo: ' + (err && err.message ? err.message : err), 'error');
+      });
+    }
+
+    /**
+     * Crea una sección plegable, con el mismo acordeón que las secciones de
+     * tipo de servicio (patrón de vueloFotogrametrico): cabecera con
+     * role=button y cuerpo que se anima con alto y opacidad.
+     *
+     * @param {string} titulo Texto de la cabecera.
+     * @param {string} id Identificador del grupo, para el estado.
+     * @returns {{caja: HTMLElement, cuerpo: HTMLElement, alternar: Function}}
+     */
+    _crearAcordeon(titulo, id) {
+      const self = this;
+
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__seccion catalogo__seccion--grupo';
+      caja.dataset.grupo = id;
+
+      const cabecera = document.createElement('div');
+      cabecera.className = 'catalogo__seccion-cabecera';
+      cabecera.setAttribute('role', 'button');
+      cabecera.setAttribute('tabindex', '0');
+      cabecera.setAttribute('aria-expanded', 'false');
+
+      const chevron = document.createElement('span');
+      chevron.className = 'catalogo__seccion-chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+
+      const nombre = document.createElement('span');
+      nombre.className = 'catalogo__seccion-nombre';
+      nombre.textContent = titulo;
+
+      cabecera.appendChild(chevron);
+      cabecera.appendChild(nombre);
+      caja.appendChild(cabecera);
+
+      const cuerpo = document.createElement('div');
+      cuerpo.className = 'catalogo__seccion-cuerpo catalogo__seccion-cuerpo--grupo';
+      caja.appendChild(cuerpo);
+
+      const alternar = function () {
+        const abierta = caja.classList.contains('collapsed');
+        caja.classList.toggle('collapsed', !abierta);
+        cabecera.setAttribute('aria-expanded', String(abierta));
+        const pos = self._gruposAbiertos.indexOf(id);
+        if (abierta && pos === -1) self._gruposAbiertos.push(id);
+        if (!abierta && pos > -1) self._gruposAbiertos.splice(pos, 1);
+      };
+      this._gruposDom[id] = { caja: caja, cabecera: cabecera, alternar: alternar };
+
+      cabecera.addEventListener('click', alternar);
+      cabecera.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+          ev.preventDefault();
+          alternar();
+        }
+      });
+
+      // Los dos grupos de la pestaña arrancan abiertos: el catálogo es lo
+      // principal y el alta tiene que verse para que se sepa que existe.
+      if (this._gruposAbiertos.indexOf(id) === -1) this._gruposAbiertos.push(id);
+      caja.classList.remove('collapsed');
+      cabecera.setAttribute('aria-expanded', 'true');
+
+      return { caja: caja, cuerpo: cuerpo, alternar: alternar };
+    }
+
+    /**
+     * Pliega o despliega un grupo de la pestaña de catálogos.
+     * @param {string} id
+     */
+    _alternarGrupo(id) {
+      const grupo = this._gruposDom[id];
+      if (grupo) grupo.alternar();
+    }
+
+    // =====================================================================
+    //  Alta de catálogos nuevos
+    // =====================================================================
+
+    /**
+     * Construye la sección de alta de catálogos, que va al final de la
+     * pestaña: nombre, tipo, URL y la lista de los ya dados de alta.
+     * @param {HTMLElement} padre
+     */
+    _construirAlta(padre) {
+      const self = this;
+      const registro = window.CatalogoRegistro;
+
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__nuevo';
+
+      const cabecera = document.createElement('div');
+      cabecera.className = 'catalogo__nuevo-cabecera';
+      cabecera.textContent = 'Añadir un catálogo nuevo';
+      caja.appendChild(cabecera);
+
+      if (!registro) {
+        this._pintarAviso(caja, 'No está cargado catalogo_registro.js.', 'error');
+        padre.appendChild(caja);
+        return;
+      }
+
+      const nombre = document.createElement('input');
+      nombre.type = 'text';
+      nombre.className = 'catalogo__campo-control';
+      nombre.placeholder = 'Nombre del catálogo';
+      nombre.setAttribute('aria-label', 'Nombre del catálogo nuevo');
+
+      const tipo = document.createElement('select');
+      tipo.className = 'catalogo__campo-control';
+      tipo.setAttribute('aria-label', 'Tipo de catálogo nuevo');
+      Object.keys(registro.TIPOS).forEach(function (k) {
+        const op = document.createElement('option');
+        op.value = k;
+        op.textContent = registro.TIPOS[k];
+        tipo.appendChild(op);
+      });
+
+      const url = document.createElement('input');
+      url.type = 'text';
+      url.className = 'catalogo__campo-control';
+      url.placeholder = 'https://servidor/catalogo';
+      url.setAttribute('aria-label', 'URL del catálogo nuevo');
+
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'catalogo__cargar';
+      boton.textContent = 'Añadir al catálogo';
+      boton.addEventListener('click', function () {
+        let creado;
+        try {
+          creado = registro.alta({ nombre: nombre.value, tipo: tipo.value, url: url.value });
+        } catch (e) {
+          self._decir(e && e.message ? e.message : String(e), 'aviso');
+          return;
+        }
+        nombre.value = '';
+        url.value = '';
+        self._decir('Catálogo añadido: ' + creado.nombre);
+        // El tipo seleccionado se cambia ANTES de refrescar el selector: al
+        // repintarlo se marca la opción elegida, y si se hace al revés el
+        // desplegable se queda mostrando el catálogo anterior.
+        self._tipoSeleccionado = creado.id;
+        self._refrescarSelector();
+        self._pintarNuevos();
+        self._pintarCatalogo();
+      });
+
+      [['Nombre', nombre], ['Tipo', tipo], ['URL del catálogo', url]].forEach(function (campo) {
+        const etiqueta = document.createElement('label');
+        etiqueta.className = 'catalogo__campo';
+        const texto = document.createElement('span');
+        texto.className = 'catalogo__campo-etiqueta';
+        texto.textContent = campo[0];
+        etiqueta.appendChild(texto);
+        etiqueta.appendChild(campo[1]);
+        caja.appendChild(etiqueta);
+      });
+
+      const pie = document.createElement('div');
+      pie.className = 'catalogo__nuevo-pie';
+      pie.appendChild(boton);
+      caja.appendChild(pie);
+
+      const lista = document.createElement('div');
+      lista.className = 'catalogo__nuevos';
+      caja.appendChild(lista);
+      this._nuevosEl = lista;
+
+      padre.appendChild(caja);
+      this._pintarNuevos();
+    }
+
+    /** Vuelve a pintar la lista de catálogos dados de alta. */
+    _pintarNuevos() {
+      const self = this;
+      const lista = this._nuevosEl;
+      const registro = window.CatalogoRegistro;
+      if (!lista || !registro) return;
+
+      lista.innerHTML = '';
+      const dados = registro.todos();
+
+      if (!dados.length) {
+        const aviso = document.createElement('p');
+        aviso.className = 'catalogo__aviso';
+        aviso.textContent = 'Todavía no has añadido ningún catálogo.';
+        lista.appendChild(aviso);
+        return;
+      }
+
+      dados.forEach(function (c) {
+        const fila = document.createElement('div');
+        fila.className = 'catalogo__nuevo-item';
+
+        const textos = document.createElement('div');
+        textos.className = 'catalogo__item-texto';
+        const nom = document.createElement('span');
+        nom.className = 'catalogo__item-nombre';
+        nom.textContent = c.nombre;
+        nom.title = c.nombre;
+        const dir = document.createElement('span');
+        dir.className = 'catalogo__item-url';
+        dir.textContent = registro.TIPOS[c.tipo] + ' · ' + c.url;
+        dir.title = c.url;
+        textos.appendChild(nom);
+        textos.appendChild(dir);
+        fila.appendChild(textos);
+
+        const quitar = document.createElement('button');
+        quitar.type = 'button';
+        quitar.className = 'catalogo__quitar';
+        quitar.textContent = 'Quitar';
+        quitar.setAttribute('aria-label', 'Quitar el catálogo ' + c.nombre);
+        quitar.addEventListener('click', function () {
+          registro.baja(c.id);
+          delete self._entradasPropias[c.id];
+          if (self._tipoSeleccionado === c.id) self._tipoSeleccionado = 'idee';
+          self._decir('Catálogo quitado: ' + c.nombre);
+          self._refrescarSelector();
+          self._pintarNuevos();
+          self._pintarCatalogo();
+        });
+        fila.appendChild(quitar);
+
+        lista.appendChild(fila);
+      });
+    }
+
+    /** Vuelve a pintar el <select> de catálogos (tras un alta o una baja). */
+    _refrescarSelector() {
+      const selector = this._selectorEl;
+      const registro = window.CatalogoRegistro;
+      if (!selector || !registro) return;
+
+      const elegido = this._tipoSeleccionado;
+      selector.innerHTML = '';
+
+      const opciones = Object.keys(CATALOGOS).map(function (id) {
+        return { id: id, nombre: CATALOGOS[id].nombre, propio: false };
+      });
+      registro.todos().forEach(function (c) {
+        opciones.push({ id: c.id, nombre: c.nombre, propio: true });
+      });
+
+      opciones.forEach(function (op) {
+        const el = document.createElement('option');
+        el.value = op.id;
+        el.textContent = op.propio ? (op.nombre + ' (tuyo)') : op.nombre;
+        if (op.id === elegido) el.selected = true;
+        selector.appendChild(el);
+      });
+      selector.value = elegido;
     }
 
     /**
@@ -695,22 +1035,38 @@
       cont.appendChild(buscador);
       this._buscadorEl = input;
 
-      const caja = document.createElement('div');
-      caja.className = 'catalogo__secciones';
-      cont.appendChild(caja);
-      this._seccionesEl = caja;
+      const lista = document.createElement('div');
+      lista.className = 'catalogo__secciones';
+      cont.appendChild(lista);
+      this._seccionesEl = lista;
 
       if (!secciones.length) {
-        this._pintarAviso(caja, 'No se ha podido cargar el catálogo de la IDEE.');
+        this._pintarAviso(lista, 'No se ha podido cargar el catálogo de la IDEE.');
         return;
       }
 
       secciones.forEach(function (sec) {
-        const det = document.createElement('details');
-        det.className = 'catalogo__seccion';
+        // Acordeón con el patrón de vueloFotogrametrico: un contenedor con la
+        // clase "collapsed" cuando está plegado, una cabecera con role=button y
+        // un cuerpo que se anima con alto y opacidad. Se hace con <div> en vez
+        // de <details> por el mismo motivo que allí: así la cabecera puede
+        // llevar el contador y el distintivo de tipo, y el plegado se puede
+        // controlar desde el estado (getState/setState).
+        const caja = document.createElement('div');
+        // Nacen PLEGADAS: el catálogo de la IDEE tiene diez secciones y pedir
+        // las diez de golpe sería una barbaridad. Se despliegan al pulsar.
+        caja.className = 'catalogo__seccion collapsed';
+        caja.dataset.seccion = sec.id;
 
-        const sum = document.createElement('summary');
-        sum.className = 'catalogo__seccion-cabecera';
+        const cabecera = document.createElement('div');
+        cabecera.className = 'catalogo__seccion-cabecera';
+        cabecera.setAttribute('role', 'button');
+        cabecera.setAttribute('tabindex', '0');
+        cabecera.setAttribute('aria-expanded', 'false');
+
+        const chevron = document.createElement('span');
+        chevron.className = 'catalogo__seccion-chevron';
+        chevron.setAttribute('aria-hidden', 'true');
 
         const nombre = document.createElement('span');
         nombre.className = 'catalogo__seccion-nombre';
@@ -723,37 +1079,63 @@
         const cuenta = document.createElement('span');
         cuenta.className = 'catalogo__seccion-cuenta';
 
-        sum.appendChild(nombre);
-        sum.appendChild(insignia);
-        sum.appendChild(cuenta);
-        det.appendChild(sum);
+        cabecera.appendChild(chevron);
+        cabecera.appendChild(nombre);
+        cabecera.appendChild(insignia);
+        cabecera.appendChild(cuenta);
+        caja.appendChild(cabecera);
 
         const cuerpo = document.createElement('div');
         cuerpo.className = 'catalogo__seccion-cuerpo';
-        det.appendChild(cuerpo);
+        caja.appendChild(cuerpo);
 
-        det.addEventListener('toggle', function () {
-          if (det.open) {
-            if (self._seccionesAbiertas.indexOf(sec.id) === -1) self._seccionesAbiertas.push(sec.id);
-            self._cargarSeccion(sec, cuerpo, cuenta);
-          } else {
-            const pos = self._seccionesAbiertas.indexOf(sec.id);
-            if (pos > -1) self._seccionesAbiertas.splice(pos, 1);
+        const alternar = function () { self._alternarSeccion(sec.id); };
+        cabecera.addEventListener('click', alternar);
+        // Enter y Espacio, que es lo que se espera de un role=button.
+        cabecera.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+            ev.preventDefault();
+            alternar();
           }
         });
 
-        self._seccionesDom[sec.id] = { det: det, cuerpo: cuerpo, cuenta: cuenta, sec: sec };
-        caja.appendChild(det);
+        self._seccionesDom[sec.id] = { caja: caja, cabecera: cabecera, cuerpo: cuerpo, cuenta: cuenta, sec: sec };
+        lista.appendChild(caja);
       });
 
-      // Las secciones que estaban abiertas antes (cambio 2D/3D, o filtro que
-      // ya se estaba aplicando) se reabren y se piden.
+      // Las secciones que estaban abiertas antes (cambio 2D/3D) se reabren y
+      // se piden.
       this._seccionesAbiertas.forEach(function (id) {
         const s = this._seccionesDom[id];
-        if (s) { s.det.open = true; this._cargarSeccion(s.sec, s.cuerpo, s.cuenta); }
+        if (s) this._alternarSeccion(id, true);
       }, this);
 
       if ((this._filtro || '').trim()) this._filtrarSecciones();
+    }
+
+    /**
+     * Pliega o despliega una sección. Al desplegarla se pide al catálogo (y se
+     * cachea); el estado de cuáles están abiertas viaja en el getState.
+     * @param {string} id
+     * @param {boolean} [forzar] true despliega siempre, false pliega siempre.
+     */
+    _alternarSeccion(id, forzar) {
+      const s = this._seccionesDom[id];
+      if (!s) return;
+
+      const abierta = forzar === undefined ? s.caja.classList.contains('collapsed') : !forzar;
+      const pos = this._seccionesAbiertas.indexOf(id);
+
+      if (abierta) {
+        s.caja.classList.remove('collapsed');
+        s.cabecera.setAttribute('aria-expanded', 'true');
+        if (pos === -1) this._seccionesAbiertas.push(id);
+        this._cargarSeccion(s.sec, s.cuerpo, s.cuenta, (this._filtro || '').trim() || undefined);
+      } else {
+        s.caja.classList.add('collapsed');
+        s.cabecera.setAttribute('aria-expanded', 'false');
+        if (pos > -1) this._seccionesAbiertas.splice(pos, 1);
+      }
     }
 
     /**
@@ -773,13 +1155,13 @@
         if (!filtro) {
           // Sin filtro vuelve todo: la sección se reaparece y su cuerpo se
           // repinta entero, que se quedó con solo las coincidencias.
-          s.det.hidden = false;
+          s.caja.hidden = false;
           if (st && st.datos) self._pintarSeccion(st.datos, s.cuerpo, '');
           return;
         }
 
         if (st && st.datos) {
-          s.det.hidden = !self._pintarSeccion(st.datos, s.cuerpo, filtro);
+          s.caja.hidden = !self._pintarSeccion(st.datos, s.cuerpo, filtro);
         } else if (!st || !st.promesa) {
           // Sin datos todavía: se pide para poder filtrarla (queda cacheada).
           self._cargarSeccion(s.sec, s.cuerpo, s.cuenta, filtro);
@@ -820,7 +1202,7 @@
         // Si la sección se pidió solo para filtrar, se esconde si en ella no
         // hay nada que ver: si no, el filtro deja diez secciones vacías.
         const dom = self._seccionesDom[sec.id];
-        if (filtro && dom) dom.det.hidden = !queda;
+        if (filtro && dom) dom.caja.hidden = !queda;
         return datos;
       }).catch(function (err) {
         st.promesa = null;
@@ -1203,7 +1585,9 @@
       }
       this._decir('Cargando…');
       try {
-        const capas = CATALOGOS[this._tipoSeleccionado].cargarUrl(info.url, this._map, {
+        const tipoActual = this._catalogoActual();
+        if (!tipoActual) return;
+        const capas = tipoActual.cargarUrl(info.url, this._map, {
           tipo: info.tipo,
           capas: info.elegidas,
           nombre: info.nombre
@@ -1240,12 +1624,14 @@
 
       urlTool.leerCapas(srv.url, tipo).then(function (info) {
         if (!info.capas || info.capas.length <= 1) {
-          const capas = CATALOGOS[self._tipoSeleccionado].cargarUrl(srv.url, self._map, {
+          const cargador = self._catalogoActual();
+          if (!cargador) return;
+          const creadas = cargador.cargarUrl(srv.url, self._map, {
             tipo: info.tipo || tipo,
             capas: (info.capas || []).map(function (c) { return c.id; }),
             nombre: srv.nombre
           });
-          const cuantas = (capas && capas.length) || 0;
+          const cuantas = (creadas && creadas.length) || 0;
           self._decir('Cargada' + (cuantas > 1 ? 's ' + cuantas + ' capas' : '') + ': ' + srv.nombre);
           return;
         }
@@ -1309,6 +1695,7 @@
         // Secciones del catálogo abiertas y filtro de texto: son lo que el
         // usuario estaba mirando, y abrirlas de nuevo cuesta una petición.
         secciones: this._seccionesAbiertas.slice(),
+        grupos: this._gruposAbiertos.slice(),
         filtro: this._filtro || '',
         // Lo último analizado, para que la pestaña de opciones siga montada
         // después del cambio 2D/3D sin tener que volver a pedir el servicio.
@@ -1326,7 +1713,10 @@
 
     setState(state, map) {
       if (!state || typeof state !== 'object') return;
-      if (state.tipo && CATALOGOS[state.tipo]) {
+      // Un catálogo del usuario vale igual que uno de serie: los ids de estos
+      // empiezan por "usuario_" y no están en CATALOGOS.
+      const esDelUsuario = window.CatalogoRegistro && window.CatalogoRegistro.porId(state.tipo);
+      if (state.tipo && (CATALOGOS[state.tipo] || esDelUsuario)) {
         this._tipoSeleccionado = state.tipo;
       }
       if (typeof state.url === 'string') {
@@ -1337,6 +1727,9 @@
       }
       if (Array.isArray(state.secciones)) {
         this._seccionesAbiertas = state.secciones.filter(function (id) { return typeof id === 'string'; });
+      }
+      if (Array.isArray(state.grupos)) {
+        this._gruposAbiertos = state.grupos.filter(function (id) { return typeof id === 'string'; });
       }
       if (typeof state.filtro === 'string') {
         this._filtro = state.filtro;
@@ -1416,8 +1809,11 @@
       this._selectorEl = null;
       this._capasListaEl = null;
       this._buscadorEl = null;
+      this._nuevosEl = null;
       this._seccionesDom = {};
       this._estadoSecciones = {};
+      this._entradasPropias = {};
+      this._gruposDom = {};
     }
   }
 

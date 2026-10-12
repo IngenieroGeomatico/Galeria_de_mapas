@@ -270,8 +270,15 @@
 .catalogo__buscador-input:focus-visible { border-color: var(--cat-acento); box-shadow: var(--cat-foco); }
 
 /* ---- Acordeón de secciones del catálogo --------------------------------- */
-/* Cada <details> es una sección (un tipo de servicio). El marcador nativo se
-   oculta y el que se ve es el del propio plugin. */
+/* Cada sección es un tipo de servicio. El plegado sigue el patrón de
+   ext/vueloFotogrametrico (acordeones con .vf-accordion y .collapsed) en vez
+   de <details>: así la cabecera puede llevar el contador y el distintivo de
+   tipo, y el plegado se puede escribir en el estado del plugin.
+
+   IMPORTANTE, y por el mismo motivo que allí: las reglas de estado usan el
+   combinador de HIJO DIRECTO (>). Con el descendiente, el estado de una
+   sección desplegada afectaría a la cabecera y al cuerpo de las que llevara
+   dentro y se desincronizaría el chevron. */
 .catalogo__secciones {
   display: flex;
   flex-direction: column;
@@ -289,7 +296,7 @@
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.catalogo__seccion[open] {
+.catalogo__seccion:not(.collapsed) {
   border-color: var(--cat-linea-fuerte);
   box-shadow: var(--cat-sombra);
 }
@@ -302,31 +309,37 @@
   gap: 8px;
   padding: 9px 10px;
   cursor: pointer;
-  list-style: none;
   user-select: none;
   transition: background-color 0.16s ease;
 }
 
-.catalogo__seccion-cabecera::-webkit-details-marker { display: none; }
+.catalogo__seccion-cabecera:hover { background: var(--cat-fondo-2); }
+
+.catalogo__seccion-cabecera:focus-visible {
+  outline: none;
+  box-shadow: var(--cat-foco);
+}
 
 /* El chevron es un cuadrado que gira: es el gesto de "esto se abre". */
-.catalogo__seccion-cabecera::before {
-  content: "";
+.catalogo__seccion-chevron {
   flex: 0 0 auto;
   width: 7px;
   height: 7px;
+  margin-right: 2px;
   border-right: 2px solid var(--cat-fg-tenue);
   border-bottom: 2px solid var(--cat-fg-tenue);
   transform: rotate(-45deg);
-  transition: transform 0.18s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-.catalogo__seccion[open] > .catalogo__seccion-cabecera::before {
+.catalogo__seccion.collapsed > .catalogo__seccion-cabecera .catalogo__seccion-chevron {
+  transform: rotate(-45deg);
+}
+
+.catalogo__seccion:not(.collapsed) > .catalogo__seccion-cabecera .catalogo__seccion-chevron {
   transform: rotate(45deg);
   border-color: var(--cat-marca);
 }
-
-.catalogo__seccion-cabecera:hover { background: var(--cat-fondo-2); }
 
 .catalogo__seccion-nombre {
   flex: 1 1 auto;
@@ -352,7 +365,7 @@
   text-transform: uppercase;
 }
 
-.catalogo__seccion[open] > .catalogo__seccion-cabecera .catalogo__seccion-tipo {
+.catalogo__seccion:not(.collapsed) > .catalogo__seccion-cabecera .catalogo__seccion-tipo {
   background: var(--cat-marca);
   color: var(--cat-marca-fg);
 }
@@ -366,12 +379,41 @@
   text-align: right;
 }
 
-.catalogo__seccion-cuerpo {
+/* Cuerpo de la sección: desplegado por defecto, y plegado con alto y opacidad
+   a cero (patrón de vueloFotogrametrico). El max-height alto da margen para
+   listas largas; con overflow hidden el plegado no deja hueco. */
+.catalogo__seccion > .catalogo__seccion-cuerpo {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 2px 8px 8px;
+  padding: 8px 8px 8px;
   border-top: 1px solid var(--cat-linea);
+  max-height: 3000px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-height 0.28s ease-out, opacity 0.28s ease-out,
+    padding-top 0.28s ease-out, border-top-color 0.28s ease-out;
+}
+
+.catalogo__seccion.collapsed > .catalogo__seccion-cuerpo {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+}
+
+/* Los dos grupos de la pestaña (catálogos disponibles y alta) son las mismas
+   secciones, pero sin contador ni distintivo, y su cuerpo lleva su propio hueco
+   para que el contenido no quede pegado al borde de la cabecera. */
+.catalogo__seccion--grupo > .catalogo__seccion-cuerpo {
+  padding: 10px 12px 12px;
+  gap: 10px;
+}
+
+.catalogo__seccion--grupo > .catalogo__seccion-cabecera .catalogo__seccion-nombre {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* ---- Organismos (agrupación dentro de una sección) --------------------- */
@@ -709,6 +751,66 @@
 }
 
 .catalogo__aviso--error {
+  background: #fdecea;
+  color: #b3261e;
+}
+
+/* ---- Alta de catálogos nuevos ------------------------------------------ */
+/* Va al final de la pestaña, separado del resto con una línea. */
+.catalogo__nuevo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cat-linea);
+}
+
+.catalogo__nuevo-cabecera {
+  color: var(--cat-fg);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.catalogo__nuevo-pie {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- Catálogos ya dados de alta --------------------------------------- */
+.catalogo__nuevos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.catalogo__nuevo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+}
+
+/* Quitar va en plano: es retirar, no la acción principal. */
+.catalogo__quitar {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cat-fg-suave);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
+}
+
+.catalogo__quitar:hover {
+  border-color: #d9534f;
   background: #fdecea;
   color: #b3261e;
 }
