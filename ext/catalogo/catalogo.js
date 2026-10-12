@@ -476,8 +476,23 @@
         console.warn(this.name + ': no se pudo hacer arrastrable la barra de título.', e);
       }
 
-      this._aplicarIcono(panel.getElement ? panel.getElement() : null);
+      this._aplicarIcono(this._elementoPanel(panel));
       // No se refresca la lista aquí: la vista del control todavía no existe.
+    }
+
+    /**
+     * Elemento DOM de un panel. La API no expone getElement() en el Panel (sí en
+     * los controles), así que se cae a la propiedad interna _element.
+     * @param {Object} panel
+     * @returns {HTMLElement|null}
+     */
+    _elementoPanel(panel) {
+      if (!panel) return null;
+      if (typeof panel.getElement === 'function') {
+        const el = panel.getElement();
+        if (el) return el;
+      }
+      return panel._element || null;
     }
 
     /** Construye la interfaz del plugin dentro del control. */

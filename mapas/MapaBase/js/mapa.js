@@ -75,10 +75,20 @@ function mapa() {
   // ── Catálogo de servicios y capas ──────────────────────────────────
   // Listado predefinido por tipo de catálogo (IDEE, STAC, OGC API Records) y
   // botón de "Añadir por URL". Ver ext/catalogo.
-  // Va en la esquina TR (arriba a la derecha) con order 2. El CSS recoloca la
-  // barra de título (margin-left:-40px) porque en TR el API mete el botón
-  // dentro del panel y sin eso la cabecera sale partida.
-  mapajs.addPlugin(new IDEE.plugin.miPlugin_catalogo({ position: 'TR', order: 2 }));
+  // Va en la esquina TR (arriba a la derecha) con order 2. La barra de título
+  // la deja a todo ancho el bloque "PANEL EN LA ESQUINA TR" que llevan las
+  // hojas de los plugins (en TR el API mete el botón dentro del panel y sin
+  // eso la cabecera sale partida).
+  //
+  // El icono es el "collect" de svgrepo (libros apilados), guardado en
+  // img/iconos/collect.svg. La ruta es relativa al DOCUMENTO (la máscara se
+  // resuelve desde el CSS de la página, no desde este .js), y el color lo pone
+  // el propio plugin como máscara (--g-plugin-icon-mask).
+  mapajs.addPlugin(new IDEE.plugin.miPlugin_catalogo({
+    position: 'TR',
+    order: 2,
+    icon: '../../img/iconos/collect.svg'
+  }));
 
   // ── Plugin cambio de implementación (OL <-> Cesium) ───────────────
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
