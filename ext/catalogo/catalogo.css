@@ -99,51 +99,111 @@
   max-height: none !important;
 }
 
-/* ── Raíz del plugin ────────────────────────────────────────────────── */
+/* ====================================================================
+   INTERFAZ
+   --------------------------------------------------------------------
+   La paleta del plugin vive aquí como variables, para no repetir el mismo
+   gris veinte veces: los colores de MARCA (los del esquema del repositorio)
+   entran por --g-plugin-*, y los neutros se derivan de aquí.
+
+   El aire, el radio y la sombra son lo que da el aspecto moderno: superficies
+   blancas sobre fondo muy claro, bordes de un pelo, sombras suaves y estados
+   de hover y de foco que se notan sin estridar.
+   ==================================================================== */
+
 .catalogo {
+  /* Neutros */
+  --cat-fg: #1f2430;
+  --cat-fg-suave: #5b6472;
+  --cat-fg-tenue: #8b95a5;
+  --cat-linea: #e7eaf0;
+  --cat-linea-fuerte: #d4dae3;
+  --cat-fondo: #ffffff;
+  --cat-fondo-2: #f7f9fc;
+  --cat-fondo-3: #eef2f7;
+  --cat-sombra: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 16px rgba(16, 24, 40, 0.08);
+  --cat-sombra-alta: 0 2px 4px rgba(16, 24, 40, 0.08), 0 12px 28px rgba(16, 24, 40, 0.12);
+  --cat-radio: 12px;
+  --cat-radio-s: 8px;
+  --cat-foco: 0 0 0 3px rgba(113, 167, 211, 0.35);
+
+  /* Marca (los del esquema) */
+  --cat-marca: var(--g-plugin-bg-color, orangered);
+  --cat-marca-fg: var(--g-plugin-icon-color, #ffffff);
+  --cat-acento: var(--g-plugin-border-color-active, #71a7d3);
+
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 260px;
-  max-width: 340px;
-  padding: 10px 12px 12px;
+  min-width: 300px;
+  max-width: 360px;
+  box-sizing: border-box;
+  color: var(--cat-fg);
+  /* La cabecera se pasa 10 px por la derecha en TR (el voladizo que hace el
+     bloque "PANEL EN LA ESQUINA TR"); sin esto saldría barra horizontal. */
+  overflow-x: hidden;
+}
+
+/* El aire del plugin va en el CONTENIDO y no en la raíz: la raíz es el
+   contenedor de controles del panel, y el bloque "PANEL EN LA ESQUINA TR" le
+   pone padding:0 con más especificidad del que tiene .catalogo. Además la
+   cabecera tiene que ir a sangre, y si el padding estuviera en la raíz también
+   entraría ella. */
+.catalogo__contenido {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 14px;
   box-sizing: border-box;
 }
 
-/* ---- Pestañas y sus paneles ---- */
+/* Los controles de formulario se miden con el padding dentro. Sin esto, un
+   input con width:100% y padding se sale 20 px por la derecha (medido: el
+   campo de nombre llegaba a 1374 con el panel en 1370). */
+.catalogo input,
+.catalogo select,
+.catalogo button {
+  box-sizing: border-box;
+}
+
+/* ---- Pestañas ---------------------------------------------------------- */
+/* Segmentadas, al estilo de un conmutador: la activa se despega con sombra y
+   color de marca, la inactiva se hunde en el fondo. */
 .catalogo__pestanas {
   display: flex;
-  gap: 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e3e3e3;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--cat-radio);
+  background: var(--cat-fondo-3);
 }
 
 .catalogo__pestana {
   flex: 1 1 0;
   min-width: 0;
   height: 30px;
-  padding: 0 8px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  background: #f5f5f5;
-  color: #555555;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--cat-radio-s);
+  background: transparent;
+  color: var(--cat-fg-suave);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
+  letter-spacing: 0.1px;
   line-height: 1.2;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.catalogo__pestana:hover { background: #ececec; }
+.catalogo__pestana:hover {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--cat-fg);
+}
 
-/* La pestaña activa lleva el color de marca del esquema, que es lo que tiene
-   que destacar. */
 .catalogo__pestana--activa,
 .catalogo__pestana--activa:hover {
-  background: var(--g-plugin-bg-color, orangered);
-  border-color: var(--g-plugin-bg-color, orangered);
-  color: var(--g-plugin-icon-color, #ffffff);
+  background: var(--cat-marca);
+  color: var(--cat-marca-fg);
+  box-shadow: var(--cat-sombra);
 }
 
 .catalogo__panel {
@@ -157,186 +217,517 @@
   display: none;
 }
 
-/* ---- Cabecera: título + selector de catálogo ---- */
-.catalogo__cabecera {
+/* ---- Contenedor de gestión (debajo del selector) ---------------------- */
+.catalogo__gestor {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
 }
 
-.catalogo__titulo {
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-  color: #1a1a1a;
+.catalogo__descripcion {
+  margin: 0;
+  color: var(--cat-fg-suave);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
+/* ---- Selector de catálogo ---------------------------------------------- */
 .catalogo__selector {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid #cccccc;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #1a1a1a;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg);
   font: inherit;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.catalogo__selector:focus-visible {
-  border-color: var(--g-plugin-border-color-active, #71A7D3);
-  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.35);
+.catalogo__selector:hover { border-color: var(--cat-acento); }
+.catalogo__selector:focus-visible { border-color: var(--cat-acento); box-shadow: var(--cat-foco); }
+
+/* ---- Buscador ---------------------------------------------------------- */
+.catalogo__buscador-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-/* ---- Lista de servicios predefinidos ---- */
-.catalogo__lista {
+.catalogo__buscador-input::placeholder { color: var(--cat-fg-tenue); }
+.catalogo__buscador-input:focus-visible { border-color: var(--cat-acento); box-shadow: var(--cat-foco); }
+
+/* ---- Acordeón de secciones del catálogo --------------------------------- */
+/* Cada <details> es una sección (un tipo de servicio). El marcador nativo se
+   oculta y el que se ve es el del propio plugin. */
+.catalogo__secciones {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 320px;
+  max-height: 380px;
   overflow-y: auto;
+  padding-right: 2px;
 }
 
-.catalogo__vacio {
-  margin: 4px 0;
-  color: #777777;
-  font-size: 12px;
+.catalogo__seccion {
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  overflow: hidden;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.catalogo__item {
+.catalogo__seccion[open] {
+  border-color: var(--cat-linea-fuerte);
+  box-shadow: var(--cat-sombra);
+}
+
+.catalogo__seccion[hidden] { display: none; }
+
+.catalogo__seccion-cabecera {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid #e3e3e3;
-  border-radius: 6px;
-  background: #fafafa;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  padding: 9px 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: background-color 0.16s ease;
+}
+
+.catalogo__seccion-cabecera::-webkit-details-marker { display: none; }
+
+/* El chevron es un cuadrado que gira: es el gesto de "esto se abre". */
+.catalogo__seccion-cabecera::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--cat-fg-tenue);
+  border-bottom: 2px solid var(--cat-fg-tenue);
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease;
+}
+
+.catalogo__seccion[open] > .catalogo__seccion-cabecera::before {
+  transform: rotate(45deg);
+  border-color: var(--cat-marca);
+}
+
+.catalogo__seccion-cabecera:hover { background: var(--cat-fondo-2); }
+
+.catalogo__seccion-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cat-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Distintivo del tipo de servicio: es lo que diferencia una sección de otra. */
+.catalogo__seccion-tipo {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--cat-fondo-3);
+  color: var(--cat-fg-suave);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.catalogo__seccion[open] > .catalogo__seccion-cabecera .catalogo__seccion-tipo {
+  background: var(--cat-marca);
+  color: var(--cat-marca-fg);
+}
+
+.catalogo__seccion-cuenta {
+  flex: 0 0 auto;
+  min-width: 22px;
+  color: var(--cat-fg-tenue);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.catalogo__seccion-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 8px 8px;
+  border-top: 1px solid var(--cat-linea);
+}
+
+/* ---- Organismos (agrupación dentro de una sección) --------------------- */
+.catalogo__organismo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 2px;
+  padding: 0 2px;
+  color: var(--cat-fg-suave);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.catalogo__organismo-cuenta {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--cat-fondo-3);
+  color: var(--cat-fg-suave);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+/* ---- Fila de servicio -------------------------------------------------- */
+.catalogo__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+  transition: background-color 0.16s ease, transform 0.16s ease;
 }
 
 .catalogo__item:hover {
-  background: #f0f4f8;
-  border-color: #c9d6e2;
+  background: var(--cat-fondo-3);
+  transform: translateX(2px);
 }
 
 .catalogo__item-texto {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
 }
 
 .catalogo__item-nombre {
+  font-size: 12.5px;
   font-weight: 600;
-  font-size: 12px;
-  color: #1a1a1a;
-  white-space: nowrap;
+  color: var(--cat-fg);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.catalogo__item-desc {
-  font-size: 11px;
-  color: #777777;
-  white-space: nowrap;
+/* La URL va en petite y atenuada: es información, no el título. */
+.catalogo__item-url {
+  font-size: 10.5px;
+  color: var(--cat-fg-tenue);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Botón "Cargar" de cada servicio: el color de marca del esquema, que es lo
-   que tiene que destacar. */
 .catalogo__item-boton {
   flex: 0 0 auto;
   height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--g-plugin-bg-color, orangered);
-  border-radius: 5px;
-  background: var(--g-plugin-bg-color, orangered);
-  color: var(--g-plugin-icon-color, #ffffff);
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--cat-marca);
+  color: var(--cat-marca-fg);
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: filter 0.16s ease, transform 0.12s ease;
 }
 
-.catalogo__item-boton:hover { filter: brightness(0.92); }
-.catalogo__item-boton:active { transform: translateY(1px); }
+.catalogo__item-boton:hover { filter: brightness(0.94); }
+.catalogo__item-boton:active { transform: scale(0.96); }
 
-/* ---- Añadir por URL ---- */
+/* ---- Campo de URL ------------------------------------------------------ */
 .catalogo__url {
   display: flex;
   gap: 6px;
-  padding-top: 2px;
 }
 
 .catalogo__url-input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid #cccccc;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #1a1a1a;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg);
   font: inherit;
   font-size: 12px;
   outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.catalogo__url-input:focus-visible {
-  border-color: var(--g-plugin-border-color-active, #71A7D3);
-  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.35);
-}
+.catalogo__url-input:focus-visible { border-color: var(--cat-acento); box-shadow: var(--cat-foco); }
 
 .catalogo__url-boton {
   flex: 0 0 auto;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--g-plugin-bg-color, orangered);
-  border-radius: 6px;
-  background: var(--g-plugin-bg-color, orangered);
-  color: var(--g-plugin-icon-color, #ffffff);
+  height: 34px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fg);
+  color: #ffffff;
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: opacity 0.16s ease, transform 0.12s ease;
 }
 
-.catalogo__url-boton:hover { filter: brightness(0.92); }
-.catalogo__url-boton:active { transform: translateY(1px); }
+.catalogo__url-boton:hover { opacity: 0.88; }
+.catalogo__url-boton:active { transform: scale(0.97); }
 
-/* ---- Cuadro de estado ---- */
-.catalogo__estado {
-  min-height: 16px;
-  padding: 6px 8px;
-  border-radius: 5px;
-  background: #f4f4f4;
-  color: #555555;
+/* ---- Opciones de carga ------------------------------------------------- */
+.catalogo__opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio);
+  background: var(--cat-fondo);
+  box-shadow: var(--cat-sombra);
+}
+
+.catalogo__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.catalogo__campo-etiqueta {
+  color: var(--cat-fg-suave);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.catalogo__campo-control {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.catalogo__campo-control:focus-visible { border-color: var(--cat-acento); box-shadow: var(--cat-foco); }
+
+/* ---- Lista de capas del servicio --------------------------------------- */
+.catalogo__capas {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  overflow: hidden;
+}
+
+.catalogo__capas-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--cat-fondo-2);
+  border-bottom: 1px solid var(--cat-linea);
+}
+
+.catalogo__capas-titulo {
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--cat-fg-suave);
+}
+
+.catalogo__capas-acciones {
+  display: flex;
+  gap: 4px;
+}
+
+/* Enlaces de acción (todas / ninguna): sin caja, como texto. */
+.catalogo__enlace {
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  color: var(--cat-acento);
+  font: inherit;
   font-size: 11px;
-  line-height: 1.35;
-  word-break: break-word;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.16s ease;
 }
 
-.catalogo__estado:empty {
-  display: none;
+.catalogo__enlace:hover { background: rgba(113, 167, 211, 0.14); }
+
+.catalogo__capas-lista {
+  max-height: 220px;
+  overflow-y: auto;
 }
 
-.catalogo__estado--aviso {
+.catalogo__capa {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--cat-linea);
+  transition: background-color 0.14s ease;
+}
+
+.catalogo__capa:last-child { border-bottom: none; }
+.catalogo__capa:hover { background: var(--cat-fondo-2); }
+.catalogo__capa--marcada { background: rgba(113, 167, 211, 0.08); }
+
+/* La casilla se pinta con appearance:none para tener el mismo aspecto en
+   todos los navegadores, con el color de acento cuando está marcada. */
+.catalogo__capa-casilla {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 1px 0 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1.5px solid var(--cat-linea-fuerte);
+  border-radius: 4px;
+  background: var(--cat-fondo);
+  cursor: pointer;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.catalogo__capa-casilla:checked {
+  border-color: var(--cat-acento);
+  background-color: var(--cat-acento);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M3 7.4l2.6 2.6L11 4.6'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.catalogo__capa-casilla:focus-visible { box-shadow: var(--cat-foco); }
+
+.catalogo__capa-textos {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.catalogo__capa-nombre {
+  font-size: 12px;
+  color: var(--cat-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogo__capa-id {
+  font-size: 10px;
+  color: var(--cat-fg-tenue);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Pie de las opciones ----------------------------------------------- */
+.catalogo__opciones-pie {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.catalogo__cargar {
+  height: 34px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 999px;
+  background: var(--cat-marca);
+  color: var(--cat-marca-fg);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.16);
+  transition: filter 0.16s ease, transform 0.12s ease;
+}
+
+.catalogo__cargar:hover { filter: brightness(0.94); }
+.catalogo__cargar:active { transform: scale(0.97); }
+
+/* Sin ninguna capa elegida el botón no lleva a ningún sitio: se apaga. */
+.catalogo__cargar:disabled {
+  background: var(--cat-fondo-3);
+  color: var(--cat-fg-tenue);
+  box-shadow: none;
+  cursor: default;
+  filter: none;
+}
+
+/* ---- Avisos dentro de la interfaz -------------------------------------- */
+.catalogo__aviso {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.catalogo__aviso--aviso {
   background: #fff7e6;
   color: #8a5a00;
 }
 
-.catalogo__estado--error {
+.catalogo__aviso--error {
   background: #fdecea;
   color: #b3261e;
 }
+
+/* ---- Cuadro de estado -------------------------------------------------- */
+.catalogo__estado {
+  min-height: 16px;
+  padding: 8px 10px;
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.catalogo__estado:empty { display: none; }
+.catalogo__estado--aviso { background: #fff7e6; color: #8a5a00; }
+.catalogo__estado--error { background: #fdecea; color: #b3261e; }
 
 /* ====================================================================
    PANEL EN LA ESQUINA TR
