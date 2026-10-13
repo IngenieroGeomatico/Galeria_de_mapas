@@ -598,7 +598,15 @@ class miPlugin_layerSwitcher {
         const tree = await buildLayerTree();
         const htmlList = tree.map(node => renderLayerNode(node, 0)).join('');
 
-        control.htmlView = `<ul class="overlay-layer-selector">${htmlList}</ul>`;
+        // Sin capas que gestionar se pintaba un <ul> vacío, que en el panel
+        // parecía un hueco roto en vez de "aquí no hay nada". Se pone un texto
+        // que lo explique, y por qué: las capas base y las que llevan
+        // displayInLayerSwitcher false quedan fuera a propósito.
+        const cuerpo = htmlList || '<li class="ls-vacio" role="status">'
+          + 'No se han encontrado capas superpuestas para gestionar desde el selector de capas.'
+          + '</li>';
+
+        control.htmlView = `<ul class="overlay-layer-selector">${cuerpo}</ul>`;
         const preview = document.querySelector('#m-herramienta-previews-layerSwitcher');
         if (preview) preview.innerHTML = control.htmlView;
 
