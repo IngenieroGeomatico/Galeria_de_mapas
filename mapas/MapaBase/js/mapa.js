@@ -72,9 +72,9 @@ function mapa() {
   // un div a todo el ancho donde esta lectura ancha sí encaja.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
 
-  // ── Catálogo de servicios y capas ──────────────────────────────────
-  // Listado predefinido por tipo de catálogo (IDEE, STAC, OGC API Records) y
-  // botón de "Añadir por URL". Ver ext/catalogo.
+  // ── Plugin del catálogo de servicios y capas ──────────────────────
+  // Panel de "Catálogos disponibles" (con alta por URL) más los catálogos que
+  // declare este visualizador. Ver ext/catalogo.
   // Va en la esquina TR (arriba a la derecha) con order 2. La barra de título
   // la deja a todo ancho el bloque "PANEL EN LA ESQUINA TR" que llevan las
   // hojas de los plugins (en TR el API mete el botón dentro del panel y sin
@@ -156,19 +156,6 @@ function mapa() {
     })
   ];
 
-  // ── Plugin del catálogo ────────────────────────────────────────────
-  // Catálogos disponibles (con alta por URL) más los de arriba. Ver
-  // ext/catalogo.
-  // Va en la esquina TR (arriba a la derecha) con order 2. La barra de título
-  // la deja a todo ancho el bloque "PANEL EN LA ESQUINA TR" que llevan las
-  // hojas de los plugins (en TR el API mete el botón dentro del panel y sin
-  // eso la cabecera sale partida).
-  //
-  // El icono es el "collect" de svgrepo (libros apilados), guardado en
-  // img/iconos/collect.svg. La ruta es relativa al DOCUMENTO (la máscara se
-  // resuelve desde el CSS de la página, no desde este .js), y el color lo pone
-  // el propio plugin como máscara (--g-plugin-icon-mask).
-  //
   // Con `soloCatalogos: true` el panel se quedaría solo con lo que se le pase,
   // y con `catalogoPorDefecto: 'servicios-del-visor'` se abriría por ese.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_catalogo({
