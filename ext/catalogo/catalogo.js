@@ -395,6 +395,68 @@
   }
 
   /**
+   * Saca un id utilizable de un nombre: "Servicios de Madrid" ->
+   * "servicios-de-madrid". Sin acentos, en minúsculas y con guiones.
+   * @param {string} nombre
+   * @returns {string}
+   */
+  function idDesdeNombre(nombre) {
+    const base = String(nombre || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')   // fuera los acentos
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return base || ('cat' + Date.now().toString(36));
+  }
+
+  /**
+   * IDEE.catalog.custom: un catálogo declarado por el visualizador, en datos
+   * planos. Se instancia ANTES de crear el plugin y se le pasa en su array
+   * de catálogos:
+   *
+   *   const propio = new IDEE.catalog.custom({
+   *     nombre: 'Servicios del visor',
+   *     nodos: [
+   *       { nombre: 'Ráster', servicios: [{ nombre: 'Callejero', url: '...' }] },
+   *       { nombre: 'Organismo', nodos: [ ... ] }
+   *     ]
+   *   });
+   *
+   *   mapajs.addPlugin(new miPlugin_catalogo({ catalogos: [propio] }));
+   *
+   * El TIPO de cada servicio no se pone: lo deduce la algoritmia de
+   * catalogo_url.js a partir de la URL.
+   *
+   * El objeto resultante tiene la misma forma que IDEE.catalog.tipos.idee:
+   * id, nombre, modo, listar() y cargarUrl(), así que se puede leer suelto
+   * desde IDEE.catalog.propios.
+   */
+  class CatalogoCustom {
+    /**
+     * @param {Object} [opciones]
+     * @param {string} [opciones.id] Id. Si no, se saca del nombre.
+     * @param {string} opciones.nombre Nombre del catálogo.
+     * @param {string} [opciones.descripcion]
+     * @param {Array} [opciones.servicios] Lista plana de servicios.
+     * @param {Array} [opciones.nodos] Subnodos (un nodo puede llevar
+     *   servicios y subnodos a la vez, y así sucesivamente).
+     * @param {Array} [opciones.secciones] Secciones tipo IDEE.
+     * @param {string} [opciones.modo] arbol | lista | secciones.
+     * @param {Function} [opciones.cargarUrl] Cargador propio, por si el
+     *   visualizador quiere otra cosa que la detección por URL.
+     */
+    constructor(opciones = {}) {
+      const datos = Object.assign({}, opciones || {});
+      datos.id = datos.id || idDesdeNombre(datos.nombre);
+      const base = catalogoDesdeDatos(datos.id, datos);
+      Object.assign(this, base);
+      // Marca de catálogo construido, para distinguirlo de un objeto suelto.
+      this.esCatalogo = true;
+    }
+  }
+
+  /**
    * Monta el juego de catálogos de una instancia a partir de lo que le llega
    * al constructor.
    *
@@ -408,18 +470,48 @@
    */
   function construirCatalogos(opciones) {
     const entrada = (opciones && opciones.catalogos) || null;
+    const registro = window.IDEE && window.IDEE.catalog;
     const propios = {};
 
+    const meter = function (id, dato) {
+      // Una instancia de IDEE.catalog.custom (o cualquier catálogo ya
+      // hecho) se respeta tal cual; los datos planos se convierten.
+      propios[id] = (dato && typeof dato.listar === 'function')
+        ? Object.assign({ id: id }, dato)
+        : catalogoDesdeDatos(id, dato);
+    };
+
+    // Una entrada del array vale: un catálogo ya hecho, sus datos planos, o
+    // el contenedor IDEE.catalog.propios (que se expande en sus catálogos).
+    const meterContenedor = function (contenedor) {
+      if (!contenedor || typeof contenedor !== 'object') return;
+      Object.keys(contenedor).forEach(function (id) {
+        if (typeof contenedor[id] === 'function') return;   // crear() y demás
+        meter(id, contenedor[id]);
+      });
+    };
+
+    const meterEntrada = function (item, i) {
+      if (!item || typeof item !== 'object') return;
+      if (typeof item.listar === 'function') { meter(item.id || ('cat' + i), item); return; }
+      if (item === registro || item === registro.propios || item === registro.tipos) {
+        meterContenedor(item === registro.tipos ? registro.propios : item);
+        return;
+      }
+      if (Array.isArray(item.servicios) || Array.isArray(item.nodos)
+        || Array.isArray(item.secciones) || item.modo) {
+        meter(item.id || idDesdeNombre(item.nombre) || ('cat' + i), item);
+        return;
+      }
+      meterContenedor(item);
+    };
+
     if (Array.isArray(entrada)) {
-      entrada.forEach(function (c, i) {
-        if (!c) return;
-        const id = c.id || c.nombre || ('cat' + i);
-        propios[id] = catalogoDesdeDatos(id, c);
-      });
+      entrada.forEach(meterEntrada);
     } else if (entrada && typeof entrada === 'object') {
-      Object.keys(entrada).forEach(function (id) {
-        propios[id] = catalogoDesdeDatos(id, entrada[id]);
-      });
+      // Forma antigua: un objeto con un catálogo por clave. Se sigue
+      // admitiendo para no romper lo que ya haya escrito.
+      meterContenedor(entrada);
     }
 
     const solo = opciones && opciones.soloCatalogos;
@@ -435,10 +527,34 @@
   function exponerCatalog() {
     const registro = {
       tipos: CATALOGOS,
-      /** Devuelve el tipo de catálogo con ese id, o null. */
-      tipo: function (id) { return CATALOGOS[id] || null; },
+      // Catálogos declarados por los visualizadores, ya construidos. El
+      // plugin deja aquí los que le llegan por su array de catálogos.
+      propios: {},
+      /**
+       * La clase de catálogo propio: new IDEE.catalog.custom({...}). Lo que
+       * devuelve tiene la misma forma que IDEE.catalog.tipos.idee.
+       */
+      custom: CatalogoCustom,
+      /**
+       * Instancia un catálogo propio y lo deja en IDEE.catalog.propios.
+       * Es un atajo de custom: crearlo y cogerlo del mismo sitio.
+       * @param {string} id
+       * @param {Object} datos
+       * @returns {Object} El catálogo creado.
+       */
+      crear: function (id, datos) {
+        const c = new CatalogoCustom(Object.assign({ id: id }, datos || {}));
+        registro.propios[c.id] = c;
+        return c;
+      },
+      /** Devuelve el catálogo con ese id, de serie o propio, o null. */
+      tipo: function (id) { return CATALOGOS[id] || registro.propios[id] || null; },
       /** Lista de ids de catálogo, en el orden del <select>. */
-      ids: function () { return Object.keys(CATALOGOS); }
+      ids: function () {
+        return Object.keys(CATALOGOS).concat(
+          Object.keys(registro.propios).filter(function (id) { return !CATALOGOS[id]; })
+        );
+      }
     };
     window.IDEE = window.IDEE || {};
     window.IDEE.catalog = registro;
@@ -509,14 +625,14 @@
       this._catalogos = construidos.todos;
       this._catalogosPropios = construidos.propios;
 
-      // Los del visualizador se cuelgan en IDEE.catalog.custom (que es donde
-      // se leen desde cualquier código) y también en IDEE.catalog.tipos, que
-      // es la lista de la que se pinta el <select>.
+      // Los del visualizador quedan en IDEE.catalog.propios (donde se leen
+      // desde cualquier código) y también en IDEE.catalog.tipos, que es la
+      // lista de la que se pinta el <select>.
       const registro = (window.IDEE && window.IDEE.catalog) || (window.M && window.M.catalog);
       if (registro) {
-        if (!registro.custom) registro.custom = {};
+        if (!registro.propios) registro.propios = {};
         Object.keys(this._catalogosPropios).forEach(function (id) {
-          registro.custom[id] = this._catalogosPropios[id];
+          registro.propios[id] = this._catalogosPropios[id];
           if (registro.tipos) registro.tipos[id] = this._catalogosPropios[id];
         }, this);
       }
