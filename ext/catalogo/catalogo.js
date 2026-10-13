@@ -2086,6 +2086,13 @@
 
       fila.appendChild(texto);
 
+      // El globo. Se engancha al ratón Y al teclado (focusin/focusout), para que
+      // la descripción se lea también sin puntero.
+      fila.addEventListener('mouseenter', function () { self._mostrarGlobo(fila, srv); });
+      fila.addEventListener('mouseleave', function () { self._ocultarGlobo(); });
+      fila.addEventListener('focusin', function () { self._mostrarGlobo(fila, srv); });
+      fila.addEventListener('focusout', function () { self._ocultarGlobo(); });
+
       const boton = document.createElement('button');
       boton.type = 'button';
       boton.className = 'catalogo__item-boton';
@@ -2094,6 +2101,96 @@
       fila.appendChild(boton);
 
       return fila;
+    }
+
+    /**
+     * El elemento del globo, creado la primera vez que hace falta.
+     *
+     *  Va colgado de document.body y NO de la fila: dentro del panel lo
+     *  recortaría el scroll de .catalogo__contenido (overflow-y: auto), que es
+     *  justo donde se pinta. Siendo fijo, además, no se va con el desplazamiento.
+     *  Es UN solo globo para todas las filas, no uno por fila: con el catálogo
+     *  de la IDEE hay hasta 250 filas en el documento y serían 250 nodos de más
+     *  siempre en la página.
+     *
+     * @returns {HTMLElement}
+     */
+    _elementoGlobo() {
+      if (this._globoEl && this._globoEl.parentNode) return this._globoEl;
+      const globo = document.createElement('div');
+      globo.className = 'catalogo__globo';
+      globo.setAttribute('role', 'tooltip');
+      globo.hidden = true;
+      document.body.appendChild(globo);
+      this._globoEl = globo;
+      return globo;
+    }
+
+    /**
+     * Muestra el globo de un servicio, con lo que el catálogo sepa de él.
+     *
+     *  La descripción solo está en algunos catálogos: el de servicios
+     *  personalizados la trae declared en mapa.js y los dados de alta por el
+     *  usuario la normalizan desde `description`/`abstract` (ver
+     *  catalogo_registro.js). El de la IDEE no la tiene —medido: sus servicios
+     *  solo traen name, url, id y clase—, así que ahí el globo se queda con el
+     *  nombre y la URL enteros, que también están siempre truncados en la fila.
+     *
+     * @param {HTMLElement} fila Fila sobre la que se pasa el puntero.
+     * @param {Object} srv Servicio {nombre, url, descripcion}.
+     */
+    _mostrarGlobo(fila, srv) {
+      const globo = this._elementoGlobo();
+      if (!globo || !fila) return;
+
+      while (globo.firstChild) globo.removeChild(globo.firstChild);
+
+      if (srv.nombre) {
+        const titulo = document.createElement('div');
+        titulo.className = 'catalogo__globo-titulo';
+        titulo.textContent = srv.nombre;
+        globo.appendChild(titulo);
+      }
+      if (srv.descripcion) {
+        const desc = document.createElement('div');
+        desc.className = 'catalogo__globo-desc';
+        desc.textContent = srv.descripcion;
+        globo.appendChild(desc);
+      }
+      if (srv.url) {
+        const url = document.createElement('div');
+        url.className = 'catalogo__globo-url';
+        url.textContent = srv.url;
+        globo.appendChild(url);
+      }
+      if (srv.id) {
+        const id = document.createElement('div');
+        id.className = 'catalogo__globo-id';
+        id.textContent = 'Ref. ' + srv.id;
+        globo.appendChild(id);
+      }
+
+      globo.hidden = false;
+
+      // Colocarlo: a la IZQUIERDA de la fila, que es donde está el mapa. Si no
+      // cabe (panel en el lado izquierdo de la pantalla), se pone encima. Se
+      // mide DESPUÉS de quitarlo de hidden, que es cuando tiene tamaño real.
+      const r = fila.getBoundingClientRect();
+      const g = globo.getBoundingClientRect();
+      const margen = 8;
+      let x = r.left - g.width - 10;
+      if (x < margen) x = Math.min(r.left, window.innerWidth - g.width - margen);
+      let y = r.top;
+      if (y + g.height > window.innerHeight - margen) {
+        y = Math.max(margen, window.innerHeight - g.height - margen);
+      }
+      globo.style.left = Math.round(x) + 'px';
+      globo.style.top = Math.round(y) + 'px';
+    }
+
+    /** Oculta el globo, si lo hay. */
+    _ocultarGlobo() {
+      if (this._globoEl) this._globoEl.hidden = true;
     }
 
     /** Lista plana de servicios (catálogos STAC y OGC API Records). */
@@ -2668,6 +2765,12 @@
       this._capasListaEl = null;
       this._buscadorEl = null;
       this._cuentaBuscadorEl = null;
+      // El globo vive en document.body, así que no se va con el panel: hay que
+      // quitarlo a mano o se quedaría en la página con el plugin desmontado.
+      if (this._globoEl && this._globoEl.parentNode) {
+        this._globoEl.parentNode.removeChild(this._globoEl);
+      }
+      this._globoEl = null;
       this._nuevosEl = null;
       // Las secciones se piden por su cuenta, no hace falta acordarse de cuáles
       // estaban ya pedidas: el portal no cambia y CatalogoIDEE las cachea.
