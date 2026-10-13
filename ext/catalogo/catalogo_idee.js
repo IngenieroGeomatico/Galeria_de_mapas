@@ -54,6 +54,15 @@
      - hay cuatro claves (est/aut/loc/pve) en casi todas las secciones, aunque
        la sección servida sea solo una. Se concatenan todas.
 
+   Las secciones no se piden al vuelo: se leen de una COPIA LOCAL generada por
+   ext/catalogo/generar_catalogo_idee.py, porque www.idee.es no manda CORS y un
+   navegador no puede leer su respuesta. La copia es un .js cargado con una
+   <script>, que funciona igual en http:// que en file:// (un fetch de un JSON
+   local esta bloqueado en file://). Para refrescar el catalogo:
+
+     python ext/catalogo/generar_catalogo_idee.py          # las diez secciones
+     python ext/catalogo/generar_catalogo_idee.py wmts     # solo una
+
    ===================================================================== */
 (function () {
   'use strict';
@@ -69,27 +78,77 @@
   const PAGINA_CATALOGO = 'https://www.idee.es/segun-tipo-de-servicio';
 
   /**
-   * Las diez secciones del catálogo, con el tipo de capa con el que se cargan.
-   * `seccion` es el identificador que espera el portal; `tipo` es el tipo con
-   * el que se pasa la URL al cargador (ver CatalogoURL).
+   * Los tipos de servicio del catálogo, con las secciones del portal que los
+   * componen.
+   *
+   *  `secciones` son los identificadores que espera el portal; `tipo` es el tipo
+   *  con el que se pasa la URL al cargador (ver CatalogoURL).
+   *
+   *  Ojo con el WMS: en el portal está partido en CUATRO tablas (estatal,
+   *  autonómicos, locales y planos verticales), y aquí se fusionan en una sola.
+   *  Todos los tipos tienen el mismo esquema: una sección por tipo de servicio.
    */
   const SECCIONES = [
-    { id: 'wms_est', nombre: 'WMS · Administration General del Estado', corto: 'WMS estatal', tipo: 'WMS', seccion: 'supVisWmsEst' },
-    { id: 'wms_aut', nombre: 'WMS · Comunidades autónomas', corto: 'WMS autonómicos', tipo: 'WMS', seccion: 'supVisWmsAut' },
-    { id: 'wms_loc', nombre: 'WMS · Locales', corto: 'WMS locales', tipo: 'WMS', seccion: 'supVisWmsLoc' },
-    { id: 'wms_pve', nombre: 'WMS · Planos verticales', corto: 'WMS planos verticales', tipo: 'WMS', seccion: 'supVisWmsPV' },
-    { id: 'wmts', nombre: 'WMTS', corto: 'WMTS', tipo: 'WMTS', seccion: 'sup-vis-wmts' },
-    { id: 'xyz', nombre: 'XYZ · Raster Tile Service', corto: 'XYZ', tipo: 'XYZ', seccion: 'sup-vis-rts' },
-    { id: 'mvt', nombre: 'Vector Tiles (MVT)', corto: 'MVT', tipo: 'MVT', seccion: 'sup-vis-vts' },
-    { id: 'wfs', nombre: 'WFS', corto: 'WFS', tipo: 'WFS', seccion: 'sup-des-wfs' },
-    { id: 'wcs', nombre: 'WCS', corto: 'WCS', tipo: 'WCS', seccion: 'sup-des-wcs' },
-    { id: 'ogcapi', nombre: 'OGC API', corto: 'OGC API', tipo: 'OGCAPIFeatures', seccion: 'sup-ogc-api' }
+    { id: 'wms', nombre: 'WMS', corto: 'WMS', tipo: 'WMS', secciones: ['supVisWmsEst', 'supVisWmsAut', 'supVisWmsLoc', 'supVisWmsPV'] },
+    { id: 'wmts', nombre: 'WMTS', corto: 'WMTS', tipo: 'WMTS', secciones: ['sup-vis-wmts'] },
+    { id: 'xyz', nombre: 'XYZ · Raster Tile Service', corto: 'XYZ', tipo: 'XYZ', secciones: ['sup-vis-rts'] },
+    { id: 'mvt', nombre: 'Vector Tiles (MVT)', corto: 'MVT', tipo: 'MVT', secciones: ['sup-vis-vts'] },
+    { id: 'wfs', nombre: 'WFS', corto: 'WFS', tipo: 'WFS', secciones: ['sup-des-wfs'] },
+    { id: 'wcs', nombre: 'WCS', corto: 'WCS', tipo: 'WCS', secciones: ['sup-des-wcs'] },
+    { id: 'ogcapi', nombre: 'OGC API', corto: 'OGC API', tipo: 'OGCAPIFeatures', secciones: ['sup-ogc-api'] }
   ];
 
   // Caché de secciones ya pedidas: { idSeccion: Promise<datos> }.
   // El portal no cambia entre recargas, así que no hay por qué volver a
   // pedirlo, y abrir/cerrar la sección tiene que ser instantáneo.
   const cache = {};
+
+  // La URL de este script se lee UNA vez, al cargar: document.currentScript solo
+  // vale mientras se ejecuta el script, y cuando el plugin llama a urlDatos ya es
+  // null (medido: devolvía './datos/...', relativo a la página, y daba 404).
+  const SCRIPT_AQUI = (document.currentScript && document.currentScript.src) || '';
+
+  /**
+   * URL de la copia local de una sección, que es lo que se lee de verdad.
+   *
+   *  La ruta sale de la posición de ESTE script, no de la página: así da igual a
+   *  qué profundidad esté el visualizador.
+   *
+   *  @param {string} idSeccion Id de la sección ('wms_est', ...).
+   * @returns {string} URL del fichero .js local.
+   */
+  function urlDatos(idSeccion) {
+    const base = SCRIPT_AQUI.slice(0, SCRIPT_AQUI.lastIndexOf('/'));   // .../ext/catalogo
+    return (base || '.') + '/datos/' + idSeccion + '.js';
+  }
+
+  /**
+   * Carga la copia local de una sección con una etiqueta `<script>`.
+   *
+   *  Se carga así y NO con fetch: con `file://` (abrir el visualizador
+   *  directamente del disco, sin servidor) el navegador bloquea el fetch de un
+   *  fichero local, y una `<script>` sí que lo carga. En `http://` las dos vías
+   *  funcionan, pero esta sirve para las dos.
+   *
+   *  @param {string} idSeccion Id de la sección ('wms_est', ...).
+   * @returns {Promise<Object>} El JSON de la sección, tal como lo dejó el script.
+   */
+  function cargarDatos(idSeccion) {
+    return new Promise(function (resolver, rechazar) {
+      const url = urlDatos(idSeccion);
+      const s = document.createElement('script');
+      s.src = url;
+      s.onload = function () {
+        const datos = window.CatalogoIDEE_Datos && window.CatalogoIDEE_Datos[idSeccion];
+        if (datos) resolver(datos);
+        else rechazar(new Error('«' + url + '» se ha cargado pero no ha dejado datos.'));
+      };
+      s.onerror = function () {
+        rechazar(new Error('No se ha podido cargar «' + url + '».'));
+      };
+      document.head.appendChild(s);
+    });
+  }
 
   /**
    * Devuelve la URL de la tabla de servicios de una sección del portal.
@@ -182,13 +241,61 @@
   }
 
   /**
-   * Lista los servicios de una sección del catálogo.
+   * Deja el JSON de una sección en la forma que espera el plugin (familias con
+   * sus servicios).
    *
-   * @param {string} idSeccion Id de la sección en SECCIONES ('wms_est', ...).
-   * @param {Object} [opciones]
-   * @param {boolean} [opciones.recargar=false] Ignora la caché.
+   *  @param {Object} datos El JSON tal como lo dejó el portal (o el script).
+   * @param {Object} def Definición de la sección en SECCIONES.
    * @returns {Promise<{seccion: Object, familias: Array<Object>, total: number}>}
    */
+  function leerSeccion(datos, def) {
+    const crudo = datos && datos.datos ? datos.datos : {};
+
+    // El portal agrupa por ámbito (est/aut/loc/pve) y en una sección concreta
+    // solo viene uno, pero se concatenan todos los que vengan.
+    let familias = [];
+    ['est', 'aut', 'loc', 'pve'].forEach(function (clave) {
+      if (!Array.isArray(crudo[clave])) return;
+      crudo[clave].forEach(function (f) { familias.push(normalizarFamilia(f)); });
+    });
+
+    // Las familias sin servicios no aportan nada: fuera.
+    familias = familias.filter(function (f) { return f.servicios.length > 0; });
+
+    let total = 0;
+    familias.forEach(function (f) { total += f.servicios.length; });
+
+    return Promise.resolve({ seccion: def, familias: familias, total: total });
+  }
+
+  /**
+   * Pide un tipo de servicio al portal y lo deja en la forma que espera el plugin.
+   *
+   *  Un tipo puede estar partido en el portal en varias tablas (el WMS, en
+   *  estatal, autonómicos, locales y planos verticales): se piden todas y se
+   *  concatenan por ámbito, que es lo mismo que hace el parser con las claves
+   *  est/aut/loc/pve.
+   *
+   * @param {Object} def Definición del tipo en SECCIONES.
+   * @returns {Promise<{seccion: Object, familias: Array<Object>, total: number}>}
+   */
+  function leerPortal(def) {
+    return Promise.all(def.secciones.map(function (idPortal) {
+      return pedir(urlSeccion(idPortal));
+    })).then(function (textos) {
+      const crudo = { est: [], aut: [], loc: [], pve: [] };
+      textos.forEach(function (texto) {
+        const datos = JSON.parse(texto);
+        const d = (datos && datos.datos) || {};
+        ['est', 'aut', 'loc', 'pve'].forEach(function (clave) {
+          const lista = Array.isArray(d[clave]) ? d[clave] : [];
+          lista.forEach(function (f) { crudo[clave].push(f); });
+        });
+      });
+      return leerSeccion({ datos: crudo }, def);
+    });
+  }
+
   function listarSeccion(idSeccion, opciones) {
     const opts = opciones || {};
     const def = SECCIONES.find(function (s) { return s.id === idSeccion; });
@@ -196,26 +303,15 @@
 
     if (cache[idSeccion] && !opts.recargar) return cache[idSeccion];
 
-    const promesa = pedir(urlSeccion(def.seccion)).then(function (texto) {
-      const json = JSON.parse(texto);
-      const datos = json && json.datos ? json.datos : {};
-
-      // El portal agrupa por ámbito (est/aut/loc/pve) y en una sección concreta
-      // solo viene uno, pero se concatenan todos los que vengan.
-      let familias = [];
-      ['est', 'aut', 'loc', 'pve'].forEach(function (clave) {
-        if (!Array.isArray(datos[clave])) return;
-        datos[clave].forEach(function (f) { familias.push(normalizarFamilia(f)); });
+    const promesa = cargarDatos(idSeccion)
+      .then(function (datos) { return leerSeccion(datos, def); })
+      .catch(function () {
+        // No hay copia local (o no se ha podido cargar): se pide al portal, que
+        // es donde está el catálogo de verdad. Ojo: www.idee.es no manda CORS,
+        // así que desde un visualizador esto falla; por eso existe la copia
+        // local.
+        return leerPortal(def);
       });
-
-      // Las familias sin servicios no aportan nada: fuera.
-      familias = familias.filter(function (f) { return f.servicios.length > 0; });
-
-      let total = 0;
-      familias.forEach(function (f) { total += f.servicios.length; });
-
-      return { seccion: def, familias: familias, total: total };
-    });
 
     // Si la petición falla se saca de la caché, para poder reintentar.
     cache[idSeccion] = promesa.catch(function (err) {
@@ -235,10 +331,36 @@
     urlSeccion: urlSeccion,
     listarSeccion: listarSeccion,
     pedir: pedir,
-    /** Vacía la caché de secciones (para el botón de recargar). */
-    limpiarCache: function (idSeccion) {
-      if (idSeccion) delete cache[idSeccion];
-      else Object.keys(cache).forEach(function (k) { delete cache[k]; });
+    /**
+     * Vacía la caché de secciones.
+     *
+     *  Con `idSeccion` suelta solo esa; sin argumento, todas. Y con
+     *  `mantenerId` suelta todas menos esa, que es lo que hace el panel al
+     *  cambiar de tipo de servicio: el catálogo de la IDEE viene partido en diez
+     *  secciones y la de WMS estatal del IGN tiene más de setecientos servicios,
+     *  así que tenerlas todas residentes es justo lo que no se quiere. Al soltar
+     *  la memoria se vuelve a pedir si se vuelve a esa sección, que es el precio
+     *  de no retenerlas todas.
+     *
+     *  @param {string} [idSeccion] Sección a soltar, o todas si no se indica.
+     *  @param {string} [mantenerId] Sección que se deja en la caché.
+     * @returns {number} Cuántas se han soltado.
+     */
+    limpiarCache: function (idSeccion, mantenerId) {
+      let soltadas = 0;
+      if (idSeccion) {
+        if (idSeccion !== mantenerId && cache[idSeccion]) {
+          delete cache[idSeccion];
+          soltadas++;
+        }
+        return soltadas;
+      }
+      Object.keys(cache).forEach(function (k) {
+        if (k === mantenerId) return;
+        delete cache[k];
+        soltadas++;
+      });
+      return soltadas;
     }
   };
 

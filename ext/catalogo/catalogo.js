@@ -295,6 +295,31 @@
    */
   const CLAVE_SELECCION = 'galeria_catalogo_seleccion';
 
+  /**
+   * Clave de localStorage donde se recuerda con qué TIPO DE SERVICIO se quedó el
+   * catálogo de la IDEE, para que al volver al visualizador siga por el mismo
+   * y no haya que volver a elegirlo.
+   */
+  const CLAVE_SECCION = 'galeria_catalogo_seccion';
+
+  /** Último tipo de servicio elegido, o null. */
+  function leerSeccion() {
+    try {
+      return window.localStorage.getItem(CLAVE_SECCION) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Recuerda el tipo de servicio elegido. */
+  function guardarSeccion(id) {
+    try {
+      window.localStorage.setItem(CLAVE_SECCION, String(id));
+    } catch (e) {
+      /* sin localStorage se sigue funcionando, pero no se recuerda */
+    }
+  }
+
   /** Último catálogo elegido, o null si nunca se eligió o no hay localStorage. */
   function leerSeleccion() {
     try {
@@ -723,10 +748,13 @@
       this._panelCatalogos = null;
       this._panelCapa = null;
 
-      // Catálogo: secciones abiertas, filtro de texto y datos ya pedidos.
-      this._seccionesAbiertas = Array.isArray(options.secciones) ? options.secciones.slice() : [];
+      // Catálogo: filtro de texto y datos ya pedidos de la sección a la vista.
+      // El tipo de servicio se elige con el SEGUNDO desplegable (ver
+      // _pintarSecciones): solo hay uno activo, y el resto de secciones se
+      // sueltan de memoria al cambiar, que es lo que se busca (la sección de WMS
+      // estatal del IGN tiene más de setecientos servicios).
+      this._seccionActiva = (typeof options.seccion === 'string') ? options.seccion : leerSeccion();
       this._filtro = options.filtro || '';
-      this._seccionesDom = {};
       this._estadoSecciones = {};
       // Grupos plegables de la pestaña de catálogos ("disponibles" y "nuevo").
       this._gruposAbiertos = Array.isArray(options.grupos) ? options.grupos.slice() : ['disponibles', 'nuevo'];
@@ -1056,7 +1084,6 @@
       const cont = this._gestorEl;
       if (!cont) return;
       cont.innerHTML = '';
-      this._seccionesDom = {};
 
       const tipo = this._catalogoActual();
       if (!tipo) return;
@@ -1516,115 +1543,147 @@
     }
 
     /**
-     * Acordeón de secciones del catálogo, con buscador. Cada sección se pide
-     * al abrirse y se cachea, porque son datos que no cambian.
+     * Selector de tipo de servicio y la sección elegida.
+     *
+     *  El catálogo de la IDEE viene partido en diez secciones (WMS estatal,
+     *  WMTS, WFS...), cada una con su tabla de servicios. Antes se pintaban las
+     *  diez en un acordeón y se pedía cada una al desplegarla; ahora hay un
+     *  SEGUNDO desplegable, debajo del de catálogo, y solo se pide y se pinta la
+     *  que está elegida.
+     *
+     *  El motivo es la memoria del cliente: la sección de WMS estatal del IGN
+     *  tiene más de setecientos servicios, y recorrer las diez secciones
+     *  dejando todas las que ya se han pedido acaba con el catálogo entero
+     *  resident en memoria. Al cambiar de sección se sueltan las demás, en este
+     *  plugin y en la caché de CatalogoIDEE.
+     *
+     * @param {HTMLElement} cont
+     * @param {Object} tipo Catálogo en modo 'secciones'.
      */
     _pintarSecciones(cont, tipo) {
       const self = this;
       const secciones = tipo.listar() || [];
 
-      this._pintarBuscador(cont);
-
-      const lista = document.createElement('div');
-      lista.className = 'catalogo__secciones';
-      cont.appendChild(lista);
-      this._seccionesEl = lista;
-
       if (!secciones.length) {
-        this._pintarAviso(lista, 'No se ha podido cargar el catálogo de la IDEE.');
+        this._pintarAviso(cont, 'No se ha podido cargar el catálogo de la IDEE.');
         return;
       }
 
+      // --- El segundo selector ------------------------------------------
+      const cajaSelector = document.createElement('div');
+      cajaSelector.className = 'catalogo__campo';
+
+      const etiqueta = document.createElement('label');
+      etiqueta.className = 'catalogo__campo-etiqueta';
+      etiqueta.textContent = 'Tipo de servicio';
+      etiqueta.setAttribute('for', 'catalogo-seccion');
+
+      const selector = document.createElement('select');
+      selector.id = 'catalogo-seccion';
+      selector.className = 'catalogo__selector catalogo__selector--seccion';
+      selector.setAttribute('aria-label', 'Tipo de servicio del catálogo');
       secciones.forEach(function (sec) {
-        // Acordeón con el patrón de vueloFotogrametrico: un contenedor con la
-        // clase "collapsed" cuando está plegado, una cabecera con role=button y
-        // un cuerpo que se anima con alto y opacidad. Se hace con <div> en vez
-        // de <details> por el mismo motivo que allí: así la cabecera puede
-        // llevar el contador y el distintivo de tipo, y el plegado se puede
-        // controlar desde el estado (getState/setState).
-        const caja = document.createElement('div');
-        // Nacen PLEGADAS: el catálogo de la IDEE tiene diez secciones y pedir
-        // las diez de golpe sería una barbaridad. Se despliegan al pulsar.
-        caja.className = 'catalogo__seccion collapsed';
-        caja.dataset.seccion = sec.id;
-
-        const cabecera = document.createElement('div');
-        cabecera.className = 'catalogo__seccion-cabecera';
-        cabecera.setAttribute('role', 'button');
-        cabecera.setAttribute('tabindex', '0');
-        cabecera.setAttribute('aria-expanded', 'false');
-
-        const chevron = document.createElement('span');
-        chevron.className = 'catalogo__seccion-chevron';
-        chevron.setAttribute('aria-hidden', 'true');
-
-        const nombre = document.createElement('span');
-        nombre.className = 'catalogo__seccion-nombre';
-        nombre.textContent = sec.nombre;
-
-        const insignia = document.createElement('span');
-        insignia.className = 'catalogo__seccion-tipo';
-        insignia.textContent = sec.tipo;
-
-        const cuenta = document.createElement('span');
-        cuenta.className = 'catalogo__seccion-cuenta';
-
-        cabecera.appendChild(chevron);
-        cabecera.appendChild(nombre);
-        cabecera.appendChild(insignia);
-        cabecera.appendChild(cuenta);
-        caja.appendChild(cabecera);
-
-        const cuerpo = document.createElement('div');
-        cuerpo.className = 'catalogo__seccion-cuerpo';
-        caja.appendChild(cuerpo);
-
-        const alternar = function () { self._alternarSeccion(sec.id); };
-        cabecera.addEventListener('click', alternar);
-        // Enter y Espacio, que es lo que se espera de un role=button.
-        cabecera.addEventListener('keydown', function (ev) {
-          if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
-            ev.preventDefault();
-            alternar();
-          }
-        });
-
-        self._seccionesDom[sec.id] = { caja: caja, cabecera: cabecera, cuerpo: cuerpo, cuenta: cuenta, sec: sec };
-        lista.appendChild(caja);
+        const op = document.createElement('option');
+        op.value = sec.id;
+        op.textContent = sec.corto || sec.nombre || sec.id;
+        op.title = sec.nombre || sec.id;
+        selector.appendChild(op);
       });
 
-      // Las secciones que estaban abiertas antes (cambio 2D/3D) se reabren y
-      // se piden.
-      this._seccionesAbiertas.forEach(function (id) {
-        const s = this._seccionesDom[id];
-        if (s) this._alternarSeccion(id, true);
-      }, this);
+      // La sección elegida: la que se dejó en localStorage si sigue existiendo,
+      // y si no la primera.
+      let activa = this._seccionActiva;
+      if (!activa || !secciones.some(function (s) { return s.id === activa; })) {
+        activa = secciones[0].id;
+      }
+      this._seccionActiva = activa;
+      selector.value = activa;
 
-      if ((this._filtro || '').trim()) this._filtrarSecciones();
+      selector.addEventListener('change', function () {
+        self._seccionActiva = this.value;
+        guardarSeccion(this.value);
+        self._liberarSecciones(this.value);
+        self._cargarSeccionActiva();
+      });
+
+      cajaSelector.appendChild(etiqueta);
+      cajaSelector.appendChild(selector);
+      cont.appendChild(cajaSelector);
+      this._selectorSeccionEl = selector;
+
+      // El buscador, que ahora filtra DENTRO de la sección elegida.
+      this._pintarBuscador(cont);
+
+      // --- El cuerpo de la sección elegida -------------------------------
+      const cuerpo = document.createElement('div');
+      cuerpo.className = 'catalogo__secciones catalogo__secciones--activa';
+      cont.appendChild(cuerpo);
+      this._seccionesEl = cuerpo;
+
+      // Un contador de la sección, que se actualiza al pedirla.
+      const cuenta = document.createElement('span');
+      cuenta.className = 'catalogo__cuenta-seccion';
+      cuenta.hidden = true;
+      this._cuentaSeccionEl = cuenta;
+
+      this._cargarSeccionActiva();
     }
 
     /**
-     * Pliega o despliega una sección. Al desplegarla se pide al catálogo (y se
-     * cachea); el estado de cuáles están abiertas viaja en el getState.
-     * @param {string} id
-     * @param {boolean} [forzar] true despliega siempre, false pliega siempre.
+     * Suelta de memoria las secciones que no son la activa.
+     *
+     *  Se vacían los datos ya pedidos de este plugin y la caché de
+     *  CatalogoIDEE (que guarda el JSON ya parseado, que es lo que pesa). La
+     *  activa se queda, así que volver a ella no vuelve a pedir nada.
+     *
+     * @param {string} [mantenerId] Sección que se deja.
      */
-    _alternarSeccion(id, forzar) {
-      const s = this._seccionesDom[id];
-      if (!s) return;
+    _liberarSecciones(mantenerId) {
+      Object.keys(this._estadoSecciones).forEach(function (id) {
+        if (id === mantenerId) return;
+        delete this._estadoSecciones[id];
+      }, this);
+      // La caché de CatalogoIDEE guarda el JSON ya parseado, que es lo que de
+      // verdad pesa, así que también se suelta. Si no está cargado, no pasa nada.
+      if (window.CatalogoIDEE && typeof window.CatalogoIDEE.limpiarCache === 'function') {
+        window.CatalogoIDEE.limpiarCache(null, mantenerId);
+      }
+    }
 
-      const abierta = forzar === undefined ? s.caja.classList.contains('collapsed') : !forzar;
-      const pos = this._seccionesAbiertas.indexOf(id);
+    /**
+     * Pide y pinta la sección activa.
+     *
+     *  @returns {Promise<Object|null>} Los datos de la sección, o null si falló.
+     */
+    _cargarSeccionActiva() {
+      const self = this;
+      const cont = this._seccionesEl;
+      if (!cont) return Promise.resolve(null);
 
-      if (abierta) {
-        s.caja.classList.remove('collapsed');
-        s.cabecera.setAttribute('aria-expanded', 'true');
-        if (pos === -1) this._seccionesAbiertas.push(id);
-        this._cargarSeccion(s.sec, s.cuerpo, s.cuenta, (this._filtro || '').trim() || undefined);
+      const tipo = this._catalogoActual();
+      const secciones = (tipo && tipo.listar()) || [];
+      const sec = secciones.find(function (s) { return s.id === self._seccionActiva; });
+      if (!sec) {
+        cont.innerHTML = '';
+        this._pintarAviso(cont, 'No hay ninguna sección seleccionada.');
+        return Promise.resolve(null);
+      }
+
+      const cuenta = this._cuentaSeccionEl || document.createElement('span');
+      return this._cargarSeccion(sec, cont, cuenta, (this._filtro || '').trim() || undefined);
+    }
+
+    /**
+     * Aplica el filtro de texto a la sección activa, que es la única pintada.
+     */
+    _filtrarSecciones() {
+      const cont = this._seccionesEl;
+      const st = this._estadoSecciones[this._seccionActiva];
+      if (!cont) return;
+      if (st && st.datos) {
+        this._pintarSeccion(st.datos, cont, (this._filtro || '').trim());
       } else {
-        s.caja.classList.add('collapsed');
-        s.cabecera.setAttribute('aria-expanded', 'false');
-        if (pos > -1) this._seccionesAbiertas.splice(pos, 1);
+        this._cargarSeccionActiva();
       }
     }
 
@@ -1655,37 +1714,6 @@
       buscador.appendChild(input);
       cont.appendChild(buscador);
       this._buscadorEl = input;
-    }
-
-    /**
-     * Aplica el filtro de texto a las secciones de tipo de servicio. Las que ya
-     * están cargadas se filtran en local; las que no, se piden en segundo plano
-     * y se filtran al llegar, que es la única forma de buscar en todo el
-     * catálogo (el WMS estatal del IGN tiene más de setecientos servicios).
-     */
-    _filtrarSecciones() {
-      const self = this;
-      const filtro = (this._filtro || '').trim().toLowerCase();
-
-      Object.keys(this._seccionesDom).forEach(function (id) {
-        const s = self._seccionesDom[id];
-        const st = self._estadoSecciones[id];
-
-        if (!filtro) {
-          // Sin filtro vuelve todo: la sección se reaparece y su cuerpo se
-          // repinta entero, que se quedó con solo las coincidencias.
-          s.caja.hidden = false;
-          if (st && st.datos) self._pintarSeccion(st.datos, s.cuerpo, '');
-          return;
-        }
-
-        if (st && st.datos) {
-          s.caja.hidden = !self._pintarSeccion(st.datos, s.cuerpo, filtro);
-        } else if (!st || !st.promesa) {
-          // Sin datos todavía: se pide para poder filtrarla (queda cacheada).
-          self._cargarSeccion(s.sec, s.cuerpo, s.cuenta, filtro);
-        }
-      });
     }
 
     /**
@@ -1726,9 +1754,7 @@
         };
         st.datos = datos;
         cuenta.textContent = datos.total + (datos.total === 1 ? ' servicio' : ' servicios');
-        const quedaPropia = self._pintarSeccion(datos, cuerpo, filtro);
-        const domPropia = self._seccionesDom[sec.id];
-        if (filtro && domPropia) domPropia.caja.hidden = !quedaPropia;
+        self._pintarSeccion(datos, cuerpo, filtro);
         return Promise.resolve(datos);
       }
 
@@ -1738,11 +1764,7 @@
         st.datos = datos;
         st.promesa = null;
         cuenta.textContent = datos.total + (datos.total === 1 ? ' servicio' : ' servicios');
-        const queda = self._pintarSeccion(datos, cuerpo, filtro);
-        // Si la sección se pidió solo para filtrar, se esconde si en ella no
-        // hay nada que ver: si no, el filtro deja diez secciones vacías.
-        const dom = self._seccionesDom[sec.id];
-        if (filtro && dom) dom.caja.hidden = !queda;
+        self._pintarSeccion(datos, cuerpo, filtro);
         return datos;
       }).catch(function (err) {
         st.promesa = null;
@@ -2232,9 +2254,10 @@
         url: this._urlIntroducida,
         mensaje: this._ultimoMensaje,
         pestana: this._pestanaActiva,
-        // Secciones del catálogo abiertas y filtro de texto: son lo que el
-        // usuario estaba mirando, y abrirlas de nuevo cuesta una petición.
-        secciones: this._seccionesAbiertas.slice(),
+        // Tipo de servicio que se estaba mirando y filtro de texto: es lo que
+        // el usuario tenía delante, y volver a pedir esa sección cuesta una
+        // petición al portal.
+        seccion: this._seccionActiva,
         grupos: this._gruposAbiertos.slice(),
         filtro: this._filtro || '',
         // Lo último analizado, para que la pestaña de opciones siga montada
@@ -2265,8 +2288,8 @@
       if (typeof state.mensaje === 'string') {
         this._ultimoMensaje = state.mensaje;
       }
-      if (Array.isArray(state.secciones)) {
-        this._seccionesAbiertas = state.secciones.filter(function (id) { return typeof id === 'string'; });
+      if (typeof state.seccion === 'string') {
+        this._seccionActiva = state.seccion;
       }
       if (Array.isArray(state.grupos)) {
         this._gruposAbiertos = state.grupos.filter(function (id) { return typeof id === 'string'; });
@@ -2350,7 +2373,8 @@
       this._capasListaEl = null;
       this._buscadorEl = null;
       this._nuevosEl = null;
-      this._seccionesDom = {};
+      // Las secciones se piden por su cuenta, no hace falta acordarse de cuáles
+      // estaban ya pedidas: el portal no cambia y CatalogoIDEE las cachea.
       this._estadoSecciones = {};
       this._entradasPropias = {};
       this._gruposDom = {};
