@@ -95,6 +95,10 @@
   color: #1a1a1a;
 }
 
+/* El contenedor de la API no lleva tope de alto: el que lo pone, para que el
+   panel no crezca con el contenido, es .catalogo__contenido (ver allí el why).
+   Aquí solo se neutraliza el max-height que el API trae, que medido recortaba
+   el contenido a la mitad. */
 .g-herramienta_catalogo .m-panel-controls {
   max-height: none !important;
 }
@@ -154,6 +158,21 @@
   gap: 12px;
   padding: 12px 14px 14px;
   box-sizing: border-box;
+  /* Tope de alto y scroll AQUÍ, no en la raíz: así la CABECERA se queda fija
+     arriba y lo único que se desplaza es el contenido.
+
+     Sin este tope el panel crece con lo que lleva dentro y se sale de la
+     pantalla: con el catálogo de la IDEE abierto medía 1088 px de alto en un
+     viewport de 940, así que el alta de catálogo (nombre, tipo, URL y su
+     botón) quedaba 148 px por debajo del borde y sin forma de llegar, porque
+     el contenedor de la API no scrollea y el CSS de este plugin le ponía
+     justo max-height: none. El margen de 72 px es lo que dejan la cabecera
+     (40), el separ superior del área (10) y un respiro abajo. */
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* La rueda se queda en el panel y no sigue con el mapa que hay debajo. */
+  overscroll-behavior: contain;
 }
 
 /* Los controles de formulario se miden con el padding dentro. Sin esto, un
@@ -252,10 +271,27 @@
 .catalogo__selector:focus-visible { border-color: var(--cat-acento); box-shadow: var(--cat-foco); }
 
 /* ---- Buscador ---------------------------------------------------------- */
+/* Con la lupa a la izquierda y el recuento a la derecha. El recuento importa:
+   filtrando "car" sobre los servicios de la IDEE salen 382, y sin él no hay
+   manera de saber si el filtro ha SERVERcido de verdad o si no hay coincidencias. */
+.catalogo__buscador {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.catalogo__buscador-caja {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
 .catalogo__buscador-input {
   width: 100%;
   height: 34px;
-  padding: 0 12px;
+  padding: 0 12px 0 32px;
   border: 1px solid var(--cat-linea-fuerte);
   border-radius: var(--cat-radio-s);
   background: var(--cat-fondo);
@@ -266,8 +302,42 @@
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
+/* La cruz que pinta el navegador en type=search es una imagen del sistema que
+   no respeta el color ni el tamaño del panel, y en algunos navegadores tapa
+   el texto. Se quita y deja su sitio a una propia. */
+.catalogo__buscador-input::-webkit-search-cancel-button,
+.catalogo__buscador-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* La lupa es un SVG en línea en el CSS (no una <img>, que no toma variables de
+   color). Va en el tono neutro del placeholder: es una pista, no un botón. */
+.catalogo__buscador-lupa {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  background: no-repeat center / contain no-repeat;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b95a5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20.5 20.5L16 16'/%3E%3C/svg%3E");
+}
+
 .catalogo__buscador-input::placeholder { color: var(--cat-fg-tenue); }
 .catalogo__buscador-input:focus-visible { border-color: var(--cat-acento); box-shadow: var(--cat-foco); }
+
+/* Recuento de lo que hay visible ahora mismo. Es texto, no un control. */
+.catalogo__buscador-cuenta {
+  flex: 0 0 auto;
+  min-width: 46px;
+  color: var(--cat-fg-tenue);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.catalogo__buscador-cuenta[hidden] { display: none; }
 
 /* ---- Acordeón de secciones del catálogo --------------------------------- */
 /* Cada sección es un tipo de servicio. El plegado sigue el patrón de
@@ -283,9 +353,10 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 380px;
-  overflow-y: auto;
-  padding-right: 2px;
+  /* SIN scroll propio: el scroll es el del contenido del panel (una sola
+     columna con scroll es usable; dos encadenadas no se manejan bien con la
+     rueda). Antes esta lista tenía max-height: 380px y acababa cortando una
+     fila por la mitad, sin avisar de que aquello se podía desplazar. */
 }
 
 .catalogo__seccion {
@@ -416,6 +487,48 @@
   font-weight: 700;
 }
 
+/* ---- Pie de las listas largas ------------------------------------------ */
+/* Aparece solo cuando hay más servicios de los que se pintan (ver
+   _pintarSeccion): dice cuántos son y deja abrir el resto. Sin esto, con la
+   sección WMS de la IDEE, se pintaban 1642 filas de golpe —89 658 px de scroll
+   y 8563 nodos— sin ninguna pista de que faltaban servicios. */
+.catalogo__pie-lista {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 10px 12px;
+  border: 1px dashed var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.catalogo__pie-lista[hidden] { display: none; }
+
+.catalogo__pie-boton {
+  padding: 5px 14px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: 999px;
+  background: var(--cat-fondo);
+  color: var(--cat-fg-suave);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
+}
+
+.catalogo__pie-boton:hover {
+  border-color: var(--cat-marca);
+  color: var(--cat-marca);
+  background: var(--cat-fondo);
+}
+
 /* ---- Árbol de nodos (catálogos del visualizador) ---------------------- */
 /* Cada nodo es una sección más, sangrada según su nivel para que se vea la
    jerarquía. La sangría va en el propio nodo (--cat-nivel) y no en los hijos,
@@ -424,9 +537,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 380px;
-  overflow-y: auto;
-  padding-right: 2px;
+  /* Mismo criterio que .catalogo__secciones: un solo scroll, el del panel. */
 }
 
 .catalogo__nodo {
@@ -469,19 +580,25 @@
 }
 
 /* ---- Fila de servicio -------------------------------------------------- */
+/* La fila es una tarjeta neutra y el botón va fantasma: con el catálogo de la
+   IDEE abierto hay más de mil filas seguidas, y con el botón siempre pintado
+   de marca lo que se veía era un muro de naranja en vez de una lista. El
+   botón se llena solo cuando se pasa por encima de ESA fila, de modo que la
+   acción se sigue viendo sin gritar en las 1642 filas de golpe. */
 .catalogo__item {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
+  border: 1px solid transparent;
   border-radius: var(--cat-radio-s);
   background: var(--cat-fondo-2);
-  transition: background-color 0.16s ease, transform 0.16s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 
 .catalogo__item:hover {
-  background: var(--cat-fondo-3);
-  transform: translateX(2px);
+  background: var(--cat-fondo);
+  border-color: var(--cat-linea-fuerte);
 }
 
 .catalogo__item-texto {
@@ -492,13 +609,19 @@
   min-width: 0;
 }
 
+/* El nombre puede ocupar DOS líneas antes de recortarse: hay títulos largos
+   ("Hidrografía - Información Geográfica de Referencia…") que en una sola
+   línea perdían la mitad y con el title no había forma de verlos enteros
+   sin parar el ratón encima de cada uno. */
 .catalogo__item-nombre {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 12.5px;
   font-weight: 600;
+  line-height: 1.35;
   color: var(--cat-fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* La URL va en petite y atenuada: es información, no el título. */
@@ -510,22 +633,40 @@
   white-space: nowrap;
 }
 
+/* Fantasma en reposo (texto y borde neutros), relleno de marca al pasar por
+   encima de la fila o al enfocar el botón (quien va con el teclado ve el
+   relleno sin necesidad de puntero). */
 .catalogo__item-boton {
   flex: 0 0 auto;
   height: 26px;
   padding: 0 12px;
-  border: none;
+  border: 1px solid var(--cat-linea-fuerte);
   border-radius: 999px;
-  background: var(--cat-marca);
-  color: var(--cat-marca-fg);
+  background: var(--cat-fondo);
+  color: var(--cat-fg-suave);
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: filter 0.16s ease, transform 0.12s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease,
+    color 0.16s ease, transform 0.12s ease;
 }
 
-.catalogo__item-boton:hover { filter: brightness(0.94); }
+.catalogo__item:hover .catalogo__item-boton {
+  background: var(--cat-marca);
+  border-color: var(--cat-marca);
+  color: var(--cat-marca-fg);
+}
+
+.catalogo__item-boton:focus-visible {
+  border-color: var(--cat-marca);
+  color: var(--cat-marca);
+  box-shadow: var(--cat-foco);
+  outline: none;
+}
+
+.catalogo__item-boton:hover { color: var(--cat-marca); }
+
 .catalogo__item-boton:active { transform: scale(0.96); }
 
 /* ---- Campo de URL ------------------------------------------------------ */

@@ -302,6 +302,17 @@
    */
   const CLAVE_SECCION = 'galeria_catalogo_seccion';
 
+  /**
+   * Cuántos servicios se pintan de golpe como mucho en una sección.
+   *
+   *  Sin tope, la sección WMS del catálogo de la IDEE pintaba sus 1642 servicios
+   *  de una vez (medido: 8563 nodos en el documento y 89 658 px de scroll), lo
+   *  que deja el panel pesado y, además, sin ninguna señal de que quedaban
+   *  servicios por mirar. Con tope se pintan los primeros y el pie de la lista
+   *  ofrece abrir el resto o afinar la búsqueda.
+   */
+  const LIMITE_FILAS = 250;
+
   /** Último tipo de servicio elegido, o null. */
   function leerSeccion() {
     try {
@@ -337,6 +348,36 @@
       // Sin localStorage (modo privado, permisos) se sigue funcionando, pero
       // no se recuerda entre recargas.
     }
+  }
+
+  /**
+   * A partir de cuántos caracteres el filtro puede mirar también la URL.
+   *
+   *  Las URLs de estos servicios llevan SIEMPRE su coletilla de protocolo
+   *  ("…?request=GetCapabilities&service=WMS"), así que buscar "ca" en la URL
+   *  sale en los 1642 servicios de la sección WMS de la IDEE (medido: escribir
+   *  "ca" devolvía los 1642, porque "GetCapabilities" lleva "ca"). El campo dice
+   *  "Filtrar por servicio u organismo", así que corto se busca en el nombre y
+   *  en el organismo; a partir de seis caracteres ya se admite la URL, que es
+   *  cuando se está buscando un dominio o una palabra larga de verdad.
+   */
+  const MIN_CARACTERES_BUSQUEDA_URL = 6;
+
+  /**
+   * ¿Coincide un servicio con lo que hay escrito en el filtro?
+   *
+   * @param {Object} srv Servicio {nombre, url}.
+   * @param {string} [organismo] Nombre del organismo al que pertenece.
+   * @param {string} f Texto del filtro ya en minúsculas y sin espacios.
+   * @returns {boolean}
+   */
+  function coincideServicio(srv, organismo, f) {
+    if (!f) return true;
+    if (String(srv.nombre || '').toLowerCase().indexOf(f) > -1) return true;
+    if (String(organismo || '').toLowerCase().indexOf(f) > -1) return true;
+    if (f.length >= MIN_CARACTERES_BUSQUEDA_URL
+      && String(srv.url || '').toLowerCase().indexOf(f) > -1) return true;
+    return false;
   }
 
   /**
@@ -756,6 +797,11 @@
       this._seccionActiva = (typeof options.seccion === 'string') ? options.seccion : leerSeccion();
       this._filtro = options.filtro || '';
       this._estadoSecciones = {};
+      // Si se han pedido ya todos los servicios de la sección (botón del pie de
+      // la lista), y el total de los que tiene, que es contra lo que va el
+      // recuento del buscador.
+      this._verTodos = false;
+      this._totalSeccion = 0;
       // Grupos plegables de la pestaña de catálogos ("disponibles" y "nuevo").
       this._gruposAbiertos = Array.isArray(options.grupos) ? options.grupos.slice() : ['disponibles', 'nuevo'];
       this._gruposDom = {};
@@ -770,6 +816,7 @@
       this._selectorEl = null;
       this._capasListaEl = null;
       this._buscadorEl = null;
+      this._cuentaBuscadorEl = null;
     }
 
     /** Normaliza un color a {active, deactive}. */
@@ -981,7 +1028,19 @@
         guardarSeleccion(self._tipoSeleccionado);
         self._pintarCatalogo();
       });
-      grupoDisponibles.cuerpo.appendChild(selector);
+      // El selector va con etiqueta, igual que el de "Tipo de servicio" que se
+      // añade más abajo: si no, el primero de los dos se queda sin nombre y no
+      // hay forma de saber de qué es el desplegable de arriba.
+      const cajaSelector = document.createElement('div');
+      cajaSelector.className = 'catalogo__campo';
+      const etiquetaSelector = document.createElement('label');
+      etiquetaSelector.className = 'catalogo__campo-etiqueta';
+      etiquetaSelector.textContent = 'Catálogo';
+      etiquetaSelector.setAttribute('for', 'catalogo-tipo');
+      selector.id = 'catalogo-tipo';
+      cajaSelector.appendChild(etiquetaSelector);
+      cajaSelector.appendChild(selector);
+      grupoDisponibles.cuerpo.appendChild(cajaSelector);
 
       const gestor = document.createElement('div');
       gestor.className = 'catalogo__gestor';
@@ -1153,9 +1212,16 @@
       caja.innerHTML = '';
       if (!nodos.length) {
         this._pintarAviso(caja, 'El catálogo no declara ningún nodo.');
+        this._pintarCuentaBuscador(0, 0);
         return;
       }
       caja.appendChild(this._construirArbol(nodos));
+      // Mismo recuento que en las listas: las filas que han quedado a la vista
+      // después de filtrar.
+      const filas = caja.querySelectorAll('.catalogo__item');
+      let visibles = 0;
+      for (let i = 0; i < filas.length; i += 1) if (!filas[i].hidden) visibles += 1;
+      this._pintarCuentaBuscador(visibles, filas.length);
     }
 
     /**
@@ -1210,7 +1276,7 @@
       let serviciosVisibles = 0;
       (nodo.servicios || []).forEach(function (srv) {
         const fila = this._filaServicio(srv, { tipo: srv.tipo });
-        const coincide = !filtro || contiene(srv.nombre) || contiene(srv.url);
+        const coincide = coincideServicio(srv, nodo.nombre, filtro);
         if (!coincide) fila.hidden = true; else serviciosVisibles += 1;
         cuerpo.appendChild(fila);
       }, this);
@@ -1631,6 +1697,9 @@
       selector.addEventListener('change', function () {
         self._seccionActiva = this.value;
         guardarSeccion(this.value);
+        // El "verlas todas" era de la sección anterior: al cambiar de tipo de
+        // servicio vuelve al tope.
+        self._verTodos = false;
         self._liberarSecciones(this.value);
         self._cargarSeccionActiva();
       });
@@ -1730,10 +1799,25 @@
       if (previo) {
         const input = previo.querySelector('.catalogo__buscador-input');
         if (input && input.value !== (this._filtro || '')) input.value = this._filtro || '';
+        // Aunque se reutilice el buscador hay que volver a apuntar al recuento
+        // de ESTE: el anterior puede quedar en un catálogo que ya no está.
+        this._buscadorEl = input;
+        this._cuentaBuscadorEl = previo.querySelector('.catalogo__buscador-cuenta');
         return;
       }
       const buscador = document.createElement('div');
       buscador.className = 'catalogo__buscador';
+
+      // La lupa es un elemento de apoyo, no un botón: no se pulsa, solo dice de
+      // qué va el campo. Va dentro de una caja para que el input pueda dejarse
+      // sitio con padding en vez de con position:relative sobre el buscador
+      // entero.
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__buscador-caja';
+
+      const lupa = document.createElement('span');
+      lupa.className = 'catalogo__buscador-lupa';
+      lupa.setAttribute('aria-hidden', 'true');
 
       const input = document.createElement('input');
       input.type = 'search';
@@ -1748,9 +1832,44 @@
         self._filtrar();
       });
 
-      buscador.appendChild(input);
+      // El recuento: sin él no hay manera de distinguir "el filtro no ha
+      // servido" de "no hay coincidencias" cuando se filtran miles de servicios.
+      const cuenta = document.createElement('span');
+      cuenta.className = 'catalogo__buscador-cuenta';
+      cuenta.hidden = true;
+
+      caja.appendChild(lupa);
+      caja.appendChild(input);
+      buscador.appendChild(caja);
+      buscador.appendChild(cuenta);
       cont.appendChild(buscador);
       this._buscadorEl = input;
+      this._cuentaBuscadorEl = cuenta;
+    }
+
+    /**
+     * Escribe el recuento de resultados junto al buscador.
+     *
+     *  Solo aparece cuando hay texto de filtro, o cuando la lista ya está
+     *  pintada y hay algo que contar; en reposo estorba.
+     *
+     * @param {number} [visibles] Cuántos hay ahora mismo a la vista.
+     * @param {number} [total] Cuántos hay en total.
+     */
+    _pintarCuentaBuscador(visibles, total) {
+      const cuenta = this._cuentaBuscadorEl;
+      if (!cuenta || !cuenta.parentNode) return;
+      if (visibles === undefined) {
+        cuenta.hidden = true;
+        cuenta.textContent = '';
+        return;
+      }
+      if (visibles === total) {
+        cuenta.textContent = total + (total === 1 ? ' servicio' : ' servicios');
+      } else {
+        cuenta.textContent = visibles + ' / ' + total;
+      }
+      cuenta.hidden = false;
     }
 
     /**
@@ -1790,6 +1909,7 @@
           total: sec.servicios.length
         };
         st.datos = datos;
+        self._totalSeccion = datos.total || 0;
         cuenta.textContent = datos.total + (datos.total === 1 ? ' servicio' : ' servicios');
         self._pintarSeccion(datos, cuerpo, filtro);
         return Promise.resolve(datos);
@@ -1800,6 +1920,7 @@
       st.promesa = window.CatalogoIDEE.listarSeccion(sec.id).then(function (datos) {
         st.datos = datos;
         st.promesa = null;
+        self._totalSeccion = datos.total || 0;
         cuenta.textContent = datos.total + (datos.total === 1 ? ' servicio' : ' servicios');
         self._pintarSeccion(datos, cuerpo, filtro);
         return datos;
@@ -1828,21 +1949,33 @@
       cuerpo.innerHTML = '';
 
       let encontrados = 0;
+      let pintados = 0;
+      // Tope de filas de golpe. Medido: la sección WMS de la IDEE son 1642
+      // servicios en 30 organismos, y se pintaban todos — 89 658 px de scroll y
+      // 8563 nodos en el documento— sin que nada indicara que quedaban servicios
+      // por ver. Con tope, el panel arranca ligero y el buscador es la vía
+      // normal de llegar al resto; el botón del pie los abre si de verdad se
+      // quieren todos.
+      const tope = f || this._verTodos ? Infinity : LIMITE_FILAS;
       const fragmentos = document.createDocumentFragment();
+      let completa = true;
 
       datos.familias.forEach(function (fam) {
         const servicios = f
-          ? fam.servicios.filter(function (s) {
-            return (s.nombre || '').toLowerCase().indexOf(f) > -1
-              || (fam.nombre || '').toLowerCase().indexOf(f) > -1
-              || (s.url || '').toLowerCase().indexOf(f) > -1;
-          })
+          ? fam.servicios.filter(function (s) { return coincideServicio(s, fam.nombre, f); })
           : fam.servicios;
 
         if (!servicios.length) return;
         encontrados += servicios.length;
 
-        // Cabecera del organismo, con su número de servicios.
+        // Cabecera del organismo, con su número de servicios. Con el tope
+        // puesto, un organismo puede quedarse entero fuera: se avisa en vez de
+        // dejar la cabecera sola, que parece un fallo de pintada.
+        if (pintados >= tope) {
+          completa = false;
+          return;
+        }
+
         const org = document.createElement('div');
         org.className = 'catalogo__organismo';
         const orgNombre = document.createElement('span');
@@ -1855,18 +1988,79 @@
         fragmentos.appendChild(org);
 
         servicios.forEach(function (srv) {
+          if (pintados >= tope) {
+            completa = false;
+            return;
+          }
           fragmentos.appendChild(self._filaServicio(srv, datos.seccion));
+          pintados++;
         });
       });
 
       if (!encontrados) {
         this._pintarAviso(cuerpo,
           f ? 'Ninguna sección contiene «' + filtro + '».' : 'La sección no tiene servicios.');
+        this._pintarCuentaBuscador(0, 0);
         return false;
       }
 
       cuerpo.appendChild(fragmentos);
+      this._pintarListaCorta(cuerpo, pintados, encontrados, completa, f);
       return true;
+    }
+
+    /**
+     * Pinta el pie de una lista a la que se le ha puesto tope, y el recuento del
+     * buscador.
+     *
+     *  Con filtro el tope no se aplica (LIMITE_FILAS es Infinity), así que el
+     *  pie casi nunca sale ahí: sale cuando se está viendo la lista entera
+     *  después de haber pedido "verlas todas", que es el único caso en que
+     *  interesa volver al tope.
+     *
+     * @param {HTMLElement} cuerpo Donde va el pie.
+     * @param {number} pintados Filas escritas.
+     * @param {number} encontrados Filas que hay en total.
+     * @param {boolean} completa Si se han pintado todas.
+     * @param {string} filtro Texto del filtro, ya en minúsculas.
+     */
+    _pintarListaCorta(cuerpo, pintados, encontrados, completa, filtro) {
+      const self = this;
+
+      if (filtro) {
+        this._pintarCuentaBuscador(encontrados, this._totalSeccion || encontrados);
+        this._verTodos = false;
+        return;
+      }
+
+      this._pintarCuentaBuscador(pintados, encontrados);
+
+      const pie = document.createElement('div');
+      pie.className = 'catalogo__pie-lista';
+
+      if (completa) {
+        // Ya se han abierto todas antes y ahora se pinta enteras: no hace falta
+        // un pie que solo diga lo mismo otra vez.
+        this._verTodos = false;
+        return;
+      }
+
+      const texto = document.createElement('span');
+      texto.textContent = 'Mostrando ' + pintados + ' de ' + encontrados
+        + ' servicios. Usa el buscador para llegar antes, o ábrelos todos.';
+      pie.appendChild(texto);
+
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'catalogo__pie-boton';
+      boton.textContent = 'Ver los ' + encontrados;
+      boton.addEventListener('click', function () {
+        self._verTodos = true;
+        self._filtrarSecciones();
+      });
+      pie.appendChild(boton);
+
+      cuerpo.appendChild(pie);
     }
 
     /** Una fila de servicio con su botón de carga. */
@@ -1962,21 +2156,20 @@
         || ((tipo && typeof tipo.listar === 'function') ? tipo.listar() : []);
       const f = (this._filtro || '').trim().toLowerCase();
       const servicios = f
-        ? todos.filter(function (s) {
-            return (s.nombre || '').toLowerCase().indexOf(f) > -1
-              || (s.url || '').toLowerCase().indexOf(f) > -1;
-          })
+        ? todos.filter(function (s) { return coincideServicio(s, null, f); })
         : todos;
       caja.innerHTML = '';
       if (!servicios.length) {
         this._pintarAviso(caja, f ? 'Ningún servicio coincide con «' + f + '».'
           : 'Este catálogo todavía no tiene servicios predefinidos.');
+        this._pintarCuentaBuscador(0, 0);
         return;
       }
       const self = this;
       servicios.forEach(function (srv) {
         caja.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
       });
+      this._pintarCuentaBuscador(servicios.length, todos.length || servicios.length);
     }
 
     // =====================================================================
@@ -2474,6 +2667,7 @@
       this._selectorEl = null;
       this._capasListaEl = null;
       this._buscadorEl = null;
+      this._cuentaBuscadorEl = null;
       this._nuevosEl = null;
       // Las secciones se piden por su cuenta, no hace falta acordarse de cuáles
       // estaban ya pedidas: el portal no cambia y CatalogoIDEE las cachea.
