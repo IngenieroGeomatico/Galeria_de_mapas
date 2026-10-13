@@ -58,21 +58,36 @@
 /* ====================================================================
    PANEL EN LA ESQUINA TR
    --------------------------------------------------------------------
-   Cuando un panel se coloca arriba a la derecha, el API mete el botón
-   DENTRO del panel (pegado al borde izquierdo) y la cabecera
-   .m-herramienta-header sale PARTIDA: empieza donde acaba el botón, así que
-   el título queda descentrado y la cabecera parece sobrar por la derecha
-   a la altura del botón. En TL no pasa (el botón queda fuera, a la derecha)
-   y la cabecera es a todo ancho.
+   En TL el botón de plegado queda FUERA del panel, a un lado, y el panel
+   mide lo que mide su contenido. En TR eso no pasa: el botón es un item más
+   del flex del panel, así que el panel crece 40 px para incluirlo y la
+   cabecera (que es el ancho del panel) le pasa por encima. El botón se ve
+   metido dentro del panel y su sombra se come el borde.
 
-   Estas reglas dejan el panel de TR igual que el de TL:
-     - el contenedor de controles, plano y sin sombra;
-     - el fondo del panel, transparente;
-     - la cabecera, a todo ancho del panel (el botón se pinta por encima de
-       su extremo izquierdo).
+   Medido, con el baseLayer que el API coloca en TL y otro panel en TR:
 
-   La compensación de la cabecera se scopea a la esquina TR por la clase que
-   el API pone al área (m-top m-right), así que solo actúa ahí.
+     TL   panel x10..430    raíz x10..430    botón x430..470   (fuera)
+     TR   panel x910..1370  raíz x950..1370  botón x910..950   (dentro)
+
+   La diferencia es que el API solo invierte el panel en m-left
+   (flex-direction: row-reverse), y solo para m-left el botón se sale de la
+   caja. Antes esto se tapaba con una compensación en la cabecera
+   (margin-left: -40px y un calc() de +40 px), que tapaba el botón pero
+   dejaba el panel 40 px más ancho que su contenido, con la sombra por
+   encima de una franja sin pintar. Ahora se reproduce lo de TL sacando el
+   botón de flujo: absolute a la izquierda del panel. El panel vuelve a medir
+   lo que mide su contenido, su sombra envuelve justo el blanco de la raíz y
+   la cabecera ya no lo pisa.
+
+   Y la cabecera lleva box-sizing porque el API la deja en content-box con
+   padding: 5px: sin eso se sale 10 px por la derecha, más allá del panel y
+   de su sombra.
+
+   El botón se saca de flujo solo con el panel ABIERTO: plegado, el panel es
+   el botón y tiene que seguir midiendo 40x40.
+
+   Todo esto va scopeado a la esquina TR por la clase que el API pone al área
+   (m-top m-right), así que en TL no toca nada.
 
    OJO: el selector del contenedor de controles es GENÉRICO y este bloque está
    repetido en la hoja de cada plugin, así que entre hojas con el mismo selector
@@ -96,10 +111,12 @@
   background-color: #fdfdfd00 !important;
 }
 
-/* La compensación se scopea a la esquina TR por la clase que el API pone
-   al área (m-top m-right): así solo actúa ahí y no en TL, donde el botón va
-   fuera del panel y la cabecera ya es a todo ancho. */
+/* Este plugin no crea panel propio (vive en la banda de otro, o no usa
+   panel), así que aquí no hay botón que sacar de la caja: esa regla
+   viaja en la hoja del plugin que sí tiene panel. */
+
+/* La cabecera va con box-sizing porque el API la deja en content-box con
+   padding: 5px: sin eso se sale 10 px por la derecha, más allá del panel. */
 .m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
-  margin-left: -40px;
-  width: calc(100% + 40px);
+  box-sizing: border-box;
 }
