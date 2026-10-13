@@ -39,7 +39,7 @@
   /** Claves con las que un JSON propio puede traer la lista de servicios. */
   const CLAVES_LISTA = ['services', 'servicios', 'catalogos', 'items', 'features', 'collections', 'datos'];
 
-  /** Pide un recurso por el proxy de la API (lo hace CatalogoURL). */
+  /** Pide un recurso directamente (lo hace CatalogoURL). */
   async function pedir(url) {
     const urlTool = window.CatalogoURL;
     if (!urlTool) throw new Error('No está cargado catalogo_url.js.');
@@ -48,9 +48,8 @@
 
   /**
    * Convierte la respuesta en JSON con un mensaje que sirva cuando lo que
-   * llega no es JSON. El proxy de la API devuelve su propia página HTML para
-   * los servidores a los que no llega, y un JSON.parse de eso solo dice
-   * "Unexpected token '<'".
+   * llega no es JSON (una página web de redirección, por ejemplo), y un
+   * JSON.parse a pelo de eso solo diría "Unexpected token '<'".
    *
    * @param {string} texto
    * @param {string} url Para nombrar el documento en el mensaje.
@@ -84,8 +83,16 @@
 
   /** Nombre deducido del final de un href, para cuando el enlace no trae título. */
   function nombreDeHref(href) {
-    const trozo = String(href || '').split('#')[0].split('?')[0].replace(/\/+$/, '').split('/').pop();
-    return (trozo || String(href || '')).replace(/\.json$/i, '').replace(/[-_]+/g, ' ');
+    const limpio = String(href || '').split('#')[0].split('?')[0].replace(/\/+$/, '');
+    const partes = limpio.split('/').filter(Boolean);
+    let ultimo = partes[partes.length - 1] || limpio;
+    // En un catálogo STAC estático las colecciones suelen guardarse como
+    // "<carpeta>/collection.json": el fichero es siempre el mismo, así que lo
+    // que las distingue es la carpeta. Sin esto todas se llamarían "collection".
+    if (/^(collection|catalog)\.json$/i.test(ultimo) && partes.length > 1) {
+      ultimo = partes[partes.length - 2];
+    }
+    return (ultimo || limpio).replace(/\.json$/i, '').replace(/[-_]+/g, ' ');
   }
 
   /** Quita la barra final. */
@@ -166,8 +173,12 @@
    */
   async function leerOgapiRecords(url) {
     const base = sinBarra(url);
-    const destino = /(\/collections|\/records)$/.test(base) ? base : base + '/records';
-    const json = parsear(await pedir(destino), destino);
+    // Se mira el CAMINO de la URL, sin la query: si ya apunta a /collections,
+    // /records o /items se pide tal cual (una URL con ?f=json no acaba en
+    // /collections y se le añadiría /records por el lado equivocado).
+    const camino = String(base).split('?')[0];
+    const final = /(\/collections|\/records|\/items)$/.test(camino) ? base : base + '/records';
+    const json = parsear(await pedir(final), final);
 
     // Colecciones (OGC API Features).
     if (Array.isArray(json.collections)) {
@@ -180,7 +191,7 @@
         });
         return {
           nombre: c.title || props.title || id,
-          url: (items && items.href) ? resolver(destino, items.href) : (id ? unir(base, 'collections/' + id + '/items') : base),
+          url: (items && items.href) ? resolver(final, items.href) : (id ? unir(base, 'collections/' + id + '/items') : base),
           descripcion: resumen(props.description || c.description || '', 110),
           tipo: 'OGCAPIFeatures'
         };

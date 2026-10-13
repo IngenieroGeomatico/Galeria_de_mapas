@@ -106,43 +106,27 @@
   }
 
   /**
-   * Pide un recurso que puede ser de otro dominio.
+   * Pide un recurso con fetch, directamente (ver CatalogoURL.pedir).
    *
-   * www.idee.es NO manda cabeceras CORS, así que desde el navegador la
-   * petición tiene que pasar por el proxy de la API (IDEE.config.PROXY_URL).
-   * Ese proxy envuelve la respuesta en { valid, code, content, ... } y deja el
-   * cuerpo en `content` COMO TEXTO, así que hay que desenvolverlo. Si no
-   * hubiera proxy configurado se cae a la petición directa.
+   * AVISO IMPORTANTE, medido: el catálogo de la IDEE se sirve en www.idee.es,
+   * y www.idee.es NO manda Access-Control-Allow-Origin. Sin esa cabecera el
+   * navegador permite la petición pero bloquea la lectura, así que desde un
+   * visualizador estas diez secciones NO se pueden leer directamente. Los
+   * catálogos STAC y OGC API de verdad sí mandan CORS.
    *
    * @param {string} url
    * @returns {Promise<string>} El cuerpo de la respuesta.
    */
   async function pedir(url) {
-    const IDEE = window.IDEE || window.M;
-    const base = (IDEE && IDEE.config && IDEE.config.PROXY_URL) ? String(IDEE.config.PROXY_URL) : '';
-
-    if (!base) {
-      const r = await fetch(url);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return await r.text();
-    }
-
-    const r = await fetch(base + '?url=' + encodeURIComponent(url));
-    if (!r.ok) throw new Error('HTTP ' + r.status + ' (proxy)');
-    const texto = await r.text();
-
+    let r;
     try {
-      const envoltorio = JSON.parse(texto);
-      // El proxy envuelve la respuesta; `content` lleva el cuerpo real.
-      if (envoltorio && typeof envoltorio === 'object' && envoltorio.content !== undefined) {
-        if (envoltorio.error) throw new Error(envoltorio.message || 'error del proxy');
-        return typeof envoltorio.content === 'string' ? envoltorio.content : JSON.stringify(envoltorio.content);
-      }
+      r = await fetch(url);
     } catch (e) {
-      // Si no es el envoltorio del proxy, el texto ya es la respuesta.
-      if (e && e.message && /error del proxy/.test(e.message)) throw e;
+      throw new Error('El navegador no ha podido leer «' + url + '» desde aquí.' +
+        ' www.idee.es no manda cabeceras CORS, y sin ellas el navegador bloquea la lectura.');
     }
-    return texto;
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' al pedir «' + url + '».');
+    return await r.text();
   }
 
   /**

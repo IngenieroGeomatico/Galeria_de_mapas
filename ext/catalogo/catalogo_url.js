@@ -258,54 +258,37 @@
   }
 
   /**
-   * Pide un recurso que puede ser de otro dominio, pasando por el proxy de la
-   * API. El proxy devuelve { valid, code, error, message, content } con el
-   * cuerpo en `content` como texto.
+   * Pide un recurso con fetch, directamente.
+   *
+   * NO se usa el proxy de la API. El precio de no usarlo es el CORS: si el
+   * servidor no manda Access-Control-Allow-Origin, el navegador permite la
+   * petición pero bloquea la lectura de la respuesta, y fetch falla sin más
+   * detalle. Por eso el error lo dice explícitamente, para que no toque
+   * adivinar. Medido: los servidores de capacidades del IGN y los catálogos
+   * STAC de verdad SÍ mandan CORS; www.idee.es es la excepción.
    *
    * @param {string} url
-   * @returns {Promise<string>}
+   * @returns {Promise<string>} El cuerpo de la respuesta.
    */
   async function pedir(url) {
-    const IDEE = window.IDEE || window.M;
-    const base = (IDEE && IDEE.config && IDEE.config.PROXY_URL) ? String(IDEE.config.PROXY_URL) : '';
-
-    if (!base) {
-      const r = await fetch(url);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return await r.text();
-    }
-
     let r;
     try {
-      r = await fetch(base + '?url=' + encodeURIComponent(url));
+      r = await fetch(url);
     } catch (e) {
-      // El navegador solo dice "Failed to fetch", que no dice nada. Suele ser
-      // que el proxy no trae ese servidor o que no manda cabeceras CORS.
-      throw new Error('No se ha podido conectar con el proxy de la API. Puede que ' +
-        'su servidor no esté entre los que el proxy trae.');
+      throw new Error('El navegador no ha podido leer «' + url + '» desde aquí.' +
+        ' Suele ser porque ese servidor no manda cabeceras CORS' +
+        ' (Access-Control-Allow-Origin), y sin ellas el navegador bloquea la lectura.');
     }
-    if (!r.ok) throw new Error('HTTP ' + r.status + ' (proxy)');
-    const texto = await r.text();
-
-    try {
-      const env = JSON.parse(texto);
-      if (env && typeof env === 'object' && env.content !== undefined) {
-        if (env.error) throw new Error(env.message || 'el proxy no ha podido traer el documento');
-        return typeof env.content === 'string' ? env.content : JSON.stringify(env.content);
-      }
-    } catch (e) {
-      if (e && e.message && /proxy no ha podido/.test(e.message)) throw e;
-    }
-    return texto;
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' al pedir «' + url + '».');
+    return await r.text();
   }
 
   /**
    * Convierte un cuerpo de respuesta en JSON, con un mensaje que se entienda
    * cuando lo que llega no es JSON.
    *
-   * El proxy de la API no trae todos los servidores: para los que no trae
-   * devuelve su propia página HTML, y un JSON.parse de eso da un
-   * "Unexpected token '<'" que no explica nada.
+   * Si lo que llega es una página web en vez de JSON, un JSON.parse a pelo
+   * solo diría "Unexpected token '<'".
    *
    * @param {string} texto
    * @param {string} url Para poder nombrar el documento en el mensaje.
@@ -314,14 +297,13 @@
   function parsearJson(texto, url) {
     const limpio = String(texto || '').trim();
     if (!limpio) {
-      throw new Error('El documento de «' + url + '» ha llegado vacío a través del proxy.');
+      throw new Error('El documento de «' + url + '» ha llegado vacío.');
     }
     try {
       return JSON.parse(limpio);
     } catch (e) {
       if (/^</.test(limpio)) {
-        throw new Error('El proxy de la API ha devuelto una página web en vez del JSON de «' +
-          url + '»: su servidor no está entre los que el proxy trae.');
+        throw new Error('Lo que devuelve «' + url + '» es una página web y no el JSON que se esperaba.');
       }
       throw new Error('La respuesta de «' + url + '» no es JSON válido.');
     }

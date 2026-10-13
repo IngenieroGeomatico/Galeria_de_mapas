@@ -112,11 +112,12 @@ function mapa() {
       url: 'https://raw.githubusercontent.com/stac-utils/stac-examples/main/catalog.json'
     }),
 
-    // OGC API Records: catálogos de metadatos. Admite /records y /collections.
+    // OGC API Records: catálogos de metadatos. Admite /records, /collections y
+    // /items; si la URL ya trae el camino, no se le añade nada.
     new IDEE.catalog.OGCAPIRecords({
       nombre: 'Catálogo de ejemplo (cubeWerx)',
-      descripcion: 'Registros de metadatos en un OGC API Records',
-      url: 'https://test.cubewerx.com/cubewerx/cubeserv/default/ogcapi/catalogues/collections/cwtepcat2/items?f=json'
+      descripcion: 'Registros de metadatos en un OGC API',
+      url: 'https://test.cubewerx.com/cubewerx/cubeserv/default/ogcapi/catalogues/collections?f=json'
     }),
     new IDEE.catalog.custom({
       nombre: 'Servicios del visor',

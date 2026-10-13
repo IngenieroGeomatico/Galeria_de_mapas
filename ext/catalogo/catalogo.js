@@ -348,7 +348,7 @@
 
   /**
    * Base de los catálogos que se CONSULTAN por una URL: al seleccionarlos el
-   * plugin pide el documento a esa URL (por el proxy de la API) y lista lo
+   * plugin pide el documento a esa URL (con fetch directo) y lista lo
    * que encuentre. Es lo que hacen los catálogos STAC y OGC API Records, y
    * también los que se dan de alta desde el panel.
    *
