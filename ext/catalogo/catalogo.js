@@ -1124,17 +1124,38 @@
       const caja = document.createElement('div');
       caja.className = 'catalogo__arbol';
       cont.appendChild(caja);
+      // Se guarda para poder rehacerlo al filtrar sin tocar el buscador.
+      this._arbolEl = caja;
 
       if (!nodos.length) {
         this._pintarAviso(caja, 'El catálogo no declara ningún nodo.');
         return;
       }
 
+      caja.appendChild(this._construirArbol(nodos));
+    }
+
+    /** Construye el árbol de nodos con el filtro puesto. */
+    _construirArbol(nodos) {
       const fragmento = document.createDocumentFragment();
       nodos.forEach(function (nodo) {
         fragmento.appendChild(this._crearNodoArbol(nodo, 0));
       }, this);
-      caja.appendChild(fragmento);
+      return fragmento;
+    }
+
+    /** Rehace SOLO el árbol, sin tocar el buscador (para no perder el foco). */
+    _repintarArbol() {
+      const caja = this._arbolEl;
+      if (!caja) return;
+      const tipo = this._catalogoActual();
+      const nodos = (tipo && typeof tipo.listar === 'function') ? tipo.listar() : [];
+      caja.innerHTML = '';
+      if (!nodos.length) {
+        this._pintarAviso(caja, 'El catálogo no declara ningún nodo.');
+        return;
+      }
+      caja.appendChild(this._construirArbol(nodos));
     }
 
     /**
@@ -1261,6 +1282,8 @@
      */
     _pintarCatalogoRemoto(cont, tipo) {
       const self = this;
+      // El mismo buscador: las entradas de estos catálogos también se filtran.
+      this._pintarBuscador(cont);
       const cache = this._entradasPropias[tipo.id] || (this._entradasPropias[tipo.id] = {});
 
       if (cache.datos) {
@@ -1278,11 +1301,17 @@
         // está en la página y no hay que pintar nada.
         if (!document.contains(cont)) return;
         self._pintarLista(cont, entradas);
+        // Si mientras tanto se ha escrito algo en el buscador, el filtro se
+        // aplicó sobre una lista vacía y hay que repetirlo ahora que ya están
+        // las entradas: si no, se queda en 0 para siempre.
+        if ((self._filtro || '').trim()) self._repintarLista();
         self._decir('«' + tipo.nombre + '»: ' + entradas.length + ' entrada(s).');
       }).catch(function (err) {
         cache.promesa = null;
         if (!document.contains(cont)) return;
-        cont.innerHTML = '';
+        // Se limpia solo la lista: cargarse el gestor entero se llevaba el
+        // buscador por delante.
+        if (self._listaEl) self._listaEl.innerHTML = '';
         self._pintarAviso(cont,
           'No se ha podido consultar el catálogo: ' + (err && err.message ? err.message : err), 'error');
       });
@@ -1694,6 +1723,15 @@
      */
     _pintarBuscador(cont) {
       const self = this;
+      // Idempotente: _pintarLista y _pintarCatalogoRemoto pueden llamarlo los
+      // dos, y dos buscadores es uno de más (medido: el gestor se quedaba con
+      // dos).
+      const previo = cont.querySelector('.catalogo__buscador');
+      if (previo) {
+        const input = previo.querySelector('.catalogo__buscador-input');
+        if (input && input.value !== (this._filtro || '')) input.value = this._filtro || '';
+        return;
+      }
       const buscador = document.createElement('div');
       buscador.className = 'catalogo__buscador';
 
@@ -1705,10 +1743,9 @@
       input.setAttribute('aria-label', 'Filtrar servicios del catálogo');
       input.addEventListener('input', function () {
         self._filtro = this.value;
-        // Se repinta el catálogo entero en vez de filtrar sobre lo ya pintado:
-        // el árbol se filtra al construirlo y las secciones necesitan volver a
-        // pintar su cuerpo.
-        self._pintarCatalogo();
+        // Se filtra sobre lo ya pintado, sin reconstruir el panel: reconstruirlo
+        // destruía el input y se perdía el foco en cada pulsación.
+        self._filtrar();
       });
 
       buscador.appendChild(input);
@@ -1868,12 +1905,77 @@
     /** Lista plana de servicios (catálogos STAC y OGC API Records). */
     _pintarLista(cont, servicios) {
       const self = this;
+      // El mismo buscador de las secciones y del árbol: sin él estos catálogos no
+      // se podían filtrar.
+      this._pintarBuscador(cont);
+
+      // Las filas van en su propio contenedor, para poder rehacerlas al filtrar
+      // sin tocar el buscador (que es lo que hacía perder el foco).
+      let caja = this._listaEl;
+      if (!caja || !document.contains(caja)) {
+        caja = document.createElement('div');
+        caja.className = 'catalogo__lista';
+        cont.appendChild(caja);
+        this._listaEl = caja;
+      }
+      caja.innerHTML = '';
       if (!servicios.length) {
-        this._pintarAviso(cont, 'Este catálogo todavía no tiene servicios predefinidos.');
+        this._pintarAviso(caja, 'Este catálogo todavía no tiene servicios predefinidos.');
         return;
       }
       servicios.forEach(function (srv) {
-        cont.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
+        caja.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
+      });
+    }
+
+    /**
+     * Aplica el filtro de texto a lo que ya está pintado, SIN reconstruir el
+     * buscador.
+     *
+     *  Antes el input llamaba a _pintarCatalogo(), que rehacía todo el panel
+     *  incluido el propio input: en cada pulsación se destruía y se volvía a
+     *  crear, y por eso se perdía el foco. Ahora cada modo repinta solo su
+     *  cuerpo.
+     */
+    _filtrar() {
+      const tipo = this._catalogoActual();
+      if (!tipo) return;
+      if (tipo.modo === 'secciones') {
+        this._filtrarSecciones();
+      } else if (tipo.modo === 'arbol') {
+        this._repintarArbol();
+      } else {
+        this._repintarLista();
+      }
+    }
+
+    /** Rehace solo la lista de servicios, sin tocar el buscador. */
+    _repintarLista() {
+      const caja = this._listaEl;
+      if (!caja) return;
+      const tipo = this._catalogoActual();
+      // Ojo: en un catálogo remoto listar() devuelve los servicios declarados en el
+      // constructor, que están vacíos. Las entradas de verdad viven en
+      // _entradasPropias, que es donde las deja _pintarCatalogoRemoto.
+      const cache = this._entradasPropias[tipo.id];
+      const todos = (cache && cache.datos)
+        || ((tipo && typeof tipo.listar === 'function') ? tipo.listar() : []);
+      const f = (this._filtro || '').trim().toLowerCase();
+      const servicios = f
+        ? todos.filter(function (s) {
+            return (s.nombre || '').toLowerCase().indexOf(f) > -1
+              || (s.url || '').toLowerCase().indexOf(f) > -1;
+          })
+        : todos;
+      caja.innerHTML = '';
+      if (!servicios.length) {
+        this._pintarAviso(caja, f ? 'Ningún servicio coincide con «' + f + '».'
+          : 'Este catálogo todavía no tiene servicios predefinidos.');
+        return;
+      }
+      const self = this;
+      servicios.forEach(function (srv) {
+        caja.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
       });
     }
 
