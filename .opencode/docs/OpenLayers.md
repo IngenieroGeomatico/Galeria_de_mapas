@@ -86,17 +86,20 @@ fuente.set('wrapX', false);
 El que sí funciona es tocar el campo, y hay que avisar con `changed()` para que repinte:
 
 ```javascript
-// Ruta: ext/wrapX/wrapX.js (módulo compartido, no es un plugin)
+// La implementación vive en ext/selectorCapas/ext_layerSwitcher.js
 const fuente = capa.getImpl().olLayer.getSource();
 fuente.wrapX_ = true;
 fuente.changed();
 ```
 
-Para ponerlo a **todas** las capas de una vez hay `ext/wrapX/wrapX.js`, que expone
-`window.miWrapX`:
+Para ponerlo a **todas** las capas de una vez está `window.miWrapX`, que define
+`ext/selectorCapas/ext_layerSwitcher.js` — el plugin que gestiona las capas, así que
+**no hay que cargar ningún script aparte**: los 28 visualizadores del repositorio ya
+cargan ese fichero, y `miPlugin_layerSwitcher.addTo()` ya llama a `miWrapX.aplica(map)`
+por su cuenta.
 
 ```javascript
-miWrapX.aplica(mapa);   // una vez tras crear el mapa
+miWrapX.aplica(mapa);   // por si se quiere llamar a mano
 ```
 
 Recorre la colección de capas (incluidos los grupos), pone `wrapX_ = true` a toda fuente
@@ -104,12 +107,15 @@ que lo tenga —las vectoriales no lo tienen y se dejan como están— y se qued
 altas y bajas, de modo que también tapa las capas que se añadan después. Es idempotente.
 En 3D no hace nada: el impl de Cesium no tiene `getLayers()`.
 
-Está llamado desde los dos puntos donde nacen capas ráster en este repositorio:
-`ext/selectorCapas/ext_backgorundLayers.js` (tras `addLayers` de la capa base) y
-`ext/catalogo/catalogo_url.js` (en `cargar()`, tras `mapa.addLayers(capas)`). Para otros
-visualizadores, incluir el script y llamar a `miWrapX.aplica(mapajs)` tras `IDEE.map()`,
-**repetido cada vez que se recree el mapa**, que es lo que pasa al cambiar de
-implementación.
+Además de definarla, el plugin la usa; y la usan con guardia (si el fichero no está
+cargado, la llamada se salta) otros tres sitios: `ext/selectorCapas/ext_backgorundLayers.js`
+(tras `addLayers` de la capa base), `ext/catalogo/catalogo_url.js` (en `cargar()`, tras
+`mapa.addLayers(capas)`) y `ext/mapInfo/mapInfo.js` (al arrancar).
+
+Ojo: esto es **la mitad** del asunto. La otra mitad es la extensión de la capa, que
+también recorta las copias del mundo repetido, y de eso se encarga `mapInfo`, con su
+modo global (ver `_recortarCapas` en `ext/mapInfo/mapInfo.js`). Sin las dos, el mapa se
+corta en ±180.
 
 #### Ejemplos
 

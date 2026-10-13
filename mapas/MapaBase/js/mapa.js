@@ -48,14 +48,6 @@ function mapa() {
     container: "mapaDIV",
   });
 
-  // Wrap del mundo a true en todas las capas ráster. Sin esto cada fuente
-  // decide por su cuenta: las TMS y XYZ (TileImage) salen con wrapX=true y las
-  // WMTS y WMS con false, de modo que una capa base repite el planeta al cruzar
-  // el antimeridiano y la otra no. ext/wrapX/wrapX.js explica el detalle; aquí
-  // solo se avisa de que hay que volver a llamarlo cada vez que se crea el mapa,
-  // que es justo lo que pasa al cambiar de implementación.
-  if (window.miWrapX) window.miWrapX.aplica(mapajs);
-
   // ── Plugin selector de capas base (grid de imágenes) ──────────────
   var baseLayerPlugin = new IDEE.plugin.miPlugin_baseLayer({
     // Una única fila (todas las capas base en línea). Parametrizable:

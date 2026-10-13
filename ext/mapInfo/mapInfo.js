@@ -5207,9 +5207,9 @@
       // 3 bis) El otro medio de que el mapa se repita. La extensión de la capa ya
       //   no recorta, pero la fuente todavía puede tener su wrapX a false: en
       //   OpenLayers cada clase de fuente trae el suyo y no coinciden (las TMS y
-      //   XYZ con true, las WMTS y WMS con false, medido). ext/wrapX los iguala a
+      //   XYZ con true, las WMTS y WMS con false, medido). miWrapX los iguala a
       //   true, y de paso se queda escuchando las capas que se añadan después.
-      //   En 3D no hace nada. Si el visualizador no incluye ext/wrapX/wrapX.js, la
+      //   En 3D no hace nada. Si el visualizador no carga ext_layerSwitcher.js, la
       //   llamada se salta y aquí no pasa nada.
       if (window.miWrapX && !this._es3D(map)) window.miWrapX.aplica(map);
 
