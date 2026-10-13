@@ -446,7 +446,21 @@ class miPlugin_layerSwitcher {
       // lista en map.getLayers() pero deben aparecer en el selector (bajo su
       // grupo) y en el dropdown del sidenav. Se aplanan recursivamente.
       const hijasDeGrupos = [];
+      const esCapaBase = (l) => {
+        try {
+          if (l && l.isBase === true) return true;
+          const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
+          return Boolean(impl && impl.isBase === true);
+        } catch (e) { return false; }
+      };
       const collectGroupChildren = (g) => {
+        // Las hijas de un grupo que ES capa base no se recogen. La API marca de
+        // isBase al grupo, no a sus capas (el Híbrido de MapaBase es un
+        // LayerGroup con dos TMS dentro), así que el filtro de más abajo, que
+        // solo mira la propia capa, las dejaba pasar y salían como si fueran
+        // superpuestas. Aquí solo se recogen las de los grupos que no son base,
+        // que es lo único que este selector tiene que mostrar.
+        if (esCapaBase(g)) return;
         let hijos = [];
         try { hijos = g.getLayers ? g.getLayers() : []; } catch (e) { hijos = []; }
         hijos.forEach(h => {

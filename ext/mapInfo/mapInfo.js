@@ -1,4 +1,4 @@
-﻿/* =====================================================================
+/* =====================================================================
    PLUGIN DE INFORMACIÓN DEL MAPA PARA API-IDEE / API-CNIG
    Repositorio: Galeria_de_mapas
    =====================================================================
@@ -519,6 +519,20 @@
    *  plugin pone la proyección en global y preguntarle después a isGlobal() no
    *  distinguiría una cosa de la otra. */
   const MUNDIAL_NATIVA = 'mapInfoMundialNativa';
+  /** A cuántos mundos de ancho se estira la extensión de una capa metida en un grupo.
+   *
+   *  Las capas sueltas no necesitan nada de esto: con `setExtent(undefined)` OpenLayers
+   *  deja de recortarlas y dibuja las copias repetidas. Las que están dentro de un
+   *  grupo no funcionan así (ver _recortarCapas), y para ellas la extensión hay que
+   *  ponerla sí o sí, así que se les da un rectángulo de este número de mundos de
+   *  ancho por uno de alto.
+   *
+   *  El ancho tiene que ser un número ENTERO de mundos: la repetición desplaza cada
+   *  copia un ancho de extensión de la proyección, y si ese ancho no casa con el de
+   *  la rejilla de teselas las copias dejan de caer donde tocaba. Once mundos es lo
+   *  medido: con la extensión de 3 el Híbrido ya repite al pasar de ±180, y once
+   *  llega bastante más lejos del mundo que lo que se puede arrastrar de costumbre. */
+  const REPETICIONES_EN_GRUPO = 11;
 
   /**
    * Resuelve el objeto global de la API cartográfica realmente cargada.
@@ -2526,7 +2540,10 @@
     _vigilarVistaOL() {
       try {
         const vista = this._vistaOL();
-        if (!vista || typeof vista.addEventListener !== 'function') return;
+        // La vista de OpenLayers es un Observable: se escucha con on(), no con
+        // addEventListener(). El guardia de antes comprobaba justo lo
+        // contrario y se salía siempre.
+        if (!vista || typeof vista.on !== 'function') return;
         const self = this;
         const alCambiar = function () { self._actualizar(); };
         ['change:center', 'change:resolution', 'change:rotation'].forEach(function (tipo) {
@@ -3492,31 +3509,82 @@
         const vista = typeof mapa.getView === 'function' ? mapa.getView() : null;
         const proyeccionVista = (vista && typeof vista.getProjection === 'function')
           ? vista.getProjection() : null;
-        const capas = mapa.getLayers();
-        for (let i = 0; i < capas.getLength(); i++) {
-          const capa = capas.item(i);
-          if (!capa || typeof capa.setExtent !== 'function') continue;
-          if (!Object.prototype.hasOwnProperty.call(capa, '_extentSinRecorte')) {
-            capa._extentSinRecorte = (typeof capa.getExtent === 'function')
-              ? capa.getExtent() : undefined;
+
+        // Se baja a las capas que están dentro de un grupo, y se apunta si lo
+        // estaban, porque una capa suelta y una metida en un grupo no se dejan
+        // sin extensión igual. El motivo, medido en el Híbrido de MapaBase (un
+        // LayerGroup con dos TMS dentro):
+        //
+        //   · La capa suelta, con wrapX_ = true, repite el mundo al pasar de ±180.
+        //   · La misma capa dentro del grupo, con el MISMO wrapX_ = true, no repite
+        //     nada: se acaba en un corte recto.
+        //
+        // La diferencia la pone el grupo, no la fuente: el grupo de la API arma el
+        // estado de sus hijas con extent = el mundo entero (medido: getLayerStatesArray()
+        // devuelve [-20037508,-20037508,20037508,20037508] en las dos), y ese rectángulo
+        // recorta justo donde empiezan las copias. Y con setExtent(undefined) tampoco
+        // vale, porque al no tener extensión propia el grupo vuelve a caer en el
+        // mundo entero. Hay que ponerla a mano, y por eso las hijas reciben un
+        // rectángulo de varios mundos (REPETICIONES_EN_GRUPO).
+        const visitar = (coleccion, dentroDeGrupo) => {
+          for (let i = 0; i < coleccion.getLength(); i++) {
+            const capa = coleccion.item(i);
+            if (!capa) continue;
+            if (typeof capa.getLayers === 'function') {
+              visitar(capa.getLayers(), true);
+              continue;
+            }
+            if (typeof capa.setExtent !== 'function') continue;
+            if (!Object.prototype.hasOwnProperty.call(capa, '_extentSinRecorte')) {
+              capa._extentSinRecorte = (typeof capa.getExtent === 'function')
+                ? capa.getExtent() : undefined;
+            }
+            if (restituir) {
+              capa.setExtent(capa._extentSinRecorte || undefined);
+            } else if (extent) {
+              capa.setExtent(this._extentEnProyeccion(extent, proyeccionVista,
+                this._proyeccionCapa(capa, proyeccionVista)));
+            } else {
+              // Sin extensión: en global no hay nada que recorte, y sin este
+              // undefined la copia repetida se quedaría fuera del mapa.
+              capa.setExtent(dentroDeGrupo
+                ? this._extentRepetido(this._proyeccionCapa(capa, proyeccionVista))
+                : undefined);
+            }
+            if (typeof capa.changed === 'function') capa.changed();
+            tocadas++;
           }
-          if (restituir) {
-            capa.setExtent(capa._extentSinRecorte || undefined);
-          } else if (extent) {
-            capa.setExtent(this._extentEnProyeccion(extent, proyeccionVista,
-              this._proyeccionCapa(capa, proyeccionVista)));
-          } else {
-            // Sin extensión: en global no hay nada que recorte, y sin este
-            // undefined la copia repetida se quedaría fuera del mapa.
-            capa.setExtent(undefined);
-          }
-          if (typeof capa.changed === 'function') capa.changed();
-          tocadas++;
-        }
+        };
+        visitar(mapa.getLayers(), false);
       } catch (e) {
         console.warn(`${this.name}: no se pudieron recortar las capas.`, e);
       }
       return tocadas;
+    }
+
+    /**
+     * Rectángulo de varios mundos de ancho por uno de alto, en las unidades de la
+     * proyección dada, para una capa que está dentro de un grupo.
+     *
+     *  Es lo que necesitan las hijas de un grupo para que el mapa se repita (ver
+     *  _recortarCapas): el grupo las recorta a su extensión de estado, y si esa es un
+     *  solo mundo se comen las copias. Sin proyección con extensión propia se
+     *  devuelve undefined y se deja que se comporten como hasta ahora.
+     *
+     * @param {Object} [proyeccion] Proyección de la capa.
+     * @returns {number[]|undefined} [xmin, ymin, xmax, ymax], o undefined.
+     */
+    _extentRepetido(proyeccion) {
+      const propio = (proyeccion && typeof proyeccion.getExtent === 'function')
+        ? proyeccion.getExtent() : null;
+      if (!propio) return undefined;
+      const ancho = Math.abs(propio[2] - propio[0]);
+      const alto = Math.abs(propio[3] - propio[1]);
+      if (!ancho || !alto) return undefined;
+      const cx = (propio[0] + propio[2]) / 2;
+      const cy = (propio[1] + propio[3]) / 2;
+      const total = ancho * REPETICIONES_EN_GRUPO;
+      return [cx - total / 2, cy - alto / 2, cx + total / 2, cy + alto / 2];
     }
 
     /**
@@ -3987,11 +4055,36 @@
         const capas = (mapa && typeof mapa.getLayers === 'function') ? mapa.getLayers() : null;
         if (!capas) return;
         const self = this;
-        this._on(capas, 'add', function () {
+        const alCambiar = function () {
           self._aplicarAlcance(self._epsgActivo || self._crsDelVisor().codigo);
-        });
+        };
+        // No basta con escuchar a la coleccion de la raiz: un grupo se anade
+        // VACIO y sus hijas llegan despues. Medido al cambiar la capa base al
+        // Hibrido: el 'add' del grupo dispara _recortarCapas y toca una sola
+        // capa, y las dos TMS se quedan con la extension del mundo, que es
+        // justo la que recorta las copias del mapa repetido. Asi que al
+        // aparecer un grupo se baja tambien a su coleccion, y se arranca con los
+        // que ya vinieran llenos.
+        const vigilar = (coleccion, vistas) => {
+          if (!coleccion || vistas.has(coleccion)) return;
+          vistas.add(coleccion);
+          self._on(coleccion, 'add', function (e) {
+            const c = e && e.element;
+            if (c && typeof c.getLayers === 'function') vigilar(c.getLayers(), vistas);
+            alCambiar();
+          });
+          try {
+            const dentro = (typeof coleccion.getArray === 'function') ? coleccion.getArray() : [];
+            dentro.forEach(function (h) {
+              if (h && typeof h.getLayers === 'function') vigilar(h.getLayers(), vistas);
+            });
+          } catch (e) {
+            /* grupo sin hijos legibles */
+          }
+        };
+        vigilar(capas, new Set());
       } catch (e) {
-        /* sin colección que vigilar se queda como esté; ver _aplicarAlcance */
+        /* sin coleccion que vigilar se queda como esta; ver _aplicarAlcance */
       }
     }
 
@@ -4939,16 +5032,39 @@
     // =====================================================================
 
     /**
-     * Registra un listener DOM y lo anota para poder soltarlo en destroy().
-     * @param {EventTarget} objetivo Elemento destino.
+     * Registra un listener y lo anota para poder soltarlo en destroy().
+     *
+     *  Valen dos tipos de destino, porque el plugin escucha a los dos mundos:
+     *  el DOM (EventTarget, con addEventListener) y los objetos de OpenLayers
+     *  (la vista y la colección de capas), que son Observables y usan on/un, no
+     *  addEventListener. Antes solo se aceptaba el primer caso, así que los
+     *  watchers de la vista y de las capas no se registraban nunca en silencio
+     *  (el `if` de abajo se comía la llamada sin avisar).
+     * @param {EventTarget|Object} objetivo Elemento u Observable de OpenLayers.
      * @param {string} tipo Tipo de evento.
      * @param {Function} fn Función escuchada.
      * @param {Object|boolean} [opciones] Opciones de addEventListener.
      */
     _on(objetivo, tipo, fn, opciones) {
-      if (!objetivo || typeof objetivo.addEventListener !== 'function') return;
-      objetivo.addEventListener(tipo, fn, opciones);
-      this._listeners.push({ objetivo: objetivo, tipo: tipo, fn: fn, opciones: opciones });
+      if (!objetivo) return;
+      // El orden importa y va al revés de lo que parece: los objetos de
+      // OpenLayers (la vista, la colección de capas) tienen las DOS cosas, pero su
+      // addEventListener es un señuelo que solo apila el callback en `listeners_`
+      // y no dispara nada (medido: el cuerpo es `n.push(e)` y punto). El que
+      // funciona es on(). Por eso se mira antes on() que addEventListener().
+      if (typeof objetivo.on === 'function' && typeof objetivo.un === 'function') {
+        try {
+          objetivo.on(tipo, fn);
+          this._listeners.push({ objetivo: objetivo, tipo: tipo, fn: fn, opciones: undefined, ol: true });
+        } catch (e) {
+          /* el evento no existe en esta versión de OpenLayers */
+        }
+        return;
+      }
+      if (typeof objetivo.addEventListener === 'function') {
+        objetivo.addEventListener(tipo, fn, opciones);
+        this._listeners.push({ objetivo: objetivo, tipo: tipo, fn: fn, opciones: opciones, ol: false });
+      }
     }
 
     /**
@@ -4973,7 +5089,12 @@
       for (let i = 0; i < this._listeners.length; i++) {
         const l = this._listeners[i];
         try {
-          l.objetivo.removeEventListener(l.tipo, l.fn, l.opciones);
+          // Los de OpenLayers se sueltan con un(), no con removeEventListener().
+          if (l.ol) {
+            if (l.objetivo && typeof l.objetivo.un === 'function') l.objetivo.un(l.tipo, l.fn);
+          } else {
+            l.objetivo.removeEventListener(l.tipo, l.fn, l.opciones);
+          }
         } catch (e) {
           /* silencioso */
         }
@@ -5082,6 +5203,15 @@
       //    ensanchada, 98 100 99 97 99). Sin esta llamada el visor arrancaría sin
       //    repetición y el mapa se cortaría en ±180 hasta que se tocase algo.
       if (!this._es3D(map)) this._recortarCapas(null);
+
+      // 3 bis) El otro medio de que el mapa se repita. La extensión de la capa ya
+      //   no recorta, pero la fuente todavía puede tener su wrapX a false: en
+      //   OpenLayers cada clase de fuente trae el suyo y no coinciden (las TMS y
+      //   XYZ con true, las WMTS y WMS con false, medido). ext/wrapX los iguala a
+      //   true, y de paso se queda escuchando las capas que se añadan después.
+      //   En 3D no hace nada. Si el visualizador no incluye ext/wrapX/wrapX.js, la
+      //   llamada se salta y aquí no pasa nada.
+      if (window.miWrapX && !this._es3D(map)) window.miWrapX.aplica(map);
 
       // 4) Primer pintado.
       this._aplicarVisibilidad();
