@@ -63,6 +63,31 @@
     return JSON.parse(texto);
   }
 
+  /**
+   * Resuelve un href contra la URL del documento. Un catálogo STAC
+   * estático guarda sus colecciones como rutas relativas ("../planet/
+   * collection.json") y hay que resolverlas contra la del catálogo, no
+   * contra su carpeta.
+   * @param {string} base URL del documento.
+   * @param {string} href
+   * @returns {string}
+   */
+  function resolver(base, href) {
+    const h = String(href || '').trim();
+    if (/^https?:\/\//i.test(h)) return h;
+    try {
+      return new URL(h, base).href;
+    } catch (e) {
+      return h;
+    }
+  }
+
+  /** Nombre deducido del final de un href, para cuando el enlace no trae título. */
+  function nombreDeHref(href) {
+    const trozo = String(href || '').split('#')[0].split('?')[0].replace(/\/+$/, '').split('/').pop();
+    return (trozo || String(href || '')).replace(/\.json$/i, '').replace(/[-_]+/g, ' ');
+  }
+
   /** Quita la barra final. */
   function sinBarra(url) {
     return String(url || '').replace(/\/+$/, '');
@@ -91,8 +116,29 @@
    */
   async function leerStac(url) {
     const base = sinBarra(url);
-    const destino = /\/collections$/.test(base) ? base : base + '/collections';
+    // Un catálogo STAC estático es un fichero (catalog.json) y se pide tal cual;
+    // una API STAC se consulta en su /collections.
+    const destino = (/\.json$/i.test(base) || /\/collections$/.test(base))
+      ? base
+      : base + '/collections';
     const json = parsear(await pedir(destino), destino);
+
+    // Un catálogo STAC estático (un catalog.json) no tiene /collections: sus
+    // colecciones vienen en los enlaces con rel="child".
+    if (!Array.isArray(json.collections) && Array.isArray(json.links)) {
+      return json.links
+        .filter(function (l) { return l && (l.rel === 'child' || l.rel === 'item'); })
+        .map(function (l) {
+          return {
+            nombre: l.title || nombreDeHref(l.href),
+            url: resolver(destino, l.href),
+            descripcion: resumen(l.description || '', 110),
+            // Una colección STAC no es una capa: lo dice el tipo para que el
+            // plugin lo explique en vez de fallar al cargar.
+            tipo: 'STAC'
+          };
+        });
+    }
 
     const colecciones = Array.isArray(json.collections) ? json.collections : [];
     return colecciones.map(function (c) {
@@ -134,7 +180,7 @@
         });
         return {
           nombre: c.title || props.title || id,
-          url: (items && items.href) ? items.href : (id ? unir(base, 'collections/' + id + '/items') : base),
+          url: (items && items.href) ? resolver(destino, items.href) : (id ? unir(base, 'collections/' + id + '/items') : base),
           descripcion: resumen(props.description || c.description || '', 110),
           tipo: 'OGCAPIFeatures'
         };
@@ -142,7 +188,9 @@
     }
 
     // Registros (OGC API Records).
-    const registros = Array.isArray(json.features) ? json.features : (Array.isArray(json.records) ? json.records : []);
+    const registros = Array.isArray(json.features) ? json.features
+      : (Array.isArray(json.records) ? json.records
+        : (Array.isArray(json.items) ? json.items : []));
     if (!registros.length) throw new Error('La respuesta no trae colecciones ni registros.');
     return registros.map(function (r) {
       const props = r.properties || {};

@@ -100,9 +100,24 @@ function mapa() {
   // la URL, que es lo que sabe distinguir un WMS de un GeoJSON o de una
   // plantilla de teselas.
   const catalogos = [
+    // La IDEE no se parametriza: sus diez secciones de tipo de servicio se
+    // piden al portal cuando se despliegan.
     new IDEE.catalog.IDEE(),
-    new IDEE.catalog.STAC(),
-    new IDEE.catalog.OGCAPIRecords(),
+
+    // STAC: catálogos estáticos (un catalog.json) o API STAC (que se le añade
+    // /collections). Cada colección que sale es una entrada de la lista.
+    new IDEE.catalog.STAC({
+      nombre: 'STAC de ejemplos',
+      descripcion: 'Catálogo estático de colecciones de ejemplo',
+      url: 'https://raw.githubusercontent.com/stac-utils/stac-examples/main/catalog.json'
+    }),
+
+    // OGC API Records: catálogos de metadatos. Admite /records y /collections.
+    new IDEE.catalog.OGCAPIRecords({
+      nombre: 'Catálogo de ejemplo (cubeWerx)',
+      descripcion: 'Registros de metadatos en un OGC API Records',
+      url: 'https://test.cubewerx.com/cubewerx/cubeserv/default/ogcapi/catalogues/collections/cwtepcat2/items?f=json'
+    }),
     new IDEE.catalog.custom({
       nombre: 'Servicios del visor',
       descripcion: 'Catálogo de ejemplo declarado desde mapa.js.',

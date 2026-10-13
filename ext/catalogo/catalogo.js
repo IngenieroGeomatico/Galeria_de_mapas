@@ -139,63 +139,6 @@
   // catálogos que son una lista corta y fija: STAC y OGC API Records.
 
   /**
-   * Servicios predefinidos de STAC.
-   * Catálogos STAC públicos con colecciones de imágenes (Sentinel, Landsat...).
-   */
-  const SERVICIOS_STAC = [
-    {
-      nombre: 'Copernicus Data Space (STAC)',
-      url: 'https://catalogue.dataspace.copernicus.eu/stac',
-      tipo: 'STAC',
-      descripcion: 'Sentinel-1/2/3/5P y datos Copernicus'
-    },
-    {
-      nombre: 'Earth Search (Element84, STAC)',
-      url: 'https://earth-search.aws.element84.com/v1',
-      tipo: 'STAC',
-      descripcion: 'Landsat, Sentinel-2 y MODIS en AWS'
-    },
-    {
-      nombre: 'Microsoft Planetary Computer (STAC)',
-      url: 'https://planetarycomputer.microsoft.com/api/stac/v1',
-      tipo: 'STAC',
-      descripcion: 'Landsat, Sentinel, MODIS y mucho más'
-    },
-    {
-      nombre: 'STAC del IGN (Catálogo PNOA)',
-      url: 'https://api.stac.ign.es',
-      tipo: 'STAC',
-      descripcion: 'Vuelos históricos y PNOA del IGN'
-    }
-  ];
-
-  /**
-   * Servicios predefinidos de OGC API Records.
-   * Catálogos de metadatos (CSW moderno) con registros descargables.
-   */
-  const SERVICIOS_OGCAPI = [
-    {
-      nombre: 'Catálogo central IDEE (OGC API Records)',
-      url: 'https://www.ign.es/ogcapi-records',
-      tipo: 'OGCAPI',
-      descripcion: 'Metadatos de los servicios IDEE'
-    },
-    {
-      nombre: 'Catálogo INSPIRE de España',
-      url: 'https://inspire-geoportal.ec.europa.eu/services/NetworkService/rest/ogcapi-records',
-      tipo: 'OGCAPI',
-      descripcion: 'Registros INSPIRE europeos'
-    },
-    {
-      nombre: 'Catálogo de datos.gob.es',
-      url: 'https://datos.gob.es/ogcapi-records',
-      tipo: 'OGCAPI',
-      descripcion: 'Datos abiertos de la AGE'
-    }
-  ];
-
-
-  /**
    * Normaliza un servicio declarado en el JSON.
    *
    * El TIPO NO HAY QUE PONERLO: si viene, se respeta; si no, lo deduce la
@@ -404,6 +347,86 @@
   }
 
   /**
+   * Base de los catálogos que se CONSULTAN por una URL: al seleccionarlos el
+   * plugin pide el documento a esa URL (por el proxy de la API) y lista lo
+   * que encuentre. Es lo que hacen los catálogos STAC y OGC API Records, y
+   * también los que se dan de alta desde el panel.
+   *
+   * El LECTOR es el de catalogo_registro.js (stac, ogcapi o json).
+   */
+  class CatalogoRemoto {
+    constructor(opciones = {}) {
+      // Los valores por defecto los mete cada subclase al llamar a super();
+      // aquí no se puede tocar this, porque en una clase derivada no se puede
+      // tocar this antes de super() y el script entero se caía al cargar.
+      const d = Object.assign({}, opciones || {});
+      const base = new CatalogoCustom({
+        id: d.id,
+        nombre: d.nombre,
+        descripcion: d.descripcion,
+        modo: 'lista'
+      });
+      Object.assign(this, base);
+      // La URL del nodo inicial: lo que se consulta para sacar la lista.
+      this.url = d.url || '';
+      this.tipoLectura = d.tipoLectura || 'json';
+      // Marca de catálogo consultado: el plugin lo pide y lo cachea.
+      this.seConsulta = true;
+      this.esCatalogo = true;
+    }
+  }
+
+  /**
+   * IDEE.catalog.STAC: un catálogo STAC, que se consulta para sacar sus
+   * colecciones.
+   *
+   *   new IDEE.catalog.STAC({
+   *     nombre: 'Copernicus Data Space',
+   *     descripcion: 'Sentinel-1/2/3/5P y datos Copernicus',
+   *     url: 'https://catalogue.dataspace.copernicus.eu/stac'
+   *   })
+   *
+   * La URL es la del catálogo: el plugin le añade /collections y lee lo que
+   * devuelva. Sin `url`, se usa la de Copernicus.
+   */
+  class CatalogoSTAC extends CatalogoRemoto {
+    constructor(opciones = {}) {
+      super(Object.assign({
+        id: 'stac',
+        nombre: 'STAC',
+        descripcion: 'Catálogo STAC con colecciones de imágenes.',
+        url: 'https://catalogue.dataspace.copernicus.eu/stac',
+        tipoLectura: 'stac'
+      }, opciones));
+    }
+  }
+
+  /**
+   * IDEE.catalog.OGCAPIRecords: un catálogo de metadatos, que se consulta
+   * para sacar sus registros.
+   *
+   *   new IDEE.catalog.OGCAPIRecords({
+   *     nombre: 'Catálogo central IDEE',
+   *     descripcion: 'Metadatos de los servicios IDEE',
+   *     url: 'https://www.ign.es/ogcapi-records'
+   *   })
+   *
+   * Acepta tanto /records (OGC API Records) como /collections (OGC API
+   * Features); el lector decide con lo que conteste. Sin `url`, se usa el
+   * API de Features del IGN.
+   */
+  class CatalogoOGCAPIRecords extends CatalogoRemoto {
+    constructor(opciones = {}) {
+      super(Object.assign({
+        id: 'ogcapi-records',
+        nombre: 'OGC API Records',
+        descripcion: 'Catálogo de metadatos (CSW moderno).',
+        url: 'https://api-features.ign.es/collections',
+        tipoLectura: 'ogcapi'
+      }, opciones));
+    }
+  }
+  /**
    * IDEE.catalog.IDEE: el catálogo de la IDEE, que no lleva la lista escrita
    * sino que se pide por secciones al portal (ver catalogo_idee.js).
    *
@@ -425,45 +448,6 @@
         descripcion: 'Servicios publicados en el catálogo de la IDEE, por tipo.',
         modo: 'secciones',
         secciones: secciones
-      }, opciones));
-      Object.assign(this, base);
-      this.esCatalogo = true;
-    }
-  }
-
-  /**
-   * IDEE.catalog.STAC: los catálogos STAC de serie (Copernicus, Earth
-   * Search, Planetary Computer y el del IGN).
-   *
-   *   new IDEE.catalog.STAC();                                  // el de serie
-   *   new IDEE.catalog.STAC({ servicios: [ ...mis servicios... ] });
-   */
-  class CatalogoSTAC {
-    constructor(opciones = {}) {
-      const base = new CatalogoCustom(Object.assign({
-        id: 'stac',
-        nombre: 'STAC',
-        descripcion: 'Catálogos STAC con colecciones de imágenes.',
-        servicios: SERVICIOS_STAC
-      }, opciones));
-      Object.assign(this, base);
-      this.esCatalogo = true;
-    }
-  }
-
-  /**
-   * IDEE.catalog.OGCAPIRecords: los catálogos de metadatos de serie.
-   *
-   *   new IDEE.catalog.OGCAPIRecords();
-   *   new IDEE.catalog.OGCAPIRecords({ servicios: [ ... ] });
-   */
-  class CatalogoOGCAPIRecords {
-    constructor(opciones = {}) {
-      const base = new CatalogoCustom(Object.assign({
-        id: 'ogcapi-records',
-        nombre: 'OGC API Records',
-        descripcion: 'Catálogos de metadatos (CSW moderno).',
-        servicios: SERVICIOS_OGCAPI
       }, opciones));
       Object.assign(this, base);
       this.esCatalogo = true;
@@ -1056,8 +1040,8 @@
         this._pintarSecciones(cont, tipo);
       } else if (tipo.modo === 'arbol') {
         this._pintarArbol(cont, tipo);
-      } else if (tipo.esPropio) {
-        this._pintarCatalogoPropio(cont, tipo);
+      } else if (tipo.seConsulta || tipo.esPropio) {
+        this._pintarCatalogoRemoto(cont, tipo);
       } else {
         this._pintarLista(cont, tipo.listar() || []);
       }
@@ -1202,7 +1186,8 @@
           nombre: propio.nombre,
           modo: 'lista',
           esPropio: true,
-          tipoCatalogo: propio.tipo,
+          seConsulta: true,
+          tipoLectura: propio.tipo,
           url: propio.url,
           descripcion: 'Catálogo añadido por ti: ' + propio.url,
           cargarUrl: function (url, mapa, opciones) { return cargarUrlGenerica(url, mapa, opciones); },
@@ -1213,10 +1198,11 @@
     }
 
     /**
-     * Pinta las entradas de un catálogo dado de alta por el usuario. Se piden
-     * al seleccionarlo y se cachean, como las secciones de la IDEE.
+     * Pinta las entradas de un catálogo que se consulta por URL (STAC, OGC API
+     * Records o uno dado de alta). Se piden al seleccionarlo y se cachean, como
+     * las secciones de la IDEE.
      */
-    _pintarCatalogoPropio(cont, tipo) {
+    _pintarCatalogoRemoto(cont, tipo) {
       const self = this;
       const cache = this._entradasPropias[tipo.id] || (this._entradasPropias[tipo.id] = {});
 
@@ -1228,7 +1214,7 @@
 
       this._pintarAviso(cont, 'Consultando «' + tipo.nombre + '»…');
 
-      cache.promesa = window.CatalogoRegistro.leer(tipo.tipoCatalogo, tipo.url).then(function (entradas) {
+      cache.promesa = window.CatalogoRegistro.leer(tipo.tipoLectura, tipo.url).then(function (entradas) {
         cache.datos = entradas;
         cache.promesa = null;
         // Si mientras tanto el usuario ha cambiado de catálogo, este nodo ya no

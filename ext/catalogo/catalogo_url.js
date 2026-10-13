@@ -432,6 +432,15 @@
     if (!IDEE || !IDEE.layer) throw new Error('La API no está disponible.');
     if (typeof mapa.addLayers !== 'function') throw new Error('El mapa no está listo.');
 
+    // Un tipo que la API no sabe construir (una colección STAC, un registro
+    // de metadatos) se avisa en claro en vez de reventar con un
+    // "IDEE.layer[x] is not a constructor" que no dice nada.
+    if (typeof IDEE.layer[tipo] !== 'function') {
+      throw new Error('Una entrada de tipo ' + tipo +
+        ' no se puede cargar como capa. Los tipos que la API construye son: ' +
+        Object.keys(ETIQUETAS).filter(function (k) { return k !== 'desconocido'; }).join(', ') + '.');
+    }
+
     // Factoria por tipo, con el nombre de la capa del servicio (o la URL en
     // los tipos que no la tienen) y la leyenda con el nombre pedido.
     const fabricar = function (nombreCapa, leyenda) {
