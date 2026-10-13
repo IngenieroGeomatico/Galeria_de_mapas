@@ -395,6 +395,31 @@
   }
 
   /**
+   * Clave de localStorage donde se recuerda con qué catálogo se quedó abierto
+   * el panel, para que al volver al visualizador siga por el mismo.
+   */
+  const CLAVE_SELECCION = 'galeria_catalogo_seleccion';
+
+  /** Último catálogo elegido, o null si nunca se eligió o no hay localStorage. */
+  function leerSeleccion() {
+    try {
+      return window.localStorage.getItem(CLAVE_SELECCION) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Recuerda el catálogo elegido. */
+  function guardarSeleccion(id) {
+    try {
+      window.localStorage.setItem(CLAVE_SELECCION, String(id));
+    } catch (e) {
+      // Sin localStorage (modo privado, permisos) se sigue funcionando, pero
+      // no se recuerda entre recargas.
+    }
+  }
+
+  /**
    * Saca un id utilizable de un nombre: "Servicios de Madrid" ->
    * "servicios-de-madrid". Sin acentos, en minúsculas y con guiones.
    * @param {string} nombre
@@ -637,11 +662,24 @@
         }, this);
       }
 
-      // Catálogo con el que se abre el panel: el que pida el visualizador con
-      // catalogoPorDefecto, o el primero que haya.
+      // Catálogo con el que se abre el panel. Por orden: el que pida el
+      // visualizador con catalogoPorDefecto, el que se eligió la última vez
+      // (queda en localStorage, para que al volver al visualizador siga por
+      // el mismo) o el primero que haya.
       const ids = Object.keys(this._catalogos);
-      if (options.catalogoPorDefecto && this._catalogos[options.catalogoPorDefecto]) {
+      const guardado = leerSeleccion();
+      const existe = function (id) {
+        if (!id) return false;
+        if (this._catalogos[id]) return true;
+        // Los catálogos que el usuario se añadió con el formulario no están
+        // en this._catalogos: se buscan en el registro.
+        return !!(window.CatalogoRegistro && window.CatalogoRegistro.porId(id));
+      }.bind(this);
+
+      if (existe(options.catalogoPorDefecto)) {
         this._tipoSeleccionado = options.catalogoPorDefecto;
+      } else if (existe(guardado)) {
+        this._tipoSeleccionado = guardado;
       } else if (ids.length) {
         this._tipoSeleccionado = ids[0];
       }
@@ -878,6 +916,8 @@
       });
       selector.addEventListener('change', function () {
         self._tipoSeleccionado = this.value;
+        // Se recuerda para que al volver al visualizador siga por este.
+        guardarSeleccion(self._tipoSeleccionado);
         self._pintarCatalogo();
       });
       grupoDisponibles.cuerpo.appendChild(selector);
@@ -1329,6 +1369,8 @@
         self._refrescarSelector();
         self._pintarNuevos();
         self._pintarCatalogo();
+        // El catálogo recién creado pasa a ser el elegido y se recuerda.
+        guardarSeleccion(creado.id);
       });
 
       [['Nombre', nombre], ['Tipo', tipo], ['URL del catálogo', url]].forEach(function (campo) {
