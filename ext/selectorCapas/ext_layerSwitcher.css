@@ -387,6 +387,12 @@
   color: #0078d4;
 }
 
+/* Boton de zoom a la capa: azul de la API, el color de "ir a" */
+.overlay-layer-selector .ls-action-zoom:hover {
+  background: #eef6fd;
+  color: #0078d4;
+}
+
 /* Botón de borrar: tono rojo al pasar el ratón para advertir del efecto */
 .overlay-layer-selector .ls-action-delete:hover {
   color: #d9534f;

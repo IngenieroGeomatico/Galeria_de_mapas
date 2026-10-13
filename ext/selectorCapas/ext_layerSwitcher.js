@@ -742,6 +742,7 @@ class miPlugin_layerSwitcher {
                   <span class="ls-option-value">${transpPct}%</span>
                 </div>
                 <div class="ls-actions-row">
+                  <button type="button" class="ls-action ls-action-zoom" data-id="${index}" title="Zoom a la capa" onclick="zoomToLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="3.2"></circle></svg></button>
                   <button type="button" class="ls-action ls-action-rename" data-id="${index}" title="Renombrar capa" onclick="startRenameLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
                   ${tableBtnHtml}
                   <button type="button" class="ls-action ls-action-delete" data-id="${index}" title="Eliminar la capa del mapa" onclick="deleteLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
@@ -1406,6 +1407,148 @@ class miPlugin_layerSwitcher {
         console.warn('layerSwitcher: no se pudo borrar la capa', e);
       }
     };
+
+    // ── Zoom a la capa ────────────────────────────────────────────────
+    // Encuadra la vista sobre lo que ocupa la capa. Funciona con grupos
+    // tambien: se unen las extensiones de todas sus hijas, pordepth included.
+    //
+    // DE DONDE SALE LA EXTENSIÓN: de `layer.getMaxExtent()`. OJO, ese método
+    // devuelve EL MUNDO ENTERO cuando la capa no tiene extensión propia, que es
+    // lo que pasa con las TMS y con las de terreno (medido:
+    // [-20037508.34, ...] en EPSG:3857 y [-180, -90, 180, 90] en Cesium). Si se
+    // tomara tal cual, el botón llevaría siempre al planeta entero, así que
+    // _esMundoEntero() lo descarta y se avisa en vez de hacer eso.
+    window.zoomToLayer = function (index) {
+      const capa = findLayerById(index);
+      if (!capa || !map) return;
+      const ext = _extensionUtil(capa);
+      if (!ext) {
+        _avisar('Esta capa no tiene una extensión conocida, así que no hay a dónde ir.');
+        return;
+      }
+      const impl = map.getMapImpl ? map.getMapImpl() : null;
+      // El impl de Cesium trae `scene` y no `getView()`: es lo que distingue una
+      // implementacion de otra sin preguntar por la version de la API.
+      const escena = (impl && impl.scene) ? impl.scene : null;
+      const vista = (impl && typeof impl.getView === 'function') ? impl.getView() : null;
+
+      if (escena && escena.camera) {
+        _irAExtentEn3D(ext, escena);
+      } else if (vista && typeof vista.fit === 'function') {
+        try { vista.fit(ext, { padding: [48, 48, 48, 48], maxZoom: 17, duration: 350 }); }
+        catch (e) { _avisar('No se ha podido encuadrar la capa.'); }
+      } else if (typeof map.setBbox === 'function') {
+        // Reserva: sin vista de OpenLayers a la que preguntarle.
+        try { map.setBbox(ext); }
+        catch (e) { _avisar('No se ha podido encuadrar la capa.'); }
+      }
+    };
+
+    /**
+     * ¿La extensión que devuelve la capa es de relleno (el mundo entero)?
+     * @param {Array<number>} ext [x0, y0, x1, y1].
+     * @returns {boolean}
+     */
+    function _esMundoEntero(ext) {
+      // EPSG:3857, el semieje mayor del mundo.
+      const MUNDO_3857 = 20037508.34;
+      if (Math.abs(ext[0]) >= MUNDO_3857 && Math.abs(ext[2]) >= MUNDO_3857 &&
+          Math.abs(ext[1]) >= MUNDO_3857 && Math.abs(ext[3]) >= MUNDO_3857) return true;
+      // En grados, como devuelve Cesium.
+      if (ext[0] <= -180 && ext[2] >= 180 && ext[1] <= -90 && ext[3] >= 90) return true;
+      return false;
+    }
+
+    /**
+     * Extensión real de una capa o de un grupo, en EPSG:3857.
+     *
+     * Para un grupo se unen las de todas sus hijas, y se ignoran las que no
+     * traen extensión: si solo una de las diez tiene datos, el encuadre tiene que
+     * ser el de esa, no el mundo entero de las otras nueve.
+     *
+     * @param {Object} capa
+     * @returns {Array<number>|null} [x0, y0, x1, y1] o null si no hay extensión.
+     */
+    function _extensionUtil(capa) {
+      const propias = [];
+      const visitar = (c) => {
+        let ext = null;
+        try { ext = c.getMaxExtent(); } catch (e) { ext = null; }
+        if (Array.isArray(ext) && ext.length >= 4) {
+          const n = ext.slice(0, 4).map(Number);
+          if (n.every(isFinite) && n[0] < n[2] && n[1] < n[3] && !_esMundoEntero(n)) propias.push(n);
+        }
+        let hijas = [];
+        try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.slice().forEach(visitar);
+      };
+      visitar(capa);
+      if (!propias.length) return null;
+
+      return propias.reduce(function (acc, e) {
+        return [
+          Math.min(acc[0], e[0]), Math.min(acc[1], e[1]),
+          Math.max(acc[2], e[2]), Math.max(acc[3], e[3]),
+        ];
+      }, [Infinity, Infinity, -Infinity, -Infinity]);
+    }
+
+    /**
+     * Lleva la cámara de Cesium hasta la extensión (implementación 3D).
+     *
+     * OJO CON LAS UNIDADES: `getMaxExtent()` devuelve el bbox en las unidades de
+     * la proyección que tenga el mapa AHORA. En 2D (EPSG:3857) son metros
+     * proyectados y en 3D (Cesium) son GRADOS (medido: la misma capa da
+     * [-412305, 4926696, ...] en 2D y [-3.7127, 40.4078, ...] en 3D). Por eso
+     * aquí no se supone nada: se mira el valor, que es inequívoco porque los
+     * grados no pasan de 180 y 90, y solo si son metros se reproyectan.
+     *
+     * @param {Array<number>} ext [x0, y0, x1, y1].
+     * @param {Object} escena Escena de Cesium.
+     */
+    function _irAExtentEn3D(ext, escena) {
+      const C = window.Cesium;
+      const camara = escena && escena.camera;
+      if (!C || !C.Rectangle || !camara) {
+        _avisar('No se puede mover la cámara en esta implementación.');
+        return;
+      }
+      let oeste = [ext[0], ext[1]];
+      let este = [ext[2], ext[3]];
+
+      const pareceGrados = Math.abs(ext[0]) <= 180 && Math.abs(ext[2]) <= 180 &&
+                           Math.abs(ext[1]) <= 90 && Math.abs(ext[3]) <= 90;
+      if (!pareceGrados) {
+        const api = window.IDEE || window.M;
+        if (!(api && api.utils && typeof api.utils.reproject === 'function')) {
+          _avisar('No se ha podido convertir la extensión a coordenadas geográficas.');
+          return;
+        }
+        try {
+          oeste = api.utils.reproject([ext[0], ext[1]], 'EPSG:3857', 'EPSG:4326');
+          este = api.utils.reproject([ext[2], ext[3]], 'EPSG:3857', 'EPSG:4326');
+        } catch (e) {
+          _avisar('No se ha podido convertir la extensión a coordenadas geográficas.');
+          return;
+        }
+      }
+
+      try {
+        camara.flyTo({
+          destination: C.Rectangle.fromDegrees(
+            oeste[0], oeste[1], este[0], este[1]
+          ),
+          duration: 1.2,
+        });
+      } catch (e) {
+        _avisar('No se ha podido encuadrar la capa.');
+      }
+    }
+
+    /** Aviso corto dentro del propio selector de capas. */
+    function _avisar(texto) {
+      try { console.info('layerSwitcher: ' + texto); } catch (e) { /* ignorar */ }
+    }
 
     // ── Identificador del tipo de capa ──────────────────────────────────
     // Devuelve 'vector' si la capa es vectorial (GeoJSON, WFS, Vector...)
@@ -2492,7 +2635,7 @@ class miPlugin_layerSwitcher {
       'renderLayerList', 'toggleLayerVisibility', 'toggleLayerOptions', 'toggleGroup',
       'startRenameLayer', '_renameLayerName', 'handleDragStart', 'handleDragOver',
       'handleDrop', 'handleDragEnd', 'deleteLayer', 'getLayerKind', 'setLayerOpacity',
-      'closeSheet', 'locateFeature', 'openLayerInfo', '_lsPickerLayers',
+      'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo', '_lsPickerLayers',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {
