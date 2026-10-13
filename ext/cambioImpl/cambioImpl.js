@@ -979,6 +979,26 @@ function reRegistrarPluginsTrasSwap() {
             }
         }
     });
+    // Y los REGISTROS que los plugins cuelgan de la API y que la build nueva se
+    // queda sin ellos, que es un agujero distinto: el de las clases lo cubre el
+    // bucle de arriba, pero un registro colgado aparte (window.IDEE.catalog, el
+    // de tipos de catalogo) no. Se cuelgan con la convencion de un global
+    // window.mi* que sea un objeto con una funcion exponer(), y se recorren
+    // igual, para no tener que tocar este fichero cada vez que un plugin anada
+    // uno. Sin esto, MapaBase reventaba al volver a 3D con
+    // "Cannot read properties of undefined (reading 'IDEE')" en
+    // `new IDEE.catalog.IDEE()`, que se llevaba por delante mapa(), plugins y
+    // boton de cambio (medido).
+    Object.keys(window).forEach((k) => {
+        if (k.indexOf('mi') !== 0 || !window[k] || typeof window[k] !== 'object') return;
+        if (typeof window[k].exponer === 'function') {
+            try {
+                window[k].exponer();
+            } catch (e) {
+                console.warn('[cambioImpl] al reponer ' + k + ':', e);
+            }
+        }
+    });
 }
 
 /* =====================================================================

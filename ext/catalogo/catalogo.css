@@ -973,7 +973,8 @@
   margin-top: 2px;
 }
 
-.catalogo__cargar {
+.catalogo__cargar,
+.catalogo__nuevo-boton {
   height: 34px;
   padding: 0 20px;
   border: none;

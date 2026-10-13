@@ -684,6 +684,14 @@
     window.IDEE.catalog = registro;
     window.M = window.M || {};
     window.M.catalog = registro;
+    // Al alternar 2D/3D la API recarga su bundle y window.IDEE pasa a ser un
+    // objeto NUEVO, que se queda sin .catalog: el visualizador hace
+    // `new IDEE.catalog.IDEE()` y revienta con "Cannot read properties of
+    // undefined (reading 'IDEE')" al volver a ejecutar mapa() (medido en
+    // MapaBase). Este global NO depende de window.IDEE, así que sobrevive al
+    // swap, y es por donde miPlugin_cambioImpl vuelve a colgar el registro en la
+    // build nueva. Mismo truco que los window.miPlugin_*.
+    window.miCatalogos = { exponer: exponerCatalog };
     return registro;
   }
 
@@ -1506,7 +1514,11 @@
 
       const boton = document.createElement('button');
       boton.type = 'button';
-      boton.className = 'catalogo__cargar';
+      // Clase propia, y no .catalogo__cargar como el de la pestaña de capas:
+      // son dos botones distintos (este da de alta un catálogo nuevo, el otro
+      // mete capas en el mapa) y compartir clase hacía que un
+      // querySelector('.catalogo__cargar') cogiera el equivocado.
+      boton.className = 'catalogo__nuevo-boton';
       boton.textContent = 'Añadir al catálogo';
       boton.addEventListener('click', function () {
         let creado;
