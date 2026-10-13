@@ -487,35 +487,9 @@
   font-weight: 700;
 }
 
-/* ---- Pie de las listas largas ------------------------------------------ */
-/* Va ARRIBA de la lista, justo debajo del buscador (ver _pintarListaCorta): es
-   la información de la lista que va a ver y la acción para saltarse el tope, y
-   tiene que estar a la vista sin desplazar. Cuando estaba al final quedaba a
-   18.000 px por debajo (medido con las 250 filas de WMS) y no lo encontraba
-   nadie.
-
-   Aparece solo cuando hay más servicios de los que se pintan (ver
-   _pintarSeccion): dice cuántos son y deja abrir el resto. Sin esto, con la
-   sección WMS de la IDEE, se pintaban 1642 filas de golpe —89 658 px de scroll
-   y 8563 nodos— sin ninguna pista de que faltaban servicios. */
-.catalogo__pie-lista {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-  padding: 10px 12px;
-  border: 1px dashed var(--cat-linea-fuerte);
-  border-radius: var(--cat-radio-s);
-  background: var(--cat-fondo-2);
-  color: var(--cat-fg-suave);
-  font-size: 11.5px;
-  line-height: 1.4;
-  text-align: center;
-}
-
-.catalogo__pie-lista[hidden] { display: none; }
-
+/* Botón del paginador que se sale del formato habitual ("Ver los 1642",
+   "Ver de 50 en 50"): va en pastilla como el resto de acciones de marca del
+   plugin. El resto del paginador está en su propio bloque, más arriba. */
 .catalogo__pie-boton {
   padding: 5px 14px;
   border: 1px solid var(--cat-linea-fuerte);
@@ -591,6 +565,55 @@
   color: rgba(255, 255, 255, 0.55);
   font-size: 10.5px;
   letter-spacing: 0.3px;
+}
+
+/* ---- Paginador de las secciones ----------------------------------------- */
+/* Va arriba y abajo de la lista. Antes había un tope de 250 filas con el aviso
+   al final, que quedaba a 18.000 px de scroll y no se veía nunca; ahora se ve
+   en qué página se está, cuántas hay y cuántas cosas quedan por mirar. */
+.catalogo__paginador {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+}
+
+.catalogo__paginador-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.catalogo__pag-boton {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg-suave);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+
+.catalogo__pag-boton:hover:not(:disabled) {
+  border-color: var(--cat-acento);
+  color: var(--cat-acento);
+}
+
+.catalogo__pag-boton:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* ---- Árbol de nodos (catálogos del visualizador) ---------------------- */

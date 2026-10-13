@@ -303,15 +303,14 @@
   const CLAVE_SECCION = 'galeria_catalogo_seccion';
 
   /**
-   * Cuántos servicios se pintan de golpe como mucho en una sección.
+   * Servicios que se pintan por página en una sección.
    *
-   *  Sin tope, la sección WMS del catálogo de la IDEE pintaba sus 1642 servicios
-   *  de una vez (medido: 8563 nodos en el documento y 89 658 px de scroll), lo
-   *  que deja el panel pesado y, además, sin ninguna señal de que quedaban
-   *  servicios por mirar. Con tope se pintan los primeros y el pie de la lista
-   *  ofrece abrir el resto o afinar la búsqueda.
+   *  Antes había un tope de 250 filas con un aviso al final, que quedaba a
+   *  18.000 px de scroll y no se veía: parecía que faltaban servicios. Fifty
+   *  páginas de 50 se ven enteras en una o dos pantallas y el paginador deja
+   *  claro en qué página se está, cuántas hay y cuántas cosas quedan.
    */
-  const LIMITE_FILAS = 250;
+  const TAMANIO_PAGINA = 50;
 
   /** Último tipo de servicio elegido, o null. */
   function leerSeccion() {
@@ -805,10 +804,11 @@
       this._seccionActiva = (typeof options.seccion === 'string') ? options.seccion : leerSeccion();
       this._filtro = options.filtro || '';
       this._estadoSecciones = {};
-      // Si se han pedido ya todos los servicios de la sección (botón del pie de
-      // la lista), y el total de los que tiene, que es contra lo que va el
-      // recuento del buscador.
+      // Si se han pedido ya todos los servicios de la sección (botón del
+      // paginador), y la página por la que se va. Cambiar de sección, de
+      // catálogo o de filtro devuelve el paginador a la primera.
       this._verTodos = false;
+      this._pagina = 1;
       this._totalSeccion = 0;
       // Grupos plegables de la pestaña de catálogos ("disponibles" y "nuevo").
       this._gruposAbiertos = Array.isArray(options.grupos) ? options.grupos.slice() : ['disponibles', 'nuevo'];
@@ -1709,9 +1709,10 @@
       selector.addEventListener('change', function () {
         self._seccionActiva = this.value;
         guardarSeccion(this.value);
-        // El "verlas todas" era de la sección anterior: al cambiar de tipo de
-        // servicio vuelve al tope.
+        // El "verlas todas" y la página eran de la sección anterior: al cambiar
+        // de tipo de servicio se vuelve a la primera página, paginada.
         self._verTodos = false;
+        self._pagina = 1;
         self._liberarSecciones(this.value);
         self._cargarSeccionActiva();
       });
@@ -1839,6 +1840,10 @@
       input.setAttribute('aria-label', 'Filtrar servicios del catálogo');
       input.addEventListener('input', function () {
         self._filtro = this.value;
+        // Cada cambio de filtro vuelve a la primera página: los resultados son
+        // otros y quedarse en la página 7 de la lista anterior no lleva a nada.
+        self._pagina = 1;
+        self._verTodos = false;
         // Se filtra sobre lo ya pintado, sin reconstruir el panel: reconstruirlo
         // destruía el input y se perdía el foco en cada pulsación.
         self._filtrar();
@@ -1947,8 +1952,15 @@
       return st.promesa;
     }
 
-    /**
-     * Pinta los servicios de una sección ya pedida, agrupados por organismo.
+/**
+     * Pinta una página de los servicios de una sección, agrupados por organismo.
+     *
+     *  Se pagina de TAMANIO_PAGINA en TAMANIO_PAGINA. Antes se pintaban los
+     *  primeros LIMITE_FILAS y el aviso iba al final de la lista, a 18.000 px de
+     *  scroll: no lo veía nadie y parecía directamente que faltaban servicios.
+     *  Con el paginador se sabe en todo momento en qué página se está y cuántas
+     *  hay.
+     *
      * @param {Object} datos { seccion, familias, total }.
      * @param {HTMLElement} cuerpo
      * @param {string} [filtro] Texto a filtrar.
@@ -1960,124 +1972,157 @@
       const f = (filtro || '').trim().toLowerCase();
       cuerpo.innerHTML = '';
 
-      let encontrados = 0;
-      let pintados = 0;
-      // Tope de filas de golpe. Medido: la sección WMS de la IDEE son 1642
-      // servicios en 30 organismos, y se pintaban todos — 89 658 px de scroll y
-      // 8563 nodos en el documento— sin que nada indicara que quedaban servicios
-      // por ver. Con tope, el panel arranca ligero y el buscador es la vía
-      // normal de llegar al resto; el botón del pie los abre si de verdad se
-      // quieren todos.
-      const tope = f || this._verTodos ? Infinity : LIMITE_FILAS;
-      const fragmentos = document.createDocumentFragment();
-      let completa = true;
-
+      // 1) Aplanar en el orden del catálogo, filtrando. Se aplana ANTES de
+      //    paginar porque si no, un corte de página podía dejar a un organismo
+      //    con la cabecera puesta y sin ningún servicio debajo.
+      const planos = [];
       datos.familias.forEach(function (fam) {
-        const servicios = f
-          ? fam.servicios.filter(function (s) { return coincideServicio(s, fam.nombre, f); })
-          : fam.servicios;
-
-        if (!servicios.length) return;
-        encontrados += servicios.length;
-
-        // Cabecera del organismo, con su número de servicios. Con el tope
-        // puesto, un organismo puede quedarse entero fuera: se avisa en vez de
-        // dejar la cabecera sola, que parece un fallo de pintada.
-        if (pintados >= tope) {
-          completa = false;
-          return;
-        }
-
-        const org = document.createElement('div');
-        org.className = 'catalogo__organismo';
-        const orgNombre = document.createElement('span');
-        orgNombre.textContent = fam.nombre;
-        const orgCuenta = document.createElement('span');
-        orgCuenta.className = 'catalogo__organismo-cuenta';
-        orgCuenta.textContent = servicios.length;
-        org.appendChild(orgNombre);
-        org.appendChild(orgCuenta);
-        fragmentos.appendChild(org);
-
-        servicios.forEach(function (srv) {
-          if (pintados >= tope) {
-            completa = false;
-            return;
-          }
-          fragmentos.appendChild(self._filaServicio(srv, datos.seccion));
-          pintados++;
+        (fam.servicios || []).forEach(function (srv) {
+          if (!f || coincideServicio(srv, fam.nombre, f)) planos.push({ fam: fam, srv: srv });
         });
       });
 
+      const encontrados = planos.length;
       if (!encontrados) {
         this._pintarAviso(cuerpo,
           f ? 'Ninguna sección contiene «' + filtro + '».' : 'La sección no tiene servicios.');
         this._pintarCuentaBuscador(0, 0);
+        this._pagina = 1;
         return false;
       }
 
+      // 2) Ventana de la página.
+      const paginas = Math.max(1, Math.ceil(encontrados / TAMANIO_PAGINA));
+      if (this._pagina > paginas || this._pagina < 1) this._pagina = paginas;
+      const todos = this._verTodos;
+      const desde = todos ? 0 : (this._pagina - 1) * TAMANIO_PAGINA;
+      const hasta = todos ? encontrados : Math.min(encontrados, desde + TAMANIO_PAGINA);
+      const visibles = planos.slice(desde, hasta);
+
+      // 3) Pintar, reagrupando por organismo dentro de la página.
+      const fragmentos = document.createDocumentFragment();
+      let familiaActual = null;
+      let cuentaActual = 0;
+      let totalDeLaFamilia = 0;
+
+      const cerrarOrganismo = function () {
+        if (!familiaActual) return;
+        const org = document.createElement('div');
+        org.className = 'catalogo__organismo';
+        const orgNombre = document.createElement('span');
+        orgNombre.textContent = familiaActual.nombre;
+        const orgCuenta = document.createElement('span');
+        orgCuenta.className = 'catalogo__organismo-cuenta';
+        // Con filtro o mostrando la lista entera, el número que interesa es el
+        // de los que hay. Paginado, solo se enseña el total de la familia si la
+        // página se ha quedado a medias en ella: si no, un número menor del real
+        // parece que la cuenta esté mal.
+        orgCuenta.textContent = (f || todos || cuentaActual >= totalDeLaFamilia)
+          ? cuentaActual
+          : cuentaActual + ' de ' + totalDeLaFamilia;
+        org.appendChild(orgNombre);
+        org.appendChild(orgCuenta);
+        fragmentos.appendChild(org);
+        familiaActual = null;
+        cuentaActual = 0;
+        totalDeLaFamilia = 0;
+      };
+
+      visibles.forEach(function (p) {
+        if (p.fam !== familiaActual) {
+          cerrarOrganismo();
+          familiaActual = p.fam;
+          totalDeLaFamilia = planos.filter(function (x) { return x.fam === p.fam; }).length;
+        }
+        cuentaActual++;
+        fragmentos.appendChild(self._filaServicio(p.srv, datos.seccion));
+      });
+      cerrarOrganismo();
+
+      // 4) Paginador arriba y abajo: arriba para verlo nada más abrir la sección,
+      //    abajo para seguir leyendo sin tener que volver a subir.
+      cuerpo.appendChild(this._crearPaginador(paginas, encontrados, todos));
       cuerpo.appendChild(fragmentos);
-      this._pintarListaCorta(cuerpo, pintados, encontrados, completa, f);
+      cuerpo.appendChild(this._crearPaginador(paginas, encontrados, todos));
+
+      this._pintarCuentaBuscador(visibles.length, encontrados);
       return true;
     }
 
     /**
-     * Pinta el pie de una lista a la que se le ha puesto tope, y el recuento del
-     * buscador.
+     * Crea el paginador de una sección.
      *
-     *  Con filtro el tope no se aplica (LIMITE_FILAS es Infinity), así que el
-     *  pie casi nunca sale ahí: sale cuando se está viendo la lista entera
-     *  después de haber pedido "verlas todas", que es el único caso en que
-     *  interesa volver al tope.
+     *  Se crea dos veces por página (arriba y abajo) y los dos escriben en el
+     *  mismo estado, así que no hay nada que sincronizar entre ellos.
      *
-     * @param {HTMLElement} cuerpo Donde va el pie.
-     * @param {number} pintados Filas escritas.
-     * @param {number} encontrados Filas que hay en total.
-     * @param {boolean} completa Si se han pintado todas.
-     * @param {string} filtro Texto del filtro, ya en minúsculas.
+     * @param {number} paginas Número de páginas.
+     * @param {number} encontrados Servicios que hay en total.
+     * @param {boolean} todos Si se están mostrando todos.
+     * @returns {HTMLElement} El paginador.
      */
-    _pintarListaCorta(cuerpo, pintados, encontrados, completa, filtro) {
+    _crearPaginador(paginas, encontrados, todos) {
       const self = this;
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__paginador';
 
-      if (filtro) {
-        this._pintarCuentaBuscador(encontrados, this._totalSeccion || encontrados);
-        this._verTodos = false;
-        return;
+      if (todos) {
+        // Lista entera: no hay páginas, pero sí una salida para volver a paginar.
+        const texto = document.createElement('span');
+        texto.className = 'catalogo__paginador-info';
+        texto.textContent = 'Mostrando los ' + encontrados + ' servicios, sin paginar';
+        caja.appendChild(texto);
+        const volver = document.createElement('button');
+        volver.type = 'button';
+        volver.className = 'catalogo__pie-boton';
+        volver.textContent = 'Ver de ' + TAMANIO_PAGINA + ' en ' + TAMANIO_PAGINA;
+        volver.addEventListener('click', function () {
+          self._verTodos = false;
+          self._pagina = 1;
+          self._filtrarSecciones();
+        });
+        caja.appendChild(volver);
+        return caja;
       }
 
-      this._pintarCuentaBuscador(pintados, encontrados);
+      const irA = function (n) {
+        self._pagina = n;
+        self._filtrarSecciones();
+      };
 
-      const pie = document.createElement('div');
-      pie.className = 'catalogo__pie-lista';
+      const anterior = document.createElement('button');
+      anterior.type = 'button';
+      anterior.className = 'catalogo__pag-boton';
+      anterior.textContent = 'Anterior';
+      anterior.disabled = this._pagina <= 1;
+      anterior.addEventListener('click', function () { irA(self._pagina - 1); });
 
-      if (completa) {
-        // Ya se han abierto todas antes y ahora se pinta enteras: no hace falta
-        // un pie que solo diga lo mismo otra vez.
-        this._verTodos = false;
-        return;
-      }
+      const info = document.createElement('span');
+      info.className = 'catalogo__paginador-info';
+      info.textContent = 'Página ' + this._pagina + ' de ' + paginas;
 
-      const texto = document.createElement('span');
-      texto.textContent = 'Mostrando ' + pintados + ' de ' + encontrados
-        + ' servicios. Usa el buscador para llegar antes, o ábrelos todos.';
-      pie.appendChild(texto);
+      const siguiente = document.createElement('button');
+      siguiente.type = 'button';
+      siguiente.className = 'catalogo__pag-boton';
+      siguiente.textContent = 'Siguiente';
+      siguiente.disabled = this._pagina >= paginas;
+      siguiente.addEventListener('click', function () { irA(self._pagina + 1); });
 
-      const boton = document.createElement('button');
-      boton.type = 'button';
-      boton.className = 'catalogo__pie-boton';
-      boton.textContent = 'Ver los ' + encontrados;
-      boton.addEventListener('click', function () {
+      const todosBtn = document.createElement('button');
+      todosBtn.type = 'button';
+      todosBtn.className = 'catalogo__pie-boton';
+      todosBtn.textContent = 'Ver los ' + encontrados;
+      todosBtn.addEventListener('click', function () {
         self._verTodos = true;
         self._filtrarSecciones();
       });
-      pie.appendChild(boton);
 
-      // ARRIBA de la lista, no al final. Al final quedaba a 18.000 px por debajo
-      // de lo que se ve (medido con las 250 filas de WMS), o sea que el aviso y
-      // el botón no los encontraba nadie. Aquí el pie se lee nada más abrir la
-      // sección y contesta a lo que uno se pregunta al ver la lista: por qué
-      // solo hay estos, y cómo ver los demás.
-      cuerpo.insertBefore(pie, cuerpo.firstChild);
+      caja.appendChild(anterior);
+      caja.appendChild(info);
+      caja.appendChild(siguiente);
+      // "Ver los N" solo cuando de verdad hay más páginas: si todo cabe en una,
+      // el botón abriría lo mismo que ya se está viendo.
+      if (paginas > 1) caja.appendChild(todosBtn);
+      return caja;
     }
 
     /** Una fila de servicio con su botón de carga. */
