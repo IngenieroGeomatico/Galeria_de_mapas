@@ -2182,9 +2182,12 @@
       fila.addEventListener('focusin', function () { self._mostrarGlobo(fila, srv); });
       fila.addEventListener('focusout', function () { self._ocultarGlobo(); });
 
-      // Una colección STAC no es una capa: no se carga, se ENTRA en ella. En ese
-      // caso la fila entera es el botón, con su marca de "se abre" al final, y
-      // el "Cargar" no aparece porque no habría nada que cargar.
+      // Una colección se ENTRA a ella, y con ello la fila entera hace de botón, con
+      // su marca de "se abre" al final. Pero entrar y cargar no son la misma
+      // cosa: la colección de una API STAC publica sus elementos en un endpoint
+      // OGC API Features que la API SÍ sabe construir como capa, y entonces
+      // tiene las dos acciones. Solo las de un catálogo estático, que son un
+      // fichero JSON y no una capa, se quedan con entrar.
       if (srv.abrir) {
         fila.classList.add('catalogo__item--abre');
         fila.setAttribute('role', 'button');
@@ -2198,20 +2201,31 @@
             entrar();
           }
         });
+      }
+
+      // El botón de cargar va fuera si la fila NO es abrible (el caso normal de
+      // un servicio) y también en las que sí lo son pero son cargables.
+      if (!srv.abrir || srv.cargable) {
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = 'catalogo__item-boton';
+        boton.textContent = 'Cargar';
+        boton.addEventListener('click', function (ev) {
+          // La fila es un botón y el botón está dentro: sin parar la subida, el
+          // clic se contaría dos veces y cada carga abriría la colección.
+          ev.stopPropagation();
+          self._cargarServicio(srv, sec);
+        });
+        fila.appendChild(boton);
+      }
+
+      if (srv.abrir) {
         const flecha = document.createElement('span');
         flecha.className = 'catalogo__item-flecha';
         flecha.setAttribute('aria-hidden', 'true');
         flecha.textContent = '›';
         fila.appendChild(flecha);
-        return fila;
       }
-
-      const boton = document.createElement('button');
-      boton.type = 'button';
-      boton.className = 'catalogo__item-boton';
-      boton.textContent = 'Cargar';
-      boton.addEventListener('click', function () { self._cargarServicio(srv, sec); });
-      fila.appendChild(boton);
 
       return fila;
     }

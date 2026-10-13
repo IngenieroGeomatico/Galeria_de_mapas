@@ -125,7 +125,86 @@
    */
   const LIMITE_ITEMS_STAC = 50;
 
+/**
+   * Tipos de un asset STAC que la API sabe construir como capa.
+   *
+   *  Se decide por el `type` MIME que declara el asset, que es donde el STAC
+   *  dice de qué es el fichero, y no por el nombre del asset.
+   *
+   *  `GeoTIFF` está porque los catálogos de satélite publican casi todo en COG
+   *  (`image/tiff; profile=cloud-optimized`), que es un GeoTIFF optimizado para
+   *  la nube, y la API tiene constructor para GeoTIFF (medido: `M.layer.GeoTIFF`
+   *  es una función). Un item sin ninguno de estos se queda como información.
+   */
+  const ASSETS_CARGABLES = [
+    { tipo: 'OGCAPIFeatures', mime: /^application\/geo\+json$/ },
+    { tipo: 'GeoJSON', mime: /^application\/geo\+json$/ },
+    { tipo: 'XYZ', mime: /tilejson|vnd\.mapbox-vector-tile/i },
+    { tipo: 'MVT', mime: /application\/vnd\.mapbox-vector-tile/i },
+    { tipo: 'GeoTIFF', mime: /image\/tiff/i },
+    { tipo: 'CSV', mime: /^text\/csv$/ },
+    { tipo: 'KML', mime: /vnd\.google-earth\.kml/i },
+    { tipo: 'GML', mime: /^application\/gml\+xml$/ }
+  ];
+
   /**
+ * Busca en los assets de un item STAC el primero que se pueda cargar.
+ *
+ *  Primero se mira si algún asset es un servicio OGC (se carga por URL aunque
+ *  lo que sirva por debajo sea una imagen), y luego los que son ficheros que la
+ *  API sabe construir. Los de apoyo (metadatos, miniaturas) se descartan: no son
+ *  la escena. Y entre los que valen se prefiere el marcado como `visual`, que es
+ *  la imagen en color true, antes que una banda suelta.
+ *
+ *  OJO, con los catálogos de satélite esto es lo normal: los items de
+ *  Earth Search son COG (`image/tiff; profile=cloud-optimized`) y la API sí tiene
+ *  constructor para ellos, `M.layer.GeoTIFF` (medido), así que se cargan.
+ *
+ * @param {Object} assets El diccionario `assets` del item.
+ * @returns {{tipo: string, url: string, clave: string}|null} El asset elegido.
+ */
+function assetCargable(assets) {
+    const claves = Object.keys(assets || {});
+    for (const clave of claves) {
+      const a = assets[clave] || {};
+      const href = String(a.href || '');
+      if (!href) continue;
+      const servicio = /[?&]SERVICE=(WMS|WMTS|WFS|WCS)/i.exec(href);
+      if (servicio) {
+        const nombre = { WMS: 'WMS', WMTS: 'WMTS', WFS: 'WFS', WCS: 'WCS' }[servicio[1].toUpperCase()];
+        return { tipo: nombre, url: href, clave: clave };
+      }
+    }
+    // Dos pasadas: primero el asset visual, y si no hay, cualquier otro de
+    // datos. Un item de Sentinel-2 tiene veinte bandas y una visual; cargar la
+    // visual es lo que espera cualquiera.
+    for (const clave of claves) {
+      const a = assets[clave] || {};
+      const href = String(a.href || '');
+      if (!href) continue;
+      const roles = Array.isArray(a.roles) ? a.roles : [];
+      if (roles.indexOf('thumbnail') > -1 || roles.indexOf('metadata') > -1) continue;
+      if (roles.indexOf('visual') < 0) continue;
+      const mime = String(a.type || a['type:asset'] || '');
+      for (const regla of ASSETS_CARGABLES) {
+        if (regla.mime.test(mime)) return { tipo: regla.tipo, url: href, clave: clave };
+      }
+    }
+    for (const clave of claves) {
+      const a = assets[clave] || {};
+      const href = String(a.href || '');
+      if (!href) continue;
+      const roles = Array.isArray(a.roles) ? a.roles : [];
+      if (roles.indexOf('thumbnail') > -1 || roles.indexOf('metadata') > -1) continue;
+      const mime = String(a.type || a['type:asset'] || '');
+      for (const regla of ASSETS_CARGABLES) {
+        if (regla.mime.test(mime)) return { tipo: regla.tipo, url: href, clave: clave };
+      }
+    }
+    return null;
+  }
+
+   /**
    * Lee un documento STAC (un catálogo o una colección) y lo devuelve con sus
    * hijos, sus metadatos y su padre, que es lo que hace falta para PODER BAJAR
    * por el árbol y volver a subir.
@@ -198,17 +277,22 @@
         const trozos = [];
         if (fecha) trozos.push(String(fecha).slice(0, 10));
         if (gsd) trozos.push(gsd + ' m/píxel');
-        if (claves.length) trozos.push(claves.length + ' bandas');
+        if (claves.length) trozos.push(claves.length + ' assets');
+        // El botón de cargar solo aparece si el item tiene ALGÚN asset que la
+        // API sepa construir como capa. Con los COG de Earth Search no hay
+        // ninguno y el item se queda como información, que es lo honesto.
+        const bueno = assetCargable(assets);
         return {
           nombre: f.id || '(sin id)',
-          url: (assets.visual && assets.visual.href) || (assets.thumbnail && assets.thumbnail.href) || '',
+          url: bueno ? bueno.url : ((assets.visual && assets.visual.href) || ''),
           descripcion: trozos.join(' · '),
           id: f.id || null,
-          tipo: 'STAC',
-          // Un elemento STAC no es una capa: sus assets son ficheros (COG, JP2,
-          // GeoTIFF) y la API no construye capas con ellos. Se enseña como
-          // información, no con un botón de cargar que solo podría fallar.
-          soloInfo: true
+          tipo: bueno ? bueno.tipo : 'STAC',
+          cargable: !!bueno,
+          // Sin asset cargable, lo que se enseña del item es solo información:
+          // sus assets son ficheros (COG, JP2, GeoTIFF) y la API no construye
+          // capas con ellos. Un botón de cargar ahí solo podría fallar.
+          soloInfo: !bueno
         };
       });
     }
@@ -306,7 +390,10 @@
         tipo: 'OGCAPIFeatures',
         // Y se puede entrar en la colección a ver qué contiene, que es lo que
         // hace la fila en vez de offering un "Cargar" que no tiene sentido aquí.
-        abrir: id ? unir(raiz, 'collections/' + id) : null
+        abrir: id ? unir(raiz, 'collections/' + id) : null,
+        // Su /items es un endpoint OGC API Features y la API sí sabe construir
+        // una capa con él, así que esta colección se puede cargar sin entrar.
+        cargable: true
       };
     }).filter(function (e) { return e.id !== '' || e.url; });
   }
