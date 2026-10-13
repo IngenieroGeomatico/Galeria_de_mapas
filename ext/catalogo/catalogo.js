@@ -2072,7 +2072,12 @@
       });
       pie.appendChild(boton);
 
-      cuerpo.appendChild(pie);
+      // ARRIBA de la lista, no al final. Al final quedaba a 18.000 px por debajo
+      // de lo que se ve (medido con las 250 filas de WMS), o sea que el aviso y
+      // el botón no los encontraba nadie. Aquí el pie se lee nada más abrir la
+      // sección y contesta a lo que uno se pregunta al ver la lista: por qué
+      // solo hay estos, y cómo ver los demás.
+      cuerpo.insertBefore(pie, cuerpo.firstChild);
     }
 
     /** Una fila de servicio con su botón de carga. */

@@ -488,7 +488,13 @@
 }
 
 /* ---- Pie de las listas largas ------------------------------------------ */
-/* Aparece solo cuando hay más servicios de los que se pintan (ver
+/* Va ARRIBA de la lista, justo debajo del buscador (ver _pintarListaCorta): es
+   la información de la lista que va a ver y la acción para saltarse el tope, y
+   tiene que estar a la vista sin desplazar. Cuando estaba al final quedaba a
+   18.000 px por debajo (medido con las 250 filas de WMS) y no lo encontraba
+   nadie.
+
+   Aparece solo cuando hay más servicios de los que se pintan (ver
    _pintarSeccion): dice cuántos son y deja abrir el resto. Sin esto, con la
    sección WMS de la IDEE, se pintaban 1642 filas de golpe —89 658 px de scroll
    y 8563 nodos— sin ninguna pista de que faltaban servicios. */
@@ -497,7 +503,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  margin-top: 2px;
+  margin-bottom: 4px;
   padding: 10px 12px;
   border: 1px dashed var(--cat-linea-fuerte);
   border-radius: var(--cat-radio-s);
