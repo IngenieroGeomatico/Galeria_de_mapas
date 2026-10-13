@@ -53,6 +53,66 @@ En OpenLayers (`'ol'`), `mapajs.getMapImpl()` devuelve la instancia interna de O
 El código del proyecto instancia diversos tipos de capas soportados por la API sobre OpenLayers:
 
 ### Capas TMS y WMS
+
+#### `wrapX`: que la capa dé la vuelta al mundo
+
+Con `wrapX` a `true` una fuente de teselas **pinta el mundo en bucle**: al cruzar el
+antimeridiano se ve el planeta repetido, que es lo normal en un mapa generalista. Con
+`false`, al otro lado de ±180 no hay nada.
+
+**El valor por defecto NO es el mismo en todas las fuentes**, y la API no lo unifica:
+
+| Fuente OpenLayers | Qué la usa | Defecto de `wrapX` |
+|---|---|---|
+| `ol.source.TileImage` | `TMS`, `XYZ` (heredan de ella) | `options.wrapX !== false` → **true** |
+| `ol.source.TileWMTS` | `WMTS` | sin valor por defecto → **false** |
+| `ol.source.TileWMS` | `WMS` | sin valor por defecto → **false** |
+
+Medido en `mapas/MapaBase`: la capa base «Imagen» (`BASE_PNOA_MA_TMS`) sale con
+`wrapX=true` y «Callejero» (`BASE_MapaBase_IGNBaseTodo_WMTS`) con `wrapX=false`, sin
+que el visualizador haya pedido ninguna de las dos cosas.
+
+Doswege que **no** funcionan:
+
+```javascript
+// 1) La API no deja pasar la opción: solo reenvía crossOrigin al impl.
+new IDEE.layer.TMS({ url: '...', wrapX: false });   // sigue saliendo wrapX=true
+
+// 2) OpenLayers lee el CAMPO wrapX_, no la propiedad observable.
+fuente.set('wrapX', false);
+//    -> fuente.get('wrapX') === false  pero  fuente.wrapX_ === true (no cambia nada)
+```
+
+El que sí funciona es tocar el campo, y hay que avisar con `changed()` para que repinte:
+
+```javascript
+// Ruta: ext/wrapX/wrapX.js (módulo compartido, no es un plugin)
+const fuente = capa.getImpl().olLayer.getSource();
+fuente.wrapX_ = true;
+fuente.changed();
+```
+
+Para ponerlo a **todas** las capas de una vez hay `ext/wrapX/wrapX.js`, que expone
+`window.miWrapX`:
+
+```javascript
+miWrapX.aplica(mapa);   // una vez tras crear el mapa
+```
+
+Recorre la colección de capas (incluidos los grupos), pone `wrapX_ = true` a toda fuente
+que lo tenga —las vectoriales no lo tienen y se dejan como están— y se queda escuchando
+altas y bajas, de modo que también tapa las capas que se añadan después. Es idempotente.
+En 3D no hace nada: el impl de Cesium no tiene `getLayers()`.
+
+Está llamado desde los dos puntos donde nacen capas ráster en este repositorio:
+`ext/selectorCapas/ext_backgorundLayers.js` (tras `addLayers` de la capa base) y
+`ext/catalogo/catalogo_url.js` (en `cargar()`, tras `mapa.addLayers(capas)`). Para otros
+visualizadores, incluir el script y llamar a `miWrapX.aplica(mapajs)` tras `IDEE.map()`,
+**repetido cada vez que se recree el mapa**, que es lo que pasa al cambiar de
+implementación.
+
+#### Ejemplos
+
 ```javascript
 // Ruta: mapas/LucesdeBohemia/js/mapa.js
 Base_IGNBaseTodo_TMS_2 = new M.layer.TMS({

@@ -163,6 +163,11 @@ class miPlugin_baseLayer {
           const selected = this._items.find(function (l) { return l.id === targetId; });
           if (selected && selected.layers && typeof mapRef.addLayers === 'function') {
             mapRef.addLayers(selected.layers);
+            // Las capas base las construye la API a partir de su catálogo, y su
+            // wrapX sale del defecto de cada clase de fuente (las TMS con true y
+            // las WMTS con false). Se igualan a true para que todas den la vuelta
+            // al mundo. Ver ext/wrapX/wrapX.js.
+            if (window.miWrapX) window.miWrapX.aplica(mapRef);
           }
         }
         if (typeof localStorage !== 'undefined') {
@@ -329,6 +334,9 @@ class miPlugin_baseLayer {
       var selected = items.find(function (l) { return l.id === layerId; });
       if (!selected) return;
       map.addLayers(selected.layers);
+      // Ver el comentario del otro alta: el wrapX de las capas base sale del
+      // defecto de cada clase de fuente y se iguala a true (ext/wrapX).
+      if (window.miWrapX) window.miWrapX.aplica(map);
       localStorage.setItem('baseLayer_ID', layerId);
     };
     this._changeBase = changeBase;

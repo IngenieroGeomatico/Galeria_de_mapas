@@ -48,6 +48,14 @@ function mapa() {
     container: "mapaDIV",
   });
 
+  // Wrap del mundo a true en todas las capas ráster. Sin esto cada fuente
+  // decide por su cuenta: las TMS y XYZ (TileImage) salen con wrapX=true y las
+  // WMTS y WMS con false, de modo que una capa base repite el planeta al cruzar
+  // el antimeridiano y la otra no. ext/wrapX/wrapX.js explica el detalle; aquí
+  // solo se avisa de que hay que volver a llamarlo cada vez que se crea el mapa,
+  // que es justo lo que pasa al cambiar de implementación.
+  if (window.miWrapX) window.miWrapX.aplica(mapajs);
+
   // ── Plugin selector de capas base (grid de imágenes) ──────────────
   var baseLayerPlugin = new IDEE.plugin.miPlugin_baseLayer({
     // Una única fila (todas las capas base en línea). Parametrizable:
@@ -72,9 +80,9 @@ function mapa() {
   // un div a todo el ancho donde esta lectura ancha sí encaja.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
 
-  // ── Plugin del catálogo de servicios y capas ──────────────────────
-  // Panel de "Catálogos disponibles" (con alta por URL) más los catálogos que
-  // declare este visualizador. Ver ext/catalogo.
+  // ── Catálogo de servicios y capas ──────────────────────────────────
+  // Listado predefinido por tipo de catálogo (IDEE, STAC, OGC API Records) y
+  // botón de "Añadir por URL". Ver ext/catalogo.
   // Va en la esquina TR (arriba a la derecha) con order 2. La barra de título
   // la deja a todo ancho el bloque "PANEL EN LA ESQUINA TR" que llevan las
   // hojas de los plugins (en TR el API mete el botón dentro del panel y sin
@@ -112,15 +120,15 @@ function mapa() {
       url: 'https://raw.githubusercontent.com/stac-utils/stac-examples/main/catalog.json'
     }),
 
-    // OGC API Records: catálogos de metadatos. Admite /records, /collections y
-    // /items; si la URL ya trae el camino, no se le añade nada.
+    // OGC API Records: catálogos de metadatos. Admite /records y /collections.
     new IDEE.catalog.OGCAPIRecords({
       nombre: 'Catálogo de ejemplo (cubeWerx)',
-      descripcion: 'Registros de metadatos en un OGC API',
-      url: 'https://test.cubewerx.com/cubewerx/cubeserv/default/ogcapi/catalogues/collections?f=json'
+      descripcion: 'Registros de metadatos en un OGC API Records',
+      url: 'https://test.cubewerx.com/cubewerx/cubeserv/default/ogcapi/catalogues/collections/cwtepcat2/items?f=json'
     }),
+
     new IDEE.catalog.custom({
-      nombre: 'Servicios del visor',
+      nombre: 'Servicios personalizados',
       descripcion: 'Catálogo de ejemplo declarado desde mapa.js.',
       nodos: [
         {
@@ -156,6 +164,19 @@ function mapa() {
     })
   ];
 
+  // ── Plugin del catálogo ────────────────────────────────────────────
+  // Catálogos disponibles (con alta por URL) más los de arriba. Ver
+  // ext/catalogo.
+  // Va en la esquina TR (arriba a la derecha) con order 2. La barra de título
+  // la deja a todo ancho el bloque "PANEL EN LA ESQUINA TR" que llevan las
+  // hojas de los plugins (en TR el API mete el botón dentro del panel y sin
+  // eso la cabecera sale partida).
+  //
+  // El icono es el "collect" de svgrepo (libros apilados), guardado en
+  // img/iconos/collect.svg. La ruta es relativa al DOCUMENTO (la máscara se
+  // resuelve desde el CSS de la página, no desde este .js), y el color lo pone
+  // el propio plugin como máscara (--g-plugin-icon-mask).
+  //
   // Con `soloCatalogos: true` el panel se quedaría solo con lo que se le pase,
   // y con `catalogoPorDefecto: 'servicios-del-visor'` se abriría por ese.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_catalogo({

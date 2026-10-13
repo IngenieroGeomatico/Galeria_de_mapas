@@ -481,6 +481,15 @@
     });
 
     mapa.addLayers(capas);
+
+    // Las fuentes de OpenLayers no coinciden en su wrapX por defecto: las TMS y
+    // XYZ (TileImage) vienen con true y las WMTS y WMS con false, así que una
+    // capa cargada desde el catálogo daría la vuelta al mundo y otra no. Se
+    // igualan todas a true. La API no deja pasar la opción (a un TMS con
+    // wrapX:false le sale true), y fuente.set('wrapX') tampoco sirve porque
+    // OpenLayers lee el campo wrapX_. Ver ext/wrapX/wrapX.js.
+    if (window.miWrapX) window.miWrapX.aplica(mapa);
+
     return capas;
   }
 
