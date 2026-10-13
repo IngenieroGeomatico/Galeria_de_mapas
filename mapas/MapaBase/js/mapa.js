@@ -105,11 +105,17 @@ function mapa() {
     new IDEE.catalog.IDEE(),
 
     // STAC: catálogos estáticos (un catalog.json) o API STAC (que se le añade
-    // /collections). Cada colección que sale es una entrada de la lista.
+    // /collections). Cada colección que sale es una entrada de la lista, y
+    // entrando en ella se ve lo que contiene, con un botón para volver al JSON
+    // de antes.
+    //
+    // Antes apuntaba a stac-examples, que ya no sirve: sus cinco colecciones dan
+    // 404 porque el repo movió los ficheros (medido). Ahora es la API STAC de
+    // Earth Search, que sí tiene sus colecciones con items y metadatos.
     new IDEE.catalog.STAC({
-      nombre: 'STAC de ejemplos',
-      descripcion: 'Catálogo estático de colecciones de ejemplo',
-      url: 'https://raw.githubusercontent.com/stac-utils/stac-examples/main/catalog.json'
+      nombre: 'STAC (Earth Search)',
+      descripcion: 'Catálogo STAC de imágenes de satélite',
+      url: 'https://earth-search.aws.element84.com/v1/collections'
     }),
 
     // OGC API Records: catálogos de metadatos. Admite /records y /collections.

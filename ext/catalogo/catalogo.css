@@ -616,6 +616,111 @@
   cursor: default;
 }
 
+/* ---- Migas y botón de volver (árbol STAC) ------------------------------ */
+/* Solo aparece cuando se ha bajado a alguna colección. */
+.catalogo__migas {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+}
+
+.catalogo__volver {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg-suave);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+
+.catalogo__volver:hover {
+  border-color: var(--cat-acento);
+  color: var(--cat-acento);
+}
+
+.catalogo__migas-ruta {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ficha de la colección en la que se está: qué es, cuándo cubre y con qué
+   licencia. Es lo que responde a "qué tiene este catálogo". */
+.catalogo__ficha {
+  flex: 1 0 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--cat-linea);
+}
+
+.catalogo__ficha-desc {
+  margin: 0;
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.catalogo__ficha-datos {
+  color: var(--cat-fg-tenue);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+/* Un elemento STAC se enseña pero no se carga: sin botón y sin luz de acción. */
+.catalogo__item--info {
+  cursor: default;
+  background: var(--cat-fondo);
+  border-color: var(--cat-linea);
+}
+
+.catalogo__item--info:hover {
+  background: var(--cat-fondo);
+  border-color: var(--cat-linea);
+}
+
+/* Una colección no se carga, se entra en ella: la fila entera hace de botón y
+   lleva su chevron al final, con el color de marca para que se lea de un
+   vistazo que hay algo dentro. El hover de la fila normal ya pinta el botón de
+   carga, y aquí no hay botón que pintar. */
+.catalogo__item--abre {
+  cursor: pointer;
+  border-color: var(--cat-linea);
+}
+
+.catalogo__item--abre:hover,
+.catalogo__item--abre:focus-visible {
+  background: var(--cat-fondo);
+  border-color: var(--cat-marca);
+  outline: none;
+}
+
+.catalogo__item-flecha {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--cat-marca);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 /* ---- Árbol de nodos (catálogos del visualizador) ---------------------- */
 /* Cada nodo es una sección más, sangrada según su nivel para que se vea la
    jerarquía. La sangría va en el propio nodo (--cat-nivel) y no en los hijos,

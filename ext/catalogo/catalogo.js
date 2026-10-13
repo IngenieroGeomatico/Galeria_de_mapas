@@ -815,6 +815,10 @@
       this._gruposDom = {};
       // Entradas ya consultadas de los catálogos dados de alta por el usuario.
       this._entradasPropias = {};
+      // Navegación por el árbol de un catálogo STAC: dónde se está y lo que se
+      // ha pedido al bajar, para poder volver sin volver a preguntar nada.
+      this._pilaStac = [];
+      this._cacheStac = {};
       this._analisis = null;
 
       // Referencias a la interfaz (se rellenan en _construirUI).
@@ -1034,6 +1038,9 @@
         self._tipoSeleccionado = this.value;
         // Se recuerda para que al volver al visualizador siga por este.
         guardarSeleccion(self._tipoSeleccionado);
+        // La navegación por el árbol STAC es de un catálogo: al cambiar de
+        // catálogo se empieza por su raíz otra vez.
+        self._resetPilaStac();
         self._pintarCatalogo();
       });
       // El selector va con etiqueta, igual que el de "Tipo de servicio" que se
@@ -1371,6 +1378,11 @@
       cache.promesa = window.CatalogoRegistro.leer(tipo.tipoLectura, tipo.url).then(function (entradas) {
         cache.datos = entradas;
         cache.promesa = null;
+        // La raíz del árbol se guarda aparte para poder volver a ella al subir
+        // todo el recorrido, que si no no habría de dónde sacar la lista.
+        self._raizStac = entradas;
+        self._pilaStac = [];
+        self._cacheStac = {};
         // Si mientras tanto el usuario ha cambiado de catálogo, este nodo ya no
         // está en la página y no hay que pintar nada.
         if (!document.contains(cont)) return;
@@ -2142,11 +2154,26 @@
 
       const url = document.createElement('span');
       url.className = 'catalogo__item-url';
-      url.textContent = srv.url;
-      url.title = srv.url;
+      // Un elemento que es solo información no tiene una URL que enseñar: lo
+      // que interesa de él es lo que el STAC dice de él (fecha, resolución).
+      if (!srv.soloInfo && srv.url) {
+        url.textContent = srv.url;
+        url.title = srv.url;
+      } else {
+        url.textContent = srv.descripcion || '';
+        url.title = srv.descripcion || '';
+      }
       texto.appendChild(url);
 
       fila.appendChild(texto);
+
+      // Un elemento STAC se enseña pero no se carga: sus assets son ficheros
+      // (COG, JP2, GeoTIFF) y la API no construye capas con ellos. Ponerle un
+      // botón de cargar sería prometer algo que no puede cumplir.
+      if (srv.soloInfo) {
+        fila.classList.add('catalogo__item--info');
+        return fila;
+      }
 
       // El globo. Se engancha al ratón Y al teclado (focusin/focusout), para que
       // la descripción se lea también sin puntero.
@@ -2154,6 +2181,30 @@
       fila.addEventListener('mouseleave', function () { self._ocultarGlobo(); });
       fila.addEventListener('focusin', function () { self._mostrarGlobo(fila, srv); });
       fila.addEventListener('focusout', function () { self._ocultarGlobo(); });
+
+      // Una colección STAC no es una capa: no se carga, se ENTRA en ella. En ese
+      // caso la fila entera es el botón, con su marca de "se abre" al final, y
+      // el "Cargar" no aparece porque no habría nada que cargar.
+      if (srv.abrir) {
+        fila.classList.add('catalogo__item--abre');
+        fila.setAttribute('role', 'button');
+        fila.setAttribute('tabindex', '0');
+        fila.title = 'Entrar en «' + srv.nombre + '»';
+        const entrar = function () { self._abrirNodoStac(srv.abrir, String(srv.nombre || '').trim()); };
+        fila.addEventListener('click', entrar);
+        fila.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+            ev.preventDefault();
+            entrar();
+          }
+        });
+        const flecha = document.createElement('span');
+        flecha.className = 'catalogo__item-flecha';
+        flecha.setAttribute('aria-hidden', 'true');
+        flecha.textContent = '›';
+        fila.appendChild(flecha);
+        return fila;
+      }
 
       const boton = document.createElement('button');
       boton.type = 'button';
@@ -2258,9 +2309,27 @@
     /** Lista plana de servicios (catálogos STAC y OGC API Records). */
     _pintarLista(cont, servicios) {
       const self = this;
-      // El mismo buscador de las secciones y del árbol: sin él estos catálogos no
+      // El buscador: sin él estos catálogos no
       // se podían filtrar.
       this._pintarBuscador(cont);
+
+      // La barra de navegación del árbol STAC, si se ha bajado a alguna
+      // colección. Va fuera de la caja de filas porque el filtro solo repinta las
+      // filas y esta barra se tiene que quedar. Se inserta ANTES del buscador
+      // (el bloque entero, no el input: el input cuelga de una caja interior y
+      // no es hijo directo del gestor — insertBefore con él revienta).
+      const barra = this._pintarBarraStac();
+      if (barra) {
+        const buscador = cont.querySelector('.catalogo__buscador');
+        cont.insertBefore(barra, buscador || null);
+      }
+
+      // Los avisos que hubiera en el gestor (el "Consultando…" del catálogo
+      // remoto) se van al terminar: si no, se quedan escritos encima de la lista
+      // ya cargada (medido).
+      cont.querySelectorAll(':scope > .catalogo__aviso').forEach(function (a) {
+        a.parentNode.removeChild(a);
+      });
 
       // Las filas van en su propio contenedor, para poder rehacerlas al filtrar
       // sin tocar el buscador (que es lo que hacía perder el foco).
@@ -2273,12 +2342,159 @@
       }
       caja.innerHTML = '';
       if (!servicios.length) {
-        this._pintarAviso(caja, 'Este catálogo todavía no tiene servicios predefinidos.');
+        this._pintarAviso(caja, this._pilaStac.length
+          ? 'Esta colección no tiene colecciones ni elementos dentro.'
+          : 'Este catálogo todavía no tiene servicios predefinidos.');
         return;
       }
       servicios.forEach(function (srv) {
         caja.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
       });
+    }
+
+    /**
+     * Barra de navegación del árbol STAC: el botón de volver y las migas.
+     *
+     *  Solo se pinta cuando se ha bajado de la raíz. En la raíz no hay a dónde
+     *  volver y una fila vacía solo añade ruido.
+     * @returns {HTMLElement|null} La barra, o null si se está en la raíz.
+     */
+    _pintarBarraStac() {
+      const self = this;
+      if (!this._pilaStac.length) return null;
+
+      const barra = document.createElement('div');
+      barra.className = 'catalogo__migas';
+
+      const volver = document.createElement('button');
+      volver.type = 'button';
+      volver.className = 'catalogo__volver';
+      volver.textContent = '← Volver';
+      volver.title = 'Volver a ' + (this._pilaStac.length > 1
+        ? this._pilaStac[this._pilaStac.length - 2].titulo : 'el catálogo');
+      volver.addEventListener('click', function () { self._volverStac(); });
+
+      const ruta = document.createElement('span');
+      ruta.className = 'catalogo__migas-ruta';
+      ruta.textContent = this._pilaStac.map(function (n) { return n.titulo; }).join('  ›  ');
+
+      barra.appendChild(volver);
+      barra.appendChild(ruta);
+
+      // La ficha de la colección en la que se está, que es "lo que tiene ese
+      // catálogo": descripción, cobertura temporal, licencia y cuántos
+      // elementos declara.
+      const nodo = this._cacheStac[this._pilaStac[this._pilaStac.length - 1].url];
+      if (nodo && (nodo.descripcion || nodo.temporal || nodo.licencia || nodo.totalElementos)) {
+        const ficha = document.createElement('div');
+        ficha.className = 'catalogo__ficha';
+
+        if (nodo.descripcion) {
+          const d = document.createElement('p');
+          d.className = 'catalogo__ficha-desc';
+          d.textContent = nodo.descripcion;
+          ficha.appendChild(d);
+        }
+        const datos = [];
+        if (nodo.temporal) datos.push('Temporal: ' + nodo.temporal);
+        if (nodo.totalElementos) datos.push(nodo.totalElementos.toLocaleString('es-ES') + ' elementos');
+        if (nodo.licencia) datos.push('Licencia: ' + nodo.licencia);
+        if (datos.length) {
+          const m = document.createElement('div');
+          m.className = 'catalogo__ficha-datos';
+          m.textContent = datos.join(' · ');
+          ficha.appendChild(m);
+        }
+        barra.appendChild(ficha);
+      }
+      return barra;
+    }
+
+    /**
+     * Entra en una colección STAC y pinta lo que contiene en el MISMO sitio.
+     *
+     *  La lista se guarda en el mismo hueco que la del catálogo (`_entradasPropias`),
+     *  así que el buscador, el recuento y el filtrado siguen funcionando sin
+     *  tocar nada: bajando a un nodo no cambia cómo se ve, cambia qué hay.
+     *
+     * @param {string} url Documento STAC al que entrar.
+     * @param {string} titulo Nombre para las migas.
+     */
+    _abrirNodoStac(url, titulo) {
+      const self = this;
+      const tipo = this._catalogoActual();
+      if (!tipo) return;
+      const registro = window.CatalogoRegistro;
+      if (!registro || typeof registro.leerNodoStac !== 'function') {
+        this._decir('No se puede navegar por este catálogo: falta el lector STAC.', 'aviso');
+        return;
+      }
+      if (this._pilaStac.length) {
+        this._decir('Abriendo «' + titulo + '»…');
+      }
+
+      const cache = this._entradasPropias[tipo.id] || (this._entradasPropias[tipo.id] = {});
+      const yaEsta = this._cacheStac[url];
+
+      const pintar = function (nodo) {
+        self._cacheStac[url] = nodo;
+        cache.datos = (nodo.entradas || []).map(function (e) {
+          return Object.assign({}, e, { nombre: e.nombre, padre: nodo.url });
+        });
+        self._pintarCatalogo();
+        if ((self._filtro || '').trim()) self._repintarLista();
+      };
+
+      if (yaEsta) {
+        this._pilaStac.push({ url: url, titulo: titulo });
+        pintar(yaEsta);
+        return;
+      }
+
+      cache.promesa = registro.leerNodoStac(url).then(function (nodo) {
+        cache.promesa = null;
+        self._pilaStac.push({ url: url, titulo: titulo });
+        pintar(nodo);
+        return nodo;
+      }).catch(function (err) {
+        cache.promesa = null;
+        self._decir('No se ha podido abrir «' + titulo + '»: '
+          + (err && err.message ? err.message : err), 'error');
+      });
+    }
+
+    /**
+     * Sube un nivel en el árbol STAC.
+     *
+     *  No vuelve a pedir nada: los nodos ya visitados están en _cacheStac, que
+     *  es justo para que subir y bajar sea instantáneo.
+     */
+    _volverStac() {
+      const tipo = this._catalogoActual();
+      if (!tipo || !this._pilaStac.length) return;
+      this._pilaStac.pop();
+      const actual = this._pilaStac.length
+        ? this._pilaStac[this._pilaStac.length - 1]
+        : null;
+
+      const cache = this._entradasPropias[tipo.id] || (this._entradasPropias[tipo.id] = {});
+      const nodo = actual ? this._cacheStac[actual.url] : null;
+
+      if (nodo) {
+        cache.datos = nodo.entradas || [];
+      } else {
+        // De vuelta en la raíz: lo que se pintó al abrir el catálogo.
+        cache.datos = this._raizStac || cache.datos;
+      }
+      this._pintarCatalogo();
+      if ((this._filtro || '').trim()) this._repintarLista();
+    }
+
+    /** Olvida la navegación: se llama al cambiar de catálogo. */
+    _resetPilaStac() {
+      this._pilaStac = [];
+      this._cacheStac = {};
+      this._raizStac = null;
     }
 
     /**

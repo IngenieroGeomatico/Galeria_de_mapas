@@ -117,6 +117,139 @@
   // =====================================================================
 
   /**
+   * Cuántos elementos se piden de una colección STAC al entrar en ella.
+   *
+   *  La de Sentinel-2 de Earth Search tiene 51.669.232 elementos (medido), así
+   *  que no se pueden listar todos ni interesa: se pide este lote y se dice
+   *  cuántos hay en total.
+   */
+  const LIMITE_ITEMS_STAC = 50;
+
+  /**
+   * Lee un documento STAC (un catálogo o una colección) y lo devuelve con sus
+   * hijos, sus metadatos y su padre, que es lo que hace falta para PODER BAJAR
+   * por el árbol y volver a subir.
+   *
+   *  Un catálogo estático (catalog.json) tiene sus colecciones en los enlaces
+   *  con rel="child"; una colección, sus items en rel="item"; y cualquier nodo
+   *  dice de dónde viene en rel="parent". Con eso se monta la navegación sin
+   *  adivinar nada de la URL.
+   *
+   * @param {string} url URL del documento STAC.
+   * @returns {Promise<Object>} {url, titulo, descripcion, padre, entradas, licencia, temporal}
+   */
+  async function leerNodoStac(url) {
+    const base = sinBarra(url);
+    const json = parsear(await pedir(url), url);
+    const enlaces = Array.isArray(json.links) ? json.links : [];
+
+    const buscarEnlace = function (rels) {
+      return enlaces.find(function (l) {
+        return l && rels.indexOf(l.rel) > -1;
+      });
+    };
+
+    const padre = buscarEnlace(['parent']);
+    const items = buscarEnlace(['items']);
+
+    // Los hijos: primero las colecciones hijas, y si no hay, los items. Un
+    // catálogo de ejemplo suele tener uno u otro, no los dos.
+    const hijos = enlaces
+      .filter(function (l) { return l && (l.rel === 'child' || l.rel === 'item'); })
+      .map(function (l) {
+        const abs = resolver(url, l.href);
+        return {
+          nombre: l.title || nombreDeHref(abs),
+          url: abs,
+          descripcion: resumen(l.description || '', 110),
+          // Un hijo de rel="child" es otra colección en la que se puede entrar;
+          // uno de rel="item" es un elemento, que ya es una carga.
+          abrir: l.rel === 'child' ? abs : null,
+          tipo: l.rel === 'child' ? 'STAC' : 'OGCAPIFeatures'
+        };
+      });
+
+    // Si el documento es una colección de una API STAC (no un catálogo
+    // estático), sus items no vienen por links sino en /items, y su tipo es
+    // el que se puede cargar en el mapa.
+    const titulo = json.title || json.id || nombreDeHref(base);
+    const esColeccionApi = /\/collections\//.test(base) || json.type === 'Collection';
+    const urlItems = items ? resolver(url, items.href) : null;
+
+    let entradas = hijos;
+    let totalElementos = 0;
+
+    // Colección de una API STAC: sus elementos están en /items y no en el
+    // documento, así que hay que ir a buscarlos. Y hay que pedirlos con tope:
+    // la de Sentinel-2 de Earth Search tiene 51.669.232 elementos (medido), que
+    // no caben en ninguna lista ni interesan.
+    if (!entradas.length && urlItems) {
+      const conTope = urlItems + (urlItems.indexOf('?') > -1 ? '&' : '?')
+        + 'limit=' + LIMITE_ITEMS_STAC;
+      const j = parsear(await pedir(conTope), conTope);
+      const feats = Array.isArray(j.features) ? j.features : [];
+      totalElementos = Number(j.numberMatched || j.numberReturned || feats.length) || 0;
+      entradas = feats.map(function (f) {
+        const props = f.properties || {};
+        const assets = f.assets || {};
+        const claves = Object.keys(assets);
+        const gsd = props['gsd'] || props['proj:gsd'] || '';
+        const fecha = props.datetime || props.start_datetime || '';
+        const trozos = [];
+        if (fecha) trozos.push(String(fecha).slice(0, 10));
+        if (gsd) trozos.push(gsd + ' m/píxel');
+        if (claves.length) trozos.push(claves.length + ' bandas');
+        return {
+          nombre: f.id || '(sin id)',
+          url: (assets.visual && assets.visual.href) || (assets.thumbnail && assets.thumbnail.href) || '',
+          descripcion: trozos.join(' · '),
+          id: f.id || null,
+          tipo: 'STAC',
+          // Un elemento STAC no es una capa: sus assets son ficheros (COG, JP2,
+          // GeoTIFF) y la API no construye capas con ellos. Se enseña como
+          // información, no con un botón de cargar que solo podría fallar.
+          soloInfo: true
+        };
+      });
+    }
+
+    return {
+      url: base,
+      titulo: titulo,
+      descripcion: resumen(json.description || '', 160),
+      padre: padre ? resolver(url, padre.href) : null,
+      licencia: (json.license || (Array.isArray(json.licenses) && json.licenses[0]
+        ? (json.licenses[0].name || json.licenses[0]) : '')) || '',
+      temporal: leerTemporal(json),
+      // La URL de los items de una colección de API, para cargarlos.
+      urlItems: urlItems,
+      totalElementos: totalElementos,
+      entradas: entradas,
+      esColeccionApi: esColeccionApi
+    };
+  }
+
+  /**
+   * El intervalo temporal de un documento STAC, como texto.
+   * @param {Object} json
+   * @returns {string}
+   */
+  function leerTemporal(json) {
+    try {
+      const ext = json.extent || (json.extents ? json.extents.spatial : null);
+      const temporal = (json.extent && json.extent.temporal)
+        || (json.extents && json.extents.temporal);
+      if (!temporal || !Array.isArray(temporal.interval) || !temporal.interval[0]) return '';
+      const it = temporal.interval[0];
+      const desde = it[0] ? String(it[0]).slice(0, 10) : '…';
+      const hasta = it[1] ? String(it[1]).slice(0, 10) : 'hoy';
+      return desde === hasta ? desde : desde + ' a ' + hasta;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /**
    * Lee un catálogo STAC y devuelve sus colecciones.
    * @param {string} url URL del catálogo (con o sin /collections).
    * @returns {Promise<Array<{nombre, url, descripcion, tipo}>>}
@@ -136,26 +269,44 @@
       return json.links
         .filter(function (l) { return l && (l.rel === 'child' || l.rel === 'item'); })
         .map(function (l) {
+          const abs = resolver(destino, l.href);
           return {
-            nombre: l.title || nombreDeHref(l.href),
-            url: resolver(destino, l.href),
+            nombre: l.title || nombreDeHref(abs),
+            url: abs,
             descripcion: resumen(l.description || '', 110),
             // Una colección STAC no es una capa: lo dice el tipo para que el
-            // plugin lo explique en vez de fallar al cargar.
-            tipo: 'STAC'
+            // plugin lo explique en vez de fallar al cargar. Y trae `abrir`
+            // para poder entrar en ella y ver lo que contiene.
+            tipo: 'STAC',
+            abrir: l.rel === 'child' ? abs : null
           };
         });
     }
 
     const colecciones = Array.isArray(json.collections) ? json.collections : [];
+    // La raíz de la API se saca del documento que se ha pedido, y no de la URL
+    // que se escribió: si esa ya acababa en /collections, construir las rutas
+    // sobre ella las duplicaba ("/v1/collections/collections/<id>/items",
+    // medido).
+    const raiz = /\/collections$/.test(destino) ? destino.replace(/\/collections$/, '') : destino;
+
     return colecciones.map(function (c) {
       const id = c.id || (c.properties && c.properties.id) || '';
       const props = c.properties || c;
+      const enlaces = Array.isArray(c.links) ? c.links : [];
+      const relItems = enlaces.find(function (l) {
+        return l && (l.rel === 'items' || /\/items(\?|$)/.test(String(l.href || '')));
+      });
       return {
         nombre: c.title || props.title || id,
-        url: id ? unir(base, 'collections/' + id + '/items') : base,
+        url: relItems && relItems.href
+          ? resolver(destino, relItems.href)
+          : (id ? unir(raiz, 'collections/' + id + '/items') : raiz),
         descripcion: resumen(props.description || c.description || '', 110),
-        tipo: 'OGCAPIFeatures'
+        tipo: 'OGCAPIFeatures',
+        // Y se puede entrar en la colección a ver qué contiene, que es lo que
+        // hace la fila en vez de offering un "Cargar" que no tiene sentido aquí.
+        abrir: id ? unir(raiz, 'collections/' + id) : null
       };
     }).filter(function (e) { return e.id !== '' || e.url; });
   }
@@ -350,6 +501,9 @@
     TIPOS: TIPOS,
     CLAVE: CLAVE,
     leer: leer,
+    // Lectura de UN nodo STAC con sus hijos y su padre: es lo que permite bajar
+    // por el árbol de un catálogo y volver a subir (ver _abrirNodoStac).
+    leerNodoStac: leerNodoStac,
     todos: todos,
     porId: porId,
     alta: alta,
