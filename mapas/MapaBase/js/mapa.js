@@ -84,10 +84,57 @@ function mapa() {
   // img/iconos/collect.svg. La ruta es relativa al DOCUMENTO (la máscara se
   // resuelve desde el CSS de la página, no desde este .js), y el color lo pone
   // el propio plugin como máscara (--g-plugin-icon-mask).
+  //
+  // `catalogos` son los catálogos que usa este visualizador, en datos planos.
+  // Se suman a los de serie (IDEE, STAC, OGC API Records) y quedan colgados en
+  // IDEE.catalog.custom, así que también se leen desde aquí con
+  // IDEE.catalog.custom.propio.
+  //
+  // El tipo de cada servicio NO se pone: lo deduce el plugin de la URL, que es
+  // lo que sabe distinguir un WMS de un GeoJSON o de una plantilla de teselas.
+  // Un nodo puede llevar servicios y subnodos, y se pinta como un árbol de
+  // desplegables. Con `soloCatalogos: true` se quedaría solo con estos.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_catalogo({
     position: 'TR',
     order: 2,
-    icon: '../../img/iconos/collect.svg'
+    icon: '../../img/iconos/collect.svg',
+    catalogos: {
+      propio: {
+        nombre: 'Servicios del visor',
+        descripcion: 'Catálogo de ejemplo declarado desde mapa.js.',
+        nodos: [
+          {
+            nombre: 'Ráster',
+            servicios: [
+              {
+                nombre: 'Callejero (WMS)',
+                url: 'https://www.ign.es/wms-inspire/ign-base',
+                descripcion: 'Callejero y toponimia de España'
+              },
+              {
+                nombre: 'Ortofoto PNOA (WMS)',
+                url: 'https://www.ign.es/wms-inspire/pnoa-ma',
+                descripcion: 'Ortofotos del Plan Nacional'
+              }
+            ]
+          },
+          {
+            nombre: 'Organismo',
+            nodos: [
+              {
+                nombre: 'Servicios base',
+                servicios: [
+                  {
+                    nombre: 'Base de España',
+                    url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg'
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
   }));
 
   // ── Plugin cambio de implementación (OL <-> Cesium) ───────────────

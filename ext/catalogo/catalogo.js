@@ -207,7 +207,7 @@
    *                       tal cual, como hasta ahora.
    *
    * Para añadir un tipo nuevo basta con meterlo en CATALOGOS: el <select>, la
-   * sección de gestión y el estado lo cogen solos.
+   * sección de gestión y el estado los cogen solos.
    */
   const CATALOGOS = {
     idee: {
@@ -274,6 +274,160 @@
   }
 
   /**
+   * Normaliza un servicio declarado en el JSON.
+   *
+   * El TIPO NO HAY QUE PONERLO: si viene, se respeta; si no, lo deduce la
+   * algoritmia de catalogo_url.js a partir de la URL, que es lo que sabe
+   * distinguir un WMS de un GeoJSON o de una plantilla de teselas.
+   *
+   * @param {Object} s
+   * @returns {Object}
+   */
+  function servicioDesdeDatos(s) {
+    const url = s.url || s.capa || s.href || '';
+    const declarado = s.tipo || s.type || null;
+    const urlTool = window.CatalogoURL;
+    return {
+      nombre: s.nombre || s.name || s.title || url || '(sin nombre)',
+      url: url,
+      descripcion: s.descripcion || s.description || '',
+      // Lo declarado manda; si no, se deduce de la URL.
+      tipo: declarado || (urlTool ? urlTool.detectarTipo(url) : 'WMS')
+    };
+  }
+
+  /**
+   * Normaliza un nodo del árbol. Un nodo puede llevar servicios Y subnodos, y
+   * los subnodos son nodos igual, así que el árbol es de profundidad libre:
+   *
+   *   { nombre: 'Rasters', servicios: [ ... ],
+   *     nodos: [ { nombre: 'Ortofoto', servicios: [ ... ] } ] }
+   *
+   * @param {Object} datos
+   * @param {string} [nombrePorDefecto]
+   * @returns {Object} Nodo normalizado, con `total` ya calculado.
+   */
+  function nodoDesdeDatos(datos, nombrePorDefecto) {
+    const d = datos || {};
+    const servicios = (Array.isArray(d.servicios) ? d.servicios : []).map(servicioDesdeDatos);
+    const crudos = Array.isArray(d.nodos) ? d.nodos
+      : (Array.isArray(d.hijos) ? d.hijos : (Array.isArray(d.secciones) ? d.secciones : []));
+    const nodos = crudos.map(function (n) { return nodoDesdeDatos(n); });
+
+    let total = servicios.length;
+    nodos.forEach(function (n) { total += n.total; });
+
+    return {
+      nombre: d.nombre || d.name || nombrePorDefecto || '(sin nombre)',
+      descripcion: d.descripcion || d.description || '',
+      servicios: servicios,
+      nodos: nodos,
+      total: total
+    };
+  }
+
+  /**
+   * Construye un catálogo a partir de datos planos, para declararlo desde el
+   * constructor del plugin con un JSON, sin escribir funciones.
+   *
+   * Forma del dato:
+   *
+   *   {
+   *     nombre: 'Servicios del visor',   // obligatorio-ish
+   *     descripcion: '...',               // opcional
+   *     modo: 'arbol',                    // 'arbol' (defecto si hay nodos),
+   *     servicios: [ { nombre, url } ],   //   'lista', o
+   *     nodos: [ { nombre, servicios, nodos } ]  //   'secciones' (IDEE)
+   *   }
+   *
+   * El tipo de cada servicio NO se pone: lo deduce la algoritmia por la URL.
+   *
+   * @param {string} id Id del catálogo.
+   * @param {Object} datos Datos planos, o un objeto con listar() si se
+   *   prefiere pasar directamente un IDEE.catalog ya hecho.
+   * @returns {Object} Catálogo con la forma de IDEE.catalog.tipos.{id}.
+   */
+  function catalogoDesdeDatos(id, datos) {
+    // Si ya viene hecho (trae listar()), se respeta tal cual.
+    if (datos && typeof datos.listar === 'function') {
+      return Object.assign({ id: id }, datos);
+    }
+
+    const d = datos || {};
+    const servicios = (Array.isArray(d.servicios) ? d.servicios : []).map(servicioDesdeDatos);
+    const nodosCrudos = Array.isArray(d.nodos) ? d.nodos
+      : (Array.isArray(d.hijos) ? d.hijos : []);
+    const secciones = Array.isArray(d.secciones) ? d.secciones : [];
+
+    // Modo por defecto: árbol si trae nodos, lista si solo trae servicios, y
+    // secciones si lo dice explícitamente (que es lo de la IDEE).
+    const modo = d.modo
+      || (secciones.length ? 'secciones' : (nodosCrudos.length ? 'arbol' : 'lista'));
+
+    const nodos = nodosCrudos.map(function (n) { return nodoDesdeDatos(n); });
+
+    return {
+      id: id,
+      nombre: d.nombre || d.name || id,
+      modo: modo,
+      descripcion: d.descripcion || d.description || '',
+      servicios: servicios,
+      nodos: nodos,
+      secciones: secciones.map(function (s) {
+        return {
+          id: s.id || s.nombre || '',
+          nombre: s.nombre || s.name || s.id || '(sin nombre)',
+          tipo: s.tipo || s.type || 'WMS',
+          corto: s.corto || s.nombre || s.id || '',
+          descripcion: s.descripcion || '',
+          servicios: Array.isArray(s.servicios) ? s.servicios.map(servicioDesdeDatos) : []
+        };
+      }),
+      listar: function () {
+        if (this.modo === 'secciones') return this.secciones;
+        if (this.modo === 'arbol') return this.nodos;
+        return this.servicios;
+      },
+      cargarUrl: d.cargarUrl || function (url, mapa, opciones) {
+        return cargarUrlGenerica(url, mapa, opciones);
+      }
+    };
+  }
+
+  /**
+   * Monta el juego de catálogos de una instancia a partir de lo que le llega
+   * al constructor.
+   *
+   * - `catalogos` puede ser un array de entradas o un objeto con la entrada
+   *   como clave (en ese caso la clave es su id).
+   * - Si un id coincide con uno de serie, lo pisa; si no, se añade.
+   * - Con `soloCatalogos: true` se queda únicamente con los que llegan.
+   *
+   * @param {Object} [opciones] Opciones del constructor.
+   * @returns {{todos: Object, propios: Object}}
+   */
+  function construirCatalogos(opciones) {
+    const entrada = (opciones && opciones.catalogos) || null;
+    const propios = {};
+
+    if (Array.isArray(entrada)) {
+      entrada.forEach(function (c, i) {
+        if (!c) return;
+        const id = c.id || c.nombre || ('cat' + i);
+        propios[id] = catalogoDesdeDatos(id, c);
+      });
+    } else if (entrada && typeof entrada === 'object') {
+      Object.keys(entrada).forEach(function (id) {
+        propios[id] = catalogoDesdeDatos(id, entrada[id]);
+      });
+    }
+
+    const solo = opciones && opciones.soloCatalogos;
+    const todos = solo ? Object.assign({}, propios) : Object.assign({}, CATALOGOS, propios);
+    return { todos: todos, propios: propios };
+  }
+
+  /**
    * Expone el registro de catálogos en IDEE.catalog (y en M.catalog, que es el
    * alias histórico). Así cualquier código puede hacer
    * `IDEE.catalog.tipos.idee.listar()` o crear un tipo nuevo.
@@ -306,6 +460,12 @@
      * @param {Object|string} [options.color2] Color de borde.
      * @param {Object|string} [options.color3] Color de icono y texto.
      * @param {string} [options.icon] Icono del botón (SVG completo, contenido o URL).
+     * @param {Object|Array} [options.catalogos] Catálogos del visualizador, en
+     *   datos planos (un JSON). Cada entrada es un catálogo: { nombre,
+     *   descripcion, modo, servicios[] } o { nombre, secciones[] }. Se suman a
+     *   los de serie y, si el id coincide con uno de ellos, lo pisan.
+     * @param {boolean} [options.soloCatalogos=false] Con `catalogos` a true se
+     *   queda solo con los del visualizador, sin los de serie.
      */
     constructor(options = {}) {
       this.name = 'miPlugin_catalogo';
@@ -341,6 +501,34 @@
       // Estado interno
       this._tipoSeleccionado = 'idee';
       this._urlIntroducida = '';
+
+      // Catálogos de esta instancia: los de serie más los que declare el
+      // visualizador. A partir de aquí TODOS los usos del registro pasan por
+      // this._catalogos, no por la constante CATALOGOS.
+      const construidos = construirCatalogos(options);
+      this._catalogos = construidos.todos;
+      this._catalogosPropios = construidos.propios;
+
+      // Los del visualizador se cuelgan en IDEE.catalog.custom (que es donde
+      // se leen desde cualquier código) y también en IDEE.catalog.tipos, que
+      // es la lista de la que se pinta el <select>.
+      const registro = (window.IDEE && window.IDEE.catalog) || (window.M && window.M.catalog);
+      if (registro) {
+        if (!registro.custom) registro.custom = {};
+        Object.keys(this._catalogosPropios).forEach(function (id) {
+          registro.custom[id] = this._catalogosPropios[id];
+          if (registro.tipos) registro.tipos[id] = this._catalogosPropios[id];
+        }, this);
+      }
+
+      // Catálogo con el que se abre el panel: el que pida el visualizador con
+      // catalogoPorDefecto, o el primero que haya.
+      const ids = Object.keys(this._catalogos);
+      if (options.catalogoPorDefecto && this._catalogos[options.catalogoPorDefecto]) {
+        this._tipoSeleccionado = options.catalogoPorDefecto;
+      } else if (ids.length) {
+        this._tipoSeleccionado = ids[0];
+      }
       this._ultimoMensaje = null;
       // Pestaña activa del panel ('catalogos' o 'capa').
       this._pestanaActiva = options.pestana || 'catalogos';
@@ -559,8 +747,8 @@
       selector.setAttribute('aria-label', 'Tipo de catálogo');
       // Primero los de serie y después los que ha dado de alta el usuario, que
       // se marcan para que se distinguan de un vistazo.
-      const opcionesCatalogo = Object.keys(CATALOGOS).map(function (id) {
-        return { id: id, nombre: CATALOGOS[id].nombre, propio: false };
+      const opcionesCatalogo = Object.keys(self._catalogos).map(function (id) {
+        return { id: id, nombre: self._catalogos[id].nombre, propio: false };
       });
       (window.CatalogoRegistro ? window.CatalogoRegistro.todos() : []).forEach(function (c) {
         opcionesCatalogo.push({ id: c.id, nombre: c.nombre, propio: true });
@@ -691,11 +879,136 @@
 
       if (tipo.modo === 'secciones') {
         this._pintarSecciones(cont, tipo);
+      } else if (tipo.modo === 'arbol') {
+        this._pintarArbol(cont, tipo);
       } else if (tipo.esPropio) {
         this._pintarCatalogoPropio(cont, tipo);
       } else {
         this._pintarLista(cont, tipo.listar() || []);
       }
+    }
+
+    // =====================================================================
+    //  Árbol de catálogos (los que declara el visualizador)
+    // =====================================================================
+    // Un nodo puede llevar servicios y subnodos, y los subnodos son nodos
+    // igual, así que la profundidad es libre. Cada nodo es un desplegable con
+    // el MISMO acordeón que las secciones de tipo de servicio, así que un
+    // nodo dentro de otro no desincroniza el chevron de su padre (el CSS usa
+    // el combinador de hijo directo).
+
+    /** Pinta el árbol de nodos del catálogo activo. */
+    _pintarArbol(cont, tipo) {
+      const nodos = tipo.listar() || [];
+
+      // El mismo buscador de las secciones: aquí filtra por nombre de nodo, de
+      // servicio y de URL, y esconde los nodos que se quedan sin nada.
+      this._pintarBuscador(cont);
+
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__arbol';
+      cont.appendChild(caja);
+
+      if (!nodos.length) {
+        this._pintarAviso(caja, 'El catálogo no declara ningún nodo.');
+        return;
+      }
+
+      const fragmento = document.createDocumentFragment();
+      nodos.forEach(function (nodo) {
+        fragmento.appendChild(this._crearNodoArbol(nodo, 0));
+      }, this);
+      caja.appendChild(fragmento);
+    }
+
+    /**
+     * Crea el desplegable de un nodo y, recursivamente, los de sus hijos.
+     *
+     * Con el filtro puesto, un nodo se ve si coincide por su nombre, si tiene
+     * algún servicio que coincida, o si queda algún hijo visible; y se abre
+     * solo, que si no habría que desplegar a mano para ver el resultado.
+     *
+     * @param {Object} nodo Nodo normalizado (servicios, nodos y total).
+     * @param {number} nivel Profundidad, para la sangría.
+     * @returns {HTMLElement} La caja del nodo, ya con su visibilidad decidida.
+     */
+    _crearNodoArbol(nodo, nivel) {
+      const filtro = (this._filtro || '').trim().toLowerCase();
+      const contiene = function (texto) {
+        return String(texto || '').toLowerCase().indexOf(filtro) > -1;
+      };
+
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__seccion catalogo__nodo collapsed';
+      caja.style.setProperty('--cat-nivel', String(nivel));
+
+      const cabecera = document.createElement('div');
+      cabecera.className = 'catalogo__seccion-cabecera';
+      cabecera.setAttribute('role', 'button');
+      cabecera.setAttribute('tabindex', '0');
+      cabecera.setAttribute('aria-expanded', 'false');
+
+      const chevron = document.createElement('span');
+      chevron.className = 'catalogo__seccion-chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+
+      const nombre = document.createElement('span');
+      nombre.className = 'catalogo__seccion-nombre';
+      nombre.textContent = nodo.nombre;
+
+      const cuenta = document.createElement('span');
+      cuenta.className = 'catalogo__seccion-cuenta';
+      cuenta.textContent = nodo.total + (nodo.total === 1 ? ' servicio' : ' servicios');
+
+      cabecera.appendChild(chevron);
+      cabecera.appendChild(nombre);
+      cabecera.appendChild(cuenta);
+      caja.appendChild(cabecera);
+
+      const cuerpo = document.createElement('div');
+      cuerpo.className = 'catalogo__seccion-cuerpo catalogo__nodo-cuerpo';
+      caja.appendChild(cuerpo);
+
+      // Los servicios del propio nodo.
+      let serviciosVisibles = 0;
+      (nodo.servicios || []).forEach(function (srv) {
+        const fila = this._filaServicio(srv, { tipo: srv.tipo });
+        const coincide = !filtro || contiene(srv.nombre) || contiene(srv.url);
+        if (!coincide) fila.hidden = true; else serviciosVisibles += 1;
+        cuerpo.appendChild(fila);
+      }, this);
+
+      // Y sus subnodos, recursivamente: se construyen antes de decidir si este
+      // nodo se ve, porque puede que se vea solo por lo que haya dentro.
+      const hijos = (nodo.nodos || []).map(function (hijo) {
+        return this._crearNodoArbol(hijo, nivel + 1);
+      }, this);
+      hijos.forEach(function (h) { cuerpo.appendChild(h); });
+
+      const alternar = function () {
+        const abierta = caja.classList.contains('collapsed');
+        caja.classList.toggle('collapsed', !abierta);
+        cabecera.setAttribute('aria-expanded', String(abierta));
+      };
+      cabecera.addEventListener('click', alternar);
+      cabecera.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+          ev.preventDefault();
+          alternar();
+        }
+      });
+
+      if (filtro) {
+        const hijoVisible = hijos.some(function (h) { return !h.hidden; });
+        const visible = contiene(nodo.nombre) || serviciosVisibles > 0 || hijoVisible;
+        caja.hidden = !visible;
+        if (visible) {
+          caja.classList.remove('collapsed');
+          cabecera.setAttribute('aria-expanded', 'true');
+        }
+      }
+
+      return caja;
     }
 
     /**
@@ -721,7 +1034,7 @@
           listar: function () { return self._entradasPropias[propio.id] || []; }
         };
       }
-      return CATALOGOS[this._tipoSeleccionado] || null;
+      return this._catalogos[this._tipoSeleccionado] || null;
     }
 
     /**
@@ -847,10 +1160,8 @@
       const caja = document.createElement('div');
       caja.className = 'catalogo__nuevo';
 
-      const cabecera = document.createElement('div');
-      cabecera.className = 'catalogo__nuevo-cabecera';
-      cabecera.textContent = 'Añadir un catálogo nuevo';
-      caja.appendChild(cabecera);
+      // Sin título propio: la cabecera del acordeón "Añadir un catálogo nuevo"
+      // ya lo pone (estaría duplicado).
 
       if (!registro) {
         this._pintarAviso(caja, 'No está cargado catalogo_registro.js.', 'error');
@@ -994,9 +1305,9 @@
       const elegido = this._tipoSeleccionado;
       selector.innerHTML = '';
 
-      const opciones = Object.keys(CATALOGOS).map(function (id) {
-        return { id: id, nombre: CATALOGOS[id].nombre, propio: false };
-      });
+      const opciones = Object.keys(this._catalogos).map(function (id) {
+        return { id: id, nombre: this._catalogos[id].nombre, propio: false };
+      }, this);
       registro.todos().forEach(function (c) {
         opciones.push({ id: c.id, nombre: c.nombre, propio: true });
       });
@@ -1019,21 +1330,7 @@
       const self = this;
       const secciones = tipo.listar() || [];
 
-      const buscador = document.createElement('div');
-      buscador.className = 'catalogo__buscador';
-      const input = document.createElement('input');
-      input.type = 'search';
-      input.className = 'catalogo__buscador-input';
-      input.placeholder = 'Filtrar por servicio u organismo…';
-      input.value = this._filtro || '';
-      input.setAttribute('aria-label', 'Filtrar servicios del catálogo');
-      input.addEventListener('input', function () {
-        self._filtro = this.value;
-        self._filtrarSecciones();
-      });
-      buscador.appendChild(input);
-      cont.appendChild(buscador);
-      this._buscadorEl = input;
+      this._pintarBuscador(cont);
 
       const lista = document.createElement('div');
       lista.className = 'catalogo__secciones';
@@ -1139,10 +1436,39 @@
     }
 
     /**
-     * Aplica el filtro de texto. Las secciones ya cargadas se filtran en
-     * local; las que no, se piden en segundo plano y se filtran al llegar, que
-     * es la única forma de buscar en todo el catálogo (el WMS estatal del
-     * IGN tiene más de setecientos servicios).
+     * Pinta el buscador, que es el mismo para las secciones de tipo de servicio
+     * y para el árbol de nodos: filtra por lo que haya escrito la persona.
+     * @param {HTMLElement} cont
+     */
+    _pintarBuscador(cont) {
+      const self = this;
+      const buscador = document.createElement('div');
+      buscador.className = 'catalogo__buscador';
+
+      const input = document.createElement('input');
+      input.type = 'search';
+      input.className = 'catalogo__buscador-input';
+      input.placeholder = 'Filtrar por servicio u organismo…';
+      input.value = this._filtro || '';
+      input.setAttribute('aria-label', 'Filtrar servicios del catálogo');
+      input.addEventListener('input', function () {
+        self._filtro = this.value;
+        // Se repinta el catálogo entero en vez de filtrar sobre lo ya pintado:
+        // el árbol se filtra al construirlo y las secciones necesitan volver a
+        // pintar su cuerpo.
+        self._pintarCatalogo();
+      });
+
+      buscador.appendChild(input);
+      cont.appendChild(buscador);
+      this._buscadorEl = input;
+    }
+
+    /**
+     * Aplica el filtro de texto a las secciones de tipo de servicio. Las que ya
+     * están cargadas se filtran en local; las que no, se piden en segundo plano
+     * y se filtran al llegar, que es la única forma de buscar en todo el
+     * catálogo (el WMS estatal del IGN tiene más de setecientos servicios).
      */
     _filtrarSecciones() {
       const self = this;
@@ -1192,6 +1518,27 @@
       }
 
       cuerpo.innerHTML = '';
+      // Una sección puede traer sus servicios en el propio catálogo (así se
+      // declaran desde el constructor del plugin) y entonces no hay que pedir
+      // nada: se usan tal cual, con la misma forma que devuelve el portal.
+      if (Array.isArray(sec.servicios)) {
+        const datos = {
+          seccion: sec,
+          familias: [{
+            nombre: sec.nombre,
+            id: sec.id,
+            servicios: sec.servicios
+          }],
+          total: sec.servicios.length
+        };
+        st.datos = datos;
+        cuenta.textContent = datos.total + (datos.total === 1 ? ' servicio' : ' servicios');
+        const quedaPropia = self._pintarSeccion(datos, cuerpo, filtro);
+        const domPropia = self._seccionesDom[sec.id];
+        if (filtro && domPropia) domPropia.caja.hidden = !quedaPropia;
+        return Promise.resolve(datos);
+      }
+
       this._pintarAviso(cuerpo, 'Pidiendo «' + sec.nombre + '» al catálogo de la IDEE…');
 
       st.promesa = window.CatalogoIDEE.listarSeccion(sec.id).then(function (datos) {
@@ -1716,7 +2063,7 @@
       // Un catálogo del usuario vale igual que uno de serie: los ids de estos
       // empiezan por "usuario_" y no están en CATALOGOS.
       const esDelUsuario = window.CatalogoRegistro && window.CatalogoRegistro.porId(state.tipo);
-      if (state.tipo && (CATALOGOS[state.tipo] || esDelUsuario)) {
+      if (state.tipo && (this._catalogos[state.tipo] || esDelUsuario)) {
         this._tipoSeleccionado = state.tipo;
       }
       if (typeof state.url === 'string') {

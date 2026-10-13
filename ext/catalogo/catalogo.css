@@ -416,6 +416,34 @@
   font-weight: 700;
 }
 
+/* ---- Árbol de nodos (catálogos del visualizador) ---------------------- */
+/* Cada nodo es una sección más, sangrada según su nivel para que se vea la
+   jerarquía. La sangría va en el propio nodo (--cat-nivel) y no en los hijos,
+   para que un nodo con muchos nietos no se vaya de margen. */
+.catalogo__arbol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.catalogo__nodo {
+  margin-left: calc(var(--cat-nivel, 0) * 12px);
+  width: calc(100% - var(--cat-nivel, 0) * 12px);
+}
+
+.catalogo__nodo[hidden] { display: none; }
+
+.catalogo__nodo-cuerpo {
+  gap: 4px;
+}
+
+/* Los servicios cuelgan del nodo y las filas que no coinciden con el filtro
+   se ocultan sin dejar hueco. */
+.catalogo__nodo-cuerpo > .catalogo__item[hidden] { display: none; }
+
 /* ---- Organismos (agrupación dentro de una sección) --------------------- */
 .catalogo__organismo {
   display: flex;
@@ -764,12 +792,6 @@
   margin-top: 4px;
   padding-top: 12px;
   border-top: 1px solid var(--cat-linea);
-}
-
-.catalogo__nuevo-cabecera {
-  color: var(--cat-fg);
-  font-size: 12.5px;
-  font-weight: 700;
 }
 
 .catalogo__nuevo-pie {
