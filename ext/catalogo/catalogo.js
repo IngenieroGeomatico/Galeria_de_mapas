@@ -139,6 +139,36 @@
   // catálogos que son una lista corta y fija: STAC y OGC API Records.
 
   /**
+   * Carga una URL en el mapa.
+   *
+   * La detección de tipo y la lectura de las capas del servicio están en
+   * catalogo_url.js; aquí solo se le pasa lo que el usuario ha elegido en el
+   * panel (qué capas y con qué nombre).
+   *
+   * @param {string} url URL del servicio.
+   * @param {Object} mapa Instancia del mapa API-IDEE.
+   * @param {Object} [opciones] { tipo, capas, nombre }.
+   * @returns {Array<Object>} Las capas creadas, o [].
+   */
+  function cargarUrlGenerica(url, mapa, opciones) {
+    const opts = opciones || {};
+    const urlTool = window.CatalogoURL;
+    if (!urlTool) {
+      console.error('[catalogo] no está cargado catalogo_url.js');
+      return [];
+    }
+    // El tipo lo pone el panel si ya lo sabe (viene de leer las capabilities);
+    // si no, lo deduce la algoritmia por la URL.
+    return urlTool.cargar({
+      url: url,
+      mapa: mapa,
+      tipo: opts.tipo || urlTool.detectarTipo(url),
+      capas: (opts.capas && opts.capas.length) ? opts.capas : null,
+      nombre: opts.nombre || ''
+    });
+  }
+
+  /**
    * Normaliza un servicio declarado en el JSON.
    *
    * El TIPO NO HAY QUE PONERLO: si viene, se respeta; si no, lo deduce la
