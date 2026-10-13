@@ -896,8 +896,24 @@
 
 /* La compensación se scopea a la esquina TR por la clase que el API pone
    al área (m-top m-right): así solo actúa ahí y no en TL, donde el botón va
-   fuera del panel y la cabecera ya es a todo ancho. */
+   fuera del panel y la cabecera ya es a todo ancho.
+
+   El botón va DENTRO del panel, así que en TR el panel es 40 px más ancho que
+   el contenido (420 de raíz + 40 de botón). Con el panel en transparente, esa
+   franja solo la pintaba el botón en sus 40 px de alto: por debajo se veía el
+   mapa por detrás de la sombra y el panel parecía roto. Con el panel en el
+   mismo blanco que la raíz, el borde cierra igual que en TL.
+
+   Y la cabecera lleva border-box porque su ancho va con un calc() sobre el de
+   su padre: el API la deja en content-box con padding: 5px, así que los 40 px
+   de compensación se comían los 10 del padding y la cabecera se salía 10 px
+   por la derecha, más allá del panel y de su sombra. */
+.m-areas > .m-top.m-right > .m-panel.g-herramienta_catalogo.opened {
+  background-color: #fff !important;
+}
+
 .m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
+  box-sizing: border-box;
   margin-left: -40px;
   width: calc(100% + 40px);
 }
