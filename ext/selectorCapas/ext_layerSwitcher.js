@@ -1410,22 +1410,58 @@ class miPlugin_layerSwitcher {
 
     // ── Zoom a la capa ────────────────────────────────────────────────
     // Encuadra la vista sobre lo que ocupa la capa. Funciona con grupos
-    // tambien: se unen las extensiones de todas sus hijas, pordepth included.
+    // tambien: se unen las extensiones de todas sus hijas, con el grupo
+    // dentro y sin él.
     //
-    // DE DONDE SALE LA EXTENSIÓN: de `layer.getMaxExtent()`. OJO, ese método
-    // devuelve EL MUNDO ENTERO cuando la capa no tiene extensión propia, que es
-    // lo que pasa con las TMS y con las de terreno (medido:
+    // DE DONDE SALE LA EXTENSIÓN: primero de `layer.getMaxExtent()`, y si esa
+    // llamada no devuelve nada utilizable se recurre a la rejilla de la fuente de
+    // la capa (_extensionDeLaRejilla), que es donde la guardan los rasteres de
+    // verdad. Sin ese segundo camino, un GeoTIFF se queda sin extensión y el
+    // botón no hace nada (medido: con esta API `getMaxExtent()` devuelve null en
+    // las capas GeoTIFF, y si se le pasa una extensión a mano hasta revienta con
+    // "Cannot read properties of null (reading '0')").
+    //
+    // OJO ENCIMA, `getMaxExtent()` devuelve EL MUNDO ENTERO cuando la capa no tiene
+    // extensión propia, que es lo que pasa con las TMS y con las de terreno (medido:
     // [-20037508.34, ...] en EPSG:3857 y [-180, -90, 180, 90] en Cesium). Si se
     // tomara tal cual, el botón llevaría siempre al planeta entero, así que
     // _esMundoEntero() lo descarta y se avisa en vez de hacer eso.
     window.zoomToLayer = function (index) {
       const capa = findLayerById(index);
       if (!capa || !map) return;
+      // Una capa raster tarda un poco en tener la rejilla de su fuente (medido:
+      // ~1,1 s, lo que tarda en leerse la cabecera del GeoTIFF), así que antes de
+      // decir que no hay a dónde ir se insiste un par de veces.
+      _conExtension(capa, function (ext) {
+        if (!ext) {
+          _avisar('Esta capa no tiene una extensión conocida, así que no hay a dónde ir.');
+          return;
+        }
+        _irALaExtension(ext);
+      });
+    };
+
+    /**
+     * Calcula la extensión de una capa y se la pasa a `hecho`, reintentando hasta
+     * cuatro veces con medio segundo de margen mientras no aparezca.
+     * @param {Object} capa
+     * @param {Function} hecho Recibe la extensión o null.
+     * @param {number} [intento]
+     */
+    function _conExtension(capa, hecho, intento) {
+      const n = intento || 0;
       const ext = _extensionUtil(capa);
-      if (!ext) {
-        _avisar('Esta capa no tiene una extensión conocida, así que no hay a dónde ir.');
-        return;
-      }
+      if (ext) { hecho(ext); return; }
+      if (n >= 4) { hecho(null); return; }
+      setTimeout(function () { _conExtension(capa, hecho, n + 1); }, 600);
+    }
+
+    /**
+     * Mueve la vista hasta la extensión, por la vía que corresponda a la
+     * implementación que esté cargada.
+     * @param {Array<number>} ext [x0, y0, x1, y1].
+     */
+    function _irALaExtension(ext) {
       const impl = map.getMapImpl ? map.getMapImpl() : null;
       // El impl de Cesium trae `scene` y no `getView()`: es lo que distingue una
       // implementacion de otra sin preguntar por la version de la API.
@@ -1472,12 +1508,11 @@ class miPlugin_layerSwitcher {
     function _extensionUtil(capa) {
       const propias = [];
       const visitar = (c) => {
+        // Primero lo que dice la API, y si no hay nada, la rejilla de la fuente.
         let ext = null;
         try { ext = c.getMaxExtent(); } catch (e) { ext = null; }
-        if (Array.isArray(ext) && ext.length >= 4) {
-          const n = ext.slice(0, 4).map(Number);
-          if (n.every(isFinite) && n[0] < n[2] && n[1] < n[3] && !_esMundoEntero(n)) propias.push(n);
-        }
+        if (!(_esExtension(ext))) ext = _extensionDeLaRejilla(c);
+        if (_esExtension(ext)) propias.push(ext.slice(0, 4).map(Number));
         let hijas = [];
         try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
         hijas.slice().forEach(visitar);
@@ -1491,6 +1526,102 @@ class miPlugin_layerSwitcher {
           Math.max(acc[2], e[2]), Math.max(acc[3], e[3]),
         ];
       }, [Infinity, Infinity, -Infinity, -Infinity]);
+    }
+
+    /**
+     * ¿Es una extensión utilizable (creciente, finita y no el mundo entero de relleno)?
+     * @param {*} ext
+     * @returns {boolean}
+     */
+    function _esExtension(ext) {
+      if (!Array.isArray(ext) || ext.length < 4) return false;
+      const n = ext.slice(0, 4).map(Number);
+      return n.every(isFinite) && n[0] < n[2] && n[1] < n[3] && !_esMundoEntero(n);
+    }
+
+    /**
+     * Extensión de una capa raster tomándola de la rejilla de su fuente, que es
+     * donde la guardan los teseleros de verdad, y no en `getMaxExtent()`.
+     *
+     * POR QUÉ HACE FALTA: el `getMaxExtent()` de la implementación de OpenLayers
+     * para un GeoTIFF toma `source.getTileGrid().getExtent()` y acto seguido lo
+     * transforma desde `source.projection`, y de ahí sale un disparate en lugar de
+     * una extensión. Medido con un GeoTIFF de Sentinel-2: la fuente está en
+     * EPSG:32621 y su rejilla mide [699960, 190200, 809760, 300000] (110 x 110 km,
+     * la tesela entera), que en EPSG:3857 es [-6145114, 191359, -6035105, 302104].
+     * Con `getMaxExtent()` la capa no tenía extensión ninguna y el botón no hacía nada.
+     *
+     * La capa raster se llega a tener la rejilla al cabo de ~1,1 s (medido: es lo
+     * que tarda en leerse la cabecera del GeoTIFF), así que antes de rendirse se
+     * espera un poco y se vuelve a mirar.
+     *
+     * Solo tiene sentido en 2D: en Cesium no hay rejilla de OpenLayers, y de hecho
+     * la implementación 3D ni siquiera sabe construir capas GeoTIFF (medido: "La
+     * implementación usada no puede crear capas GeoTIFF").
+     *
+     * @param {Object} capa
+     * @returns {Array<number>|null} [x0, y0, x1, y1] en la proyección del mapa.
+     */
+    function _extensionDeLaRejilla(capa) {
+      const impl = (capa && typeof capa.getImpl === 'function') ? capa.getImpl() : null;
+      if (!impl || !impl.olLayer || typeof impl.olLayer.getSource !== 'function') return null;
+      const fuente = impl.olLayer.getSource();
+      if (!fuente || !fuente.tileGrid || typeof fuente.tileGrid.getExtent !== 'function') return null;
+      const cruda = fuente.tileGrid.getExtent();
+      const ext = Array.isArray(cruda) ? cruda : (cruda && cruda.getExtent ? cruda.getExtent() : null);
+      if (!Array.isArray(ext) || ext.length < 4 || !ext.slice(0, 4).every(isFinite)) return null;
+
+      const desde = (fuente.projection && typeof fuente.projection.getCode === 'function')
+        ? fuente.projection.getCode() : 'EPSG:3857';
+      const hasta = _codigoDeLaProyeccion();
+      return hasta ? _reproyectar(ext.slice(0, 4), desde, hasta) : ext.slice(0, 4);
+    }
+
+    /** Código de la proyección que tiene el mapa ahora mismo. */
+    function _codigoDeLaProyeccion() {
+      try {
+        const p = (map && typeof map.getProjection === 'function') ? map.getProjection() : null;
+        return (p && p.code) ? p.code : 'EPSG:3857';
+      } catch (e) {
+        return 'EPSG:3857';
+      }
+    }
+
+    /**
+     * Reproyecta un rectángulo [x0, y0, x1, y1] de un sistema a otro.
+     *
+     * Está medido que `IDEE.utils.reproject` solo mira el primer par de coordenadas,
+     * así que para un rectángulo hay que ir esquina por esquina (y eso es lo que
+     * hace aquí); la vía de OpenLayers reproyecta el rectángulo entero de una vez
+     * y da el mismo resultado, así que se prefiere si está a mano.
+     *
+     * @param {Array<number>} ext
+     * @param {string} desde
+     * @param {string} hasta
+     * @returns {Array<number>|null}
+     */
+    function _reproyectar(ext, desde, hasta) {
+      if (desde === hasta) return ext.slice(0, 4);
+      const ol = window.ol && window.ol.proj;
+      if (ol && typeof ol.transformExtent === 'function') {
+        try {
+          const r = ol.transformExtent(ext, desde, hasta);
+          if (Array.isArray(r) && r.every(isFinite)) return r;
+        } catch (e) { /* se intenta la otra vía */ }
+      }
+      const api = window.IDEE || window.M;
+      if (api && api.utils && typeof api.utils.reproject === 'function') {
+        try {
+          const esquinas = [[ext[0], ext[1]], [ext[2], ext[1]], [ext[0], ext[3]], [ext[2], ext[3]]]
+            .map((p) => api.utils.reproject(p, desde, hasta));
+          const xs = esquinas.map((p) => Number(p[0]));
+          const ys = esquinas.map((p) => Number(p[1]));
+          const r = [Math.min.apply(null, xs), Math.min.apply(null, ys),
+                     Math.max.apply(null, xs), Math.max.apply(null, ys)];
+          return r.every(isFinite) ? r : null;
+        } catch (e) { /* sin reproyección */ }
+      }
+      return null;
     }
 
     /**
