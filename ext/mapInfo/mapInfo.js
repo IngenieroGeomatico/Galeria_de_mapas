@@ -94,34 +94,26 @@
      número.
 
    NIVEL DE ZOOM:
-     El nivel se pinta y se escribe SOBRE EL SUELO, igual que la escala, y con
-     la misma cuenta: log2(resolución máxima / (resolución de la vista × factor
-     de la proyección)). Es la cuenta de OpenLayers con el denominador
-     convertido a suelo, y el factor es el mismo de la escala.
+      El nivel es el de OpenLayers, log2(resolución máxima / resolución de la
+      vista), sobre la resolución del PLANO de la proyección. Es el mismo número
+      que devuelve map.getZoom() y el mismo que usan los minZoom/maxZoom de la
+      vista, así que el campo, el mapa y el rango hablan el mismo idioma.
 
-     Por qué no se usa map.getZoom() tal cual: porque el nivel de OpenLayers es
-     log2(maxResolution / resolución) sobre la resolución del PLANO de la
-     proyección, así que es un artefacto de estar en Mercator. Al cambiar de
-     proyección la resolución en metros proyectados cambia aunque el mapa no se
-     haya movido, y el nivel se iba 0,46 por delante en Galicia sin que hubiera
-     pasado nada. Con la cuenta sobre el suelo el nivel NO depende de la
-     proyección, que es justo lo que se pedía.
+      Aquí NO se mete el factor de la proyección, que en Mercator es 1/cos
+      (latitud). Se metía antes, y por eso el nivel subía al ir al norte con la
+      vista quieta: al multiplicar por el factor la cuenta pasaba a hacerse
+      sobre el suelo. Medido con la resolución clavada y getZoom() en 3,0000:
+      3,00 en el ecuador, 3,09 a 20 grados, 3,45 a 43 y 4,50 a 70. El
+      estiramiento de Mercator es real y se ve, pero en la ESCALA de al lado,
+      que sí lo lleva; un nivel de zoom no se mueve por irte al norte.
 
-     Dos cosas que conviene tener presentes al leerlo:
+      Lo que sí mueve el número es cambiar de proyección, porque entonces la
+      resolución del plano va en otras unidades. Es lo que hace la propia API y
+      no tiene arreglo.
 
-       - En el ECUADOR los dos dan el mismo número, y sigue siendo el que
-         devolvía la API (medido: 13,342847 con 15,067 m/píxel). El ecuador es
-         el único sitio donde se pueden contrastar, porque es donde el suelo y
-         el plano coinciden.
-
-       - A 43 grados el nivel leído es 0,46 más alto que el de la API. No es un
-         error: ese 0,46 es el estiramiento de Mercator, el mismo que ya
-         aparece en la escala de al lado.
-
-     Por eso _irAZoom() anima la RESOLUCIÓN y no el zoom, y por eso el rango de
-     lo que se escribe se desplaza con el mismo desvío (_rangoZoom): si se
-     animara el zoom, OpenLayers lo interpretaría con su propia cuenta y el
-     número escrito no sería el que acaba poniendo.
+      Por eso _irAZoom() anima la RESOLUCIÓN y no el zoom: si se animara el
+      zoom, OpenLayers lo interpretaría con su propia cuenta, que es esta
+      misma, y el número escrito no sería el que acaba poniendo.
 
    EDICIÓN A MANO:
      Los dos valores se pueden escribir y el mapa va allí. En reposo se ven
@@ -1870,17 +1862,13 @@
         }
       }
 
-      // El rango se desplaza con el mismo desvío que el nivel. Los atributos
-      // minZoom/maxZoom de la vista son del nivel de OpenLayers, que es el del
-      // plano de la proyección, mientras que aquí el nivel es sobre el suelo; a
-      // 43 grados esa diferencia es de 0,46 y sin corregir el campo rechazaría
-      // como demasiado alto un nivel que la vista admite de sobra.
-      const factor = this._factorProyeccion(this._vistaOL());
-      const desvío = (factor !== null && factor > 0) ? -Math.log(factor) / Math.LN2 : 0;
-
+      // Sin desvío: el nivel que se pinta es el del plano, que es exactamente el
+      // de OpenLayers, así que los minZoom/maxZoom de la vista son los mismos
+      // números y sirven tal cual. Antes había que desplazarlos con
+      // -log2(factor) para casarlos con un nivel que era sobre el suelo.
       return {
-        min: (min === null) ? 0 : min + desvío,
-        max: (max === null) ? 28 : max + desvío,
+        min: (min === null) ? 0 : min,
+        max: (max === null) ? 28 : max,
       };
     }
 
@@ -2081,9 +2069,7 @@
       // acaba poniendo. Animando la resolución es la cuenta inversa exacta de la
       // que se lee, que es lo que hace falta para que el campo y el mapa no se
       // contradigan.
-      const resolucion = vista
-        ? this._resolucionDeZoom(nivel, this._factorProyeccion(vista), vista)
-        : null;
+      const resolucion = vista ? this._resolucionDeZoom(nivel, vista) : null;
       if (vista && typeof vista.animate === 'function' && resolucion !== null) {
         try {
           vista.animate({ resolution: resolucion, duration: DURACION_TRANSICION });
@@ -2410,29 +2396,35 @@
     /**
      * Nivel de zoom de una resolución de la vista.
      *
-     *  La cuenta es la de OpenLayers, log2(maxResolution / resolución), pero con
-     *  la resolución convertida a suelo mediante el factor de la proyección. La
-     *  diferencia no es un detalle: la resolución de una vista va en las unidades
-     *  de SU proyección, así que el número que sale sin el factor es un artefacto
-     *  de estar en Mercator, y eso es justo lo que hacía que el nivel de zoom
-     *  pareciera cambiar al cambiar de proyección.
+     *  La cuenta es la de OpenLayers, log2(maxResolution / resolución), sobre la
+     *  resolución DEL PLANO de la proyección y SIN el factor de
+     *  _factorProyeccion() por medio.
      *
-     *  En el ecuador el factor vale 1 y sale exactamente el getZoom() de la API
-     *  (medido: los dos dan 13,342847 a 15,067 m/píxel), que es el mismo sitio
-     *  donde la escala ya coincidía con ella. A 43 grados el nivel leído es 0,46
-     *  más alto que el de la API, y ese 0,46 es ni más ni menos el estiramiento
-     *  de Mercator, el mismo que ya se ve en la escala de la fila de al lado.
+     *  Ese factor es 1/cos(latitude) en Mercator, y usarlo aquí convertía la
+     *  lectura del nivel en una medida de suelo: el nivel se leía más alto
+     *  cuanto más al norte, con la vista quieta. Medido con la resolución
+     *  clavada y el getZoom() de la API en 3,0000:
+     *
+     *    latitud  0 -> nivel 3,00   escala 55.468.004
+     *    latitud 20 -> nivel 3,09   escala 52.122.874
+     *    latitud 43 -> nivel 3,45   escala 40.566.730
+     *    latitud 70 -> nivel 4,50   escala 19.618.084
+     *
+     *  El estiramiento de Mercator es real y tiene que verse en algún sitio,
+     *  pero su sitio es la ESCALA de al lado, que ya lo lleva, y no el nivel: un
+     *  nivel de zoom no se mueve por irte al norte. Con esto el número que sale
+     *  es exactamente el getZoom() de la API, y se queda quieto al desplazarse.
+     *
+     *  Lo que sí mueve el número es cambiar de proyección, porque entonces la
+     *  resolución del plano va en otras unidades. Eso no tiene arreglo y es lo
+     *  que hace la propia API.
      * @param {number} resolucion Resolución de la vista, en sus unidades.
-     * @param {number|null} factor Factor de _factorProyeccion().
      * @param {Object} vista Vista de OpenLayers.
      * @returns {number|null} Nivel de zoom, o null si no se puede.
      */
-    _zoomDeResolucion(resolucion, factor, vista) {
+    _zoomDeResolucion(resolucion, vista) {
       if (!isFinite(resolucion) || resolucion <= 0) return null;
-      if (factor === null || !isFinite(factor) || factor <= 0) return null;
-      const suelo = resolucion * factor;
-      if (!isFinite(suelo) || suelo <= 0) return null;
-      const nivel = Math.log(this._resolucionMaxima(vista) / suelo) / Math.LN2;
+      const nivel = Math.log(this._resolucionMaxima(vista) / resolucion) / Math.LN2;
       return isFinite(nivel) ? nivel : null;
     }
 
@@ -2442,16 +2434,12 @@
      *  Operación inversa de _zoomDeResolucion(), y hace falta por lo mismo que
      *  para la escala: escribir lo que se lee tiene que dejar lo que se lee.
      * @param {number} nivel Nivel de zoom pedido.
-     * @param {number|null} factor Factor de _factorProyeccion().
      * @param {Object} vista Vista de OpenLayers.
      * @returns {number|null} Resolución de la vista, o null si no se puede.
      */
-    _resolucionDeZoom(nivel, factor, vista) {
+    _resolucionDeZoom(nivel, vista) {
       if (!isFinite(nivel)) return null;
-      if (factor === null || !isFinite(factor) || factor <= 0) return null;
-      const suelo = this._resolucionMaxima(vista) / Math.pow(2, nivel);
-      if (!isFinite(suelo) || suelo <= 0) return null;
-      const resolucion = suelo / factor;
+      const resolucion = this._resolucionMaxima(vista) / Math.pow(2, nivel);
       return isFinite(resolucion) && resolucion > 0 ? resolucion : null;
     }
 
@@ -2466,8 +2454,7 @@
       const vista = this._vistaOL();
       let nivel = null;
       if (vista && typeof vista.getResolution === 'function') {
-        nivel = this._zoomDeResolucion(Number(vista.getResolution()),
-          this._factorProyeccion(vista), vista);
+        nivel = this._zoomDeResolucion(Number(vista.getResolution()), vista);
       }
       if (nivel !== null) return nivel;
       try {
