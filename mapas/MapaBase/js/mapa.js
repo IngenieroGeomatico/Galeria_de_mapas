@@ -85,55 +85,64 @@ function mapa() {
   // resuelve desde el CSS de la página, no desde este .js), y el color lo pone
   // el propio plugin como máscara (--g-plugin-icon-mask).
   //
-  // ── Catálogo propio del visualizador ────────────────────────────────
-  // Se instancia ANTES de crear el plugin y se le pasa en su array de
-  // catálogos. IDEE.catalog.custom es una clase: lo que devuelve tiene la
-  // misma forma que IDEE.catalog.tipos.idee (id, nombre, listar(),
-  // cargarUrl()) y queda legible en IDEE.catalog.propios.propio.
+  // ── Catálogos del visualizador ─────────────────────────────────────
+  // Los cuatro son clases de IDEE.catalog, así que se instancian aquí, antes
+  // de crear el plugin, y se le pasan en su array. Sin argumentos, cada una
+  // trae su contenido de serie; con argumentos se parametrizan:
   //
-  // El tipo de cada servicio NO se pone: lo deduce el plugin de la URL, que
-  // es lo que sabe distinguir un WMS de un GeoJSON o de una plantilla de
-  // teselas. Un nodo puede llevar servicios y subnodos, y se pinta como un
-  // árbol de desplegables.
-  const catalogoPropio = new IDEE.catalog.custom({
-    nombre: 'Servicios del visor',
-    descripcion: 'Catálogo de ejemplo declarado desde mapa.js.',
-    nodos: [
-      {
-        nombre: 'Ráster',
-        servicios: [
-          {
-            nombre: 'Callejero (WMS)',
-            url: 'https://www.ign.es/wms-inspire/ign-base',
-            descripcion: 'Callejero y toponimia de España'
-          },
-          {
-            nombre: 'Ortofoto PNOA (WMS)',
-            url: 'https://www.ign.es/wms-inspire/pnoa-ma',
-            descripcion: 'Ortofotos del Plan Nacional'
-          }
-        ]
-      },
-      {
-        nombre: 'Organismo',
-        nodos: [
-          {
-            nombre: 'Servicios base',
-            servicios: [
-              {
-                nombre: 'Base de España',
-                url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg'
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  });
+  //   · IDEE            sections de tipo de servicio que se piden al portal
+  //                     (las diez de la IDEE por defecto).
+  //   · STAC            lista de catálogos STAC.
+  //   · OGCAPIRecords   lista de catálogos de metadatos.
+  //   · custom          árbol de nodos propio, de profundidad libre.
+  //
+  // El tipo de cada servicio NO se pone en ninguna: lo deduce el plugin de
+  // la URL, que es lo que sabe distinguir un WMS de un GeoJSON o de una
+  // plantilla de teselas.
+  const catalogos = [
+    new IDEE.catalog.IDEE(),
+    new IDEE.catalog.STAC(),
+    new IDEE.catalog.OGCAPIRecords(),
+    new IDEE.catalog.custom({
+      nombre: 'Servicios del visor',
+      descripcion: 'Catálogo de ejemplo declarado desde mapa.js.',
+      nodos: [
+        {
+          nombre: 'Ráster',
+          servicios: [
+            {
+              nombre: 'Callejero (WMS)',
+              url: 'https://www.ign.es/wms-inspire/ign-base',
+              descripcion: 'Callejero y toponimia de España'
+            },
+            {
+              nombre: 'Ortofoto PNOA (WMS)',
+              url: 'https://www.ign.es/wms-inspire/pnoa-ma',
+              descripcion: 'Ortofotos del Plan Nacional'
+            }
+          ]
+        },
+        {
+          nombre: 'Organismo',
+          nodos: [
+            {
+              nombre: 'Servicios base',
+              servicios: [
+                {
+                  nombre: 'Base de España',
+                  url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg'
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+  ];
 
   // ── Plugin del catálogo ────────────────────────────────────────────
-  // Catálogos disponibles (IDEE, STAC, OGC API Records y alta por URL) más
-  // los que le pase este visualizador. Ver ext/catalogo.
+  // Catálogos disponibles (con alta por URL) más los de arriba. Ver
+  // ext/catalogo.
   // Va en la esquina TR (arriba a la derecha) con order 2. La barra de título
   // la deja a todo ancho el bloque "PANEL EN LA ESQUINA TR" que llevan las
   // hojas de los plugins (en TR el API mete el botón dentro del panel y sin
@@ -144,14 +153,13 @@ function mapa() {
   // resuelve desde el CSS de la página, no desde este .js), y el color lo pone
   // el propio plugin como máscara (--g-plugin-icon-mask).
   //
-  // Con `soloCatalogos: true` el panel se quedaría solo con lo que se le pase
-  // (sin los catálogos de serie), y con `catalogoPorDefecto: 'propio'` se
-  // abriría por este.
+  // Con `soloCatalogos: true` el panel se quedaría solo con lo que se le pase,
+  // y con `catalogoPorDefecto: 'servicios-del-visor'` se abriría por ese.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_catalogo({
     position: 'TR',
     order: 2,
     icon: '../../img/iconos/collect.svg',
-    catalogos: [catalogoPropio]
+    catalogos: catalogos
   }));
 
   // ── Plugin cambio de implementación (OL <-> Cesium) ───────────────

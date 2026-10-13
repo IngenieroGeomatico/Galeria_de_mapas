@@ -194,84 +194,6 @@
     }
   ];
 
-  /**
-   * Los tipos de catálogo.
-   *
-   * Cada tipo declara cómo se pinta su sección de gestión en el panel:
-   *
-   *   - modo 'secciones'  El catálogo se pide por secciones (tipo de servicio).
-   *                       Debajo del <select> sale un buscador y un acordeón
-   *                       con las secciones; cada una, al abrirse, se pide.
-   *                       Es lo que hace la IDEE, con sus diez secciones.
-   *   - modo 'lista'      El catálogo es una lista corta y fija y se pinta
-   *                       tal cual, como hasta ahora.
-   *
-   * Para añadir un tipo nuevo basta con meterlo en CATALOGOS: el <select>, la
-   * sección de gestión y el estado los cogen solos.
-   */
-  const CATALOGOS = {
-    idee: {
-      id: 'idee',
-      nombre: 'Catálogo IDEE',
-      modo: 'secciones',
-      descripcion: 'Servicios publicados en el catálogo de la IDEE, por tipo.',
-      listar: function () {
-        // Las secciones las trae el cliente del catálogo (ver catalogo_idee.js).
-        return (window.CatalogoIDEE && window.CatalogoIDEE.SECCIONES) || [];
-      },
-      cargarUrl: function (url, mapa, opciones) {
-        return cargarUrlGenerica(url, mapa, opciones);
-      }
-    },
-    stac: {
-      id: 'stac',
-      nombre: 'STAC',
-      modo: 'lista',
-      descripcion: 'Catálogos STAC con colecciones de imágenes.',
-      listar: function () { return SERVICIOS_STAC; },
-      cargarUrl: function (url, mapa, opciones) {
-        return cargarUrlGenerica(url, mapa, opciones);
-      }
-    },
-    'ogcapi-records': {
-      id: 'ogcapi-records',
-      nombre: 'OGC API Records',
-      modo: 'lista',
-      descripcion: 'Catálogos de metadatos (CSW moderno).',
-      listar: function () { return SERVICIOS_OGCAPI; },
-      cargarUrl: function (url, mapa, opciones) {
-        return cargarUrlGenerica(url, mapa, opciones);
-      }
-    }
-  };
-
-  /**
-   * Carga una URL en el mapa.
-   *
-   * La detección de tipo y la lectura de las capas del servicio están en
-   * catalogo_url.js; aquí solo se le pasa lo que el usuario ha elegido en el
-   * panel (qué capas y con qué nombre).
-   *
-   * @param {string} url URL pegada por el usuario.
-   * @param {Object} mapa Instancia del mapa API-IDEE.
-   * @param {Object} [opciones] { tipo, capas, nombre }.
-   * @returns {Array<Object>} Las capas creadas, o [].
-   */
-  function cargarUrlGenerica(url, mapa, opciones) {
-    const opts = opciones || {};
-    const urlTool = window.CatalogoURL;
-    if (!urlTool) {
-      console.error('[catalogo] no está cargado catalogo_url.js');
-      return [];
-    }
-    return urlTool.cargar({
-      url: url,
-      mapa: mapa,
-      tipo: opts.tipo || urlTool.detectarTipo(url),
-      capas: opts.capas && opts.capas.length ? opts.capas : null,
-      nombre: opts.nombre || ''
-    });
-  }
 
   /**
    * Normaliza un servicio declarado en el JSON.
@@ -482,6 +404,96 @@
   }
 
   /**
+   * IDEE.catalog.IDEE: el catálogo de la IDEE, que no lleva la lista escrita
+   * sino que se pide por secciones al portal (ver catalogo_idee.js).
+   *
+   *   const catalogo = new IDEE.catalog.IDEE();               // el de serie
+   *   const parcial = new IDEE.catalog.IDEE({                  // solo unas
+   *     nombre: 'WMS autonómicos',                            //   secciones
+   *     secciones: [SECCIONES.find(s => s.id === 'wms_aut')]
+   *   });
+   *
+   * Con `servicios` se le añaden servicios propios a una sección que ya no
+   * los trae. Las secciones son las de CatalogoIDEE.SECCIONES.
+   */
+  class CatalogoIDEE {
+    constructor(opciones = {}) {
+      const secciones = (window.CatalogoIDEE && window.CatalogoIDEE.SECCIONES) || [];
+      const base = new CatalogoCustom(Object.assign({
+        id: 'idee',
+        nombre: 'Catálogo IDEE',
+        descripcion: 'Servicios publicados en el catálogo de la IDEE, por tipo.',
+        modo: 'secciones',
+        secciones: secciones
+      }, opciones));
+      Object.assign(this, base);
+      this.esCatalogo = true;
+    }
+  }
+
+  /**
+   * IDEE.catalog.STAC: los catálogos STAC de serie (Copernicus, Earth
+   * Search, Planetary Computer y el del IGN).
+   *
+   *   new IDEE.catalog.STAC();                                  // el de serie
+   *   new IDEE.catalog.STAC({ servicios: [ ...mis servicios... ] });
+   */
+  class CatalogoSTAC {
+    constructor(opciones = {}) {
+      const base = new CatalogoCustom(Object.assign({
+        id: 'stac',
+        nombre: 'STAC',
+        descripcion: 'Catálogos STAC con colecciones de imágenes.',
+        servicios: SERVICIOS_STAC
+      }, opciones));
+      Object.assign(this, base);
+      this.esCatalogo = true;
+    }
+  }
+
+  /**
+   * IDEE.catalog.OGCAPIRecords: los catálogos de metadatos de serie.
+   *
+   *   new IDEE.catalog.OGCAPIRecords();
+   *   new IDEE.catalog.OGCAPIRecords({ servicios: [ ... ] });
+   */
+  class CatalogoOGCAPIRecords {
+    constructor(opciones = {}) {
+      const base = new CatalogoCustom(Object.assign({
+        id: 'ogcapi-records',
+        nombre: 'OGC API Records',
+        descripcion: 'Catálogos de metadatos (CSW moderno).',
+        servicios: SERVICIOS_OGCAPI
+      }, opciones));
+      Object.assign(this, base);
+      this.esCatalogo = true;
+    }
+  }
+
+  /**
+   * Los tipos de catálogo.
+   *
+   * Cada tipo declara cómo se pinta su sección de gestión en el panel:
+   *
+   *   - modo 'secciones'  El catálogo se pide por secciones (tipo de servicio).
+   *                       Debajo del <select> sale un buscador y un acordeón
+   *                       con las secciones; cada una, al abrirse, se pide.
+   *                       Es lo que hace la IDEE, con sus diez secciones.
+   *   - modo 'arbol'      Un árbol de nodos desplegables, de profundidad libre.
+   *   - modo 'lista'      Una lista corta y fija.
+   *
+   * Los tres de serie son clases (IDEE.catalog.IDEE, .STAC y .OGCAPIRecords) y
+   * los propios se crean con new IDEE.catalog.custom({...}). Todos se pueden
+   * pasar por el array `catalogos` del constructor del plugin para
+   * parametrízarlos; si el id coincide con uno de estos, lo pisan.
+   */
+  const CATALOGOS = {
+    idee: new CatalogoIDEE(),
+    stac: new CatalogoSTAC(),
+    'ogcapi-records': new CatalogoOGCAPIRecords()
+  };
+
+  /**
    * Monta el juego de catálogos de una instancia a partir de lo que le llega
    * al constructor.
    *
@@ -560,6 +572,13 @@
        * devuelve tiene la misma forma que IDEE.catalog.tipos.idee.
        */
       custom: CatalogoCustom,
+      // Los tres catálogos de serie, como clases, para poder instanciarlos y
+      // parametrízarlos desde el visualizador:
+      //   new IDEE.catalog.IDEE(), new IDEE.catalog.STAC(),
+      //   new IDEE.catalog.OGCAPIRecords()
+      IDEE: CatalogoIDEE,
+      STAC: CatalogoSTAC,
+      OGCAPIRecords: CatalogoOGCAPIRecords,
       /**
        * Instancia un catálogo propio y lo deja en IDEE.catalog.propios.
        * Es un atajo de custom: crearlo y cogerlo del mismo sitio.
@@ -1679,7 +1698,7 @@
       // Una sección puede traer sus servicios en el propio catálogo (así se
       // declaran desde el constructor del plugin) y entonces no hay que pedir
       // nada: se usan tal cual, con la misma forma que devuelve el portal.
-      if (Array.isArray(sec.servicios)) {
+      if (Array.isArray(sec.servicios) && sec.servicios.length) {
         const datos = {
           seccion: sec,
           familias: [{
