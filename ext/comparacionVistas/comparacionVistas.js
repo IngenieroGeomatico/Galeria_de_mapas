@@ -1504,6 +1504,8 @@
 
       this.supra = null;
       this.ui = null;
+      // El sidenav se saca de this.ui y vive aparte (ver _sacarSidenavDeLaBarra).
+      this._nav = null;
       this._workArea = null;
 
       // view = { id, name, impl:'ol'|'cesium', iframe, div, ready, lastView,
@@ -1726,11 +1728,42 @@
       this._resolveWorkArea();
       this._adoptPrimaryView();
       this.ui = this._buildUI();
+      this._sacarSidenavDeLaBarra();
       this._aplicarColores();
       // Aplica la configuración de comparación INICIAL (modo + swipe/grid).
       this._applyInitialComparison();
       this._refreshUI();
       return this.ui;
+    }
+
+    /**
+     * Saca el sidenav de la barra del supraplugin y lo deja como elemento
+     * independiente, hermano de la barra dentro del dock.
+     *
+     *  Lo que se devuelve al supraplugin en getSupraElement() se mete en su
+     *  ranura, es decir DENTRO de `.supra-bar`, y allí el panel no podía ser un
+     *  panel a lo largo del mapa: esa barra lleva `backdrop-filter` y eso la
+     *  convierte en el contenedor de referencia de todo descendiente
+     *  `position: fixed`. El `height: 100%` del sidenav se resolvía contra los
+     *  70 px de la barra y no contra el viewport (medido: 361x70 en y=8, con
+     *  todo el cuerpo de opciones por debajo sin verse), y el `top: 0` caía en
+     *  el borde de la barra y no en el de la ventana.
+     *
+     *  El dock (hermano del mapa, no lleva transform ni filtro) sí sirve: allí
+     *  el `fixed` se ancla al viewport (medido: 361x940 en y=0) y además lo
+     *  borra entero el supraplugin al desmontar la barra (_teardownDom), que
+     *  es justo lo que tiene que pasar con el panel. Sin supraplugin (uso
+     *  suelto) se va al body y lo quita destroy().
+     *
+     * @returns {HTMLElement|null} El sidenav, ya movido, o null si no estaba.
+     */
+    _sacarSidenavDeLaBarra() {
+      var nav = this.ui ? this.ui.querySelector('[data-role="sidenav"]') : null;
+      if (!nav) return null;
+      var destino = (this.supra && this.supra._dock) ? this.supra._dock : document.body;
+      destino.appendChild(nav);
+      this._nav = nav;
+      return nav;
     }
 
     /**
@@ -3168,7 +3201,10 @@
     }
 
     toggleOpciones(force) {
-      var nav = this.ui.querySelector('[data-role="sidenav"]');
+      // El sidenav ya no cuelga de this.ui: lo movió _sacarSidenavDeLaBarra al
+      // dock para poder ser fijo a lo largo del mapa. Se lee de this._nav y, por
+      // si acaso, se cae a la búsqueda dentro de la UI.
+      var nav = this._nav || (this.ui && this.ui.querySelector('[data-role="sidenav"]'));
       if (!nav) return;
       var open = (typeof force === "boolean") ? force : !nav.classList.contains("cmpv-sidenav--open");
       nav.classList.toggle("cmpv-sidenav--open", open);
@@ -4815,6 +4851,12 @@
       this._remotePending = null;
       this._vistas = null;
       this._root = null;
+      // El sidenav vive fuera de la UI que devuelve el supraplugin. Si se
+      // montó en el dock lo borra la barra entera al desmontarse, y si cayó en
+      // el body (uso sin supraplugin) lo quita esta misma línea; hacer las dos
+      // cosas no molesta: quitar un nodo ya desligado es un no-op.
+      if (this._nav && this._nav.parentNode) this._nav.parentNode.removeChild(this._nav);
+      this._nav = null;
       this._supra = null;
     }
   }

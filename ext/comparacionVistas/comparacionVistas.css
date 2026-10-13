@@ -76,6 +76,17 @@
 
 /* =====================================================================
    Sidenav de configuración (off-canvas desde la derecha)
+   --------------------------------------------------------------------
+   Es un ELEMENTO INDEPENDIENTE, no un trozo de la barra del supraplugin:
+   el panel tiene que recorrer el mapa entero, de arriba abajo, y no cabía
+   dentro de la barra. El motivo de peso está en `position: fixed`:
+   `.supra-bar` lleva `backdrop-filter` (el cristal de la barra) y eso la
+   convierte en el contenedor de referencia de sus descendientes fijos, así
+   que dentro de ella el `height: 100%` de este panel se medía contra los
+   70 px de la barra en vez de contra el viewport (medido: 360x70 en y=8,
+   con el cuerpo de las opciones recortado) y el `top: 0` caía en el borde
+   de la barra (y=8) en vez de en el de la ventana (y=0). Sacado al dock, que
+   no lleva transform ni filtro: 361x940 en y=0.
    ===================================================================== */
 .cmpv-sidenav {
   position: fixed;
@@ -90,6 +101,13 @@
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.10);
   transition: width 0.35s ease, box-shadow 0.35s ease;
   z-index: 1000;
+  /* Al salir de la barra deja de heredar su tipografía y su color de texto, así
+     que se declaran aquí los mismos que llevaba (medido: Muli / 16px / #2b2b30).
+     El color se pide por variable para que siga el tema si algún día cuelga de
+     una barra, con la reserva del tema claro como red de seguridad. */
+  font-family: "Muli", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  color: var(--supra-fg, #2b2b30);
   /* Columnas: el cabecera ocupa su alto real y el cuerpo rellena el resto,
      garantizando que el scroll inferior quede siempre dentro del viewport. */
   display: flex;
