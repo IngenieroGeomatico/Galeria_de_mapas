@@ -403,6 +403,198 @@
   transform: scale(0.9);
 }
 
+/* Boton de ficha de la capa: verde suave, el color de "leer, no tocar" */
+.overlay-layer-selector .ls-action-ficha:hover {
+  background: #edf7ee;
+  color: #2e8b57;
+}
+
+/* ── Modal de la ficha de una capa ────────────────────────────────────
+   Centrado, con el mapa detras y sin interactividad: a diferencia del panel
+   inferior, esto bloquea el raton y hay que cerrarlo para seguir. */
+.ls-ficha-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483500;
+  background: rgba(15, 23, 32, 0.5);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.ls-ficha-overlay.ls-ficha--open {
+  opacity: 1;
+}
+
+.ls-ficha {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  width: min(980px, 100%);
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(14px) scale(0.98);
+  transition: transform 0.22s ease;
+}
+
+.ls-ficha-overlay.ls-ficha--open .ls-ficha {
+  transform: translateY(0) scale(1);
+}
+
+.ls-ficha-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #e6e9ee;
+  flex-shrink: 0;
+}
+
+.ls-ficha-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1a1a1a;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ls-ficha-tipo {
+  font-size: 12px;
+  color: #6b7280;
+  background: #f1f3f6;
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ls-ficha-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  align-items: start;
+}
+
+/* En pantallas estrechas, las dos columnas se apilan */
+@media (max-width: 720px) {
+  .ls-ficha-body { grid-template-columns: 1fr; }
+}
+
+.ls-ficha-seccion-titulo {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a93a0;
+  margin-bottom: 8px;
+}
+
+.ls-ficha-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ls-ficha-tabla th {
+  text-align: left;
+  vertical-align: top;
+  color: #4b5563;
+  font-weight: 600;
+  padding: 5px 10px 5px 0;
+  white-space: nowrap;
+}
+
+.ls-ficha-tabla td {
+  color: #111827;
+  padding: 5px 0;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.ls-ficha-subfila {
+  font-size: 12px;
+  color: #374151;
+  padding: 3px 0;
+}
+
+.ls-ficha-subfila b {
+  color: #4b5563;
+}
+
+.ls-ficha-detalle {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.ls-ficha-detalle summary {
+  cursor: pointer;
+  color: #0078d4;
+  user-select: none;
+}
+
+.ls-ficha-detalle pre {
+  margin: 8px 0 0;
+}
+
+.ls-ficha-aviso {
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ls-ficha-doc-linea {
+  font-size: 13px;
+  color: #111827;
+  margin: 0 0 6px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ls-ficha-doc-linea code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: #f3f4f6;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.ls-ficha-doc-url {
+  font-size: 12px;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.ls-ficha-doc-url a {
+  color: #0078d4;
+}
+
+.ls-ficha-pre {
+  margin: 0;
+  padding: 12px;
+  background: #f8f9fb;
+  border: 1px solid #e6e9ee;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #111827;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 46vh;
+  overflow: auto;
+}
+
 /* ── Panel inferior (bottom sheet) de informacion / tabla de atributos ──
    Anclado a la parte baja de la pantalla, ocupa TODO el ancho y se despliega
    hacia arriba (tipo "sidenav" horizontal desde abajo). El mapa queda

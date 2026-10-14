@@ -745,6 +745,7 @@ class miPlugin_layerSwitcher {
                   <button type="button" class="ls-action ls-action-zoom" data-id="${index}" title="Zoom a la capa" onclick="zoomToLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="3.2"></circle></svg></button>
                   <button type="button" class="ls-action ls-action-rename" data-id="${index}" title="Renombrar capa" onclick="startRenameLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
                   ${tableBtnHtml}
+                  <button type="button" class="ls-action ls-action-ficha" data-id="${index}" title="Información de la capa: cómo está construida y su documento de servicio" onclick="openLayerFicha('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="11" x2="12" y2="16"></line><circle cx="12" cy="7.6" r="0.4" fill="currentColor"></circle></svg></button>
                   <button type="button" class="ls-action ls-action-delete" data-id="${index}" title="Eliminar la capa del mapa" onclick="deleteLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
                 </div>
               </div>`;
@@ -1974,6 +1975,378 @@ class miPlugin_layerSwitcher {
       return panel;
     }
 
+    // ── Ficha de una capa ──────────────────────────────────────────────────
+    // Un modal centrado que abre con la ventana emergente de los parámetros
+    // de construcción y, si la hay, la del documento del servicio.
+    //
+    // DE DONDE SALEN LOS PARÁMETROS: de `layer.constructorParameters`, que es
+    // lo que la API guarda tal como se construyó la capa. OJO con la clave:
+    // las capas de servicio (WMS, WMTS, TMS, GeoTIFF...) la llaman
+    // `userParameters`, y las de datos (MVT, GeoJSON...) `parameters`
+    // (medido). Por eso se leen las dos.
+    window.openLayerFicha = function (index) {
+      const capa = findLayerById(index);
+      if (!capa) return;
+      const nombre = capa.legend || capa.name || 'Sin nombre';
+      const cp = capa.constructorParameters || {};
+      const construccion = cp.userParameters || cp.parameters || {};
+      const opciones = cp.options || {};
+      const vendor = cp.vendorOptions || {};
+      let url = null;
+      try { url = (typeof capa.url !== 'undefined' && capa.url !== null) ? capa.url : null; } catch (e) { url = null; }
+
+      closeSheet();
+
+      const overlay = document.createElement('div');
+      overlay.className = 'ls-ficha-overlay';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-label', `Información de ${nombre}`);
+
+      const panel = document.createElement('div');
+      panel.className = 'ls-ficha';
+
+      const parametrosHtml = _tablaDeParametros(construccion, opciones, vendor, url);
+      const tipo = _tipoDeCapa(capa);
+
+      panel.innerHTML =
+        `<div class="ls-ficha-header">
+            <div class="ls-ficha-title">${_escaparHtml(nombre)}</div>
+            <div class="ls-ficha-tipo">${tipo}</div>
+            <button type="button" class="ls-sheet-close" title="Cerrar" onclick="cerrarFicha()">✕</button>
+          </div>
+          <div class="ls-ficha-body">
+            <div class="ls-ficha-col">
+              <div class="ls-ficha-seccion-titulo">Parámetros de construcción</div>
+              ${parametrosHtml}
+            </div>
+            <div class="ls-ficha-col">
+              <div class="ls-ficha-seccion-titulo">Documento del servicio</div>
+              <div class="ls-ficha-doc">Cargando…</div>
+            </div>
+          </div>`;
+
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => { overlay.classList.add('ls-ficha--open'); });
+
+      const cerrar = function () {
+        try { overlay.classList.remove('ls-ficha--open'); } catch (e) { /* nada */ }
+        setTimeout(function () {
+          try { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) { /* nada */ }
+        }, 260);
+      };
+      // Su propio global, en el mismo estilo que el resto del plugin: el cierre
+      // del panel inferior es `closeSheet` y este no puede tocarlo.
+      window.cerrarFicha = cerrar;
+      // Clic fuera de la caja y Escape: las dos cierran.
+      overlay.addEventListener('mousedown', function (ev) { if (ev.target === overlay) cerrar(); });
+      document.addEventListener('keydown', function onKey(ev) {
+        if (ev.key !== 'Escape') return;
+        document.removeEventListener('keydown', onKey);
+        cerrar();
+      });
+
+      // El documento se trae aparte: puede tardar, y si no hay se dice.
+      _rellenarDocumento(panel.querySelector('.ls-ficha-doc'), capa, url).catch(function (e) {
+        panel.querySelector('.ls-ficha-doc').innerHTML =
+          '<p class="ls-ficha-aviso">No se pudo leer el documento del servicio.</p>';
+        console.warn('layerSwitcher: ficha, documento', e);
+      });
+    };
+
+    /** Tabla de los parámetros de construcción de la capa. */
+    function _tablaDeParametros(construccion, opciones, vendor, url) {
+      const filas = [];
+      const todo = Object.assign({}, construccion, { 'url (resuelto)': url },
+        Object.keys(opciones).length ? { 'options': opciones } : {},
+        Object.keys(vendor).length ? { 'vendorOptions': vendor } : {});
+      const claves = Object.keys(todo).filter(function (k) { return k !== 'options' && k !== 'vendorOptions'; });
+      claves.forEach(function (clave) {
+        const valor = todo[clave];
+        let texto;
+        if (valor === null) texto = 'null';
+        else if (valor === undefined) texto = '—';
+        else if (typeof valor === 'object') texto = _escaparHtml(JSON.stringify(valor));
+        else texto = String(valor);
+        filas.push(`<tr><th>${_escaparHtml(clave)}</th><td>${texto}</td></tr>`);
+      });
+      if (!filas.length) return '<p class="ls-ficha-aviso">La capa no guarda parámetros de construcción.</p>';
+
+      let extra = '';
+      ['options', 'vendorOptions'].forEach(function (clave) {
+        const obj = todo[clave];
+        if (!obj || !Object.keys(obj).length) return;
+        const dentro = Object.keys(obj).map(function (k) {
+          const v = obj[k];
+          const texto = (v === undefined || v === null) ? '—'
+            : (typeof v === 'object' ? _escaparHtml(JSON.stringify(v)) : String(v));
+          return `<div class="ls-ficha-subfila"><b>${_escaparHtml(k)}</b> ${texto}</div>`;
+        }).join('');
+        extra += `<details class="ls-ficha-detalle">
+            <summary>${clave} (${Object.keys(obj).length})</summary>
+            ${dentro || '<div class="ls-ficha-subfila">vacío</div>'}
+          </details>`;
+      });
+
+      return `<table class="ls-ficha-tabla"><tbody>${filas.join('')}</tbody></table>${extra}`;
+    }
+
+    /** Tipo legible de la capa, para la cabecera. */
+    function _tipoDeCapa(capa) {
+      const nombre = capa.constructor && capa.constructor.name ? capa.constructor.name : null;
+      if (nombre && nombre !== 'h' && nombre !== 'c' && nombre !== 'f' && nombre !== 'o' && nombre !== 'u') {
+        return nombre;
+      }
+      // Los nombres de clase de la API llegan minificados en el bundle; en ese
+      // caso se mira qué metodos tiene, que es lo que distingue unas de otras.
+      try {
+        if (typeof capa.getCapabilities === 'function') return 'WMS / WMTS';
+        if (typeof capa.getFeatureInfoUrl === 'function') return 'Servicio WMS';
+        if (typeof capa.toGeoJSON === 'function') return 'Capa vectorial';
+        if (typeof capa.getFeaturesCount === 'function') return 'Capa vectorial';
+      } catch (e) { /* nada */ }
+      try {
+        if (capa.url && /\.pbf($|\?)/i.test(String(capa.url))) return 'MVT (teselas vectoriales)';
+      } catch (e) { /* nada */ }
+      return 'Capa';
+    }
+
+    /**
+     * Trae el documento del servicio y lo pinta.
+     *
+     * WMS y WMTS se leen con `getCapabilities()`, que es la llamada que hace la
+     * API al construirlas y que devuelve el XML entero (medido: puede ser de
+     * cientos de KB, asi que se resume y se deja el volcado entero plegable).
+     *
+     * Para teselas (TMS, MVT) no hay capabilities: lo que a veces publican es un
+     * `tileset.json` o un `metadata.json` junto al servicio (por ejemplo, los
+     * tileset de Mapbox). Se intentan los dos nombres y, si no hay, se dice.
+     *
+     * @param {HTMLElement} contenedor
+     * @param {Object} capa
+     * @param {string|null} url
+     */
+    async function _rellenarDocumento(contenedor, capa, url) {
+      // 1) Capacidades: solo WMS y WMTS.
+      if (typeof capa.getCapabilities === 'function') {
+        try {
+          const xml = await capa.getCapabilities();
+          const texto = typeof xml === 'string' ? xml : JSON.stringify(xml);
+          contenedor.innerHTML = _resumenCapacidades(texto);
+          return;
+        } catch (e) {
+          contenedor.innerHTML =
+            '<p class="ls-ficha-aviso">No se pudieron leer las capacidades del servicio.</p>';
+          console.warn('layerSwitcher: ficha, getCapabilities', e);
+          return;
+        }
+      }
+
+      // 2) JSON asociado a un servicio de teselas.
+      const base = _baseDelServicio(url);
+      if (!base) {
+        contenedor.innerHTML = '<p class="ls-ficha-aviso">Esta capa no procede de un servicio publicado.</p>';
+        return;
+      }
+      const candidatos = ['tileset.json', 'metadata.json'];
+      let encontrado = null;
+      for (const nombre of candidatos) {
+        const completa = base + nombre;
+        try {
+          const cuerpo = await _pedirTexto(completa);
+          const datos = _jsonDeVerdad(cuerpo);
+          if (datos) { encontrado = { url: completa, datos: datos }; break; }
+        } catch (e) { /* ese candidato no esta; se prueba el siguiente */ }
+      }
+      if (!encontrado) {
+        contenedor.innerHTML =
+          '<p class="ls-ficha-aviso">No se encontró ningún documento de servicio asociado ' +
+          '(se buscaron <code>tileset.json</code> y <code>metadata.json</code>).</p>';
+        return;
+      }
+      const cuerpo = JSON.stringify(encontrado.datos, null, 2);
+      const corto = cuerpo.length > 12000 ? cuerpo.slice(0, 12000) +
+        '\n… (truncado, ' + cuerpo.length + ' caracteres en total)' : cuerpo;
+      contenedor.innerHTML =
+        `<p class="ls-ficha-doc-url"><a href="${_escaparHtml(encontrado.url)}" target="_blank" rel="noopener">${_escaparHtml(encontrado.url)}</a></p>` +
+        `<pre class="ls-ficha-pre">${_escaparHtml(corto)}</pre>`;
+    }
+
+    /** Pide una URL y devuelve el cuerpo como texto. */
+    async function _pedirTexto(url) {
+      const api = apiIdee();
+      if (api && api.remote && typeof api.remote.get === 'function') {
+        const resp = await api.remote.get(url);
+        if (typeof resp === 'string') return resp;
+        if (resp && typeof resp.text === 'function') return await resp.text();
+        // La utilidad de la API devuelve el cuerpo en la propiedad `text`, que
+        // es una CADENA, no una respuesta con .text(). Si aquí se madeja el
+        // objeto entero y se serializa, los bytes de una imagen se escapan a
+        // \u0000 y la prueba de "esto es binario" deja de verlos (medido).
+        if (resp && typeof resp.text === 'string') return resp.text;
+        if (resp && typeof resp === 'object') return JSON.stringify(resp);
+        return null;
+      }
+      const resp = await fetch(url);
+      return await resp.text();
+    }
+
+    /**
+     * ¿El texto es JSON de verdad?
+     *
+     * Sin esta prueba el botón enseñaba una tesela PNG como si fuera un documento:
+     * un servicio que no publica `tileset.json` devuelve lo que sea, y una imagen
+     * no tiene por qué empezar por `{` para colarse (medido).
+     */
+    function _jsonDeVerdad(texto) {
+      if (!texto || typeof texto !== 'string') return null;
+      const limpio = texto.trim();
+      if (!/^[{\[]/.test(limpio)) return null;
+      // Binario (PNG, JPEG, una tesela) lleva caracteres de control: no es texto.
+      if (/[\x00-\x08\x0e-\x1f]/.test(limpio.slice(0, 2000))) return null;
+      try {
+        const datos = JSON.parse(limpio);
+        return (datos && typeof datos === 'object') ? datos : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /** Base de un servicio a partir de su URL, para buscar documentos vecinos. */
+    function _baseDelServicio(url) {
+      if (!url) return null;
+      let limpia = String(url).split('?')[0];
+      // Quedarse con lo que hay antes de la primera tesela: si la URL trae
+      // {z}/{x}/{y}..., la base es lo que va antes de la primera llave.
+      const i = limpia.search(/\{[xyz-]/);
+      if (i > -1) limpia = limpia.slice(0, i);
+      limpia = limpia.replace(/\/+$/, '');
+      if (!/^https?:\/\//i.test(limpia)) return null;
+      return limpia + '/';
+    }
+
+    /** Un objeto a texto JSON, o null si no se puede. */
+    function _aTexto(valor) {
+      if (valor === null || valor === undefined) return null;
+      if (typeof valor === 'string') return valor;
+      try { return JSON.stringify(valor); } catch (e) { return null; }
+    }
+
+    /** Un texto JSON a objeto, o null si no es JSON. */
+    function _aJson(texto) {
+      if (!texto || typeof texto !== 'string') return null;
+      if (!/^\s*\{/.test(texto)) return null;
+      try {
+        const datos = JSON.parse(texto);
+        return (datos && typeof datos === 'object') ? datos : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /** Resumen legible de un GetCapabilities, con el documento entero plegable. */
+    function _resumenCapacidades(crudo) {
+      // El envoltorio que pone la API es uniproblema: `getCapabilities()` puede
+      // devolver un objeto o una CADENA, y lo de dentro, capabilities_, puede
+      // ser a su vez un objeto o una cadena (medidas las cuatro formas con el
+      // WMS de la IGN y con el GeoTIFF). Se normaliza a un objeto plano antes de
+      // buscar el Service, y si lo que sale es XML se sigue por esa vía.
+      let texto = _aTexto(crudo);
+      let datos = _aJson(texto);
+      for (let vuelta = 0; vuelta < 3; vuelta++) {
+        if (!datos || datos.capabilities_ === undefined) break;
+        texto = _aTexto(datos.capabilities_);
+        if (!texto) { datos = null; break; }
+        datos = _aJson(texto);
+      }
+      if (!texto) {
+        return '<p class="ls-ficha-aviso">El servicio no devolvió documento de capacidades.</p>';
+      }
+
+      // Puede venir como JSON (lo que da la API en este visualizador) o como XML
+      // (un GetCapabilities al uso). Se prueba el primero.
+      let meta = null;
+      if (datos) {
+        try {
+          const servicio = (datos && datos.Service) ||
+            (datos && datos.Capabilities && datos.Capabilities.Service) || null;
+          if (servicio) {
+            meta = {
+              nombre: servicio.Name || null,
+              titulo: servicio.Title || null,
+              resumen: servicio.Abstract || null,
+              capas: _contarCapasJson(datos),
+            };
+          }
+        } catch (e) { meta = null; }
+      }
+      // Y si no, como XML.
+      if (!meta && /^\s*</.test(texto)) {
+        try {
+          const doc = new DOMParser().parseFromString(texto, 'text/xml');
+          const q = function (sel) {
+            let e = null;
+            try { e = doc.querySelector(sel); } catch (err) { e = null; }
+            return e && e.textContent ? e.textContent.trim() : null;
+          };
+          let lista = 0;
+          try { lista = doc.querySelectorAll('Layer > Name').length; } catch (e) { lista = 0; }
+          meta = {
+            nombre: q('Service > Name'),
+            titulo: q('Service > Title'),
+            resumen: q('Service > Abstract'),
+            capas: lista || null,
+          };
+        } catch (e) { meta = null; }
+      }
+
+      if (!meta) {
+        return '<p class="ls-ficha-aviso">El documento no traía metadatos reconocibles.</p>';
+      }
+
+      const partes = [];
+      if (meta.titulo) partes.push(`<p class="ls-ficha-doc-linea"><b>Título:</b> ${_escaparHtml(meta.titulo)}</p>`);
+      if (meta.nombre) partes.push(`<p class="ls-ficha-doc-linea"><b>Nombre del servicio:</b> <code>${_escaparHtml(meta.nombre)}</code></p>`);
+      if (meta.resumen) partes.push(`<p class="ls-ficha-doc-linea"><b>Resumen:</b> ${_escaparHtml(meta.resumen)}</p>`);
+      if (meta.capas !== null) partes.push(`<p class="ls-ficha-doc-linea"><b>Capas publicadas:</b> ${meta.capas}</p>`);
+
+      const volcado = texto.length > 12000 ? texto.slice(0, 12000) + '\n… (truncado)' : texto;
+      partes.push(`<details class="ls-ficha-detalle"><summary>Ver el documento completo (${texto.length} caracteres)</summary>` +
+        `<pre class="ls-ficha-pre">${_escaparHtml(volcado)}</pre></details>`);
+      return partes.join('');
+    }
+
+    /** Cuántas capas publica un capabilities en JSON, contando los nodos con Name. */
+    function _contarCapasJson(datos) {
+      let total = 0;
+      (function recorrer(nodo) {
+        if (!nodo || typeof nodo !== 'object') return;
+        if (Array.isArray(nodo)) { nodo.forEach(recorrer); return; }
+        if (typeof nodo.Name === 'string') total += 1;
+        Object.keys(nodo).forEach(function (k) { recorrer(nodo[k]); });
+      })(datos);
+      return total || null;
+    }
+
+    /** Escapa texto para que pueda ir dentro de HTML sin romperlo. */
+    function _escaparHtml(texto) {
+      return String(texto == null ? '' : texto)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    /** Objeto global de la API (IDEE en builds modernas, M en las antiguas). */
+    function apiIdee() {
+      try {
+        if (window.IDEE && (window.IDEE.map || window.IDEE.ui)) return window.IDEE;
+        if (window.M && (window.M.map || window.M.ui)) return window.M;
+      } catch (e) { /* nada */ }
+      return window.IDEE || window.M || null;
+    }
+
     // ── Redimensionar el panel desde el tirador ────────────────────────
     // Altura (px) elegida por el usuario; persiste entre aperturas del mismo
     // panel en esta sesion. null = usar la altura por defecto del CSS (60vh).
@@ -2826,7 +3199,8 @@ class miPlugin_layerSwitcher {
       'renderLayerList', 'toggleLayerVisibility', 'toggleLayerOptions', 'toggleGroup',
       'startRenameLayer', '_renameLayerName', 'handleDragStart', 'handleDragOver',
       'handleDrop', 'handleDragEnd', 'deleteLayer', 'getLayerKind', 'setLayerOpacity',
-      'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo', '_lsPickerLayers',
+      'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo', 'openLayerFicha',
+      '_lsPickerLayers',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {
