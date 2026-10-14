@@ -24,6 +24,34 @@
 (function () {
   'use strict';
 
+  /**
+   * Una dirección `s3://cubo/ruta` en la forma HTTPS de S3.
+   *
+   * POR QUÉ HACE FALTA: `s3://` no es un esquema que entienda un navegador.
+   * Es propio de la AWS CLI y de los SDKs, no un protocolo de red, así que no
+   * hay forma de pedirlo desde el cliente: ni fetch, ni XHR, ni un `<img>`, ni
+   * un Service Worker, ni el AWS SDK para JS (que además va con firma). La
+   * única vía es reescribirlo a HTTPS, en la forma virtual-hosted de S3.
+   *
+   * Medido sobre el DEM de Copernicus: `https://<cubo>.s3.amazonaws.com/<ruta>`
+   * responde 200, `image/tiff` y `Accept-Ranges: bytes` (que es lo que pide
+   * un COG para leer solo la cabecera). La forma `s3.amazonaws.com/<cubo>/`
+   * devuelve 301 y no hay que usarla.
+   *
+   * @param {string} url
+   * @returns {string} La misma URL en HTTPS si era s3://; si no, intacta.
+   */
+  function httpDeS3(url) {
+    const limpio = String(url || '').trim();
+    if (!/^s3:\/\//i.test(limpio)) return limpio;
+    const cuerpo = limpio.replace(/^s3:\/\//i, '');
+    const barra = cuerpo.indexOf('/');
+    if (barra < 0) return limpio;
+    const cubo = cuerpo.slice(0, barra);
+    const ruta = cuerpo.slice(barra + 1);
+    return 'https://' + cubo + '.s3.amazonaws.com/' + ruta;
+  }
+
   /** Tipos que la API puede crear (comprobados antes de instanciar). */
   const TIPOS_API = {
     WMS: 'WMS',
@@ -258,6 +286,46 @@
   }
 
   /**
+   * ¿Un navegador puede leer esta URL?
+   *
+   * POR QUÉ HACE FALTA: hay tipos de capa que el catálogo carga sin consultar
+   * nada antes (GeoTIFF, teselas, GeoPackage, GeoJSON, KML...). Se construyen y
+   * se añaden, y si el servidor no manda CORS la capa simplemente no pinta y no
+   * dice nada: no hay error que atrapar. Por eso se mira ANTES de añadir.
+   *
+   * Se pide con HEAD, que es lo más barato. El CORS se delata porque fetch ni
+   * llega a responder y salta "Failed to fetch". Si el servidor no permite HEAD
+   * (un 405, p. ej.) se cae a pedir un solo byte con Range, que es lo que
+   * acepta cualquiera que sirva el fichero.
+   *
+   * @param {string} url
+   * @returns {Promise<boolean>}
+   */
+  async function urlEsLegible(url) {
+    const limpio = String(url || '').trim();
+    if (!/^https?:\/\//i.test(limpio)) return false;
+    try {
+      const r = await fetch(limpio, { method: 'HEAD', cache: 'no-store' });
+      if (r.ok) return true;
+    } catch (e) {
+      // CORS (o la red caída): no hay nada que leer.
+      return false;
+    }
+    try {
+      const control = new AbortController();
+      const temporizador = setTimeout(function () { control.abort(); }, 10000);
+      const r = await fetch(limpio, {
+        method: 'GET', cache: 'no-store',
+        headers: { Range: 'bytes=0-0' }, signal: control.signal
+      });
+      clearTimeout(temporizador);
+      return r.ok || r.status === 206;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
    * Pide un recurso con fetch, directamente.
    *
    * NO se usa el proxy de la API. El precio de no usarlo es el CORS: si el
@@ -321,7 +389,8 @@
    * @returns {Promise<{tipo: string, nombre: string, capas: Array<{id,nombre}>, aviso: string|null}>}
    */
   async function leerCapas(url, tipo) {
-    const limpio = String(url || '').trim();
+    // Un `s3://` no se puede pedir tal cual: se pasa a HTTPS de S3 antes de nada.
+    const limpio = httpDeS3(String(url || '').trim());
     const tipoFinal = tipo || detectarTipo(limpio);
 
     if (['WMS', 'WMTS', 'WFS'].indexOf(tipoFinal) === -1) {
@@ -406,7 +475,8 @@
   function cargar(opciones) {
     const IDEE = window.IDEE || window.M;
     const mapa = opciones.mapa;
-    const url = String(opciones.url || '').trim();
+    // Igual que al leer: si la entrada es `s3://` se consume en su forma HTTPS.
+    const url = httpDeS3(String(opciones.url || '').trim());
     const tipo = opciones.tipo || detectarTipo(url);
     const nombre = (opciones.nombre || '').trim();
     const pedidas = (opciones.capas && opciones.capas.length) ? opciones.capas : [url];
@@ -499,6 +569,8 @@
   window.CatalogoURL = {
     TIPOS: TIPOS_API,
     ETIQUETAS: ETIQUETAS,
+    httpDeS3: httpDeS3,
+    urlEsLegible: urlEsLegible,
     detectarTipo: detectarTipo,
     leerCapas: leerCapas,
     urlCapabilities: urlCapabilities,

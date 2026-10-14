@@ -238,7 +238,7 @@
    * @param {Object} [opciones] { tipo, capas, nombre }.
    * @returns {Array<Object>} Las capas creadas, o [].
    */
-  function cargarUrlGenerica(url, mapa, opciones) {
+  async function cargarUrlGenerica(url, mapa, opciones) {
     const opts = opciones || {};
     const urlTool = window.CatalogoURL;
     if (!urlTool) {
@@ -247,10 +247,25 @@
     }
     // El tipo lo pone el panel si ya lo sabe (viene de leer las capabilities);
     // si no, lo deduce la algoritmia por la URL.
+    const tipo = opts.tipo || urlTool.detectarTipo(url);
+
+    // Los tipos de servicio (WMS, WMTS, WFS, WCS) ya se han leído antes, en
+    // leerCapas, y un CORS ahí ya sale. El resto se carga sin consultar nada:
+    // si el servidor no manda CORS, la capa se añade, no pinta y no dice nada.
+    // Por eso se mira antes de añadir. Ver urlEsLegible en catalogo_url.js.
+    const seConsulta = ['WMS', 'WMTS', 'WFS', 'WCS'].indexOf(String(tipo).toUpperCase()) > -1;
+    if (!seConsulta && typeof urlTool.urlEsLegible === 'function') {
+      const legible = await urlTool.urlEsLegible(url);
+      if (!legible) {
+        throw new Error('El navegador no ha podido leer «' + url + '» desde aquí: ' +
+          'ese servidor no manda cabeceras CORS (Access-Control-Allow-Origin).');
+      }
+    }
+
     return urlTool.cargar({
       url: url,
       mapa: mapa,
-      tipo: opts.tipo || urlTool.detectarTipo(url),
+      tipo: tipo,
       capas: (opts.capas && opts.capas.length) ? opts.capas : null,
       nombre: opts.nombre || ''
     });
@@ -2702,7 +2717,13 @@
       const self = this;
       const input = this._urlInputEl;
       const cont = this._opcionesEl;
-      const url = input ? String(input.value || '').trim() : '';
+      const urlTool = window.CatalogoURL;
+      // Un `s3://cubo/ruta` no es una URL que entienda un navegador: se consume en
+      // su forma HTTPS de S3 antes de pasar por la puerta de http(s). Ver
+      // httpDeS3 en catalogo_url.js y el comentario de CORS que hay ahí.
+      const crudo = String((input && input.value) || '').trim();
+      const url = (urlTool && typeof urlTool.httpDeS3 === 'function')
+        ? urlTool.httpDeS3(crudo) : crudo;
 
       if (!cont) return;
       cont.innerHTML = '';
@@ -2716,7 +2737,6 @@
         return;
       }
 
-      const urlTool = window.CatalogoURL;
       if (!urlTool) {
         this._decir('No está cargado catalogo_url.js.', 'error');
         return;
@@ -2752,6 +2772,9 @@
         };
         self._pintarOpciones();
         self._decir('No se ha podido leer el servicio: ' + self._analisis.error, 'aviso');
+        // Si el motivo es CORS, además se dice en alto con el toast de la API:
+        // el cuadro de estado está dentro del panel, que igual ni está abierto.
+        if (self._esFalloCors(err)) self._avisoCors(err, url);
       });
     }
 
@@ -2954,7 +2977,8 @@
     }
 
     /** Carga lo que haya elegido en el bloque de opciones. */
-    _cargarDesdeAnalisis() {
+    async _cargarDesdeAnalisis() {
+      const self = this;
       const info = this._analisis;
       if (!info) return;
       if (!info.elegidas || !info.elegidas.length) {
@@ -2965,7 +2989,9 @@
       try {
         const tipoActual = this._catalogoActual();
         if (!tipoActual) return;
-        const capas = tipoActual.cargarUrl(info.url, this._map, {
+        // La carga puede fallar en diferido (por CORS) y ahora se espera: ese
+        // error se atrapa aquí, no en ningún sitio.
+        const capas = await tipoActual.cargarUrl(info.url, this._map, {
           tipo: info.tipo,
           capas: info.elegidas,
           nombre: info.nombre
@@ -2974,6 +3000,8 @@
         this._decir('Cargada' + (cuantas > 1 ? 's ' + cuantas + ' capas' : '') + ': ' + info.nombre);
       } catch (err) {
         this._decir('No se ha podido cargar: ' + (err && err.message ? err.message : err), 'error');
+        // El CORS se avisa en alto, además de en el cuadro de estado.
+        if (self._esFalloCors(err)) self._avisoCors(err, info.url);
       }
     }
 
@@ -3000,17 +3028,24 @@
       if (!urlTool) return;
       this._decir('Leyendo el servicio «' + srv.nombre + '»…');
 
-      urlTool.leerCapas(srv.url, tipo).then(function (info) {
+      urlTool.leerCapas(srv.url, tipo).then(async function (info) {
         if (!info.capas || info.capas.length <= 1) {
           const cargador = self._catalogoActual();
           if (!cargador) return;
-          const creadas = cargador.cargarUrl(srv.url, self._map, {
-            tipo: info.tipo || tipo,
-            capas: (info.capas || []).map(function (c) { return c.id; }),
-            nombre: srv.nombre
-          });
-          const cuantas = (creadas && creadas.length) || 0;
-          self._decir('Cargada' + (cuantas > 1 ? 's ' + cuantas + ' capas' : '') + ': ' + srv.nombre);
+          try {
+            // Igual que arriba: la carga espera, y un fallo por CORS se atrapa aquí.
+            const creadas = await cargador.cargarUrl(srv.url, self._map, {
+              tipo: info.tipo || tipo,
+              capas: (info.capas || []).map(function (c) { return c.id; }),
+              nombre: srv.nombre
+            });
+            const cuantas = (creadas && creadas.length) || 0;
+            self._decir('Cargada' + (cuantas > 1 ? 's ' + cuantas + ' capas' : '') + ': ' + srv.nombre);
+          } catch (err) {
+            self._decir('No se ha podido cargar: ' +
+              (err && err.message ? err.message : err), 'error');
+            if (self._esFalloCors(err)) self._avisoCors(err, srv.url);
+          }
           return;
         }
 
@@ -3032,6 +3067,8 @@
       }).catch(function (err) {
         self._decir('No se ha podido leer «' + srv.nombre + '»: ' +
           (err && err.message ? err.message : err), 'error');
+        // Igual que arriba: el CORS se avisa en alto, no solo en el cuadro.
+        if (self._esFalloCors(err)) self._avisoCors(err, srv.url);
       });
     }
 
@@ -3050,6 +3087,47 @@
       if (!this._estadoEl) return;
       this._estadoEl.textContent = mensaje;
       this._estadoEl.className = 'catalogo__estado' + (clase ? (' catalogo__estado--' + clase) : '');
+    }
+
+    // ── Aviso de CORS ──────────────────────────────────────────────────────
+    // Cuando una capa no se puede cargar porque el servidor no manda
+    // Access-Control-Allow-Origin, el mensaje del cuadro de estado se queda
+    // corto: no dice que el fallo es del navegador y no de la URL, que es lo
+    // que diferencia un CORS de una URL mal escrita o un servicio caído.
+    //
+    // Para eso está el toast de la API (IDEE.toast.error), que es lo que se ve
+    // sin tener que abrir el panel del catálogo. Medido:
+    //   · IDEE.toast.error(mensaje, orden, duracionEnMilisegundos).
+    //   · Con duracion=1 no se llega a ver: hacen falta milisegundos de verdad.
+    //   · Sale como <div class="m-toast error"> dentro del contenedor de la API.
+
+    /** ¿El fallo es de CORS? */
+    _esFalloCors(err) {
+      const texto = String((err && err.message) || err || '');
+      return /cors/i.test(texto) || /no ha podido leer/i.test(texto) ||
+             /failed to fetch/i.test(texto) || /^s3:\/\//i.test(texto);
+    }
+
+    /**
+     * Avisa en alto, con el toast de la API, de que una capa no se pudo cargar
+     * por CORS. No hace nada si el visualizador no trae el toast.
+     *
+     * @param {Error|string} err
+     * @param {string} [url] La URL en cuestión, para que se vea de qué se trata.
+     * @returns {boolean} true si se pudo enseñar el toast.
+     */
+    _avisoCors(err, url) {
+      const api = (window.IDEE && window.IDEE.toast && window.IDEE.toast.error) ? window.IDEE
+        : (window.M && window.M.toast && window.M.toast.error) ? window.M : null;
+      if (!api) return false;
+      const texto = 'No se puede cargar la capa: ese servidor no permite leerlo ' +
+        'desde el navegador (no manda cabeceras CORS).';
+      try {
+        api.toast.error(texto + (url ? '  URL: ' + url : ''), 5, 9000);
+      } catch (e) {
+        return false;
+      }
+      return true;
     }
 
     // =====================================================================
