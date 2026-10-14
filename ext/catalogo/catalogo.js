@@ -929,6 +929,10 @@
       // ha pedido al bajar, para poder volver sin volver a preguntar nada.
       this._pilaStac = [];
       this._cacheStac = {};
+      // Paginación de las colecciones de una API STAC: por URL de colección,
+      // cuántas entradas hay cargadas y cuál es la página siguiente. Vive
+      // aparte de _cacheStac porque crece al leer más, no al navegar.
+      this._paginacionStac = {};
       this._analisis = null;
 
       // Referencias a la interfaz (se rellenan en _construirUI).
@@ -2200,9 +2204,9 @@
 
       // 4) Paginador arriba y abajo: arriba para verlo nada más abrir la sección,
       //    abajo para seguir leyendo sin tener que volver a subir.
-      cuerpo.appendChild(this._crearPaginador(paginas, encontrados, todos));
+      cuerpo.appendChild(this._crearPaginador(paginas, encontrados, todos, datos));
       cuerpo.appendChild(fragmentos);
-      cuerpo.appendChild(this._crearPaginador(paginas, encontrados, todos));
+      cuerpo.appendChild(this._crearPaginador(paginas, encontrados, todos, datos));
 
       this._pintarCuentaBuscador(visibles.length, encontrados);
       return true;
@@ -2219,7 +2223,7 @@
      * @param {boolean} todos Si se están mostrando todos.
      * @returns {HTMLElement} El paginador.
      */
-    _crearPaginador(paginas, encontrados, todos) {
+    _crearPaginador(paginas, encontrados, todos, datos) {
       const self = this;
       const caja = document.createElement('div');
       caja.className = 'catalogo__paginador';
@@ -2237,7 +2241,7 @@
         volver.addEventListener('click', function () {
           self._verTodos = false;
           self._pagina = 1;
-          self._filtrarSecciones();
+          self._repintarVista();
         });
         caja.appendChild(volver);
         return caja;
@@ -2245,26 +2249,40 @@
 
       const irA = function (n) {
         self._pagina = n;
-        self._filtrarSecciones();
+        self._repintarVista();
       };
+
+      // En una colección de una API STAC puede quedar más cosas en el servidor
+      // de las que hay cargadas: el enlace `next` que publica la API. En ese
+      // caso "Siguiente" pide la página en vez de solo mover el corte local.
+      const remoto = this._siguienteStacDe(datos);
+      const hayMas = remoto && !todos;
+      const cargando = remoto && remoto.cargando;
 
       const anterior = document.createElement('button');
       anterior.type = 'button';
       anterior.className = 'catalogo__pag-boton';
       anterior.textContent = 'Anterior';
-      anterior.disabled = this._pagina <= 1;
+      anterior.disabled = this._pagina <= 1 || !!cargando;
       anterior.addEventListener('click', function () { irA(self._pagina - 1); });
 
       const info = document.createElement('span');
       info.className = 'catalogo__paginador-info';
-      info.textContent = 'Página ' + this._pagina + ' de ' + paginas;
+      info.textContent = 'Página ' + this._pagina + ' de ' + paginas +
+        (cargando ? ' · cargando más…'
+          : (hayMas ? ' · sigue habiendo más en el servidor' : ''));
 
       const siguiente = document.createElement('button');
       siguiente.type = 'button';
       siguiente.className = 'catalogo__pag-boton';
       siguiente.textContent = 'Siguiente';
-      siguiente.disabled = this._pagina >= paginas;
-      siguiente.addEventListener('click', function () { irA(self._pagina + 1); });
+      siguiente.disabled = (this._pagina >= paginas && !hayMas) || !!cargando;
+      siguiente.addEventListener('click', function () {
+        // Si la página siguiente aún no está en memoria, se pide antes de
+        // pintar: si no, se acabaría en un "no hay nada más".
+        if (hayMas && self._pagina >= paginas) self._pedirMasStac(datos);
+        else irA(self._pagina + 1);
+      });
 
       const todosBtn = document.createElement('button');
       todosBtn.type = 'button';
@@ -2272,7 +2290,7 @@
       todosBtn.textContent = 'Ver los ' + encontrados;
       todosBtn.addEventListener('click', function () {
         self._verTodos = true;
-        self._filtrarSecciones();
+        self._repintarVista();
       });
 
       caja.appendChild(anterior);
@@ -2508,9 +2526,7 @@
           : 'Este catálogo todavía no tiene servicios predefinidos.');
         return;
       }
-      servicios.forEach(function (srv) {
-        caja.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
-      });
+      this._pintarFilasPaginadas(caja, servicios);
     }
 
     /**
@@ -2602,6 +2618,14 @@
         cache.datos = (nodo.entradas || []).map(function (e) {
           return Object.assign({}, e, { nombre: e.nombre, padre: nodo.url });
         });
+        // Estado de paginación de esta colección: cuántas entradas hay cargadas
+        // y dónde está la página siguiente (si la API la publica).
+        self._paginacionStac[nodo.url] = {
+          url: nodo.url,
+          cargados: cache.datos.length,
+          siguiente: nodo.urlItemsSiguiente || null,
+          cargando: false
+        };
         self._pintarCatalogo();
         if ((self._filtro || '').trim()) self._repintarLista();
       };
@@ -2615,12 +2639,144 @@
       cache.promesa = registro.leerNodoStac(url).then(function (nodo) {
         cache.promesa = null;
         self._pilaStac.push({ url: url, titulo: titulo });
+        self._pagina = 1;
         pintar(nodo);
         return nodo;
       }).catch(function (err) {
         cache.promesa = null;
         self._decir('No se ha podido abrir «' + titulo + '»: '
           + (err && err.message ? err.message : err), 'error');
+      });
+    }
+
+    /**
+     * Repinta la vista que toca con el paginador: las secciones del catálogo de
+     * la IDEE o la lista plana de los remotos (STAC, OGC API Records).
+     *
+     * El paginador se crea en los dos sitios, así que el botón tenía que saber
+     * a cuál volver. Antes iba siempre a _filtrarSecciones() y el "Anterior" de
+     * la lista de un STAC no hacía nada (medido).
+     */
+    _repintarVista() {
+      const tipo = this._catalogoActual();
+      if (tipo && this._listaEl && document.contains(this._listaEl)) {
+        this._repintarLista();
+        return;
+      }
+      this._filtrarSecciones();
+    }
+
+    /**
+     * El estado de paginación de la colección STAC a la que pertenece una
+     * sección, si esa sección viene de una API STAC.
+     *
+     * Se localiza por el `padre` que llevan las entradas de la colección, que es
+     * la URL del nodo STAC (ver _abrirNodoStac).
+     *
+     * @param {Object} datos
+     * @returns {Object|null}
+     */
+    _siguienteStacDe(datos) {
+      const servicios = [];
+      if (Array.isArray(datos)) {
+        servicios.push.apply(servicios, datos);
+      } else if (datos && Array.isArray(datos.familias)) {
+        for (let i = 0; i < datos.familias.length; i++) {
+          (datos.familias[i].servicios || []).forEach(function (s) { servicios.push(s); });
+        }
+      }
+      for (let i = 0; i < servicios.length; i++) {
+        const padre = servicios[i] && servicios[i].padre;
+        if (padre && this._paginacionStac[padre]) return this._paginacionStac[padre];
+      }
+      return null;
+    }
+
+    /**
+     * Pinta las filas de una lista plana, paginadas de TAMANIO_PAGINA en
+     * TAMANIO_PAGINA, con el paginador arriba y abajo.
+     *
+     * Las listas de los catálogos remotos (STAC y OGC API Records) enseñan
+     * TODO lo que hay cargado, que en una colección de satélite son ya 50
+     * escenas de Sentinel-2; de ahí que paginar. Y si la colección publica más
+     * páginas, el paginador lo pide en vez de quedarse en el final.
+     *
+     * @param {HTMLElement} caja Contenedor ya vacío.
+     * @param {Array<Object>} servicios La lista, ya filtrada si hay filtro.
+     * @returns {number} Cuántas filas se han pintado.
+     */
+    _pintarFilasPaginadas(caja, servicios) {
+      const self = this;
+      const total = servicios.length;
+      if (!total) return 0;
+
+      const remoto = this._siguienteStacDe(servicios);
+      const hayMas = !!(remoto && remoto.siguiente);
+      const paginas = Math.max(1, Math.ceil(total / TAMANIO_PAGINA));
+      // Con más páginas en el servidor se permite una página más allá de las
+      // cargadas: es la que está pidiendo el botón.
+      if (this._pagina > paginas && !hayMas) this._pagina = paginas;
+      if (this._pagina < 1) this._pagina = 1;
+
+      const desde = (this._pagina - 1) * TAMANIO_PAGINA;
+      const visibles = servicios.slice(desde, desde + TAMANIO_PAGINA);
+
+      if (paginas > 1 || hayMas) {
+        caja.appendChild(this._crearPaginador(paginas, total, false, servicios));
+      }
+      visibles.forEach(function (srv) {
+        caja.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
+      });
+      if (paginas > 1 || hayMas) {
+        caja.appendChild(this._crearPaginador(paginas, total, false, servicios));
+      }
+      return visibles.length;
+    }
+
+    /**
+     * Pide la página siguiente de una colección STAC y la suma a la lista.
+     *
+     * Una colección de una API STAC puede tener millones de elementos: la de
+     * Sentinel-2 de Earth Search declara 51.678.748 (medido), así que no cabe
+     * ni de broma. Se pide una página, y para seguir hay que seguir el enlace
+     * `rel="next"` que publica la API, cuyo token va en la URL (medido).
+     *
+     * @param {Object} datos La sección que se está pintando.
+     */
+    _pedirMasStac(datos) {
+      const estado = this._siguienteStacDe(datos);
+      if (!estado || !estado.siguiente || estado.cargando) return;
+      const registro = window.CatalogoRegistro;
+      if (!registro || typeof registro.leerPaginaStac !== 'function') {
+        this._decir('No se puede pedir la página siguiente: falta el lector STAC.', 'aviso');
+        return;
+      }
+      estado.cargando = true;
+      const destino = this._pagina + 1;
+      this._repintarLista();
+
+      registro.leerPaginaStac(estado.siguiente).then((pagina) => {
+        const tipo = this._catalogoActual();
+        const cache = (tipo && this._entradasPropias[tipo.id]) || null;
+        const nuevas = (pagina && pagina.entradas) || [];
+        if (cache && Array.isArray(cache.datos)) {
+          cache.datos = cache.datos.concat(nuevas.map(function (e) {
+            return Object.assign({}, e, { padre: estado.url });
+          }));
+        }
+        estado.cargando = false;
+        estado.siguiente = (pagina && pagina.siguiente) || null;
+        estado.cargados += nuevas.length;
+        // Se avanza a la página que se ha pedido: si no, el botón parecería
+        // que no hace nada, porque lo nuevo cae fuera de la ventana actual.
+        this._pagina = destino;
+        this._pintarCatalogo();
+        if ((this._filtro || '').trim()) this._repintarLista();
+      }).catch((err) => {
+        estado.cargando = false;
+        this._decir('No se ha podido pedir la página siguiente: '
+          + (err && err.message ? err.message : err), 'error');
+        this._repintarLista();
       });
     }
 
@@ -2702,9 +2858,7 @@
         return;
       }
       const self = this;
-      servicios.forEach(function (srv) {
-        caja.appendChild(self._filaServicio(srv, { tipo: srv.tipo || null }));
-      });
+      this._pintarFilasPaginadas(caja, servicios);
       this._pintarCuentaBuscador(servicios.length, todos.length || servicios.length);
     }
 

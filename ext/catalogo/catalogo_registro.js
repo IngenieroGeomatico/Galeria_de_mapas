@@ -257,6 +257,7 @@ function assetCargable(assets) {
 
     let entradas = hijos;
     let totalElementos = 0;
+    let urlItemsSiguiente = null;
 
     // Colección de una API STAC: sus elementos están en /items y no en el
     // documento, así que hay que ir a buscarlos. Y hay que pedirlos con tope:
@@ -268,33 +269,10 @@ function assetCargable(assets) {
       const j = parsear(await pedir(conTope), conTope);
       const feats = Array.isArray(j.features) ? j.features : [];
       totalElementos = Number(j.numberMatched || j.numberReturned || feats.length) || 0;
-      entradas = feats.map(function (f) {
-        const props = f.properties || {};
-        const assets = f.assets || {};
-        const claves = Object.keys(assets);
-        const gsd = props['gsd'] || props['proj:gsd'] || '';
-        const fecha = props.datetime || props.start_datetime || '';
-        const trozos = [];
-        if (fecha) trozos.push(String(fecha).slice(0, 10));
-        if (gsd) trozos.push(gsd + ' m/píxel');
-        if (claves.length) trozos.push(claves.length + ' assets');
-        // El botón de cargar solo aparece si el item tiene ALGÚN asset que la
-        // API sepa construir como capa. Con los COG de Earth Search no hay
-        // ninguno y el item se queda como información, que es lo honesto.
-        const bueno = assetCargable(assets);
-        return {
-          nombre: f.id || '(sin id)',
-          url: bueno ? bueno.url : ((assets.visual && assets.visual.href) || ''),
-          descripcion: trozos.join(' · '),
-          id: f.id || null,
-          tipo: bueno ? bueno.tipo : 'STAC',
-          cargable: !!bueno,
-          // Sin asset cargable, lo que se enseña del item es solo información:
-          // sus assets son ficheros (COG, JP2, GeoTIFF) y la API no construye
-          // capas con ellos. Un botón de cargar ahí solo podría fallar.
-          soloInfo: !bueno
-        };
-      });
+      entradas = entradasDeItems(feats);
+      // El enlace a la página siguiente, que es lo único que permite recorrer
+      // una colección entera: el token va en la URL y es un GET normal (medido).
+      urlItemsSiguiente = enlaceSiguiente(j, conTope);
     }
 
     return {
@@ -307,10 +285,90 @@ function assetCargable(assets) {
       temporal: leerTemporal(json),
       // La URL de los items de una colección de API, para cargarlos.
       urlItems: urlItems,
+      // Y la de la página siguiente, que es lo que permite seguir leyendo más
+      // allá de los primeros LIMITE_ITEMS_STAC.
+      urlItemsSiguiente: urlItemsSiguiente,
       totalElementos: totalElementos,
       entradas: entradas,
       esColeccionApi: esColeccionApi
     };
+  }
+
+  /**
+   * Una entrada de la lista del catálogo por cada item de una página.
+   * @param {Array<Object>} feats Los `features` de la respuesta.
+   * @returns {Array<Object>}
+   */
+  function entradasDeItems(feats) {
+    return feats.map(function (f) {
+      const props = f.properties || {};
+      const assets = f.assets || {};
+      const claves = Object.keys(assets);
+      const gsd = props['gsd'] || props['proj:gsd'] || '';
+      const fecha = props.datetime || props.start_datetime || '';
+      const trozos = [];
+      if (fecha) trozos.push(String(fecha).slice(0, 10));
+      if (gsd) trozos.push(gsd + ' m/píxel');
+      if (claves.length) trozos.push(claves.length + ' assets');
+      // El botón de cargar solo aparece si el item tiene ALGÚN asset que la
+      // API sepa construir como capa. Con los COG de Earth Search no hay
+      // ninguno y el item se queda como información, que es lo honesto.
+      const bueno = assetCargable(assets);
+      return {
+        nombre: f.id || '(sin id)',
+        url: bueno ? bueno.url : ((assets.visual && assets.visual.href) || ''),
+        descripcion: trozos.join(' · '),
+        id: f.id || null,
+        tipo: bueno ? bueno.tipo : 'STAC',
+        cargable: !!bueno,
+        // Sin asset cargable, lo que se enseña del item es solo información:
+        // sus assets son ficheros (COG, JP2, GeoTIFF) y la API no construye
+        // capas con ellos. Un botón de cargar ahí solo podría fallar.
+        soloInfo: !bueno
+      };
+    });
+  }
+
+  /**
+   * El enlace `rel="next"` de una respuesta de items, resuelto a URL absoluta.
+   *
+   * Las APIs STAC lo dan de dos maneras y hay que saber leer las dos: con el
+   * token en el href (GET, que es lo que hace Earth Search, medido) o con un
+   * cuerpo POST aparte. Con el cuerpo no se puede seguir en un `fetch` normal,
+   * así que aquí se devuelve null y quien llama sigue con lo que haya.
+   *
+   * @param {Object} json Respuesta de la API de items.
+   * @param {string} base La URL que se pidió, para resolver un href relativo.
+   * @returns {string|null}
+   */
+  function enlaceSiguiente(json, base) {
+    const enlaces = (json && Array.isArray(json.links)) ? json.links : [];
+    for (let i = 0; i < enlaces.length; i++) {
+      const l = enlaces[i];
+      if (!l || l.rel !== 'next' || !l.href) continue;
+      const metodo = String(l.method || 'GET').toUpperCase();
+      if (metodo !== 'GET') return null;
+      return resolver(base, l.href);
+    }
+    return null;
+  }
+
+  /**
+   * Lee la página siguiente de los items de una colección de una API STAC.
+   *
+   * No se invoca sola: el paginador la pide cuando el usuario quiere ver más de
+   * los primeros `LIMITE_ITEMS_STAC`, y lo que devuelva se suma a los ya
+   * cargados.
+   *
+   * @param {string} urlPagina La URL del enlace `rel="next"`.
+   * @returns {Promise<{entradas: Array<Object>, siguiente: (string|null)}>}
+   */
+  async function leerPaginaStac(urlPagina) {
+    const destino = String(urlPagina || '').trim();
+    if (!destino) return { entradas: [], siguiente: null };
+    const j = parsear(await pedir(destino), destino);
+    const feats = Array.isArray(j.features) ? j.features : [];
+    return { entradas: entradasDeItems(feats), siguiente: enlaceSiguiente(j, destino) };
   }
 
   /**
@@ -591,6 +649,7 @@ function assetCargable(assets) {
     // Lectura de UN nodo STAC con sus hijos y su padre: es lo que permite bajar
     // por el árbol de un catálogo y volver a subir (ver _abrirNodoStac).
     leerNodoStac: leerNodoStac,
+    leerPaginaStac: leerPaginaStac,
     todos: todos,
     porId: porId,
     alta: alta,
