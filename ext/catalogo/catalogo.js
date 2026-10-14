@@ -65,6 +65,94 @@
     return window.IDEE || window.M;
   }
 
+  // =====================================================================
+  //  Extensiones de formato: MVT y GeoTIFF
+  // =====================================================================
+  // El catálogo YA sabe deducir y construir estos dos formatos: están en
+  // TIPOS_API de catalogo_url.js y en ASSETS_CARGABLES de catalogo_registro.js,
+  // y una escena de satélite llega al mapa como GeoTIFF sin tocar nada.
+  //
+  // Lo que faltaba era que la API supiera hacerlos. El bundle de Cesium declara
+  // `IDEE.layer.MVT` y `IDEE.layer.GeoTIFF` pero deja sus implementaciones como
+  // módulos vacíos (medido: `IDEE.impl.layer.GeoTIFF` es undefined), así que en 3D
+  // la capa no hay quien la dibuje y construirlas falla con "La implementación
+  // usada no puede crear capas GeoTIFF". Las implementaciones están en
+  // ext/MVTLayer y ext/geotiffLayer, que registran una fachada propia y solo
+  // tocan la API cuando hay que hacerlo.
+  //
+  // Se cargan AQUÍ y no con dos <script> en el HTML de cada visualizador: quien
+  // pone el catálogo quiere el catálogo, y no debería tener que acordarse de
+  // añadir además las piezas de dos formatos. En 2D los dos plugins no hacen nada
+  // (solo sustituyen la fachada cuando detectan Cesium), así que cargarlos siempre
+  // es inocuo.
+  //
+  // La ruta se resuelve contra la de ESTE fichero y no contra la del documento:
+  // los visualizadores cuelgan de mapas/<nombre>/index.html a distinta profundidad,
+  // y un '../' a pelo se rompería en cuanto uno cambiara de sitio.
+
+  /** URL de este propio fichero, para resolver las de los plugins vecinos. */
+  const RUTA_PROPIA = (function () {
+    const s = document.currentScript;
+    if (s && s.src) return s.src;
+    // Respaldo: si este fichero se cargara diferido o como módulo,
+    // `currentScript` ya es null, pero el <script> sigue en el documento.
+    const lista = document.getElementsByTagName('script');
+    for (let i = lista.length - 1; i >= 0; i--) {
+      const src = lista[i].src || '';
+      if (/catalogo\/catalogo\.js(\?|#|$)/.test(src)) return src;
+    }
+    return '';
+  })();
+
+  /** Plugins que traen las implementaciones que a la API le faltan. */
+  const EXTENSIONES_FORMATO = [
+    { clase: 'miPlugin_MVTLayer', fichero: '../MVTLayer/MVTLayer.js' },
+    { clase: 'miPlugin_geotiffLayer', fichero: '../geotiffLayer/geotiffLayer.js' }
+  ];
+
+  /** Promesa de la carga, para no volver a pedir los scripts por cada mapa. */
+  let _cargaFormatos = null;
+
+  /**
+   * Carga los plugins de formato que falten y resuelve cuando están.
+   *
+   * Si ya están (porque el visualizador los trajo en su HTML, o porque es el
+   * segundo mapa que se crea tras un cambio 2D/3D) no se vuelve a pedir nada.
+   *
+   * @returns {Promise<void>}
+   */
+  function cargarExtensionesDeFormato() {
+    if (_cargaFormatos) return _cargaFormatos;
+
+    _cargaFormatos = new Promise(function (resolver) {
+      const IDEE = api();
+      const faltan = EXTENSIONES_FORMATO.filter(function (e) {
+        return !((window[e.clase] && typeof window[e.clase] === 'function') ||
+                 (IDEE && IDEE.plugin && typeof IDEE.plugin[e.clase] === 'function'));
+      });
+      if (!faltan.length) { resolver(); return; }
+
+      const base = RUTA_PROPIA || document.baseURI;
+      let pendientes = faltan.length;
+      faltan.forEach(function (e) {
+        const s = document.createElement('script');
+        s.src = new URL(e.fichero, base).href;
+        s.async = false;
+        const fallo = function () {
+          console.warn('catalogo: no se pudo cargar ' + e.fichero +
+            ', así que ese formato solo funciona en 2D.');
+          if (--pendientes === 0) resolver();
+        };
+        s.onload = function () {
+          if (--pendientes === 0) resolver();
+        };
+        s.onerror = fallo;
+        document.head.appendChild(s);
+      });
+    });
+    return _cargaFormatos;
+  }
+
   /**
    * Envuelve contenido suelto de un SVG en un `<svg>` de 24x24, que es la medida
    * en la que vienen dibujados casi todos los iconos.
@@ -722,6 +810,13 @@
       this._panel = null;
       this._control = null;
 
+      // Mapas en los que YA se han registrado los plugins de formato (MVT y
+      // GeoTIFF), para no registrar dos veces los mismos en el mismo mapa. Es un
+      // WeakMap y no un booleano porque el mismo plugin puede vivir con dos
+      // mapas distintos, y porque tras un cambio 2D/3D `mapa()` crea una
+      // instancia nueva con un mapa nuevo, que sí hay que registrar.
+      this._formatosPorMapa = new WeakMap();
+
       // Configuración de visualización y posición del panel
       this.position = options.position || 'TR';
       this.collapsible = (options.collapsible !== undefined) ? Boolean(options.collapsible) : true;
@@ -932,6 +1027,43 @@
 
       this._aplicarIcono(this._elementoPanel(panel));
       // No se refresca la lista aquí: la vista del control todavía no existe.
+
+      // ── MVT y GeoTIFF en 3D ───────────────────────────────────────────
+      // Van aparte porque llegan por red y no pueden estar listos al construir el
+      // mapa. Se registran sobre este mapa una sola vez.
+      this._registrarExtensionesDeFormato(map);
+    }
+
+    /**
+     * Carga los plugins de MVT y GeoTIFF y los registra en el mapa.
+     *
+     * El registro va dentro del.then() a propósito: se llama a `map.addPlugin`
+     * desde otro turno porque aquí la API está iterando sus plugins, y meter uno
+     * más en mitad de la vuelta es pedir que se lo salte.
+     *
+     * @param {Object} map
+     */
+    _registrarExtensionesDeFormato(map) {
+      if (this._formatosPorMapa.get(map)) return;
+      this._formatosPorMapa.set(map, true);
+
+      const mapa = map;
+      cargarExtensionesDeFormato().then(function () {
+        const IDEE = api();
+        EXTENSIONES_FORMATO.forEach(function (e) {
+          // Se mira primero en `window`: tras un cambio 2D/3D el bundle crea un
+          // IDEE.plugin nuevo, pero el global directo persiste y el coordinador
+          // de cambioImpl lo vuelve a colgar ahí (miPlugin_*).
+          const clase = window[e.clase] ||
+            (IDEE && IDEE.plugin && IDEE.plugin[e.clase]);
+          if (typeof clase !== 'function') {
+            console.warn('catalogo: ' + e.clase + ' no se ha registrado.');
+            return;
+          }
+          try { mapa.addPlugin(new clase()); }
+          catch (err) { console.warn('catalogo: no se pudo registrar ' + e.clase + '.', err); }
+        });
+      });
     }
 
     /**

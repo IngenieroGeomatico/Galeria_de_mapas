@@ -1442,8 +1442,13 @@ class miPlugin_layerSwitcher {
     };
 
     /**
-     * Calcula la extensión de una capa y se la pasa a `hecho`, reintentando hasta
-     * cuatro veces con medio segundo de margen mientras no aparezca.
+     * Calcula la extensión de una capa y se la pasa a `hecho`, reintentando
+     * mientras no aparezca.
+     *
+     * El margen es corto en el caso normal, porque casi todo o llega ya o no
+     * llega nunca, y largo solo mientras la capa siga cargándose de verdad: un
+     * GeoTIFF en 3D se pinta en 9,4 s y hay que aguantar hasta entonces.
+     *
      * @param {Object} capa
      * @param {Function} hecho Recibe la extensión o null.
      * @param {number} [intento]
@@ -1452,8 +1457,9 @@ class miPlugin_layerSwitcher {
       const n = intento || 0;
       const ext = _extensionUtil(capa);
       if (ext) { hecho(ext); return; }
-      if (n >= 4) { hecho(null); return; }
-      setTimeout(function () { _conExtension(capa, hecho, n + 1); }, 600);
+      const maxIntentos = _capaCargando(capa) ? 22 : n;
+      if (n >= maxIntentos) { hecho(null); return; }
+      setTimeout(function () { _conExtension(capa, hecho, n + 1); }, (n < 4) ? 600 : 900);
     }
 
     /**
@@ -1508,10 +1514,12 @@ class miPlugin_layerSwitcher {
     function _extensionUtil(capa) {
       const propias = [];
       const visitar = (c) => {
-        // Primero lo que dice la API, y si no hay nada, la rejilla de la fuente.
+        // Primero lo que dice la API, y si no hay nada, la rejilla de la fuente
+        // (2D) o la caja que pinta el lector (3D).
         let ext = null;
         try { ext = c.getMaxExtent(); } catch (e) { ext = null; }
         if (!(_esExtension(ext))) ext = _extensionDeLaRejilla(c);
+        if (!(_esExtension(ext))) ext = _extensionDeLaCaja(c);
         if (_esExtension(ext)) propias.push(ext.slice(0, 4).map(Number));
         let hijas = [];
         try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
@@ -1563,18 +1571,70 @@ class miPlugin_layerSwitcher {
      * @returns {Array<number>|null} [x0, y0, x1, y1] en la proyección del mapa.
      */
     function _extensionDeLaRejilla(capa) {
-      const impl = (capa && typeof capa.getImpl === 'function') ? capa.getImpl() : null;
+      let impl = null;
+      try { impl = (capa && typeof capa.getImpl === 'function') ? capa.getImpl() : null; } catch (e) { return null; }
       if (!impl || !impl.olLayer || typeof impl.olLayer.getSource !== 'function') return null;
-      const fuente = impl.olLayer.getSource();
-      if (!fuente || !fuente.tileGrid || typeof fuente.tileGrid.getExtent !== 'function') return null;
-      const cruda = fuente.tileGrid.getExtent();
-      const ext = Array.isArray(cruda) ? cruda : (cruda && cruda.getExtent ? cruda.getExtent() : null);
-      if (!Array.isArray(ext) || ext.length < 4 || !ext.slice(0, 4).every(isFinite)) return null;
+      // A partir de aquí se toca una implementación ajena, con fuentes y rejillas
+      // que pueden pedir cosas raras. Nada de esto puede dejar el botón a medias,
+      // así que va entero en un try y, si algo falla, no hay extensión.
+      try {
+        const fuente = impl.olLayer.getSource();
+        if (!fuente || !fuente.tileGrid || typeof fuente.tileGrid.getExtent !== 'function') return null;
+        const cruda = fuente.tileGrid.getExtent();
+        const ext = Array.isArray(cruda) ? cruda : (cruda && cruda.getExtent ? cruda.getExtent() : null);
+        if (!Array.isArray(ext) || ext.length < 4 || !ext.slice(0, 4).every(isFinite)) return null;
 
-      const desde = (fuente.projection && typeof fuente.projection.getCode === 'function')
-        ? fuente.projection.getCode() : 'EPSG:3857';
-      const hasta = _codigoDeLaProyeccion();
-      return hasta ? _reproyectar(ext.slice(0, 4), desde, hasta) : ext.slice(0, 4);
+        const desde = (fuente.projection && typeof fuente.projection.getCode === 'function')
+          ? fuente.projection.getCode() : 'EPSG:3857';
+        const hasta = _codigoDeLaProyeccion();
+        return hasta ? _reproyectar(ext.slice(0, 4), desde, hasta) : ext.slice(0, 4);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Extensión de una capa GeoTIFF en 3D, por la caja que pinta el lector.
+     *
+     * En Cesium la escena no la dibuja OpenLayers sino el `LectorGeoTIFF` de
+     * ext/geotiffLayer, que abre el fichero, elige un escalón de la pirámide y lo
+     * pinta en un lienzo. El sitio que ocupa es el rectángulo del propio COG, en
+     * GRADOS: `[-55.2025, 1.71994, -54.21427, 2.71095]` para una tesela de
+     * Sentinel-2 (medido). Lo publica la fachada 3D como `impl.getBoundingBox()`,
+     * que devuelve `null` mientras el lector no ha terminado (medido: con un COG
+     * de 112 MB tarda 9,4 s, contra los 1,1 s que tarda la cabecera en 2D).
+     *
+     * `getMaxExtent()` no sirve aquí: sin extensión de usuario devuelve la de la
+     * proyección, que en Cesium es el mundo entero `[-180, -90, 180, 90]`.
+     *
+     * @param {Object} capa
+     * @returns {Array<number>|null} [oeste, sur, este, norte] en grados.
+     */
+    function _extensionDeLaCaja(capa) {
+      const impl = (capa && typeof capa.getImpl === 'function') ? capa.getImpl() : null;
+      if (!impl || typeof impl.getBoundingBox !== 'function') return null;
+      let caja = null;
+      try { caja = impl.getBoundingBox(); } catch (e) { caja = null; }
+      return _esExtension(caja) ? caja.slice(0, 4) : null;
+    }
+
+    /**
+     * ¿La capa sigue cargándose de verdad? De esto depende cuánto se insiste
+     * antes de decir que no hay a dónde ir.
+     *
+     * Solo se mira el GeoTIFF de 3D, que es el caso con una espera larga
+     * justificada. En 2D no se pregunta a la fuente si tiene rejilla porque no
+     * hay forma de distinguir "aún no ha leído la cabecera" de "es un WMS, que no
+     * lleva rejilla nunca", y con esa prueba un WMS esperaría inútilmente.
+     *
+     * @param {Object} capa
+     * @returns {boolean}
+     */
+    function _capaCargando(capa) {
+      let impl = null;
+      try { impl = (capa && typeof capa.getImpl === 'function') ? capa.getImpl() : null; } catch (e) { return false; }
+      if (!impl || typeof impl.getBoundingBox !== 'function') return false;
+      try { return !impl.getBoundingBox(); } catch (e) { return false; }
     }
 
     /** Código de la proyección que tiene el mapa ahora mismo. */
