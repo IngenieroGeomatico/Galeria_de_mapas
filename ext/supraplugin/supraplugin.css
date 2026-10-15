@@ -224,21 +224,20 @@
 .supra-bar__cuerpo {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
   flex: 1 1 auto;
   min-height: 0;
   max-height: 70vh; /* techo para que un cuerpo enorme no se salga */
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 6px 10px 8px;
+  padding: 6px 12px 8px;
   border-radius: 0 0 11px 11px;
   transition: max-height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
               opacity 0.2s ease,
               padding 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.supra-bar--bottom .supra-bar__cuerpo { border-radius: 0 0 11px 11px; padding: 6px 10px 8px; }
+.supra-bar--bottom .supra-bar__cuerpo { border-radius: 0 0 11px 11px; padding: 6px 12px 8px; }
 
 /* PLEGADA: el cuerpo se colapsa y sólo queda la cabecera con el tirador. */
 .supra-bar--plegada .supra-bar__cuerpo {
@@ -262,6 +261,16 @@
 
 /* ---- Título ----------------------------------------------------------- */
 .supra-bar__titulo {
+  /* Va en absoluto y fuera del flujo: los iconos van centrados en la barra
+     entera, y si el titulo participara del flex, lo que se centraría sería
+     el grupo (titulo + iconos), con los iconos corridos hacia la derecha.
+     Con el titulo fuera, .supra-bar__items ocupa todo el ancho y sus
+     iconos quedan en el centro. En pantallas estrechas se apaga (ver el
+     bloque responsive de abajo) para que no se pisen. */
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -410,4 +419,13 @@
   .supra-bar__cuerpo { gap: 8px; padding: 5px 8px 6px; }
   .supra-bar__titulo { font-size: 12px; }
   .supra-bar__boton { height: 30px; padding: 0 10px; }
+}
+/* Etiqueta del boton, cuando el visualizador pone `conTexto: true` en el
+   constructor de la barra. Por defecto los botones de la barra son solo icono
+   (el nombre sale en el title al pasar por encima). */
+.supra-bar__boton:not(.supra-bar__boton--solo) .supra-bar__boton-texto {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  color: inherit;
 }

@@ -4006,7 +4006,10 @@ _vistaActualEnGrados() {
 
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'supra-bar__boton supra-bar__boton--solo catalogo-supra__boton';
+      // Con `conTexto` en el constructor de la barra el boton lleva tambien
+      // su etiqueta; sin ella es solo icono (y cuadrado, por --solo).
+      const conTexto = !!(this.supra && this.supra.options && this.supra.options.conTexto);
+      btn.className = 'supra-bar__boton ' + (conTexto ? '' : 'supra-bar__boton--solo ') + 'catalogo-supra__boton';
       btn.title = (this.options.tituloBarra || 'Catalogo');
       btn.setAttribute('aria-label', (this.options.tituloBarra || 'Catalogo'));
       btn.setAttribute('aria-expanded', 'false');
@@ -4020,6 +4023,12 @@ _vistaActualEnGrados() {
       texto.textContent = (this.options.tituloBarra || 'Catalogo');
 
       btn.appendChild(icono);
+        if (conTexto) {
+          const texto = document.createElement("span");
+          texto.className = "supra-bar__boton-texto";
+          texto.textContent = btn.title;
+          btn.appendChild(texto);
+        }
       btn.addEventListener('click', function (evt) {
         evt.preventDefault();
         // El gesto se queda aqui: la API registra un cierre de paneles al pulsar

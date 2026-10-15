@@ -940,7 +940,10 @@ class miPlugin_cambioImpl {
 
           const btn = document.createElement("button");
           btn.type = "button";
-          btn.className = "supra-bar__boton supra-bar__boton--solo cambio-supra__boton";
+          // Con `conTexto` en el constructor de la barra el boton lleva tambien
+          // su etiqueta; sin ella es solo icono (y cuadrado, por --solo).
+          const conTexto = !!(this.supra && this.supra.options && this.supra.options.conTexto);
+          btn.className = 'supra-bar__boton ' + (conTexto ? '' : 'supra-bar__boton--solo ') + 'cambio-supra__boton';
           const nombre = this.options.buttonTitle || "Cambiar de implementacion";
           btn.title = nombre;
           btn.setAttribute("aria-label", nombre);
@@ -951,6 +954,12 @@ class miPlugin_cambioImpl {
           icono.setAttribute("aria-hidden", "true");
 
           btn.appendChild(icono);
+            if (conTexto) {
+              const texto = document.createElement("span");
+              texto.className = "supra-bar__boton-texto";
+              texto.textContent = btn.title;
+              btn.appendChild(texto);
+            }
 
           wrap.appendChild(btn);
           this._supraBoton = btn;
