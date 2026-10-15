@@ -2367,8 +2367,10 @@
         botonHuella.title = 'Ver en el mapa dónde está este elemento';
         // Al pasar el ratón se muestra la huella sin añadirla: es un adelanto
         // de dónde está la escena. Al hacer clic se queda en el mapa.
+        // En el preview NO se encuadra: el usuario está mirando su zona y
+        // mover la vista sin que la haya pedido sería peor que no verla.
         botonHuella.addEventListener('mouseenter', function () {
-          self._verHuella(srv, { preview: true });
+          self._verHuella(srv, { preview: true, sinEncuadre: true });
         });
         botonHuella.addEventListener('mouseleave', function () {
           self._quitarHuellaPreview();
@@ -2784,6 +2786,7 @@
       const map = this._map;
       const api = window.IDEE || window.M;
       const esPreview = !!(opciones && opciones.preview);
+      const sinEncuadre = !!(opciones && opciones.sinEncuadre);
       if (!map || !srv) return;
       if (!(api && api.layer && typeof api.layer.GeoJSON === 'function')) {
         this._decir('Este visor no puede dibujar la huella.', 'aviso');
@@ -2862,7 +2865,7 @@
         else this._quitarHuella();
         return;
       }
-      if (srv.bbox) this._encuadrarHuella(srv.bbox);
+      if (srv.bbox && !sinEncuadre) this._encuadrarHuella(srv.bbox);
     }
 
     /**

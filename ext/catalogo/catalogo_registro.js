@@ -177,19 +177,22 @@
   /**
    * La huella de una colección o de un item, como [oeste, sur, este, norte].
    *
-   *  OJO con las colecciones: casi todas declaran el mundo entero (medido: las
-   *  nueve de Earth Search menos `naip`, que va de Alaska a Florida con
-   *  [-160, 17, -67, 50]), así que una huella mundial no dice nada y se devuelve
-   *  nula para no pintar un botón de zoom que lleva al planeta entero.
+   *  A un item nunca se le muestra el mundo: su escena es un cuadrilátero de un
+   *  par de grados y encuadrar el planeta no dice nada.
+   *
+   *  A una colección sí: hay colecciones mundiales (ocho de las nueve de Earth
+   *  Search), y si su cobertura es el mundo, el mundo es lo que hay que enseñar.
+   *  Se distingue con `esColeccion`.
    *
    * @param {Array<number>} bbox
+   * @param {boolean} [esColeccion=false]
    * @returns {Array<number>|null}
    */
-  function huellaDe(bbox) {
+  function huellaDe(bbox, esColeccion) {
     if (!Array.isArray(bbox) || bbox.length < 4) return null;
     const n = bbox.slice(0, 4).map(Number);
     if (!n.every(isFinite)) return null;
-    if (n[0] <= -180 && n[1] <= -90 && n[2] >= 180 && n[3] >= 90) return null;
+    if (!esColeccion && n[0] <= -180 && n[1] <= -90 && n[2] >= 180 && n[3] >= 90) return null;
     return n;
   }
 
@@ -389,10 +392,10 @@
       licencia: (json.license || (Array.isArray(json.licenses) && json.licenses[0]
         ? (json.licenses[0].name || json.licenses[0]) : '')) || '',
       temporal: leerTemporal(json),
-      // La huella, solo si dice algo: la mayoría de las colecciones son
-      // mundiales y su bbox es el mundo entero (medido).
+      // La huella de la colección, que sí puede ser el mundo: hay colecciones
+      // mundiales y su cobertura es el planeta entero.
       bbox: huellaDe(json.extent && json.extent.spatial
-        && Array.isArray(json.extent.spatial.bbox) ? json.extent.spatial.bbox[0] : null),
+        && Array.isArray(json.extent.spatial.bbox) ? json.extent.spatial.bbox[0] : null, true),
       // Los metadatos de resumen, que antes no se leian (ver leerResumenes).
       resumenes: leerResumenes(json),
       proveedores: (Array.isArray(json.providers) ? json.providers : [])
@@ -444,7 +447,7 @@
       // ninguno y el item se queda como información, que es lo honesto.
       const bueno = assetCargable(assets);
       const geometria = (f.geometry && f.geometry.type === 'Polygon') ? f.geometry : null;
-      const bbox = huellaDe(f.bbox) || cajaDe(geometria);
+      const bbox = huellaDe(f.bbox, false) || cajaDe(geometria);
       return {
         nombre: f.id || '(sin id)',
         url: bueno ? bueno.url : ((assets.visual && assets.visual.href) || ''),
