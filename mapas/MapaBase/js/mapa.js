@@ -119,10 +119,13 @@ function mapa() {
     }),
 
     // OGC API Records: catálogos de metadatos. Admite /records y /collections.
+    // La URL apunta al listado de colecciones, no a los items de una concreta:
+    // el lector decide con lo que conteste y saca el enlace a /items de cada
+    // colección. Antes apuntaba a cwtepcat2, que ya no existe en cubeWerx.
     new IDEE.catalog.OGCAPIRecords({
       nombre: 'Catálogo de ejemplo (cubeWerx)',
       descripcion: 'Registros de metadatos en un OGC API Records',
-      url: 'https://test.cubewerx.com/cubewerx/cubeserv/default/ogcapi/catalogues/collections/cwtepcat2/items?f=json'
+      url: 'https://test.cubewerx.com/cubewerx/cubeserv/default/ogcapi/catalogues/collections?f=json'
     }),
 
     new IDEE.catalog.custom({

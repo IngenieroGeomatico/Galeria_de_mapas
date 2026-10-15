@@ -2801,13 +2801,21 @@
         capa = new api.layer.GeoJSON({ name: nombre, source: fuente });
         // Relleno suave y contorno marcado: una escena de satélite es una
         // cuadrilátero de un par de grados y sin contraste no se ve.
+        // En Cesium, además, se extruye el polígono: plano sobre el elipsoide
+        // apenas se ve desde un ángulo oblicuo, y con un prisma de 1 km de
+        // altura se distingue desde cualquier punto de vista.
+        const impl = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
+        const escena = (impl && impl.scene) ? impl.scene : null;
+        const esCesium = !!(escena && escena.camera);
+        const opcionesEstilo = {
+          polygon: {
+            fill: { color: '#1f6feb', opacity: 0.18 },
+            stroke: { color: '#1f6feb', width: 2 }
+          }
+        };
+        if (esCesium) opcionesEstilo.polygon.extrudedHeight = 1000;
         if (typeof capa.setStyle === 'function' && api.style && api.style.Generic) {
-          capa.setStyle(new api.style.Generic({
-            polygon: {
-              fill: { color: '#1f6feb', opacity: 0.18 },
-              stroke: { color: '#1f6feb', width: 2 }
-            }
-          }));
+          capa.setStyle(new api.style.Generic(opcionesEstilo));
         }
       } catch (e) {
         this._decir('No se ha podido crear la capa de la huella: '
