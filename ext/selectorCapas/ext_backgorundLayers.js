@@ -46,6 +46,12 @@ class miPlugin_baseLayer {
     this._activeLayerId = null;
     // Referencia al panel IDEE (para preservar abierto/colapsado en el swap 2D/3D)
     this._panel = null;
+    // Barra supraplugin anadida (ver getSupraElement mas abajo):
+    // boton en la barra y panel en el mapa.
+    this.supra = null;
+    this._supraWrap = null;
+    this._supraBoton = null;
+    this._syncDoc = null;
   }
 
   // Devuelve {active, deactive} a partir de un color simple o un objeto.
@@ -64,6 +70,134 @@ class miPlugin_baseLayer {
         success(html);
       }),
     };
+  }
+
+  // ── Item del supraplugin: el boton vive en la barra, el panel en el mapa ──
+  // Colgado con `supra.addItem(this)`, la barra pone aqui el boton y el panel
+  // sigue siendo el que `addTo(map)` coloca en el mapa: la barra solo cambia
+  // donde esta el mando. Por eso el boton redondo que la API pinta en el area
+  // (BUTTON.m-panel-btn) se esconde, para no dejar dos puertas al mismo panel.
+  //
+  // El boton reutiliza las clases de la barra (supra-bar__boton y las suyas) a
+  // proposito: hereda solos el tema claro/oscuro y el color de marca por las
+  // variables --supra-*, sin duplicar aqui la paleta.
+  getSupraElement(supra) {
+    this.supra = supra || null;
+    this._supraWrap = this._construirSupraUI();
+    this._ocultarBotonDelMapa();
+    this._sincronizarSupra();
+    return this._supraWrap;
+  }
+
+  // Construye el boton de la barra. Devuelve el nodo raiz que se mete en la
+  // ranura del item.
+  _construirSupraUI() {
+    const self = this;
+    const wrap = document.createElement('div');
+    wrap.className = 'bl-supra__wrap';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'supra-bar__boton bl-supra__boton';
+    btn.title = (this.options.tituloBarra || this.options.title || 'Capas base');
+    btn.setAttribute('aria-expanded', 'false');
+
+    const icono = document.createElement('span');
+    icono.className = 'supra-bar__boton-icono bl-supra__icono';
+    icono.setAttribute('aria-hidden', 'true');
+
+    const texto = document.createElement('span');
+    texto.className = 'supra-bar__boton-texto';
+    texto.textContent = (this.options.tituloBarra || this.options.title || 'Capas base');
+
+    btn.appendChild(icono);
+    btn.appendChild(texto);
+    btn.addEventListener('click', function (evt) {
+      evt.preventDefault();
+      // El gesto se queda aqui: la API registra un cierre de paneles al pulsar
+      // fuera, y el click se propagaria hasta el suyo.
+      evt.stopPropagation();
+      self._alternarPanelDesdeBarra();
+    });
+
+    wrap.appendChild(btn);
+    this._supraBoton = btn;
+
+    // El panel tambien se pliega desde fuera (la API lo cierra al pulsar fuera),
+    // asi que el boton se resincroniza en cada clic del documento. Va en fase de
+    // captura para que lo vea aunque alguien detenga la propagacion.
+    if (!this._syncDoc && typeof document !== 'undefined') {
+      this._syncDoc = function () { self._sincronizarSupra(); };
+      document.addEventListener('click', this._syncDoc, true);
+    }
+
+    return wrap;
+  }
+
+  // Abre el panel si esta plegado y lo pliega si esta abierto.
+  _alternarPanelDesdeBarra() {
+    if (!this._panel) return;
+    try {
+      if (this._panelColapsado()) this._panel.open();
+      else this._panel.collapse();
+    } catch (e) {
+      console.warn('[miPlugin_baseLayer] no se pudo alternar el panel:', e);
+    }
+    this._sincronizarSupra();
+  }
+
+  // ¿Esta el panel plegado? Misma cadena de recursos que usa getState(), para
+  // que el boton y el estado guardado no se contradigan.
+  _panelColapsado() {
+    if (!this._panel) return true;
+    if (this._panel._collapsed !== undefined) return !!this._panel._collapsed;
+    if (typeof this._panel.isCollapsed === 'function') {
+      try { return !!this._panel.isCollapsed(); } catch (e) { /* sigue */ }
+    }
+    if (typeof this._panel.getElement === 'function') {
+      const el = this._panel.getElement();
+      return el ? el.classList.contains('collapsed') : true;
+    }
+    return true;
+  }
+
+  _sincronizarSupra() {
+    if (!this._supraBoton) return;
+    const abierto = !this._panelColapsado();
+    this._supraBoton.classList.toggle('supra-bar__boton--activo', abierto);
+    this._supraBoton.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+  }
+
+  // Esconde el boton propio de la API mientras el plugin viva en la barra.
+  _ocultarBotonDelMapa() {
+    const el = this._elementoPanel();
+    if (el) el.classList.add('g-panel-en-barra');
+  }
+
+  // Restaura el boton de la API y suelta el boton de la barra.
+  _destruirSupra() {
+    if (this._syncDoc && typeof document !== 'undefined') {
+      document.removeEventListener('click', this._syncDoc, true);
+    }
+    this._syncDoc = null;
+    const el = this._elementoPanel();
+    if (el) el.classList.remove('g-panel-en-barra');
+    if (this._supraWrap && this._supraWrap.parentNode) {
+      this._supraWrap.parentNode.removeChild(this._supraWrap);
+    }
+    this._supraWrap = null;
+    this._supraBoton = null;
+    this.supra = null;
+  }
+
+  // El nodo del panel, por el camino que lo fue la API.
+  _elementoPanel() {
+    try {
+      return (this._panel && typeof this._panel.getElement === 'function')
+        ? this._panel.getElement() : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   // ── Coordinación de estado (swap 2D/3D con cambioImpl) ───────────────
@@ -122,6 +256,7 @@ class miPlugin_baseLayer {
         console.warn('[miPlugin_baseLayer] Error al restaurar el estado del panel:', e);
       }
     }
+    this._sincronizarSupra();
 
     if (!state.activeLayerId) return;
     const targetId = String(state.activeLayerId);
@@ -401,6 +536,7 @@ class miPlugin_baseLayer {
   // referencias. Los listeners de los radios viven dentro del HTML del panel,
   // asi que se van con el.
   destroy() {
+      this._destruirSupra();
     try {
       if (this._map && this._control) this._map.removeControls([this._control]);
     } catch (e) { /* ignora si el mapa o el control ya no estan */ }

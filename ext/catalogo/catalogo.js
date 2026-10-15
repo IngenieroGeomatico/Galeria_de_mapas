@@ -823,6 +823,12 @@
 
       this._map = null;
       this._panel = null;
+      // Barra supraplugin anadida (ver getSupraElement mas abajo):
+      // boton en la barra y panel en el mapa.
+      this.supra = null;
+      this._supraWrap = null;
+      this._supraBoton = null;
+      this._syncDoc = null;
       this._control = null;
 
       // Mapas en los que YA se han registrado los plugins de formato (MVT y
@@ -3963,6 +3969,151 @@ _vistaActualEnGrados() {
       return true;
     }
 
+    // ── Item del supraplugin: el boton vive en la barra, el panel en el mapa ──
+    // Colgado con `supra.addItem(this)`, la barra pone aqui el boton y el panel
+    // sigue siendo el que `addTo(map)` coloca en el mapa: la barra solo cambia
+    // donde esta el mando. Por eso el boton redondo que la API pinta en el area
+    // (BUTTON.m-panel-btn) se esconde, para no dejar dos puertas al mismo panel.
+    //
+    // El boton reutiliza las clases de la barra (supra-bar__boton y las suyas) a
+    // proposito: hereda solos el tema claro/oscuro y el color de marca por las
+    // variables --supra-*, sin duplicar aqui la paleta.
+    getSupraElement(supra) {
+      this.supra = supra || null;
+      this._supraWrap = this._construirSupraUI();
+      this._ocultarBotonDelMapa();
+      this._sincronizarSupra();
+      this._iconoEnBarra();
+      return this._supraWrap;
+    }
+
+    // El icono propio del plugin (--g-plugin-icon-mask, el mismo que pinta su
+    // boton del mapa) se lleva tambien al boton de la barra. Sin icono propio se
+    // queda el glifo de la fuente de la API que pone catalogo.css.
+    _iconoEnBarra() {
+      if (!this.icon || !this._supraBoton) return;
+      const url = urlDeIcono(this.icon);
+      if (!url) return;
+      try {
+        this._supraBoton.style.setProperty('--g-plugin-icon-mask', url);
+        const icono = this._supraBoton.querySelector('.catalogo-supra__icono');
+        if (icono) icono.classList.add('catalogo-supra__icono--mascara');
+      } catch (e) {
+        console.warn(this.name + ': no se pudo aplicar el icono en la barra.', e);
+      }
+    }
+
+    // Construye el boton de la barra. Devuelve el nodo raiz que se mete en la
+    // ranura del item.
+    _construirSupraUI() {
+      const self = this;
+      const wrap = document.createElement('div');
+      wrap.className = 'catalogo-supra__wrap';
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'supra-bar__boton catalogo-supra__boton';
+      btn.title = (this.options.tituloBarra || 'Catalogo');
+      btn.setAttribute('aria-expanded', 'false');
+
+      const icono = document.createElement('span');
+      icono.className = 'supra-bar__boton-icono catalogo-supra__icono';
+      icono.setAttribute('aria-hidden', 'true');
+
+      const texto = document.createElement('span');
+      texto.className = 'supra-bar__boton-texto';
+      texto.textContent = (this.options.tituloBarra || 'Catalogo');
+
+      btn.appendChild(icono);
+      btn.appendChild(texto);
+      btn.addEventListener('click', function (evt) {
+        evt.preventDefault();
+        // El gesto se queda aqui: la API registra un cierre de paneles al pulsar
+        // fuera, y el click se propagaria hasta el suyo.
+        evt.stopPropagation();
+        self._alternarPanelDesdeBarra();
+      });
+
+      wrap.appendChild(btn);
+      this._supraBoton = btn;
+
+      // El panel tambien se pliega desde fuera (la API lo cierra al pulsar fuera),
+      // asi que el boton se resincroniza en cada clic del documento. Va en fase de
+      // captura para que lo vea aunque alguien detenga la propagacion.
+      if (!this._syncDoc && typeof document !== 'undefined') {
+        this._syncDoc = function () { self._sincronizarSupra(); };
+        document.addEventListener('click', this._syncDoc, true);
+      }
+
+      return wrap;
+    }
+
+    // Abre el panel si esta plegado y lo pliega si esta abierto.
+    _alternarPanelDesdeBarra() {
+      if (!this._panel) return;
+      try {
+        if (this._panelColapsado()) this._panel.open();
+        else this._panel.collapse();
+      } catch (e) {
+        console.warn('[miPlugin_catalogo] no se pudo alternar el panel:', e);
+      }
+      this._sincronizarSupra();
+    }
+
+    // ¿Esta el panel plegado? Misma cadena de recursos que usa getState(), para
+    // que el boton y el estado guardado no se contradigan.
+    _panelColapsado() {
+      if (!this._panel) return true;
+      if (this._panel._collapsed !== undefined) return !!this._panel._collapsed;
+      if (typeof this._panel.isCollapsed === 'function') {
+        try { return !!this._panel.isCollapsed(); } catch (e) { /* sigue */ }
+      }
+      if (typeof this._panel.getElement === 'function') {
+        const el = this._panel.getElement();
+        return el ? el.classList.contains('collapsed') : true;
+      }
+      return true;
+    }
+
+    _sincronizarSupra() {
+      if (!this._supraBoton) return;
+      const abierto = !this._panelColapsado();
+      this._supraBoton.classList.toggle('supra-bar__boton--activo', abierto);
+      this._supraBoton.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+    }
+
+    // Esconde el boton propio de la API mientras el plugin viva en la barra.
+    _ocultarBotonDelMapa() {
+      const el = this._elementoPanel();
+      if (el) el.classList.add('g-panel-en-barra');
+    }
+
+    // Restaura el boton de la API y suelta el boton de la barra.
+    _destruirSupra() {
+      if (this._syncDoc && typeof document !== 'undefined') {
+        document.removeEventListener('click', this._syncDoc, true);
+      }
+      this._syncDoc = null;
+      const el = this._elementoPanel();
+      if (el) el.classList.remove('g-panel-en-barra');
+      if (this._supraWrap && this._supraWrap.parentNode) {
+        this._supraWrap.parentNode.removeChild(this._supraWrap);
+      }
+      this._supraWrap = null;
+      this._supraBoton = null;
+      this.supra = null;
+    }
+
+    // El nodo del panel, por el camino que lo fue la API.
+    _elementoPanel() {
+      try {
+        return (this._panel && typeof this._panel.getElement === 'function')
+          ? this._panel.getElement() : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
     // =====================================================================
     //  Contrato de estado (cambio 2D/3D)
     // =====================================================================
@@ -4049,6 +4200,7 @@ _vistaActualEnGrados() {
           console.warn(this.name + ': no se pudo restaurar el panel.', e);
         }
       }
+      this._sincronizarSupra();
       // La UI se reconstruye sola en el swap (addTo se vuelve a llamar), así que
       // aquí solo hace falta que el estado esté guardado... y sincronizado: el
       // panel nuevo nace con los valores por defecto y setState llega después.
@@ -4084,6 +4236,7 @@ _vistaActualEnGrados() {
     }
 
     destroy() {
+      this._destruirSupra();
       // Antes de soltar el mapa: la huella es una capa viva y si no se quita
       // aquí se queda en el mapa sin ningún panel desde el que quitarla.
       this._quitarHuella();

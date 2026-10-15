@@ -1102,3 +1102,17 @@
 .m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
   box-sizing: border-box;
 }
+
+/* ── Item del supraplugin ───────────────────────────────────────────────
+   El botón de la barra reutiliza las clases .supra-bar__boton de la barra
+   (así hereda el tema y el color de marca por las variables --supra-*), así
+   que aquí solo hace falta el glifo: las "capas" de la fuente de la API. */
+.ls-supra__icono::before {
+  content: "\e968";
+}
+
+/* Con el plugin en la barra, el botón redondo del área sería un segundo
+   mando para el mismo panel: se esconde y solo queda el de la barra. */
+.m-panel.g-herramienta_selectorCapa.g-panel-en-barra > .m-panel-btn {
+  display: none;
+}

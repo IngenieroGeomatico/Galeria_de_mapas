@@ -114,6 +114,11 @@
                                               reciben el supraplugin y devuelven su
                                               UI. Se re-invoca en cada montaje
                                               (incluido tras un cambio 2D/3D).
+                                              Si además define addTo(map), la barra
+                                              se lo pasa antes de montarlo: el item
+                                              pone en la barra su botón y su panel
+                                              lo sigue montando en el mapa (ver
+                                              _addToItems).
      4) miPlugin_supraplugin              -> barra anidada (ver arriba).
      5) supra.separator()                 -> separador vertical.
    ===================================================================== */
@@ -232,6 +237,7 @@
         && !isNaN(Number(this.options.order))) ? Number(this.options.order) : null;
 
       this.map = null;
+      this._addToMapa = null;   // mapa al que ya se hizo addTo() en los items
       this._host = null;        // contenedor del visualizador
       this._dock = null;        // caja donde se apilan esta barra y las hijas
       this.container = null;    // barra raíz (nodo .supra-bar)
@@ -294,8 +300,49 @@
       window.__supraplugins[this.id] = this;
 
       this._buildBar();
+      this._addToItems(map);
       this._mountAllItems();
       return this;
+    }
+
+    /**
+     * Pasa el mapa a los items que lo necesitan para existir.
+     *
+     *  Un item que trae `getSupraElement` y además `addTo` (o `add`) es un
+     *  plugin de la API al que se le ha cambiado el sitio de la UI: la barra solo
+     *  le pone el botón, pero su panel, sus controles y sus capas los sigue
+     *  montando `addTo(map)`, que es lo que construye `this._panel`. Sin esta
+     *  llamada el botón se montaría contra un panel inexistente (medido: la barra
+     *  aceptaba el item y el plugin se quedaba sin panel).
+     *
+     *  Los items autocontenidos (los que solo tienen `getSupraElement`, como
+     *  `miPlugin_plantillaItem` o `comparacionVistas`) no definen `addTo` y se
+     *  saltan solos. A una barra anidada se le pasa el mapa a sus items, pero sin
+     *  volver a llamar a su `addTo` entero: de la construcción de su barra se
+     *  encarga `_mountSubSupraplugin`.
+     *
+     * @param {Object} map Mapa API-IDEE anfitrión.
+     */
+    _addToItems(map) {
+      if (!map || this._addToMapa === map) return;
+      this._addToMapa = map;
+      this.items.forEach(function (record) {
+        var item = record && record.item;
+        if (!item) return;
+        if (item instanceof miPlugin_supraplugin) {
+          try { item._addToItems(map); } catch (e) { /* ignora */ }
+          return;
+        }
+        var ciclo = (typeof item.addTo === "function") ? item.addTo
+          : (typeof item.add === "function") ? item.add
+            : null;
+        if (!ciclo) return;
+        try {
+          ciclo.call(item, map);
+        } catch (e) {
+          console.warn("[supraplugin] addTo() del item falló:", e);
+        }
+      });
     }
 
     // Devuelve la ayuda del plugin (protocolo API-IDEE: {title, content}).
@@ -323,7 +370,8 @@
 
     /**
      * Captura el estado serializable del supraplugin para preservarlo entre cambios 2D/3D.
-     * @returns {Object} {plegada, fijada, hijos: {idHijo: {abierta, plegada, fijada}}}
+     * @returns {Object} {plegada, fijada, hijos: {idHijo: {abierta, plegada, fijada}},
+     *                   plugins: {nombre: estado}}
      */
     getState() {
       var hijos = {};
@@ -339,8 +387,43 @@
       return {
         plegada: Boolean(this._plegada),
         fijada: Boolean(this._fijada),
-        hijos: hijos
+        hijos: hijos,
+        plugins: this._capturarItems()
       };
+    }
+
+    /**
+     * Estado de los plugins que aloja la barra, el árbol entero (esta barra y
+     * las anidadas).
+     *
+     *  La barra los saca a su cuenta porque el coordinador `EstadoPlugins` solo
+     *  recorre `map.getPlugins()` (medido), y un plugin que vive en la barra no
+     *  se registra en el mapa: sin esto perderían su estado en cada swap
+     *  2D/3D (la capa base elegida, los grupos plegados, el panel que estaba
+     *  abierto...). La clave es `idHijo/nombre` para los items de una barra
+     *  anidada, que es lo que después vuelve a recorrer setState().
+     *
+     * @returns {Object} nombre -> estado. Vacío si no hay ninguno.
+     */
+    _capturarItems() {
+      var salida = {};
+      this.items.forEach(function (record) {
+        var item = record && record.item;
+        if (!item) return;
+        if (item instanceof miPlugin_supraplugin) {
+          var dentro = item._capturarItems();
+          Object.keys(dentro).forEach(function (k) { salida[item.id + "/" + k] = dentro[k]; });
+          return;
+        }
+        if (!item.name || typeof item.getState !== "function") return;
+        try {
+          var st = item.getState();
+          if (st !== undefined && st !== null) salida[item.name] = st;
+        } catch (e) {
+          console.warn("[supraplugin] no se pudo capturar el estado de " + item.name, e);
+        }
+      });
+      return salida;
     }
 
     /**
@@ -372,6 +455,39 @@
         });
       }
       this._reflejarEstadoBarra();
+      this._restaurarItems(state.plugins, map);
+    }
+
+    /**
+     * Reparte el estado capturado a los plugins que aloja la barra (el árbol
+     * entero). Ver `_capturarItems`, que usa las mismas claves.
+     * @param {Object} [estados] nombre -> estado.
+     * @param {Object} [map] Instancia del mapa nuevo.
+     */
+    _restaurarItems(estados, map) {
+      if (!estados || typeof estados !== "object") return;
+      var destino = map || this.map;
+      this.items.forEach(function (record) {
+        var item = record && record.item;
+        if (!item) return;
+        if (item instanceof miPlugin_supraplugin) {
+          var dentro = {};
+          Object.keys(estados).forEach(function (k) {
+            var prefijo = item.id + "/";
+            if (k.indexOf(prefijo) === 0) dentro[k.slice(prefijo.length)] = estados[k];
+          });
+          item._restaurarItems(dentro, destino);
+          return;
+        }
+        if (!item.name || typeof item.setState !== "function") return;
+        var st = estados[item.name];
+        if (st === undefined || st === null) return;
+        try {
+          item.setState(st, destino);
+        } catch (e) {
+          console.warn("[supraplugin] no se pudo restaurar el estado de " + item.name, e);
+        }
+      });
     }
 
     // --- Construcción de la barra ------------------------------------------

@@ -1404,3 +1404,40 @@
 .m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
   box-sizing: border-box;
 }
+
+/* ── Item del supraplugin ───────────────────────────────────────────────
+   El botón de la barra reutiliza las clases .supra-bar__boton de la barra
+   (así hereda el tema y el color de marca por las variables --supra-*), así
+   que aquí solo hace falta el icono: el glifo "lista" de la fuente de la API
+   mientras el visualizador no pase un icono propio. */
+.catalogo-supra__icono::before {
+  content: "\e92c";
+}
+
+/* Si el plugin trae icono propio (--g-plugin-icon-mask, el mismo que pinta
+   su botón del mapa), el botón de la barra lo muestra como máscara y el
+   glifo se aparta. */
+.catalogo-supra__icono--mascara::before {
+  content: none;
+}
+
+.catalogo-supra__icono--mascara {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  background-color: currentColor;
+  -webkit-mask-image: var(--g-plugin-icon-mask);
+  mask-image: var(--g-plugin-icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* Con el plugin en la barra, el botón redondo del área sería un segundo
+   mando para el mismo panel: se esconde y solo queda el de la barra. */
+.m-panel.g-herramienta_catalogo.g-panel-en-barra > .m-panel-btn {
+  display: none;
+}
