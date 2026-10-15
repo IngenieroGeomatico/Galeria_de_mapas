@@ -837,6 +837,11 @@
       this._huellaCapa = null;
       this._huellaDe = null;
 
+      // El filtro de búsqueda por zona y fechas que se está aplicando a la
+      // colección abierta, si lo hay. Es de un nodo solo: al entrar en otro se
+      // olvida, porque los filtros no tienen sentido entre colecciones.
+      this._filtroStac = null;
+
       // Configuración de visualización y posición del panel
       this.position = options.position || 'TR';
       this.collapsible = (options.collapsible !== undefined) ? Boolean(options.collapsible) : true;
@@ -2596,6 +2601,9 @@
         this._cacheStac[this._pilaStac[this._pilaStac.length - 1].url]
       );
       if (ficha) barra.appendChild(ficha);
+      const nodoActual = this._cacheStac[this._pilaStac[this._pilaStac.length - 1].url];
+      const buscadorStac = this._pintarBusquedaStac(nodoActual);
+      if (buscadorStac) barra.appendChild(buscadorStac);
       return barra;
     }
 
@@ -2856,6 +2864,247 @@
     }
 
     /**
+     * El rectángulo que se está viendo ahora, en grados (EPSG:4326).
+     *
+     *  Es el filtro de zona que se le pasa a la API: "dame lo que hay donde
+     *  estoy mirando". En 2D sale de la vista de OpenLayers, que sí es un
+     *  rectángulo. En Cesium la cámara no lo es (mira al punto de vista con
+     *  inclinación), así que se devuelve null y el buscador se queda solo con
+     *  las fechas en vez de inventar una zona.
+     *
+     * @returns {Array<number>|null} [oeste, sur, este, norte].
+     */
+_vistaActualEnGrados() {
+      const map = this._map;
+      if (!map || typeof map.getMapImpl !== 'function') return null;
+      const impl = map.getMapImpl();
+      // En Cesium la cámara mira a un punto y puede ir inclinada: no es un
+      // rectángulo, así que de aquí no sale una zona. Se distingue por `scene`,
+      // que el impl de OpenLayers no tiene.
+      if (!impl || impl.scene) return null;
+      const vista = (typeof impl.getView === 'function') ? impl.getView() : null;
+      const tam = (typeof impl.getSize === 'function') ? impl.getSize() : null;
+      if (!vista || typeof vista.calculateExtent !== 'function' || !tam) return null;
+      const api = window.IDEE || window.M;
+      if (!(api && api.utils && typeof api.utils.reproject === 'function')) return null;
+
+      let caja = null;
+      try { caja = vista.calculateExtent(tam); } catch (e) { return null; }
+      if (!caja || caja.length < 4) return null;
+
+      let esquinaA = null;
+      let esquinaB = null;
+      try {
+        esquinaA = api.utils.reproject([caja[0], caja[1]], 'EPSG:3857', 'EPSG:4326');
+        esquinaB = api.utils.reproject([caja[2], caja[3]], 'EPSG:3857', 'EPSG:4326');
+      } catch (e) { return null; }
+      if (!esquinaA || !esquinaB) return null;
+
+      // La proyección web se desboca en los polos: un encuadre casi mundial da
+      // latitudes enormes y la API las rechaza, así que se recortan a 85.
+      const Recorta = function (v) { return Math.max(-85, Math.min(85, v)); };
+      const salida = [esquinaA[0], Recorta(esquinaA[1]), esquinaB[0], Recorta(esquinaB[1])];
+      return salida.every(Number.isFinite) ? salida : null;
+    }
+
+    /**
+     * El formulario de buscar elementos por zona y por fecha.
+     *
+     *  Solo tiene sentido en las colecciones de una API STAC, que son las que
+     *  tienen endpoint `/items` al que preguntarle (lo publica `leerNodoStac`
+     *  como `urlItems`). En un catálogo estático no hay nada que filtrar.
+     *
+     * @param {Object} nodo El nodo STAC abierto.
+     * @returns {HTMLElement|null}
+     */
+    _pintarBusquedaStac(nodo) {
+      if (!nodo || !nodo.urlItems) return null;
+      const self = this;
+      const api = window.IDEE || window.M;
+      if (!(api && api.layer && typeof api.layer.GeoJSON === 'function')) return null;
+
+      const caja = document.createElement('div');
+      caja.className = 'catalogo__buscador-stac';
+
+      const filtro = this._filtroStac || {};
+      const zonaDisponible = !!this._vistaActualEnGrados();
+
+      const linea = document.createElement('div');
+      linea.className = 'catalogo__buscador-stac-linea';
+
+      // Vive fuera del `if` porque lo usa el manejador del botón Buscar, que
+      // se crea más abajo y en otro bloque.
+      let chk = null;
+      if (zonaDisponible) {
+        chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.className = 'catalogo__buscador-stac-chk';
+        chk.id = 'catalogo-stac-zona';
+        chk.checked = !!filtro.bbox;
+        linea.appendChild(chk);
+        const lblZona = document.createElement('label');
+        lblZona.className = 'catalogo__buscador-stac-lbl';
+        lblZona.setAttribute('for', chk.id);
+        lblZona.textContent = 'Solo en la vista';
+        lblZona.title = 'Limitar a lo que hay en el rectángulo que se está viendo ahora';
+        linea.appendChild(lblZona);
+      } else {
+        const aviso = document.createElement('span');
+        aviso.className = 'catalogo__buscador-stac-lbl';
+        aviso.textContent = 'La zona no se puede acotar en 3D';
+        aviso.title = 'En Cesium la cámara no es un rectángulo: '
+          + 'el filtro de zona solo va en la vista 2D.';
+        linea.appendChild(aviso);
+      }
+
+      const rotulo = function (texto, valor) {
+        const campo = document.createElement('label');
+        campo.className = 'catalogo__buscador-stac-campo';
+        const t = document.createElement('span');
+        t.textContent = texto;
+        const input = document.createElement('input');
+        input.type = 'date';
+        input.className = 'catalogo__buscador-stac-fecha';
+        input.value = valor || '';
+        campo.appendChild(t);
+        campo.appendChild(input);
+        return { campo: campo, input: input };
+      };
+      const desde = rotulo('desde', filtro.desde);
+      const hasta = rotulo('hasta', filtro.hasta);
+      linea.appendChild(desde.campo);
+      linea.appendChild(hasta.campo);
+
+      const buscar = document.createElement('button');
+      buscar.type = 'button';
+      buscar.className = 'catalogo__ficha-boton';
+      buscar.textContent = 'Buscar';
+      linea.appendChild(buscar);
+
+      if (filtro.activo) {
+        const quitar = document.createElement('button');
+        quitar.type = 'button';
+        quitar.className = 'catalogo__ficha-boton';
+        quitar.textContent = 'Quitar filtro';
+        quitar.addEventListener('click', function () { self._limpiarBusquedaStac(nodo); });
+        linea.appendChild(quitar);
+      }
+      caja.appendChild(linea);
+
+      if (filtro.activo) {
+        const resumen = document.createElement('div');
+        resumen.className = 'catalogo__ficha-datos';
+        const trozos = [];
+        if (filtro.bbox) {
+          trozos.push('zona ' + filtro.bbox.map(function (v) {
+            return v.toFixed(2);
+          }).join(', '));
+        }
+        if (filtro.desde || filtro.hasta) {
+          trozos.push('entre ' + (filtro.desde || '…') + ' y ' + (filtro.hasta || '…'));
+        }
+        let cuenta = '';
+        if (filtro.total) {
+          cuenta = filtro.total.toLocaleString('es-ES') + ' elementos';
+        }
+        resumen.textContent = (trozos.join(' · ') + (cuenta ? ' · ' + cuenta : ''));
+        caja.appendChild(resumen);
+      }
+
+      buscar.addEventListener('click', function () {
+        const activa = zonaDisponible && chk && chk.checked;
+        const cajaVista = activa ? self._vistaActualEnGrados() : null;
+        if (activa && !cajaVista) {
+          self._decir('No se ha podido leer la zona que se está viendo.', 'aviso');
+          return;
+        }
+        const d = desde.input.value || '';
+        const h = hasta.input.value || '';
+        if (!cajaVista && !d && !h) {
+          self._decir('Marca la zona o pon alguna fecha: sin eso no se filtra nada.', 'aviso');
+          return;
+        }
+        if (d && h && d > h) {
+          self._decir('La fecha inicial es posterior a la final.', 'aviso');
+          return;
+        }
+        self._aplicarBusquedaStac(nodo, { bbox: cajaVista, desde: d, hasta: h });
+      });
+
+      return caja;
+    }
+
+    /**
+     * Pide a la API los elementos que casan con el filtro y los deja en la lista.
+     *
+     *  Se reescribe la lista entera y el enlace a la página siguiente, que es lo
+     *  que hace que "Siguiente" siga dentro del filtro y no se salga de él.
+     *
+     * @param {Object} nodo El nodo STAC abierto.
+     * @param {{bbox: (Array<number>|null), desde: string, hasta: string}} filtro
+     */
+    _aplicarBusquedaStac(nodo, filtro) {
+      const self = this;
+      const registro = window.CatalogoRegistro;
+      if (!nodo || !nodo.urlItems) return;
+      if (!registro || typeof registro.leerBusquedaStac !== 'function') {
+        this._decir('No se puede buscar: falta el lector STAC.', 'aviso');
+        return;
+      }
+      const estado = this._paginacionStac[nodo.url];
+      if (estado) estado.cargando = true;
+      this._decir('Buscando elementos…');
+
+      registro.leerBusquedaStac(nodo.urlItems, filtro).then(function (r) {
+        const tipo = self._catalogoActual();
+        const cache = (tipo && self._entradasPropias[tipo.id]) || null;
+        const nuevas = (r && r.entradas) || [];
+        if (cache && Array.isArray(cache.datos)) {
+          cache.datos = nuevas.map(function (e) {
+            return Object.assign({}, e, { padre: nodo.url });
+          });
+        }
+        if (estado) {
+          estado.cargando = false;
+          estado.siguiente = (r && r.siguiente) || null;
+          estado.cargados = nuevas.length;
+        }
+        self._filtroStac = Object.assign({}, filtro, { activo: true, total: (r && r.total) || 0 });
+        self._pagina = 1;
+        self._pintarCatalogo();
+        self._decir(nuevas.length
+          ? 'Hay ' + nuevas.length + ' elementos con ese filtro.'
+          : 'No hay ningún elemento con ese filtro.');
+      }).catch(function (err) {
+        if (estado) estado.cargando = false;
+        self._decir('No se ha podido buscar: '
+          + (err && err.message ? err.message : err), 'error');
+        self._pintarCatalogo();
+      });
+    }
+
+    /**
+     * Quita el filtro y vuelve a la lista sin filtrar de la colección.
+     *
+     *  Se borra el nodo de la caché y se vuelve a entrar: es lo que garantiza
+     *  que lo que se repinta es la colección entera y no el resultado de la
+     *  última búsqueda.
+     *
+     * @param {Object} nodo El nodo STAC abierto.
+     */
+    _limpiarBusquedaStac(nodo) {
+      this._filtroStac = null;
+      this._pagina = 1;
+      if (nodo) {
+        delete this._cacheStac[nodo.url];
+        delete this._paginacionStac[nodo.url];
+        this._abrirNodoStac(nodo.url, nodo.titulo);
+        return;
+      }
+      this._pintarCatalogo();
+    }
+
+    /**
      * El nombre corto de una extensión STAC, que es la URL que la publica.
      *
      *  Las extensiones son direcciones largas del tipo
@@ -2973,6 +3222,9 @@
 
       const cache = this._entradasPropias[tipo.id] || (this._entradasPropias[tipo.id] = {});
       const yaEsta = this._cacheStac[url];
+      // El filtro es de un nodo: al entrar en otro se olvida, que los filtros no
+      // tienen sentido entre colecciones distintas.
+      this._filtroStac = null;
 
       const pintar = function (nodo) {
         self._cacheStac[url] = nodo;

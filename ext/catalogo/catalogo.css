@@ -734,6 +734,54 @@
   columns: 2;
 }
 
+/* Buscar elementos por zona y por fecha dentro de la colección abierta. */
+.catalogo__buscador-stac {
+  flex: 1 0 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 5px;
+  border-top: 1px solid var(--cat-linea);
+}
+
+.catalogo__buscador-stac-linea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.catalogo__buscador-stac-chk {
+  margin: 0;
+  accent-color: var(--cat-acento);
+}
+
+.catalogo__buscador-stac-lbl {
+  color: var(--cat-fg-tenue);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.catalogo__buscador-stac-campo {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--cat-fg-tenue);
+  font-size: 10.5px;
+}
+
+.catalogo__buscador-stac-fecha {
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg);
+  font: inherit;
+  font-size: 10.5px;
+  color-scheme: light;
+}
+
 /* La huella se dibuja aparte del "Cargar": no descarga nada, solo enseña el
    polígono de la escena y encuadra la vista. */
 .catalogo__item-boton--huella {

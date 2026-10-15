@@ -510,6 +510,54 @@
   }
 
   /**
+   * Busca elementos dentro de una colección por zona y por fecha.
+   *
+   *  Son los dos filtros que de verdad se usan en un catálogo de satélite, y los
+   *  dos que la API acepta en el propio `/items`, sin necesidad de `/search`
+   *  (medido en Earth Search: `bbox=-10,35,0,45&datetime=2022-12-01/2022-12-31`
+   *  devuelve 1.515 elementos frente a los 243.638 que hay sin filtrar).
+   *
+   *  El formato de `datetime` es un intervalo RFC 3339, `inicio/fin`. Se dejan
+   *  los extremos abiertos poniéndolos a `..`, que es lo que dice la
+   *  especificación (medido: `..2022-12-31` acota solo la fecha final).
+   *
+   * @param {string} urlItems El endpoint `/items` de la colección.
+   * @param {{bbox: (Array<number>|null), desde: string, hasta: string}} [filtro]
+   * @returns {Promise<{entradas: Array<Object>, siguiente: (string|null),
+   *   total: number, url: string}>}
+   */
+  async function leerBusquedaStac(urlItems, filtro) {
+    const base = String(urlItems || '').trim();
+    if (!base) return { entradas: [], siguiente: null, total: 0, url: '' };
+    const f = filtro || {};
+
+    const params = [];
+    const caja = Array.isArray(f.bbox) && f.bbox.length >= 4 ? f.bbox.map(Number) : null;
+    if (caja && caja.every(isFinite)) params.push('bbox=' + caja.join(','));
+    const desde = String(f.desde || '').trim();
+    const hasta = String(f.hasta || '').trim();
+    if (desde || hasta) {
+      // A la medianoche UTC: las fechas del STAC son instantes, y un
+      // `datetime=2022-12-05` a secas no es un intervalo válido.
+      const inicio = desde ? desde + 'T00:00:00Z' : '..';
+      const fin = hasta ? hasta + 'T23:59:59Z' : '..';
+      params.push('datetime=' + inicio + '/' + fin);
+    }
+    if (!params.length) return leerPaginaStac(base);
+
+    const destino = base + (base.indexOf('?') > -1 ? '&' : '?')
+      + params.join('&') + '&limit=' + LIMITE_ITEMS_STAC;
+    const j = parsear(await pedir(destino), destino);
+    const feats = Array.isArray(j.features) ? j.features : [];
+    return {
+      entradas: entradasDeItems(feats),
+      siguiente: enlaceSiguiente(j, destino),
+      total: Number(j.numberMatched || j.numberReturned || feats.length) || 0,
+      url: destino
+    };
+  }
+
+  /**
    * El intervalo temporal de un documento STAC, como texto.
    * @param {Object} json
    * @returns {string}
@@ -788,6 +836,7 @@
     // por el árbol de un catálogo y volver a subir (ver _abrirNodoStac).
     leerNodoStac: leerNodoStac,
     leerPaginaStac: leerPaginaStac,
+    leerBusquedaStac: leerBusquedaStac,
     todos: todos,
     porId: porId,
     alta: alta,
