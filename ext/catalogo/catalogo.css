@@ -954,7 +954,10 @@
     color 0.16s ease, transform 0.12s ease;
 }
 
-.catalogo__item:hover .catalogo__item-boton {
+/* Los botones NO se iluminan al pasar por encima de la fila: cada uno tiene su
+   propio hover, y que se enciendan los dos a la vez hace que parezca que son el
+   mismo botón. */
+.catalogo__item-boton:hover {
   background: var(--cat-marca);
   border-color: var(--cat-marca);
   color: var(--cat-marca-fg);

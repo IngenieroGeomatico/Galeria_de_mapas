@@ -836,6 +836,10 @@
       // la capa y qué elemento es, para poder quitarla o volver a ponerla.
       this._huellaCapa = null;
       this._huellaDe = null;
+      // La huella que se muestra al pasar el ratón por encima del botón, sin
+      // llegar a hacer clic: es una capa aparte que se quita al salir.
+      this._huellaPreviewCapa = null;
+      this._huellaPreviewDe = null;
 
       // El filtro de búsqueda por zona y fechas que se está aplicando a la
       // colección abierta, si lo hay. Es de un nodo solo: al entrar en otro se
@@ -2361,6 +2365,14 @@
         botonHuella.className = 'catalogo__item-boton catalogo__item-boton--huella';
         botonHuella.textContent = 'Huella';
         botonHuella.title = 'Ver en el mapa dónde está este elemento';
+        // Al pasar el ratón se muestra la huella sin añadirla: es un adelanto
+        // de dónde está la escena. Al hacer clic se queda en el mapa.
+        botonHuella.addEventListener('mouseenter', function () {
+          self._verHuella(srv, { preview: true });
+        });
+        botonHuella.addEventListener('mouseleave', function () {
+          self._quitarHuellaPreview();
+        });
         botonHuella.addEventListener('click', function (ev) {
           ev.stopPropagation();
           self._verHuella(srv);
@@ -2405,8 +2417,10 @@
       }
 
       // El botón de cargar va fuera si la fila NO es abrible (el caso normal de
-      // un servicio) y también en las que sí lo son pero son cargables.
-      if (!srv.abrir || srv.cargable) {
+      // un servicio). En las colecciones no: una colección no se carga como capa,
+      // se entra en ella. Antes también salía ahí si era cargable, y era un botón
+      // que no tenía sentido en la fila de un nodo padre.
+      if (!srv.abrir) {
         const boton = document.createElement('button');
         boton.type = 'button';
         boton.className = 'catalogo__item-boton';
@@ -2763,23 +2777,31 @@
      *  Encarcarl con veinte escenas de Sentinel-2 encima no dice nada.
      *
      * @param {Object} srv Entrada del catálogo con `bbox` y/o `geometria`.
+     * @param {{preview: boolean}} [opciones] Con `preview: true` la huella es
+     *   un adelanto al pasar el ratón: se quita al salir y no hace palanca.
      */
-    _verHuella(srv) {
+    _verHuella(srv, opciones) {
       const map = this._map;
       const api = window.IDEE || window.M;
+      const esPreview = !!(opciones && opciones.preview);
       if (!map || !srv) return;
       if (!(api && api.layer && typeof api.layer.GeoJSON === 'function')) {
         this._decir('Este visor no puede dibujar la huella.', 'aviso');
         return;
       }
 
-      // El mismo elemento otra vez es quitarlo: el botón hace de palanca.
-      if (this._huellaDe === srv.id || this._huellaDe === srv.nombre) {
+      // Con palanca: el mismo elemento otra vez es quitarlo. En preview no hay
+      // palanca, porque el ratón entra y sale sin parar.
+      if (!esPreview) {
+        if (this._huellaDe === srv.id || this._huellaDe === srv.nombre) {
+          this._quitarHuella();
+          this._decir('Huella quitada.');
+          return;
+        }
         this._quitarHuella();
-        this._decir('Huella quitada.');
-        return;
+      } else {
+        this._quitarHuellaPreview();
       }
-      this._quitarHuella();
 
       const geometria = srv.geometria || this._poligonoDe(srv.bbox);
       if (!geometria) {
@@ -2823,17 +2845,41 @@
         return;
       }
 
-      this._huellaDe = srv.id || srv.nombre;
-      this._huellaCapa = capa;
+      // En preview se guarda en su propio sitio y no toca la huella fija.
+      if (esPreview) {
+        this._huellaPreviewDe = srv.id || srv.nombre;
+        this._huellaPreviewCapa = capa;
+      } else {
+        this._huellaDe = srv.id || srv.nombre;
+        this._huellaCapa = capa;
+      }
       try {
         map.addLayers([capa]);
       } catch (e) {
         this._decir('No se ha podido dibujar la huella: '
           + (e && e.message ? e.message : e), 'error');
-        this._quitarHuella();
+        if (esPreview) this._quitarHuellaPreview();
+        else this._quitarHuella();
         return;
       }
       if (srv.bbox) this._encuadrarHuella(srv.bbox);
+    }
+
+    /**
+     * Quita la huella de preview, la que se muestra al pasar el ratón por encima
+     * del botón sin llegar a hacer clic.
+     *
+     *  No toca la huella fija (la de `_huellaCapa`), que es la que se queda en el
+     *  mapa cuando se pulsa el botón.
+     */
+    _quitarHuellaPreview() {
+      const capa = this._huellaPreviewCapa;
+      this._huellaPreviewCapa = null;
+      this._huellaPreviewDe = null;
+      if (!capa) return;
+      const map = this._map;
+      if (!map || typeof map.removeLayers !== 'function') return;
+      try { map.removeLayers(capa); } catch (e) { /* ya no está */ }
     }
 
     /**
@@ -2859,9 +2905,10 @@
      * Quita la huella del mapa, si la hay.
      *
      *  Va en `destroy()`: si no, al cerrar el plugin la capa se queda en el mapa
-     *  sin ningún panel desde el que quitarla.
+     *  sin ningún panel desde el que quitarla. Quita también la de preview.
      */
     _quitarHuella() {
+      this._quitarHuellaPreview();
       const capa = this._huellaCapa;
       this._huellaCapa = null;
       this._huellaDe = null;
