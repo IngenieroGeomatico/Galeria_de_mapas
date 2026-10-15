@@ -832,6 +832,11 @@
       // instancia nueva con un mapa nuevo, que sí hay que registrar.
       this._formatosPorMapa = new WeakMap();
 
+      // La huella del elemento STAC que se está viendo en el mapa, si hay alguna:
+      // la capa y qué elemento es, para poder quitarla o volver a ponerla.
+      this._huellaCapa = null;
+      this._huellaDe = null;
+
       // Configuración de visualización y posición del panel
       this.position = options.position || 'TR';
       this.collapsible = (options.collapsible !== undefined) ? Boolean(options.collapsible) : true;
@@ -2339,6 +2344,25 @@
 
       fila.appendChild(texto);
 
+      // La huella de un elemento STAC, que es un Polygon GeoJSON en la propia
+      // respuesta (medido) y que se estaba tirando. Sirve para dos cosas que
+      // hacen falta: ver dónde está la escena antes de decidir si se descarga
+      // (un COG pesa cientos de megas) y localizar un elemento que no se puede
+      // cargar. Va antes del `soloInfo` a propósito: justo los elementos que no
+      // se pueden cargar son los que más besoin tienen de verse en el mapa.
+      if (srv.bbox || srv.geometria) {
+        const botonHuella = document.createElement('button');
+        botonHuella.type = 'button';
+        botonHuella.className = 'catalogo__item-boton catalogo__item-boton--huella';
+        botonHuella.textContent = 'Huella';
+        botonHuella.title = 'Ver en el mapa dónde está este elemento';
+        botonHuella.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          self._verHuella(srv);
+        });
+        fila.appendChild(botonHuella);
+      }
+
       // Un elemento STAC se enseña pero no se carga: sus assets son ficheros
       // (COG, JP2, GeoTIFF) y la API no construye capas con ellos. Ponerle un
       // botón de cargar sería prometer algo que no puede cumplir.
@@ -2717,6 +2741,118 @@
       }
 
       return ficha;
+    }
+
+    /**
+     * Dibuja la huella de un elemento en el mapa y la encuadra, o la quita si
+     * es el mismo elemento que ya estaba puesto.
+     *
+     *  Se hace con una capa GeoJSON de la propia API y no pintando en el
+     *  OpenLayers a mano, para que funcione igual en 2D y en 3D: el STAC publica
+     *  un Polygon GeoJSON y la API sabe construir una capa con él.
+     *
+     *  Solo una huella a la vez: la anterior se quita antes de poner la nueva.
+     *  Encarcarl con veinte escenas de Sentinel-2 encima no dice nada.
+     *
+     * @param {Object} srv Entrada del catálogo con `bbox` y/o `geometria`.
+     */
+    _verHuella(srv) {
+      const map = this._map;
+      const api = window.IDEE || window.M;
+      if (!map || !srv) return;
+      if (!(api && api.layer && typeof api.layer.GeoJSON === 'function')) {
+        this._decir('Este visor no puede dibujar la huella.', 'aviso');
+        return;
+      }
+
+      // El mismo elemento otra vez es quitarlo: el botón hace de palanca.
+      if (this._huellaDe === srv.id || this._huellaDe === srv.nombre) {
+        this._quitarHuella();
+        this._decir('Huella quitada.');
+        return;
+      }
+      this._quitarHuella();
+
+      const geometria = srv.geometria || this._poligonoDe(srv.bbox);
+      if (!geometria) {
+        this._decir('Este elemento no trae huella.', 'aviso');
+        return;
+      }
+
+      const nombre = 'Huella: ' + String(srv.nombre || '').slice(0, 48);
+      const fuente = {
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          properties: { nombre: srv.nombre || '' },
+          geometry: geometria
+        }]
+      };
+      let capa;
+      try {
+        capa = new api.layer.GeoJSON({ name: nombre, source: fuente });
+        // Relleno suave y contorno marcado: una escena de satélite es una
+        // cuadrilátero de un par de grados y sin contraste no se ve.
+        if (typeof capa.setStyle === 'function' && api.style && api.style.Generic) {
+          capa.setStyle(new api.style.Generic({
+            polygon: {
+              fill: { color: '#1f6feb', opacity: 0.18 },
+              stroke: { color: '#1f6feb', width: 2 }
+            }
+          }));
+        }
+      } catch (e) {
+        this._decir('No se ha podido crear la capa de la huella: '
+          + (e && e.message ? e.message : e), 'error');
+        return;
+      }
+
+      this._huellaDe = srv.id || srv.nombre;
+      this._huellaCapa = capa;
+      try {
+        map.addLayers([capa]);
+      } catch (e) {
+        this._decir('No se ha podido dibujar la huella: '
+          + (e && e.message ? e.message : e), 'error');
+        this._quitarHuella();
+        return;
+      }
+      if (srv.bbox) this._encuadrarHuella(srv.bbox);
+    }
+
+    /**
+     * Un Polygon GeoJSON a partir de un rectángulo en grados.
+     *
+     *  Para los elementos que solo traen `bbox` y no `geometry`, que también los
+     *  hay: el rectángulo del STAC es un polígono con cuatro esquinas.
+     *
+     * @param {Array<number>} bbox [oeste, sur, este, norte].
+     * @returns {Object|null}
+     */
+    _poligonoDe(bbox) {
+      if (!Array.isArray(bbox) || bbox.length < 4) return null;
+      const [o, s, e, n] = bbox.map(Number);
+      if (![o, s, e, n].every(isFinite)) return null;
+      return {
+        type: 'Polygon',
+        coordinates: [[[o, s], [e, s], [e, n], [o, n], [o, s]]]
+      };
+    }
+
+    /**
+     * Quita la huella del mapa, si la hay.
+     *
+     *  Va en `destroy()`: si no, al cerrar el plugin la capa se queda en el mapa
+     *  sin ningún panel desde el que quitarla.
+     */
+    _quitarHuella() {
+      const capa = this._huellaCapa;
+      this._huellaCapa = null;
+      this._huellaDe = null;
+      if (!capa) return;
+      const map = this._map;
+      if (!map || typeof map.removeLayers !== 'function') return;
+      try { map.removeLayers(capa); } catch (e) { /* ya no está */ }
     }
 
     /**
@@ -3638,6 +3774,9 @@
     }
 
     destroy() {
+      // Antes de soltar el mapa: la huella es una capa viva y si no se quita
+      // aquí se queda en el mapa sin ningún panel desde el que quitarla.
+      this._quitarHuella();
       if (this._panel && typeof this._panel.close === 'function') {
         try { this._panel.close(); } catch (e) { /* ignora */ }
       }

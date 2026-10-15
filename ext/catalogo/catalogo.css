@@ -734,6 +734,18 @@
   columns: 2;
 }
 
+/* La huella se dibuja aparte del "Cargar": no descarga nada, solo enseña el
+   polígono de la escena y encuadra la vista. */
+.catalogo__item-boton--huella {
+  background: transparent;
+  color: var(--cat-fg-suave);
+}
+
+.catalogo__item-boton--huella:hover {
+  border-color: var(--cat-acento);
+  color: var(--cat-acento);
+}
+
 /* Un elemento STAC se enseña pero no se carga: sin botón y sin luz de acción. */
 .catalogo__item--info {
   cursor: default;
