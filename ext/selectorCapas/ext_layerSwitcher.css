@@ -10,7 +10,11 @@
   --bl-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
 }
 
-.g-herramienta_selectorCapa .m-tools:before {
+.g-herramienta_selectorCapa .m-tools:before,
+/* El boton de la barra del supraplugin pinta el MISMO icono que este, y por
+   ese motivo comparten la declaracion: si se separaran, un dia dejarian de
+   parecerse. El tamano si es propio de cada sitio. */
+.ls-supra__icono::before {
   /* Icono de pila de capas (estilo QGIS/Leaflet): tres rombos apilados.
      Se usa como MÁSCARA (mask-image) en lugar de content:url() para que
      el icono herede el color configurable (color2 / --g-plugin-icon-color)
@@ -1104,14 +1108,20 @@
 }
 
 /* ── Item del supraplugin ───────────────────────────────────────────────
-   El botón de la barra reutiliza las clases .supra-bar__boton de la barra
-   (así hereda el tema y el color de marca por las variables --supra-*), así
-   que aquí solo hace falta el glifo: las "capas" de la fuente de la API. */
+   El boton de la barra reutiliza las clases .supra-bar__boton de la barra
+   (asi hereda el tema y el color de marca por las variables --supra-*). El
+   icono NO se declara aqui: lo pone la regla compartida de mas arriba, que
+   es la misma que pinta el boton del mapa. Aqui solo el tamano. */
 .ls-supra__icono::before {
-  content: "\e968";
+  width: 15px;
+  height: 15px;
+  /* La máscara compartida se pinta con --g-plugin-icon-color, que es cosa del
+     panel del mapa; en la barra el color es el del texto del botón, para que
+     siga al tema y se ponga blanco cuando el botón queda activo. */
+  background-color: currentColor;
 }
 
-/* Con el plugin en la barra, el botón redondo del área sería un segundo
+/* Con el plugin en la barra, el boton redondo del area seria un segundo
    mando para el mismo panel: se esconde y solo queda el de la barra. */
 .m-panel.g-herramienta_selectorCapa.g-panel-en-barra > .m-panel-btn {
   display: none;

@@ -114,11 +114,13 @@
                                               reciben el supraplugin y devuelven su
                                               UI. Se re-invoca en cada montaje
                                               (incluido tras un cambio 2D/3D).
-                                              Si además define addTo(map), la barra
-                                              se lo pasa antes de montarlo: el item
-                                              pone en la barra su botón y su panel
-                                              lo sigue montando en el mapa (ver
-                                              _addToItems).
+                                              Se lo pasa antes de montarlo salvo que el
+                                              item esté ya en map.getPlugins(): en ese
+                                              caso la API ya se lo llamó con
+                                              map.addPlugin() y la barra solo le pone el
+                                              botón. El item esconde entonces su botón
+                                              del mapa y deja el de la barra como único
+                                              mando (ver _addToItems).
      4) miPlugin_supraplugin              -> barra anidada (ver arriba).
      5) supra.separator()                 -> separador vertical.
    ===================================================================== */
@@ -333,6 +335,10 @@
           try { item._addToItems(map); } catch (e) { /* ignora */ }
           return;
         }
+        // Si el item está registrado como plugin del mapa, la API ya le llamó
+        // addTo() por su cuenta al hacer map.addPlugin(item): volver a pasárselo
+        // crearía un segundo panel (medido). La barra solo pone el botón.
+        if (this._yaLoInitElMapa(item, map)) return;
         var ciclo = (typeof item.addTo === "function") ? item.addTo
           : (typeof item.add === "function") ? item.add
             : null;
@@ -342,7 +348,29 @@
         } catch (e) {
           console.warn("[supraplugin] addTo() del item falló:", e);
         }
-      });
+      }, this);
+    }
+
+    /**
+     * ¿Está este item registrado como plugin del mapa?
+     *
+     *  Un plugin que vive en la barra puede estar además en `map.getPlugins()`,
+     *  que es lo que se usa para que conserve su estado en el swap 2D/3D (el
+     *  coordinador EstadoPlugins solo recorre esa lista, medido). Cuando lo está,
+     *  la API ya lo inicializó y su panel ya existe: la barra se limita a
+     *  esconderle el botón del mapa y a poner el suyo.
+     *
+     * @param {Object} item Item de la barra.
+     * @param {Object} [map] Mapa API-IDEE.
+     * @returns {boolean}
+     */
+    _yaLoInitElMapa(item, map) {
+      if (!item || !map || typeof map.getPlugins !== "function") return false;
+      try {
+        return (map.getPlugins() || []).indexOf(item) >= 0;
+      } catch (e) {
+        return false;
+      }
     }
 
     // Devuelve la ayuda del plugin (protocolo API-IDEE: {title, content}).
@@ -398,24 +426,29 @@
      *
      *  La barra los saca a su cuenta porque el coordinador `EstadoPlugins` solo
      *  recorre `map.getPlugins()` (medido), y un plugin que vive en la barra no
-     *  se registra en el mapa: sin esto perderían su estado en cada swap
-     *  2D/3D (la capa base elegida, los grupos plegados, el panel que estaba
-     *  abierto...). La clave es `idHijo/nombre` para los items de una barra
-     *  anidada, que es lo que después vuelve a recorrer setState().
+     *  siempre está en esa lista. Los que sí lo están los salta: de ésos ya se
+     *  ocupa el coordinador, y capturarlos aquí sería aplicar su estado dos
+     *  veces. La clave es `idHijo/nombre` para los items de una barra anidada,
+     *  que es lo que después vuelve a recorrer setState().
      *
+     * @param {Object} [map] Mapa, para poder saltar los plugins registrados.
      * @returns {Object} nombre -> estado. Vacío si no hay ninguno.
      */
-    _capturarItems() {
+    _capturarItems(map) {
       var salida = {};
+      var self = this;
+      // Sin mapa explícito (getState() no recibe ninguno) se usa el suyo.
+      var mapa = map || this.map;
       this.items.forEach(function (record) {
         var item = record && record.item;
         if (!item) return;
         if (item instanceof miPlugin_supraplugin) {
-          var dentro = item._capturarItems();
+          var dentro = item._capturarItems(mapa);
           Object.keys(dentro).forEach(function (k) { salida[item.id + "/" + k] = dentro[k]; });
           return;
         }
         if (!item.name || typeof item.getState !== "function") return;
+        if (self._yaLoInitElMapa(item, mapa)) return;
         try {
           var st = item.getState();
           if (st !== undefined && st !== null) salida[item.name] = st;
@@ -467,6 +500,7 @@
     _restaurarItems(estados, map) {
       if (!estados || typeof estados !== "object") return;
       var destino = map || this.map;
+      var self = this;
       this.items.forEach(function (record) {
         var item = record && record.item;
         if (!item) return;
@@ -480,6 +514,8 @@
           return;
         }
         if (!item.name || typeof item.setState !== "function") return;
+        // Los plugins registrados en el mapa los restaura el coordinador.
+        if (self._yaLoInitElMapa(item, destino)) return;
         var st = estados[item.name];
         if (st === undefined || st === null) return;
         try {

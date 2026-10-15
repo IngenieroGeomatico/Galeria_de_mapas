@@ -46,7 +46,7 @@ function updateConfigBaseLayer() {
     {
       "id": "mapa",
       "title": "Callejero",
-      "imgPreview": "../../../../mapas/MapaBase/img/IGNBase.png",
+      "imgPreview": "../../../../mapas/Visualizador/img/IGNBase.png",
       "layers": [
         "QUICK*Base_IGNBaseTodo_TMS_2"
       ]
@@ -54,7 +54,7 @@ function updateConfigBaseLayer() {
     {
       "id": "imagen",
       "title": "Imagen",
-      "imgPreview": "../../../../mapas/MapaBase/img/imagen.png",
+      "imgPreview": "../../../../mapas/Visualizador/img/imagen.png",
       "layers": [
         "QUICK*BASE_PNOA_MA_TMS"
       ]
@@ -64,7 +64,7 @@ function updateConfigBaseLayer() {
       "title": "Mapa Ráster",
       // Miniatura de la zona, puesta a mano: no es una tesela del servicio, sino un
       // recorte del Mapa Raster con la peninsula y el norte de Africa.
-      "imgPreview": "../../../../mapas/MapaBase/img/Raster.png",
+      "imgPreview": "../../../../mapas/Visualizador/img/Raster.png",
       "layers": [
         "QUICK*Base_MapaRaster_TMS"
       ]

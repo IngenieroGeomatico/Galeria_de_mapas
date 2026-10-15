@@ -1,12 +1,16 @@
 /* =====================================================================
-   Visualizador base 2: MapaBase con los plugins de botón y panel en un
-   supraplugin
+   Visualizador con barra de herramientas: los plugins de botón y panel
+   cuelgan de un supraplugin
    ---------------------------------------------------------------------
-   Homólogo a MapaBase, pero los plugins de botón y panel (selector de
-   capas base, selector de capas overlay y catálogo) se añaden a un
-   supraplugin en lugar de directamente al mapa. El supraplugin es una
-   barra transversal al estilo de Ubuntu, con tirador para plegar y
+   Homólogo a Visualizador, pero los plugins de botón y panel (selector
+   de capas base, selector de capas overlay y catálogo) tienen su botón
+   en una barra transversal, el supraplugin, en lugar de en el área del
+   mapa. La barra es al estilo de Ubuntu, con tirador para plegar y
    desplegar.
+
+   Cada uno se registra además con mapajs.addPlugin(), que es lo que hace
+   que la API monte su panel y lo que hace que conserve su estado al pasar
+   a 3D. La barra solo le pone el botón delante y esconde el del mapa.
 
    Los plugins que NO son de botón y panel se registran directamente en
    el mapa:
@@ -64,8 +68,14 @@ function mapa() {
   // overlay y catálogo) se añaden a esta barra en lugar de directamente al
   // mapa. El supraplugin es una barra al estilo de Ubuntu, con tirador para
   // plegar y desplegar.
+  //
+  // Cada uno se registra además con mapajs.addPlugin(). No es redundante: lo
+  // que se registra en el mapa es lo que la API inicializa (panel, control y
+  // capas) y lo que el coordinador de estado recorre al cambiar 2D/3D. La barra
+  // solo le pone el botón delante y esconde el que la API pinta en el área, así
+  // que el plugin queda con un único mando, el de la barra.
   const supra = new IDEE.plugin.miPlugin_supraplugin({
-    id: 'supra-mapabase2',
+    id: 'supra-visualizador2',
     position: 'top',
     title: 'Herramientas',
     collapsed: true,
@@ -82,10 +92,12 @@ function mapa() {
     initActiveLayer: "imagen",
   });
   supra.addItem(baseLayerPlugin);
+  mapajs.addPlugin(baseLayerPlugin);
 
   // ── Plugin selector de capas overlay (checkboxes) ─────────────────
   const layerSwitcherPlugin = new IDEE.plugin.miPlugin_layerSwitcher();
   supra.addItem(layerSwitcherPlugin);
+  mapajs.addPlugin(layerSwitcherPlugin);
 
   // ── Catálogo de servicios y capas ──────────────────────────────────
   // Listado predefinido por tipo de catálogo (IDEE, STAC, OGC API Records) y
@@ -149,6 +161,7 @@ function mapa() {
     catalogos: catalogos
   });
   supra.addItem(catalogoPlugin);
+  mapajs.addPlugin(catalogoPlugin);
 
   // ── Registro del supraplugin en el mapa ───────────────────────────
   // El supraplugin SÍ se registra en el mapa con addPlugin(): es la barra

@@ -315,11 +315,8 @@ class miPlugin_layerSwitcher {
     if (typeof this._panel.isCollapsed === 'function') {
       try { return !!this._panel.isCollapsed(); } catch (e) { /* sigue */ }
     }
-    if (typeof this._panel.getElement === 'function') {
-      const el = this._panel.getElement();
-      return el ? el.classList.contains('collapsed') : true;
-    }
-    return true;
+    const el = this._elementoPanel();
+    return el ? el.classList.contains('collapsed') : true;
   }
 
   _sincronizarSupra() {
@@ -353,12 +350,16 @@ class miPlugin_layerSwitcher {
 
   // El nodo del panel, por el camino que lo fue la API.
   _elementoPanel() {
+    const pan = this._panel;
+    if (!pan) return null;
+    // MEDIDO: IDEE.ui.Panel no expone getElement(); su prototipo trae
+    // getButtonPanel() y el campo _element. Se van probando los dos caminos.
+    try { if (pan._element) return pan._element; } catch (e) { /* sigue */ }
     try {
-      return (this._panel && typeof this._panel.getElement === 'function')
-        ? this._panel.getElement() : null;
-    } catch (e) {
-      return null;
-    }
+      const btn = (typeof pan.getButtonPanel === 'function') ? pan.getButtonPanel() : null;
+      if (btn && btn.parentElement) return btn.parentElement;
+    } catch (e) { /* sigue */ }
+    return null;
   }
 
   // ── Coordinación de estado (swap 2D/3D con cambioImpl) ───────────────

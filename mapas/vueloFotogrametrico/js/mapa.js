@@ -46,13 +46,13 @@ function updateConfigBaseLayer() {
     {
       "id": "mapa",
       "title": "Callejero",
-      "imgPreview": "../MapaBase/img/IGNBase.png",
+      "imgPreview": "../Visualizador/img/IGNBase.png",
       "layers": ["QUICK*Base_IGNBaseTodo_TMS_2"]
     },
     {
       "id": "imagen",
       "title": "Imagen",
-      "imgPreview": "../MapaBase/img/imagen.png",
+      "imgPreview": "../Visualizador/img/imagen.png",
       "layers": ["QUICK*BASE_PNOA_MA_TMS"]
     }
   ];

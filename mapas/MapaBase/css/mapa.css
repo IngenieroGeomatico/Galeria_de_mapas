@@ -1,3 +1,14 @@
+/* =====================================================================
+   Hoja de estilo de la plantilla de visualizador.
+
+   Lo único imprescindible es el alto del contenedor del mapa: sin él, el
+   div queda con la altura de una línea y no se ve nada.
+
+   El resto es el indicador de carga (un fondo opaco con una imagen
+   centrada que tapa el mapa mientras se monta) y el reinicio de los
+   márgenes por defecto del navegador.
+   ===================================================================== */
+
 html,
 body {
   margin: 0;
