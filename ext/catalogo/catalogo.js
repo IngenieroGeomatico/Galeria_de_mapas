@@ -1735,10 +1735,6 @@
       [['Nombre', nombre], ['Tipo', tipo], ['URL del catálogo', url]].forEach(function (campo) {
         const etiqueta = document.createElement('label');
         etiqueta.className = 'catalogo__campo';
-        const texto = document.createElement('span');
-        texto.className = 'catalogo__campo-etiqueta';
-        texto.textContent = campo[0];
-        etiqueta.appendChild(texto);
         etiqueta.appendChild(campo[1]);
         caja.appendChild(etiqueta);
       });
@@ -4010,8 +4006,9 @@ _vistaActualEnGrados() {
 
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'supra-bar__boton catalogo-supra__boton';
+      btn.className = 'supra-bar__boton supra-bar__boton--solo catalogo-supra__boton';
       btn.title = (this.options.tituloBarra || 'Catalogo');
+      btn.setAttribute('aria-label', (this.options.tituloBarra || 'Catalogo'));
       btn.setAttribute('aria-expanded', 'false');
 
       const icono = document.createElement('span');
@@ -4023,7 +4020,6 @@ _vistaActualEnGrados() {
       texto.textContent = (this.options.tituloBarra || 'Catalogo');
 
       btn.appendChild(icono);
-      btn.appendChild(texto);
       btn.addEventListener('click', function (evt) {
         evt.preventDefault();
         // El gesto se queda aqui: la API registra un cierre de paneles al pulsar

@@ -45,6 +45,14 @@
 /* Con layout de supraplugin, el mapa (host) crece para ocupar el resto. */
 .supra-layout > #mapaDIV,
 .supra-layout > #mapa {
+  /* MEDIDO: el host suele venir con position:absolute y top:0, con alto 100%
+     (ver css/mapa.css de cada visualizador). Con eso se sale del flujo flex y
+     el mapa se queda por debajo del dock, que le queda encima. Aquí se le
+     devuelve al flujo: el dock y el mapa son dos hermanos que se reparten la
+     altura, no dos capas superpuestas. */
+  position: relative;
+  top: auto;
+  left: auto;
   flex: 1 1 auto;
   min-height: 0; /* imprescindible en flex para que el mapa pueda encoger */
 }
@@ -216,6 +224,7 @@
 .supra-bar__cuerpo {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   flex: 1 1 auto;
   min-height: 0;
@@ -287,6 +296,7 @@
 .supra-bar__items {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   flex-wrap: wrap;
   flex: 1 1 auto;
@@ -374,6 +384,16 @@
 }
 
 .supra-bar__boton--activo:hover { filter: brightness(0.94); }
+
+/* Botón de SOLO icono: es el caso de los plugins de la barra, que no pintan
+   texto (el nombre sale en el title al pasar por encima). Cuadrado, con el
+   icono centrado. Los botones de las barras anidadas, que sí llevan su
+   etiqueta, no llevan esta clase. */
+.supra-bar__boton--solo {
+  padding: 0;
+  width: 32px;
+  justify-content: center;
+}
 
 .supra-bar__boton-icono {
   font-family: g-cartografia;

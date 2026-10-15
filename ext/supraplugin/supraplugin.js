@@ -688,9 +688,36 @@
         // Superficie de la barra: la paleta del tema, con las opciones del
         // constructor por encima. Se escribe en línea para que cada barra
         // pueda llevar su propio color sin tocar el CSS.
+        //
+        // color1/2/3 pintan la barra con el mismo reparto que el resto de
+        // plugins del repositorio (color1 = fondo, color2 = borde,
+        // color3 = icono y texto), pero SOLO cuando el visualizador los
+        // declara. Sin ellos la barra se queda con la paleta del tema, que es
+        // lo que se quiere: los valores por defecto de este esquema
+        // (naranja y blanco) son los de un panel, y aplicados a una barra
+        // darían una franja naranja que nadie ha pedido.
         var pal = PALETAS[this.theme] || PALETAS.light;
+        var base = {};
+        var pone = (opcion, pares) => {
+          if (this.options[opcion] === undefined) return;
+          pares.forEach(function (par) { base[par.clave] = par.valor; });
+        };
+        pone("color1", [
+          { clave: "bg", valor: c1.deactive },
+          { clave: "bgSolid", valor: c1.active },
+        ]);
+        pone("color2", [
+          { clave: "border", valor: c2.deactive },
+          { clave: "hover", valor: c2.active },
+        ]);
+        pone("color3", [
+          { clave: "fg", valor: c3.deactive },
+          { clave: "fgDim", valor: c3.deactive },
+        ]);
         var s = this._superficie || {};
-        var valor = (k) => (s[k] !== undefined && s[k] !== null) ? s[k] : pal[k];
+        // Lo declarado en `surface` es lo explicito y gana sobre color1/2/3.
+        var valor = (k) => (s[k] !== undefined && s[k] !== null) ? s[k]
+          : (base[k] !== undefined && base[k] !== null) ? base[k] : pal[k];
         CLAVES_SUPERFICIE.forEach((k) => {
           this.container.style.setProperty(k.css, valor(k.opcion));
         });

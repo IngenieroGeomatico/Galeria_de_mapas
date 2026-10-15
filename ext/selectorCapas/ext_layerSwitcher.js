@@ -259,20 +259,16 @@ class miPlugin_layerSwitcher {
 
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'supra-bar__boton ls-supra__boton';
+    btn.className = 'supra-bar__boton supra-bar__boton--solo ls-supra__boton';
     btn.title = (this.options.tituloBarra || 'Selector de capas');
+    btn.setAttribute('aria-label', (this.options.tituloBarra || 'Selector de capas'));
     btn.setAttribute('aria-expanded', 'false');
 
     const icono = document.createElement('span');
     icono.className = 'supra-bar__boton-icono ls-supra__icono';
     icono.setAttribute('aria-hidden', 'true');
 
-    const texto = document.createElement('span');
-    texto.className = 'supra-bar__boton-texto';
-    texto.textContent = (this.options.tituloBarra || 'Selector de capas');
-
     btn.appendChild(icono);
-    btn.appendChild(texto);
     btn.addEventListener('click', function (evt) {
       evt.preventDefault();
       // El gesto se queda aqui: la API registra un cierre de paneles al pulsar

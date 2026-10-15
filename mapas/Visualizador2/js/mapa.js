@@ -12,12 +12,11 @@
    que la API monte su panel y lo que hace que conserve su estado al pasar
    a 3D. La barra solo le pone el botón delante y esconde el del mapa.
 
-   Los plugins que NO son de botón y panel se registran directamente en
-   el mapa:
+   El plugin que NO es de botón y panel se registra directamente en el mapa:
    - mapInfo: es un plugin-control que vive en la banda inferior y no
      sigue la filosofía de los plugins de botón y panel.
-   - cambioImpl: es el plugin que alterna entre 2D y 3D y necesita
-     acceso directo al mapa.
+   - cambioImpl: sí está en la barra, pero además en el mapa, porque el
+     intercambio de implementación necesita del mapa vivo.
    ===================================================================== */
 
 const SVGCarga = document.getElementById("cargaSVG");
@@ -163,6 +162,20 @@ function mapa() {
   supra.addItem(catalogoPlugin);
   mapajs.addPlugin(catalogoPlugin);
 
+  // ── Cambio de implementación (OL <-> Cesium) ───────────────────────
+  // También cuelga de la barra: su botón del mapa se esconde y el de la
+  // barra queda como único mando. El botón de la barra no repite la lógica
+  // del swap, llama al del mapa (ver _construirSupraUI en cambioImpl.js).
+  const cambioImplPlugin = new IDEE.plugin.miPlugin_cambioImpl({
+    buttonTitle: 'Cambiar entre 2D y 3D',
+    mapsFunction: mapa,
+    sameMap: true,
+    shareView: true,
+    shareLayers: true
+  });
+  supra.addItem(cambioImplPlugin);
+  mapajs.addPlugin(cambioImplPlugin);
+
   // ── Registro del supraplugin en el mapa ───────────────────────────
   // El supraplugin SÍ se registra en el mapa con addPlugin(): es la barra
   // contenedora, y los items que contiene se gestionan a través de ella.
@@ -173,16 +186,6 @@ function mapa() {
   // la filosofía de los plugins de botón y panel. Se registra directamente
   // en el mapa.
   mapajs.addPlugin(new IDEE.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
-
-  // cambioImpl es el plugin que alterna entre 2D y 3D y necesita acceso
-  // directo al mapa. También se registra directamente.
-  mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
-    buttonTitle: 'cambiar impl :)',
-    mapsFunction: mapa,
-    sameMap: true,
-    shareView: true,
-    shareLayers: true
-  }));
 
   SVGCarga.hidden = true;
   return mapajs;

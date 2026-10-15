@@ -98,20 +98,16 @@ class miPlugin_baseLayer {
 
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'supra-bar__boton bl-supra__boton';
+    btn.className = 'supra-bar__boton supra-bar__boton--solo bl-supra__boton';
     btn.title = (this.options.tituloBarra || this.options.title || 'Capas base');
+    btn.setAttribute('aria-label', (this.options.tituloBarra || this.options.title || 'Capas base'));
     btn.setAttribute('aria-expanded', 'false');
 
     const icono = document.createElement('span');
     icono.className = 'supra-bar__boton-icono bl-supra__icono';
     icono.setAttribute('aria-hidden', 'true');
 
-    const texto = document.createElement('span');
-    texto.className = 'supra-bar__boton-texto';
-    texto.textContent = (this.options.tituloBarra || this.options.title || 'Capas base');
-
     btn.appendChild(icono);
-    btn.appendChild(texto);
     btn.addEventListener('click', function (evt) {
       evt.preventDefault();
       // El gesto se queda aqui: la API registra un cierre de paneles al pulsar

@@ -27,7 +27,10 @@
    CSS. La ruta es absoluta desde la raíz del repositorio porque en un `url()` de
    CSS las rutas relativas se resuelven contra el fichero de estilos, no contra la
    página. */
-.buttonHerramienta_cambImpl:before {
+/* El boton de la barra del supraplugin pinta el MISMO icono que este, y por
+   ese motivo comparten la declaracion. */
+.buttonHerramienta_cambImpl:before,
+.cambio-supra__icono::before {
   content: "";
   /* Ni `display: block` ni nada: se deja como `inline-block` y que sea el flex del
      botón quien lo centre. Con un inline-block sin más el icono se va hacia
@@ -202,4 +205,21 @@
    padding: 5px: sin eso se sale 10 px por la derecha, más allá del panel. */
 .m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
   box-sizing: border-box;
+}
+
+/* ── Item del supraplugin ───────────────────────────────────────────────
+   Solo el tamaño y el color: el icono lo pinta la regla compartida de
+   arriba, la misma que usa el botón del mapa. */
+.cambio-supra__icono::before {
+  width: 20px;
+  height: 20px;
+  background-color: currentColor !important;
+}
+
+/* Con el plugin en la barra, su botón del mapa sería un segundo mando:
+   se esconde y solo queda el de la barra. Va con !important porque la
+   propia API pone `display: table` al contenedor del control con un
+   selector más específico (medido). */
+.m-panel.m-herramienta_cambImpl.g-panel-en-barra .m-herramienta-container_cambImpl {
+  display: none !important;
 }

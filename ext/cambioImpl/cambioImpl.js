@@ -53,6 +53,11 @@ class miPlugin_cambioImpl {
         // el <style> de colores que se inyecta en <head>.
         this._map = null;
         this._panel = null;
+        // Barra supraplugin anadida (ver getSupraElement mas abajo).
+        this.supra = null;
+        this._supraWrap = null;
+        this._supraBoton = null;
+        this._supraObs = null;
         this._control = null;
         this._styleEl = null;
         this._carga = null;
@@ -905,6 +910,112 @@ class miPlugin_cambioImpl {
 
 
     }
+        // ── Item del supraplugin: el boton vive en la barra, el del mapa se esconde ──
+        // Colgado con `supra.addItem(this)`, la barra pone aqui el boton y el del
+        // mapa (BUTTON.buttonHerramienta_cambImpl) deja de verse: un solo mando.
+        // El boton no abre ningun panel (este plugin no lo tiene), asi que aqui no
+        // hay nada que alternar.
+        //
+        // El boton lleva las clases .supra-bar__boton de la barra (asi hereda el
+        // tema y el color de marca por las variables --supra-*) y su icono es el
+        // MISMO que el del mapa, porque las dos reglas CSS comparten declaracion
+        // (ver cambioImpl.css).
+        getSupraElement(supra) {
+          this.supra = supra || null;
+          this._supraWrap = this._construirSupraUI();
+          this._ocultarBotonDelMapa();
+          this._sincronizarSupra();
+          return this._supraWrap;
+        }
+
+        // Construye el boton de la barra y lo engancha al del mapa: este plugin
+        // marca el suyo con la clase "activated" cuando esta en 3D (medido), asi que
+        // se copia esa clase al boton de la barra con un observador. Asi el boton
+        // de la barra se enciende al cambiar de implementacion sin tocar el codigo
+        // que ya enciende el otro.
+        _construirSupraUI() {
+          const self = this;
+          const wrap = document.createElement("div");
+          wrap.className = "cambio-supra__wrap";
+
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "supra-bar__boton supra-bar__boton--solo cambio-supra__boton";
+          const nombre = this.options.buttonTitle || "Cambiar de implementacion";
+          btn.title = nombre;
+          btn.setAttribute("aria-label", nombre);
+          btn.setAttribute("aria-pressed", "false");
+
+          const icono = document.createElement("span");
+          icono.className = "supra-bar__boton-icono cambio-supra__icono";
+          icono.setAttribute("aria-hidden", "true");
+
+          btn.appendChild(icono);
+
+          wrap.appendChild(btn);
+          this._supraBoton = btn;
+
+          // El boton de la barra llama al del mapa, que es quien sabe cambiar de
+          // implementacion: el click se propaga al original en lugar de duplicar
+          // aqui la logica del swap.
+          btn.addEventListener("click", function (evt) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            const original = document.getElementById("APIIDEE-herramienta-button");
+            if (original) { original.click(); return; }
+            console.warn("[miPlugin_cambioImpl] no se encuentra el boton del mapa.");
+          });
+
+          return wrap;
+        }
+
+        _sincronizarSupra() {
+          if (!this._supraBoton) return;
+          const original = document.getElementById("APIIDEE-herramienta-button");
+          const activo = !!(original && original.classList.contains("activated"));
+          this._supraBoton.classList.toggle("supra-bar__boton--activo", activo);
+          this._supraBoton.setAttribute("aria-pressed", activo ? "true" : "false");
+
+          // El boton del mapa se reconstruye en cada swap, asi que el observador se
+          // vuelve a colgar en el que haya ahora.
+          if (this._supraObs) { try { this._supraObs.disconnect(); } catch (e) { /* ignora */ } this._supraObs = null; }
+          if (!original || typeof MutationObserver === "undefined") return;
+          const self = this;
+          this._supraObs = new MutationObserver(function () { self._sincronizarSupra(); });
+          this._supraObs.observe(original, { attributes: true, attributeFilter: ["class"] });
+        }
+
+        _ocultarBotonDelMapa() {
+          const el = this._elementoPanel();
+          if (el) el.classList.add("g-panel-en-barra");
+        }
+
+        _destruirSupra() {
+          if (this._supraObs) { try { this._supraObs.disconnect(); } catch (e) { /* ignora */ } }
+          this._supraObs = null;
+          const el = this._elementoPanel();
+          if (el) el.classList.remove("g-panel-en-barra");
+          if (this._supraWrap && this._supraWrap.parentNode) {
+            this._supraWrap.parentNode.removeChild(this._supraWrap);
+          }
+          this._supraWrap = null;
+          this._supraBoton = null;
+          this.supra = null;
+        }
+
+        // MEDIDO: IDEE.ui.Panel no expone getElement(); trae getButtonPanel() y el
+        // campo _element. Se van probando los dos caminos.
+        _elementoPanel() {
+          const pan = this._panel;
+          if (!pan) return null;
+          try { if (pan._element) return pan._element; } catch (e) { /* sigue */ }
+          try {
+            const btn = (typeof pan.getButtonPanel === "function") ? pan.getButtonPanel() : null;
+            if (btn && btn.parentElement) return btn.parentElement;
+          } catch (e) { /* sigue */ }
+          return null;
+        }
+
 
     /**
      * Destruccion. map.removePlugins() de la API la exige: sin este metodo
@@ -918,6 +1029,7 @@ class miPlugin_cambioImpl {
      * <head> con un id propio y se queda ahi para siempre.
      */
     destroy() {
+        this._destruirSupra();
         // El engranaje es de este plugin: si se desmonta a mitad de un cambio no
         // se queda puesto tapando el mapa.
         this._destruirCarga();
