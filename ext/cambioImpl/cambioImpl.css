@@ -211,8 +211,8 @@
    Solo el tamaño y el color: el icono lo pinta la regla compartida de
    arriba, la misma que usa el botón del mapa. */
 .cambio-supra__icono::before {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
   background-color: currentColor !important;
 }
 

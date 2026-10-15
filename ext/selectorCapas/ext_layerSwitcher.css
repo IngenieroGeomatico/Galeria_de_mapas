@@ -1113,8 +1113,8 @@
    icono NO se declara aqui: lo pone la regla compartida de mas arriba, que
    es la misma que pinta el boton del mapa. Aqui solo el tamano. */
 .ls-supra__icono::before {
-  width: 15px;
-  height: 15px;
+  width: 19px;
+  height: 19px;
   /* La máscara compartida se pinta con --g-plugin-icon-color, que es cosa del
      panel del mapa; en la barra el color es el del texto del botón, para que
      siga al tema y se ponga blanco cuando el botón queda activo. */

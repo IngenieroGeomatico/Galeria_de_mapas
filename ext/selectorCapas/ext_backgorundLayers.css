@@ -294,7 +294,7 @@
    icono NO se declara aqui: lo pone la regla compartida de mas arriba, que
    es la misma que pinta el boton del mapa. Aqui solo el tamano. */
 .bl-supra__icono::before {
-  font-size: 15px;
+  font-size: 19px;
 }
 
 /* Con el plugin en la barra, el boton redondo del area seria un segundo

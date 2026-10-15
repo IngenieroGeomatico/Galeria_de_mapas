@@ -1416,8 +1416,8 @@
    que pinta el botón del mapa, y lee el mismo --g-plugin-icon-mask que se
    pone en construcción. Aquí solo el tamaño. */
 .catalogo-supra__icono::before {
-  width: 15px;
-  height: 15px;
+  width: 19px;
+  height: 19px;
   /* La máscara compartida se pinta con --g-plugin-icon-color, que es cosa del
      panel del mapa; en la barra el color es el del texto del botón, para que
      siga al tema y se ponga blanco cuando el botón queda activo. */

@@ -400,13 +400,14 @@
    etiqueta, no llevan esta clase. */
 .supra-bar__boton--solo {
   padding: 0;
-  width: 32px;
+  width: 40px;
+  height: 40px;
   justify-content: center;
 }
 
 .supra-bar__boton-icono {
   font-family: g-cartografia;
-  font-size: 15px;
+  font-size: 19px;
   line-height: 1;
 }
 
