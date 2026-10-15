@@ -1519,6 +1519,13 @@
       const cache = this._entradasPropias[tipo.id] || (this._entradasPropias[tipo.id] = {});
 
       if (cache.datos) {
+        // La raíz se guarda también desde la caché, no solo al descargarla. Sin
+        // esto, volver a elegir un catálogo que ya estaba cargado (que es lo que
+        // pasa al abrir el visualizador, porque se recuerda cuál era) dejaba la
+        // raíz sin guardar: al subir desde una colección de primer nivel no
+        // había de dónde volver y el catálogo se quedaba encerrado en la
+        // colección, sin migas y sin botón de volver (medido).
+        if (!this._pilaStac.length) this._raizStac = cache.datos;
         this._pintarLista(cont, cache.datos);
         return;
       }
@@ -2559,32 +2566,250 @@
       barra.appendChild(ruta);
 
       // La ficha de la colección en la que se está, que es "lo que tiene ese
-      // catálogo": descripción, cobertura temporal, licencia y cuántos
-      // elementos declara.
-      const nodo = this._cacheStac[this._pilaStac[this._pilaStac.length - 1].url];
-      if (nodo && (nodo.descripcion || nodo.temporal || nodo.licencia || nodo.totalElementos)) {
-        const ficha = document.createElement('div');
-        ficha.className = 'catalogo__ficha';
-
-        if (nodo.descripcion) {
-          const d = document.createElement('p');
-          d.className = 'catalogo__ficha-desc';
-          d.textContent = nodo.descripcion;
-          ficha.appendChild(d);
-        }
-        const datos = [];
-        if (nodo.temporal) datos.push('Temporal: ' + nodo.temporal);
-        if (nodo.totalElementos) datos.push(nodo.totalElementos.toLocaleString('es-ES') + ' elementos');
-        if (nodo.licencia) datos.push('Licencia: ' + nodo.licencia);
-        if (datos.length) {
-          const m = document.createElement('div');
-          m.className = 'catalogo__ficha-datos';
-          m.textContent = datos.join(' · ');
-          ficha.appendChild(m);
-        }
-        barra.appendChild(ficha);
-      }
+      // catálogo". Va fuera de la barra de migas y debajo, porque con los
+      // metadatos nuevos (bandas, formatos, extensiones) ya no cabe en una línea.
+      const ficha = this._pintarFichaStac(
+        this._cacheStac[this._pilaStac[this._pilaStac.length - 1].url]
+      );
+      if (ficha) barra.appendChild(ficha);
       return barra;
+    }
+
+    /**
+     * La ficha de la colección en la que se está: qué es, cuándo cubre, con qué
+     * licencia y quién la publica.
+     *
+     *  Antes solo enseñaba descripción, cobertura, licencia y número de
+     *  elementos, y con ello se desperdiciaba casi todo lo que ya venía en la
+     *  respuesta: `providers`, `summaries` (gsd, plataforma, instrumentos,
+     *  constelación, DOI) y `eo:bands`. La de Sentinel-2 de Earth Search trae
+     *  13 bandas con su longitud de onda y cuatro proveedores, y eso es justo lo
+     *  que se va a buscar a un catálogo de satélite.
+     *
+     * @param {Object} nodo El nodo STAC abierto.
+     * @returns {HTMLElement|null}
+     */
+    _pintarFichaStac(nodo) {
+      if (!nodo) return null;
+      const self = this;
+      const resumenes = nodo.resumenes || {};
+      const tieneAlgo = nodo.descripcion || nodo.temporal || nodo.licencia
+        || nodo.totalElementos || (nodo.proveedores || []).length
+        || (resumenes.resoluciones || []).length || (resumenes.bandas || []).length
+        || (nodo.assetsPublicados || []).length;
+      if (!tieneAlgo) return null;
+
+      const ficha = document.createElement('div');
+      ficha.className = 'catalogo__ficha';
+
+      if (nodo.descripcion) {
+        const d = document.createElement('p');
+        d.className = 'catalogo__ficha-desc';
+        d.textContent = nodo.descripcion;
+        ficha.appendChild(d);
+      }
+
+      const linea = function (texto) {
+        if (!texto) return;
+        const p = document.createElement('div');
+        p.className = 'catalogo__ficha-datos';
+        p.textContent = texto;
+        ficha.appendChild(p);
+      };
+
+      const primero = [];
+      if (nodo.temporal) primero.push('Temporal: ' + nodo.temporal);
+      if (nodo.totalElementos) {
+        primero.push(nodo.totalElementos.toLocaleString('es-ES') + ' elementos');
+      }
+      if (nodo.licencia) primero.push('Licencia: ' + nodo.licencia);
+      linea(primero.join(' · '));
+
+      if ((nodo.proveedores || []).length) {
+        linea('Proveedores: ' + nodo.proveedores.join(', '));
+      }
+
+      // Las resoluciones son lo primero que se mira de un catálogo de satélite:
+      // si publica 60 m no sirve para lo que te has plantado delante.
+      const tecnico = [];
+      if ((resumenes.resoluciones || []).length) {
+        tecnico.push('Resoluciones: ' + resumenes.resoluciones.join(', ') + ' m/píxel');
+      }
+      if ((resumenes.plataformas || []).length) {
+        tecnico.push('Plataformas: ' + resumenes.plataformas.join(', '));
+      }
+      if ((resumenes.instrumentos || []).length) {
+        tecnico.push('Instrumentos: ' + resumenes.instrumentos.join(', '));
+      }
+      if (resumenes.constelacion) tecnico.push('Constelación: ' + resumenes.constelacion);
+      if (resumenes.doi) tecnico.push('DOI: ' + resumenes.doi);
+      linea(tecnico.join(' · '));
+
+      // El encuadre. Solo aparece si la huella dice algo: casi todas las
+      // colecciones son mundiales y un botón que lleva al planeta entero es
+      // ruido (medido: ocho de las nueve de Earth Search son el mundo entero).
+      if (nodo.bbox) {
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = 'catalogo__ficha-boton';
+        boton.textContent = 'Zoom a la huella';
+        boton.title = 'Encuadrar la extensión del catálogo';
+        boton.addEventListener('click', function () { self._encuadrarHuella(nodo.bbox); });
+        ficha.appendChild(boton);
+      }
+
+      // Las bandas y los formatos publicados, plegados: son muchos y estorban
+      // si van abiertos, pero son justo lo que se va a mirar antes de cargar.
+      const bandas = resumenes.bandas || [];
+      const formatos = nodo.assetsPublicados || [];
+      const extras = [];
+      if (bandas.length) extras.push(bandas.length + (bandas.length === 1 ? ' banda' : ' bandas'));
+      if (formatos.length) {
+        extras.push(formatos.length + (formatos.length === 1 ? ' formato' : ' formatos'));
+      }
+      if ((nodo.extensiones || []).length) {
+        extras.push(nodo.extensiones.length + ' extensiones');
+      }
+      if (extras.length) {
+        const detalle = document.createElement('details');
+        detalle.className = 'catalogo__ficha-mas';
+        const resumen = document.createElement('summary');
+        resumen.className = 'catalogo__ficha-mas-titulo';
+        resumen.textContent = extras.join(' · ');
+        detalle.appendChild(resumen);
+
+        if (bandas.length) {
+          const lista = document.createElement('ul');
+          lista.className = 'catalogo__ficha-bandas';
+          bandas.forEach(function (b) {
+            const li = document.createElement('li');
+            // La longitud de onda viene en micras y lo útil son los nanometros.
+            const nm = Number(b.center_wavelength);
+            li.textContent = (b.name || b.common_name || '?')
+              + (isFinite(nm) && nm ? ' · ' + Math.round(nm * 1000) + ' nm' : '');
+            if (b.description) li.title = b.description;
+            lista.appendChild(li);
+          });
+          detalle.appendChild(lista);
+        }
+        if (formatos.length) {
+          const lista = document.createElement('ul');
+          lista.className = 'catalogo__ficha-formatos';
+          formatos.forEach(function (nombre) {
+            const li = document.createElement('li');
+            li.textContent = nombre;
+            lista.appendChild(li);
+          });
+          detalle.appendChild(lista);
+        }
+        if ((nodo.extensiones || []).length) {
+          const lista = document.createElement('ul');
+          lista.className = 'catalogo__ficha-formatos';
+          nodo.extensiones.forEach(function (x) {
+            const li = document.createElement('li');
+            li.textContent = self._nombreDeExtension(x);
+            li.title = String(x);
+            lista.appendChild(li);
+          });
+          detalle.appendChild(lista);
+        }
+        ficha.appendChild(detalle);
+      }
+
+      return ficha;
+    }
+
+    /**
+     * El nombre corto de una extensión STAC, que es la URL que la publica.
+     *
+     *  Las extensiones son direcciones largas del tipo
+     *  `https://stac-extensions.github.io/eo/v2.0.0/schema.json`, y quedarse con
+     *  el último trozo las deja a todas en "schema.json", que no dice nada
+     *  (medido: las cinco de la colección de Sentinel-2). Lo que identifica una
+     *  extensión es el segmento anterior al de la versión, así que se busca el
+     *  último que no sea una versión.
+     *
+     * @param {string} url
+     * @returns {string}
+     */
+    _nombreDeExtension(url) {
+      const trozos = String(url || '').split('/').filter(Boolean);
+      if (trozos.length < 2) return String(url || '');
+      // Se quita el nombre de fichero, que en todas es `schema.json`.
+      const cuerpo = trozos.slice(0, -1);
+      const esVersion = function (t) {
+        const s = String(t || '');
+        if (!s.length) return false;
+        if (s.charAt(0) >= '0' && s.charAt(0) <= '9') return true;
+        // La forma `v1.0.0` y `v2`: una letra y enseguida un número.
+        return (s.charAt(0) === 'v' || s.charAt(0) === 'V')
+          && s.length > 1 && s.charAt(1) >= '0' && s.charAt(1) <= '9';
+      };
+      for (let i = cuerpo.length - 1; i >= 0; i--) {
+        if (!esVersion(cuerpo[i])) return cuerpo[i];
+      }
+      return cuerpo[cuerpo.length - 1];
+    }
+
+    /**
+     * Encuadra una huella en el mapa, en 2D o en 3D.
+     *
+     *  El STAC publica su `bbox` en grados (EPSG:4326) siempre, así que aquí no
+     *  hay que adivinar de dónde viene: para OpenLayers se reproyecta y se
+     *  encuadra la vista, y para Cesium se vuela la cámara al rectángulo.
+     *
+     * @param {Array<number>} bbox [oeste, sur, este, norte] en EPSG:4326.
+     */
+    _encuadrarHuella(bbox) {
+      const map = this._map;
+      if (!map || !Array.isArray(bbox) || bbox.length < 4) return;
+      const impl = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
+      // El impl de Cesium trae `scene` y el de OpenLayers, no: es lo que los
+      // distingue sin preguntar por la versión de la API.
+      const escena = (impl && impl.scene) ? impl.scene : null;
+
+      if (escena && escena.camera) {
+        const C = window.Cesium;
+        if (!C || !C.Rectangle) {
+          this._decir('No se puede mover la cámara en esta implementación.', 'aviso');
+          return;
+        }
+        try {
+          escena.camera.flyTo({
+            destination: C.Rectangle.fromDegrees(bbox[0], bbox[1], bbox[2], bbox[3]),
+            duration: 1.2
+          });
+        } catch (e) {
+          this._decir('No se ha podido encuadrar la huella.', 'error');
+        }
+        return;
+      }
+
+      const vista = (impl && typeof impl.getView === 'function') ? impl.getView() : null;
+      if (!vista || typeof vista.fit !== 'function') {
+        this._decir('No se puede encuadrar la huella en esta implementación.', 'aviso');
+        return;
+      }
+      const api = window.IDEE || window.M;
+      if (!(api && api.utils && typeof api.utils.reproject === 'function')) {
+        this._decir('No se ha podido convertir la huella a coordenadas del mapa.', 'aviso');
+        return;
+      }
+      let oeste, este;
+      try {
+        oeste = api.utils.reproject([bbox[0], bbox[1]], 'EPSG:4326', 'EPSG:3857');
+        este = api.utils.reproject([bbox[2], bbox[3]], 'EPSG:4326', 'EPSG:3857');
+      } catch (e) {
+        this._decir('No se ha podido convertir la huella a coordenadas del mapa.', 'error');
+        return;
+      }
+      try {
+        vista.fit([oeste[0], oeste[1], este[0], este[1]], {
+          padding: [48, 48, 48, 48], maxZoom: 17, duration: 350
+        });
+      } catch (e) {
+        this._decir('No se ha podido encuadrar la huella.', 'error');
+      }
     }
 
     /**
@@ -2799,9 +3024,17 @@
 
       if (nodo) {
         cache.datos = nodo.entradas || [];
+      } else if (this._raizStac) {
+        cache.datos = this._raizStac;
       } else {
-        // De vuelta en la raíz: lo que se pintó al abrir el catálogo.
-        cache.datos = this._raizStac || cache.datos;
+        // Ni la raíz ni un nodo padre: no hay de dónde volver. Se borra lo que
+        // había en memoria y se vuelve a leer el catálogo, que es lo único que
+        // devuelve al usuario a la raíz en vez de dejarlo encerrado en la
+        // colección en la que estaba.
+        delete cache.datos;
+        delete cache.promesa;
+        this._pintarCatalogo();
+        return;
       }
       this._pintarCatalogo();
       if ((this._filtro || '').trim()) this._repintarLista();

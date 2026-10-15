@@ -684,6 +684,56 @@
   line-height: 1.4;
 }
 
+/* Encuadrar la huella del catálogo. Sale solo cuando la huella dice algo: las
+   colecciones mundiales no lo enseñan. */
+.catalogo__ficha-boton {
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg-suave);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+
+.catalogo__ficha-boton:hover {
+  border-color: var(--cat-acento);
+  color: var(--cat-acento);
+}
+
+/* Las bandas y los formatos publicados van plegados: son muchos y si van
+   abiertos empujan la lista de items fuera de la vista. */
+.catalogo__ficha-mas {
+  margin-top: 2px;
+  font-size: 10.5px;
+}
+
+.catalogo__ficha-mas-titulo {
+  color: var(--cat-acento);
+  cursor: pointer;
+  user-select: none;
+}
+
+.catalogo__ficha-mas-titulo:hover {
+  text-decoration: underline;
+}
+
+.catalogo__ficha-bandas,
+.catalogo__ficha-formatos {
+  margin: 3px 0 0;
+  padding-left: 16px;
+  color: var(--cat-fg-tenue);
+  font-size: 10.5px;
+  line-height: 1.45;
+  columns: 2;
+}
+
 /* Un elemento STAC se enseña pero no se carga: sin botón y sin luz de acción. */
 .catalogo__item--info {
   cursor: default;

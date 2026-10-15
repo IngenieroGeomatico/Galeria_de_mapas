@@ -126,6 +126,112 @@
   const LIMITE_ITEMS_STAC = 50;
 
 /**
+   * Los metadatos de resumen de una colección, que es el bloque `summaries` del
+   * documento STAC.
+   *
+   *  Es la parte del catálogo que más información da y que no se usaba (medido en
+   *  la de Sentinel-2 de Earth Search):
+   *
+   *    platform         ["sentinel-2a","sentinel-2b"]
+   *    constellation    "sentinel-2"
+   *    instruments      "msi"
+   *    gsd              [10,20,60]                resoluciones en m/píxel
+   *    eo:bands         [{name, center_wavelength, ...}]  las bandas, en micras
+   *    sci:doi          "10.5270/..."
+   *
+   *  El valor de cada resumen cambia de forma: un array de cadenas, un array de
+   *  números, una cadena suelta o un array de objetos (las bandas). Por eso se
+   *  leen todos con la misma pinta y se deja que la interfaz los presente.
+   *
+   * @param {Object} json Documento STAC.
+   * @returns {Object} {resoluciones: number[], plataformas: string[],
+   *   instrumentos: string[], constelacion: string, bandas: Array<Object>,
+   *   doi: string}
+   */
+  function leerResumenes(json) {
+    const s = (json && json.summaries) ? json.summaries : {};
+    const aTexto = function (v) {
+      if (v === null || v === undefined) return '';
+      if (Array.isArray(v)) {
+        return v.map(function (x) {
+          return (x && typeof x === 'object') ? (x.name || x.title || '') : String(x);
+        }).filter(Boolean).join(', ');
+      }
+      if (typeof v === 'object') return v.name || v.title || '';
+      return String(v);
+    };
+    const aLista = function (v) {
+      return aTexto(v).split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    };
+
+    return {
+      resoluciones: (Array.isArray(s['gsd']) ? s['gsd'] : []).map(Number).filter(isFinite),
+      plataformas: aLista(s.platform),
+      instrumentos: aLista(s.instruments),
+      constelacion: aTexto(s.constellation),
+      bandas: Array.isArray(s['eo:bands']) ? s['eo:bands'] : [],
+      doi: aTexto(s['sci:doi'])
+    };
+  }
+
+  /**
+   * La huella de una colección o de un item, como [oeste, sur, este, norte].
+   *
+   *  OJO con las colecciones: casi todas declaran el mundo entero (medido: las
+   *  nueve de Earth Search menos `naip`, que va de Alaska a Florida con
+   *  [-160, 17, -67, 50]), así que una huella mundial no dice nada y se devuelve
+   *  nula para no pintar un botón de zoom que lleva al planeta entero.
+   *
+   * @param {Array<number>} bbox
+   * @returns {Array<number>|null}
+   */
+  function huellaDe(bbox) {
+    if (!Array.isArray(bbox) || bbox.length < 4) return null;
+    const n = bbox.slice(0, 4).map(Number);
+    if (!n.every(isFinite)) return null;
+    if (n[0] <= -180 && n[1] <= -90 && n[2] >= 180 && n[3] >= 90) return null;
+    return n;
+  }
+
+  /**
+   * El rectángulo que envuelve un polígono GeoJSON.
+   *
+   *  Por si el item viene sin `bbox`, que es opcional en el STAC. Para un solo
+   *  anillo (que es lo que son las huellas de las escenas) recorre los pares de
+   *  coordenadas; con anillos interiores, como un multipolígono con islas, el
+   *  resultado sigue siendo válido, porque ningún vértice aceptado sale del
+   *  polígono.
+   *
+   * @param {Object} geo Un `Feature` o una `geometry`.
+   * @returns {Array<number>|null} [oeste, sur, este, norte].
+   */
+  function cajaDe(geo) {
+    if (!geo || typeof geo !== 'object') return null;
+    const geometria = geo.type ? geo : geo.geometry;
+    const coordenadas = geometria && geometria.coordinates;
+    if (!Array.isArray(coordenadas)) return null;
+    let oeste = Infinity, sur = Infinity, este = -Infinity, norte = -Infinity;
+    const visitar = function (par) {
+      if (!Array.isArray(par) || par.length < 2) return;
+      const x = Number(par[0]);
+      const y = Number(par[1]);
+      if (!isFinite(x) || !isFinite(y)) return;
+      if (x < oeste) oeste = x;
+      if (x > este) este = x;
+      if (y < sur) sur = y;
+      if (y > norte) norte = y;
+    };
+    const recorrer = function (n) {
+      if (!Array.isArray(n)) return;
+      if (typeof n[0] === 'number') visitar(n);
+      else n.forEach(recorrer);
+    };
+    recorrer(coordenadas);
+    if (!isFinite(oeste) || !isFinite(sur) || !isFinite(este) || !isFinite(norte)) return null;
+    return [oeste, sur, este, norte];
+  }
+
+  /**
    * Tipos de un asset STAC que la API sabe construir como capa.
    *
    *  Se decide por el `type` MIME que declara el asset, que es donde el STAC
@@ -148,22 +254,22 @@
   ];
 
   /**
- * Busca en los assets de un item STAC el primero que se pueda cargar.
- *
- *  Primero se mira si algún asset es un servicio OGC (se carga por URL aunque
- *  lo que sirva por debajo sea una imagen), y luego los que son ficheros que la
- *  API sabe construir. Los de apoyo (metadatos, miniaturas) se descartan: no son
- *  la escena. Y entre los que valen se prefiere el marcado como `visual`, que es
- *  la imagen en color true, antes que una banda suelta.
- *
- *  OJO, con los catálogos de satélite esto es lo normal: los items de
- *  Earth Search son COG (`image/tiff; profile=cloud-optimized`) y la API sí tiene
- *  constructor para ellos, `M.layer.GeoTIFF` (medido), así que se cargan.
- *
- * @param {Object} assets El diccionario `assets` del item.
- * @returns {{tipo: string, url: string, clave: string}|null} El asset elegido.
- */
-function assetCargable(assets) {
+   * Busca en los assets de un item STAC el primero que se pueda cargar.
+   *
+   *  Primero se mira si algún asset es un servicio OGC (se carga por URL aunque
+   *  lo que sirva por debajo sea una imagen), y luego los que son ficheros que la
+   *  API sabe construir. Los de apoyo (metadatos, miniaturas) se descartan: no son
+   *  la escena. Y entre los que valen se prefiere el marcado como `visual`, que es
+   *  la imagen en color true, antes que una banda suelta.
+   *
+   *  OJO, con los catálogos de satélite esto es lo normal: los items de
+   *  Earth Search son COG (`image/tiff; profile=cloud-optimized`) y la API sí tiene
+   *  constructor para ellos, `M.layer.GeoTIFF` (medido), así que se cargan.
+   *
+   * @param {Object} assets El diccionario `assets` del item.
+   * @returns {{tipo: string, url: string, clave: string}|null} El asset elegido.
+   */
+  function assetCargable(assets) {
     const claves = Object.keys(assets || {});
     for (const clave of claves) {
       const a = assets[clave] || {};
@@ -283,6 +389,18 @@ function assetCargable(assets) {
       licencia: (json.license || (Array.isArray(json.licenses) && json.licenses[0]
         ? (json.licenses[0].name || json.licenses[0]) : '')) || '',
       temporal: leerTemporal(json),
+      // La huella, solo si dice algo: la mayoría de las colecciones son
+      // mundiales y su bbox es el mundo entero (medido).
+      bbox: huellaDe(json.extent && json.extent.spatial
+        && Array.isArray(json.extent.spatial.bbox) ? json.extent.spatial.bbox[0] : null),
+      // Los metadatos de resumen, que antes no se leian (ver leerResumenes).
+      resumenes: leerResumenes(json),
+      proveedores: (Array.isArray(json.providers) ? json.providers : [])
+        .map(function (p) { return p && (p.name || p.title) ? String(p.name || p.title) : ''; })
+        .filter(Boolean),
+      assetsPublicados: (json.item_assets && typeof json.item_assets === 'object')
+        ? Object.keys(json.item_assets) : [],
+      extensiones: Array.isArray(json.stac_extensions) ? json.stac_extensions : [],
       // La URL de los items de una colección de API, para cargarlos.
       urlItems: urlItems,
       // Y la de la página siguiente, que es lo que permite seguir leyendo más
@@ -296,6 +414,13 @@ function assetCargable(assets) {
 
   /**
    * Una entrada de la lista del catálogo por cada item de una página.
+   *
+   *  Se guarda también la huella del item, que es lo que permite encuadrarla en
+   * el mapa antes de descargar el fichero: los COG de satélite pesan cientos de
+   * megas. El `geometry` es un Polygon GeoJSON de verdad y el `bbox` viene
+   * siempre (medido en Earth Search: `[-64.353843, 42.387978, -64.095828,
+   * 42.447434]`).
+   *
    * @param {Array<Object>} feats Los `features` de la respuesta.
    * @returns {Array<Object>}
    */
@@ -306,14 +431,20 @@ function assetCargable(assets) {
       const claves = Object.keys(assets);
       const gsd = props['gsd'] || props['proj:gsd'] || '';
       const fecha = props.datetime || props.start_datetime || '';
+      const nubes = props['eo:cloud_cover'];
       const trozos = [];
       if (fecha) trozos.push(String(fecha).slice(0, 10));
       if (gsd) trozos.push(gsd + ' m/píxel');
+      if (nubes !== undefined && nubes !== null && nubes !== '') {
+        trozos.push(Math.round(Number(nubes)) + '% de nubes');
+      }
       if (claves.length) trozos.push(claves.length + ' assets');
       // El botón de cargar solo aparece si el item tiene ALGÚN asset que la
       // API sepa construir como capa. Con los COG de Earth Search no hay
       // ninguno y el item se queda como información, que es lo honesto.
       const bueno = assetCargable(assets);
+      const geometria = (f.geometry && f.geometry.type === 'Polygon') ? f.geometry : null;
+      const bbox = huellaDe(f.bbox) || cajaDe(geometria);
       return {
         nombre: f.id || '(sin id)',
         url: bueno ? bueno.url : ((assets.visual && assets.visual.href) || ''),
@@ -324,7 +455,14 @@ function assetCargable(assets) {
         // Sin asset cargable, lo que se enseña del item es solo información:
         // sus assets son ficheros (COG, JP2, GeoTIFF) y la API no construye
         // capas con ellos. Un botón de cargar ahí solo podría fallar.
-        soloInfo: !bueno
+        soloInfo: !bueno,
+        // La huella del item: el rectángulo para encuadrar y el polígono para
+        // dibujar. Si no hay bbox, sale del polígono, que es lo mismo.
+        bbox: bbox,
+        geometria: geometria,
+        // La cobertura de nubes, que es el dato con el que se decide si una
+        // escena de satélite sirve para algo.
+        nubes: (nubes === undefined || nubes === null) ? null : Number(nubes)
       };
     });
   }
