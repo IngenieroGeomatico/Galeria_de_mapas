@@ -1,0 +1,230 @@
+# 🧩 ext/selectorCapas (selector de capas base y de capas superpuestas)
+
+> Dos plugins de gestión de capas que se cargan juntos: el grid de capas base y el árbol de capas superpuestas.
+
+Esta carpeta agrupa los dos selectores de capas del repositorio, cada uno en su propio fichero y con su propia clase: `miPlugin_baseLayer` (fichero `ext_backgorundLayers.js`), un grid de miniaturas que hace de radiobutton para cambiar la capa base, y `miPlugin_layerSwitcher` (fichero `ext_layerSwitcher.js`), el árbol de capas superpuestas con visibilidad, transparencia, renombrado, reordenación por drag & drop, grupos, tabla de atributos y ficha de capa. Están separados a propósito: las capas base se gestionan desde el primero y quedan fuera del segundo. El fichero del layer switcher define además el ayudante global `window.miWrapX`, que usan los dos.
+
+---
+
+# 🧩 miPlugin_baseLayer
+
+> Grid de miniaturas que funciona como radiobutton para elegir la capa base del mapa.
+
+Muestra la lista de capas base como imágenes cuadradas en un grid; al marcar una se quita la capa base actual, se añade la nueva y se iguala el `wrapX` de todas las capas ráster. La selección se guarda en `localStorage` (`baseLayer_ID`), de modo que el visor recuerda la última capa base elegida entre recargas.
+
+## ✨ Características
+
+- Lista por defecto la del catálogo de la API (`IDEE.config.backgroundlayers`) si no se le pasa `layers`.
+- Grid de columnas de ancho **fijo** (110 px): cada miniatura mide siempre lo mismo y el panel se ensancha o se encoge según el número de capas.
+- Opción «Sin mapa base» (`noBaseLayer`), que se coloca **siempre al final** de la lista (id interno `__none__`).
+- Elección de la capa base inicial por `id` o por **posición**, con prioridad sobre lo guardado en `localStorage`.
+- Aplica `window.miWrapX.aplica(map)` tras cada cambio, para que todas las capas base den la vuelta al mundo (las TMS vienen con `wrapX` a `true` por defecto y las WMTS a `false`).
+- Contrato de estado 2D/3D: conserva la capa base activa y el estado abierto/colapsado del panel.
+- Se puede colgar de la barra del supraplugin (`getSupraElement`), ocultando entonces el botón redondo que la API pinta en el área.
+
+## 📁 Archivos
+
+| Archivo | Descripción |
+|---|---|
+| `ext_backgorundLayers.js` | Clase `miPlugin_baseLayer`: construye el panel (`toolsExtra_baseLayer`), el control (`controlBackgroundLayer`), el grid, la función interna `changeBase(layerId)` y el contrato de estado. |
+| `ext_backgorundLayers.css` | Estilos del grid (`.bl-grid`, `.bl-item`, `.bl-thumb`, `.bl-title`, `.bl-img`), del botón del panel (color1/color2/color3 vía variables) y del botón de la barra (`.bl-supra__*`). |
+
+## 🔧 Integración en un visualizador
+
+```html
+<link type="text/css" rel="stylesheet" href="../../ext/selectorCapas/ext_backgorundLayers.css" />
+<script src="../../ext/selectorCapas/ext_backgorundLayers.js" type="text/javascript"></script>
+```
+
+## ⚙️ Parámetros de construcción
+
+`new IDEE.plugin.miPlugin_baseLayer(options)`
+
+| Parámetro | Tipo | Por defecto | Descripción |
+|---|---|---|---|
+| `layers` | `Array<Object>` | `IDEE.config.backgroundlayers` | Capas base. Cada elemento es `{ id, title, layers, imgPreview }`: `id` lo usa `initActiveLayer` y el `localStorage`, `title` es la etiqueta, `layers` es lo que se pasa a `map.addLayers()` y `imgPreview` es la URL de la miniatura. Si el array está vacío o no es un array, se usa el catálogo de la API. |
+| `rows` | `number` | `1` | Número de filas del grid. Solo se acepta si es un número `>= 1`. Las columnas se calculan como `Math.ceil(items.length / rows)`. |
+| `noBaseLayer` | `boolean\|Object` | — (no se añade) | Añade la opción «Sin mapa base». Con `true` usa una imagen blanca 1×1 en base64 y el título `'Sin mapa base'`; con un objeto admite `{ imgPreview, title }`. Va siempre al final de la lista. |
+| `position` | `string` | `IDEE.ui.position.TL` | Esquina del panel. |
+| `title` | `string` | `'Capas base'` | Título de la cabecera del panel. |
+| `initActiveLayer` | `string\|number` | — | Capa base activa al iniciar: el `id` de una capa (`string`) o su **posición** (`number`, `0` = primera). La opción «Sin mapa base», si existe, es la última posición. **Gana sobre** la selección guardada en `localStorage`. |
+| `order` | `number` | `null` | `order` CSS del panel dentro del área de esquina. Los paneles sin `order` valen 0; `null` deja el valor que ponga la API. |
+| `tituloBarra` | `string` | `title` o `'Capas base'` | Etiqueta del botón cuando el plugin se cuelga de la barra del supraplugin. |
+| `color1` | `string\|Object` | `{active:'#ffffff', deactive:'orangered'}` | Color de fondo (cabecera y botón). |
+| `color2` | `string\|Object` | `{active:'#71A7D3', deactive:'#ffffff'}` | Color de borde (botón + panel). |
+| `color3` | `string\|Object` | `{active:'#71A7D3', deactive:'#ffffff'}` | Color de icono y texto. |
+
+## 🚀 Ejemplo de uso
+
+Ejemplo real (`mapas/Visualizador/js/mapa.js`), con la lista de capas declarada a mano:
+
+```js
+const capasBase = [
+  { id: 'mapa',   title: 'Callejero', imgPreview: 'img/IGNBase.png', layers: ['QUICK*BASE_MapaBase_IGNBaseTodo_WMTS'] },
+  { id: 'imagen', title: 'Imagen',    imgPreview: 'img/imagen.png',  layers: ['QUICK*BASE_PNOA_MA_TMS'] },
+];
+
+const baseLayerPlugin = new IDEE.plugin.miPlugin_baseLayer({
+  rows: 1,                  // una sola fila (todas en línea)
+  noBaseLayer: true,        // añade "Sin mapa base" al final
+  title: 'Capas base',
+  initActiveLayer: 'imagen' // por id; también valdría 1 (posición)
+});
+mapajs.addPlugin(baseLayerPlugin);
+```
+
+Y el patrón para colgarlo de la barra del supraplugin, con las capas del catálogo de la API (`mapas/Visualizador2/js/mapa.js`):
+
+```js
+const baseLayerPlugin = new IDEE.plugin.miPlugin_baseLayer({
+  rows: 1,
+  noBaseLayer: true,
+  title: 'Capas base',
+  initActiveLayer: 'imagen',
+});
+supra.addItem(baseLayerPlugin);         // el botón pasa a la barra
+mapajs.addPlugin(baseLayerPlugin);      // el panel sigue en el mapa
+```
+
+## 🎨 Colores
+
+Se inyectan en un bloque `<style>` con ámbito al panel del plugin (sobrevive a los re-renders que la API hace del panel, cosa que el estilo en línea no garantiza). En el estado abierto (`.opened`) los seis valores pasan a la variante `active`.
+
+| Variable | Origen |
+|---|---|
+| `--g-plugin-bg-color` / `--g-plugin-bg-color-active` | `color1.deactive` / `color1.active` |
+| `--g-plugin-border-color` / `--g-plugin-border-color-active` | `color2.deactive` / `color2.active` |
+| `--g-plugin-icon-color` / `--g-plugin-icon-color-active` | `color3.deactive` / `color3.active` |
+
+## 🔄 Estado 2D/3D
+
+| Método | Contenido |
+|---|---|
+| `getState()` | `{ activeLayerId, panelCollapsed }`. Si no hay id en memoria, lo lee del radio marcado (`.bl-radio:checked`) y, si tampoco, de `localStorage.getItem('baseLayer_ID')`. |
+| `setState(state, map)` | Restaura el plegado del panel y vuelve a seleccionar la capa base: marca el radio y dispara su evento `change`; si la UI aún no está montada, llama a `_changeBase(id)`; y como último recurso quita las capas base actuales y añade las del item elegido directamente al mapa (dejando también el `localStorage` al día). |
+
+## 🧩 Métodos públicos
+
+| Método | Descripción |
+|---|---|
+| `addTo(map)` | Construye el panel, el control y el grid, y dispara la activación (que resuelve qué radio marcar). |
+| `getSupraElement(supra)` | Devuelve el botón para la barra del supraplugin, oculta el botón propio del panel (clase `g-panel-en-barra`) y sincroniza su estado con el panel. |
+| `resolveColor(c)` | Traduce un color simple u objeto a `{active, deactive}`. |
+| `getHelp()` | `{ title: 'Selector de capas base', content: Promise<html> }`. |
+| `destroy()` | Suelta el botón de la barra, retira el control del mapa (la API se lleva el panel con él) y anula las referencias. |
+
+## ✅ Notas
+
+- `initActiveLayer` numérico se interpreta como **índice** sobre la lista de radios ya renderizada, así que permite seleccionar la opción «Sin mapa base» si está en esa posición.
+- La precedencia de la elección al iniciar es: `initActiveLayer` → `localStorage` (`baseLayer_ID`) → primer item de la lista.
+- La resolución del radio ocurre en `requestAnimationFrame`, con el evento `change` disparado a mano, porque el grid se reconstruye en cada `activate`.
+- `destroy()` es obligatorio: `map.removePlugins()` de la API lanza `"t.destroy is not a function"` y aborta el resto del lote de plugins si falta. El `control.equals` estricto (`other === this`) evita desregistrar los controles de los demás plugins.
+
+---
+
+# 🧩 miPlugin_layerSwitcher
+
+> Árbol de capas superpuestas: visibilidad, transparencia, renombrado, reordenación y consulta de datos.
+
+Es el gestor de las capas superpuestas del mapa (las capas base quedan fuera, las lleva `miPlugin_baseLayer`). Lista las capas y los grupos `IDEE.layer.LayerGroup` en forma de árbol ordenado por **z-index descendente** (la capa que se dibuja encima va arriba), con un ojo para la visibilidad, un desplegable de opciones por capa y arrastre por asa para reordenar. Es también el punto de entrada a la tabla de atributos / estadísticas (panel inferior) y a la ficha de construcción de la capa.
+
+## ✨ Características
+
+- **Visibilidad**: ojo por capa (y también el propio nombre es clicable). Alterna la capa de forma independiente; en un grupo alterna el grupo completo (OpenLayers oculta el render de todas sus hijas sin tocar su estado individual).
+- **Transparencia**: desplegable por capa con un slider 0–100 % (la API usa opacidad `0..1`, así que `opacity = 1 − transparencia/100`). En **Cesium** una capa vectorial con coordenadas 2D se dibuja como `GroundPrimitive` y su material no se reconstruye solo, así que el plugin rehace las entidades del `dataSource` (agrupando ráfagas cada 150 ms, con límite de 5000 entidades, avisando por consola por encima de ese límite).
+- **Renombrado en línea** (Enter o blur guarda; Escape cancela), persistido en la fachada (`legend` y `name`) y en el impl de OpenLayers (`name`/`title`) para que lo vean los demás paneles.
+- **Drag & drop por asa** (`ls-drag-handle`) para reordenar: reasigna el **z-index real** del impl de OpenLayers (el renderer pinta por `zIndex`, no por orden de colección) y permite mover capas **entre grupos y la raíz**, con guarda anti-ciclo para no meter un grupo dentro de sí mismo o de un descendiente.
+- **Grupos** (`IDEE.layer.LayerGroup`): nodos padre plegables, con subgrupos y el estado de colapso recordado entre re-renderizados; el nombre visible sale de `legend`, del `title` del constructor o de `name` (se descartan los nombres internos `layer_<n>`).
+- **Zoom a la capa**: encuadra la extensión de la capa o del grupo (unión de las extensiones de sus hijas). En 2D con `view.fit(...)`; en 3D con `camera.flyTo` y `Cesium.Rectangle.fromDegrees`. La extensión se busca en `getMaxExtent()`, en la rejilla de la fuente (GeoTIFF) y, en 3D, en `impl.getBoundingBox()`, descartando el «mundo entero» de relleno.
+- **Panel inferior (bottom sheet)** con la tabla de atributos de las capas vectoriales (con sincronía tabla ↔ mapa: pulsar una fila localiza y resalta el feature, y el clic en el mapa marca la fila) o con las estadísticas de las ráster. Las capas MapLibre/MVT abren además un selector de sub-capas.
+- **Ficha de la capa**: modal con los parámetros de construcción (`constructorParameters.userParameters` o `.parameters`, más `options` y `vendorOptions`, y la `url` resuelta) y con el documento del servicio (`getCapabilities()` en WMS/WMTS; `tileset.json` / `metadata.json` en servicios de teselas, validando que sea JSON y no binario).
+- **Filtro de capas listables**: quedan fuera las capas base, las marcadas con `displayInLayerSwitcher: false`, las de terreno y las internas autogeneradas (`layer_<n>`, salvo los grupos).
+- **Contrato de estado 2D/3D** completo (panel, desplegable abierto y grupos plegados), resolviendo por `legend` cuando el `idLayer` se regenera.
+- Aplica `window.miWrapX.aplica(map)` en `addTo`, de modo que el visor no tiene que cargar ningún script aparte.
+
+## 📁 Archivos
+
+| Archivo | Descripción |
+|---|---|
+| `ext_layerSwitcher.js` | El ayudante global `window.miWrapX` (`aplica`, `envuelve`, `olDe`) y la clase `miPlugin_layerSwitcher`, con todo el árbol, los handlers globales del panel, el bottom sheet y la ficha. |
+| `ext_layerSwitcher.css` | Estilos del panel y de la lista (`.overlay-layer-selector`, `.ls-row`, `.ls-eye`, `.ls-options-panel`, `.ls-opacity-slider`, `.ls-drag-handle`, `.ls-group`, `.ls-children`, marcas de drop), del bottom sheet (`.ls-sheet-*`, `.ls-attr-table`), de la ficha (`.ls-ficha-*`) y del botón de la barra (`.ls-supra__*`, icono por máscara). |
+
+## 🔧 Integración en un visualizador
+
+```html
+<link type="text/css" rel="stylesheet" href="../../ext/selectorCapas/ext_layerSwitcher.css" />
+<script src="../../ext/selectorCapas/ext_layerSwitcher.js" type="text/javascript"></script>
+```
+
+## ⚙️ Parámetros de construcción
+
+`new IDEE.plugin.miPlugin_layerSwitcher(options)`
+
+| Parámetro | Tipo | Por defecto | Descripción |
+|---|---|---|---|
+| `order` | `number` | `null` | `order` CSS del panel dentro del área de esquina. Los paneles sin `order` valen 0; `null` deja el valor que ponga la API. |
+| `tituloBarra` | `string` | `'Selector de capas'` | Etiqueta del botón cuando el plugin se cuelga de la barra del supraplugin. |
+| `color1` | `string\|Object` | `{active:'#ffffff', deactive:'orangered'}` | Color de fondo. |
+| `color2` | `string\|Object` | `{active:'#71A7D3', deactive:'#ffffff'}` | Color de borde (botón + panel, estado normal y `.opened`). |
+| `color3` | `string\|Object` | `{active:'#71A7D3', deactive:'#ffffff'}` | Color de icono y flecha. |
+
+> El panel se fija internamente en `IDEE.ui.position.TL` (`IDEE.ui.Panel('toolsExtra_layerSwitcher')`, `collapsible: true`, clase `g-herramienta_selectorCapa`) con el control `controlLayer_layerSwitcher`; no hay opción de posición ni de título de panel. Según el propio código, `addTo` lo crea plegado y el estado abierto solo se recupera vía `setState`.
+
+## 🚀 Ejemplo de uso
+
+Ejemplo real mínimo (la mayoría de visores del repositorio):
+
+```js
+mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
+```
+
+Con las opciones disponibles y colgado de la barra del supraplugin (`mapas/Visualizador2/js/mapa.js`):
+
+```js
+const layerSwitcherPlugin = new IDEE.plugin.miPlugin_layerSwitcher({
+  order: 0,                       // posición dentro de la esquina TL
+  tituloBarra: 'Capas',           // etiqueta del botón en la barra
+  color1: { active: '#ffffff', deactive: 'orangered' },
+  color2: { active: '#71A7D3', deactive: '#ffffff' },
+  color3: { active: '#71A7D3', deactive: '#ffffff' },
+});
+supra.addItem(layerSwitcherPlugin);      // el botón pasa a la barra
+mapajs.addPlugin(layerSwitcherPlugin);   // el panel sigue en el mapa
+```
+
+## 🎨 Colores
+
+Las seis variables se escriben **en línea** sobre el panel del plugin (no en un `<style>`).
+
+| Variable | Origen |
+|---|---|
+| `--g-plugin-bg-color` / `--g-plugin-bg-color-active` | `color1.deactive` / `color1.active` |
+| `--g-plugin-border-color` / `--g-plugin-border-color-active` | `color2.deactive` / `color2.active` |
+| `--g-plugin-icon-color` / `--g-plugin-icon-color-active` | `color3.deactive` / `color3.active` |
+
+## 🔄 Estado 2D/3D
+
+| Método | Contenido |
+|---|---|
+| `getState()` | `{ panelCollapsed, optionsOpen, optionsOpenLegend, groupCollapsed, groupCollapsedLegends }`. Además del `idLayer` de la capa con el desplegable abierto y del mapa `idLayer → bool` de los grupos plegados, guarda su `legend`/`name` como identificador **estable** (los `idLayer` se regeneran con prefijos temporales en cada reinicio de mapa). |
+| `setState(state, map)` | Restaura el plegado del panel, resuelve el desplegable abierto y los grupos plegados **primero por `idLayer`** y, si esa capa ya no existe, **por `legend`/`name`** (patrón `_findLayerByIdInMap` / `_findLayerByLegendInMap`, ambos recursivos dentro de grupos anidados), filtra defensivamente los identificadores que ya no están y fuerza un re-render de la lista. |
+
+El estado de **las capas** (visibilidad, opacidad, orden z, renombrado) no viaja por aquí: reside en las propias capas y lo transfiere directamente `cambioImpl`.
+
+## 🧩 Métodos públicos
+
+| Método | Descripción |
+|---|---|
+| `addTo(map)` | Aplica `miWrapX`, crea el panel y el control, inyecta el HTML, construye el árbol y engancha los eventos. Expone `window.renderLayerList()` y el resto de ayudantes que el HTML del panel llama en línea. |
+| `getSupraElement(supra)` | Devuelve el botón para la barra del supraplugin, oculta el botón propio del panel (`g-panel-en-barra`) y lo mantiene sincronizado con el estado plegado real del panel. |
+| `resolveColor(c)` | Traduce un color simple u objeto a `{active, deactive}`. |
+| `getHelp()` | `{ title: 'Selector de capas', content: Promise<html> }`. |
+| `destroy()` | Suelta el botón de la barra, desengancha el clic del mapa y el listener `ADDED_LAYER`, retira el control del mapa y borra de `window` los ayudantes que define el plugin (no toca la clase en `window.IDEE.plugin`). |
+
+## ✅ Notas
+
+- **Ayudantes globales**: el plugin deja en `window` las funciones que usa el HTML en línea del panel (`renderLayerList`, `toggleLayerVisibility`, `toggleLayerOptions`, `toggleGroup`, `startRenameLayer`, `setLayerOpacity`, `zoomToLayer`, `deleteLayer`, `getLayerKind`, `openLayerInfo`, `openLayerFicha`, `closeSheet`, `locateFeature`, `handleDragStart/DragOver/Drop/DragEnd`...). `destroy()` las retira.
+- **Reordenación**: se aplica **reasignando z-index** en el impl de OpenLayers (`recordZ`), no moviendo la colección. Se indexan solo las capas «listables» de cada contenedor, dejando intactos el z y el intercalado de las auxiliares (por ejemplo `__draw__`) y de las bases. La invariante es que las hijas de un grupo nunca superan el z del grupo.
+- **Envolver el mundo (`wrapX`)**: `window.miWrapX.aplica(mapa)` pone `wrapX_ = true` en todas las fuentes ráster (las vectoriales no lo tienen) y se queda escuchando altas y bajas de la colección de capas, así que cubre también las capas añadidas después. Hay que tocar el **campo** `wrapX_` y avisar con `changed()`: la API no deja pasar la opción y `source.set('wrapX', false)` no surte efecto en esta versión de OpenLayers. En 3D no hace nada (el impl de Cesium no tiene `getLayers()`).
+- `ext_backgorundLayers.js` y `ext/mapInfo` usan `window.miWrapX` **con guardia**, y `miWrapX` se define en `ext_layerSwitcher.js`, así que los dos ficheros de la carpeta se cargan juntos (el orden entre ellos no es crítico por la guardia).
+- El botón redondo que la API pinta en el área se esconde (`g-panel-en-barra`) cuando el plugin vive en la barra del supraplugin, para no dejar dos puertas al mismo panel.
