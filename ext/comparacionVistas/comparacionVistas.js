@@ -167,17 +167,54 @@
     // píxel inmediatamente a su izquierda. Se usa como métrica de escala común
     // con OpenLayers (view.getResolution). Mide el terreno real, así que es
     // robusta al FoV, al tamaño del canvas e incluso a una cámara inclinada.
+    // Punto de la elipsoide WGS84 al que apunta un rayo. A diferencia de
+    // scene.globe.pick(), NO necesita las teselas de terreno, asi que sirve
+    // para medir la resolucion desde el primer fotograma (medido: con
+    // terreno 69,00 m/px y con elipsoide 68,99 m/px en el mismo punto, la
+    // diferencia es la elevacion del terreno, despreciable a esa altitud).
+    function pickElipsoide(ray) {
+      try {
+        var C = window.Cesium;
+        var it = C.IntersectionTests.rayEllipsoid(ray, C.Ellipsoid.WGS84);
+        if (!it) return undefined;
+        var d = new C.Cartesian3();
+        C.Cartesian3.multiplyByScalar(ray.direction, it.start, d);
+        var p = new C.Cartesian3();
+        C.Cartesian3.add(ray.origin, d, p);
+        return p;
+      } catch (e) { return undefined; }
+    }
     function getCesiumCenterRes(impl) {
       try {
+
         var C = window.Cesium;
         var cam = impl.camera, scene = impl.scene;
         var W = scene.canvas.clientWidth, H = scene.canvas.clientHeight;
+        // Lienzo sin medir: los dos pixeles cae en el mismo rayo y la
+        // distancia entre ellos sale 0, que no es una resolucion.
+        if (!(W > 50 && H > 50)) return null;
         var c = new C.Cartesian2(Math.floor(W / 2), Math.floor(H / 2));
         var l = new C.Cartesian2(Math.floor(W / 2) - 1, Math.floor(H / 2));
         var rc = cam.getPickRay(c), rl = cam.getPickRay(l);
         var pc = rc ? scene.globe.pick(rc, scene) : undefined;
         var pl = rl ? scene.globe.pick(rl, scene) : undefined;
+        // Sin teselas de terreno todavia: se mide contra la elipsoide. Es lo
+        // que permite aplicar el encuadre del padre al primer fotograma en vez
+        // de esperar a que el globo termine de cargar el suelo.
+        if (!pc || !pl) {
+          pc = rc ? pickElipsoide(rc) : undefined;
+          pl = rl ? pickElipsoide(rl) : undefined;
+        }
         if (!pc || !pl) return null;
+        // Con la camara todavia sin colocar, el rayo del centro puede dar en
+        // un punto lejisimo (o en ninguno) y la medida sale disparada
+        // (medido: 6263 m/px). Solo vale si el punto cae justo debajo de la
+        // camara, que es lo que se mide con el mapa ya encuadrado.
+        var alt = cam.positionCartographic && cam.positionCartographic.height;
+        if (typeof alt === "number" && alt > 0) {
+          var d = C.Cartesian3.distance(cam.positionWC, pc);
+          if (!(d > alt * 0.5 && d < alt * 1.5)) return null;
+        }
         return C.Cartesian3.distance(pc, pl);
       } catch (e) { return null; }
     }
@@ -548,6 +585,14 @@
           rotation: d.rotation, heading: d.heading, pitch: d.pitch, roll: d.roll,
         });
         setTimeout(function () { _prog = Math.max(0, _prog - 1); }, 0);
+        // El movimiento de camara que ha aplicado este encuadre ocurre con el
+        // guard de eco (_prog) activo, asi que su reporte se descarta y el
+        // padre se queda con el estado anterior (medido: la vista 3D seguia
+        // informando 6367 m/px, el de la vista por defecto del globo, con el
+        // mapa ya colocado). Al soltar el guard se reenvia el estado real.
+        setTimeout(function () {
+          try { var m = buildViewMsg(); if (m) postToParent(m); } catch (e) {}
+        }, 500);
       } else if (d.type === "cmpv:getView") {
         // Responder con el estado completo (extent + centro/zoom + orientación).
         var msg = buildViewMsg();
@@ -882,17 +927,54 @@
     // vista Cesium (ver getCesiumCenterRes en _vistaBoot): distancia sobre el
     // globo entre el rayo del centro y el del píxel inmediatamente a su
     // izquierda. Métrica de escala común con OpenLayers (view.getResolution).
+    // Punto de la elipsoide WGS84 al que apunta un rayo. A diferencia de
+    // scene.globe.pick(), NO necesita las teselas de terreno, asi que sirve
+    // para medir la resolucion desde el primer fotograma (medido: con
+    // terreno 69,00 m/px y con elipsoide 68,99 m/px en el mismo punto, la
+    // diferencia es la elevacion del terreno, despreciable a esa altitud).
+    function pickElipsoide(ray) {
+      try {
+        var C = window.Cesium;
+        var it = C.IntersectionTests.rayEllipsoid(ray, C.Ellipsoid.WGS84);
+        if (!it) return undefined;
+        var d = new C.Cartesian3();
+        C.Cartesian3.multiplyByScalar(ray.direction, it.start, d);
+        var p = new C.Cartesian3();
+        C.Cartesian3.add(ray.origin, d, p);
+        return p;
+      } catch (e) { return undefined; }
+    }
     function getCesiumCenterRes(impl) {
       try {
+
         var C = window.Cesium;
         var cam = impl.camera, scene = impl.scene;
         var W = scene.canvas.clientWidth, H = scene.canvas.clientHeight;
+        // Lienzo sin medir: los dos pixeles cae en el mismo rayo y la
+        // distancia entre ellos sale 0, que no es una resolucion.
+        if (!(W > 50 && H > 50)) return null;
         var c = new C.Cartesian2(Math.floor(W / 2), Math.floor(H / 2));
         var l = new C.Cartesian2(Math.floor(W / 2) - 1, Math.floor(H / 2));
         var rc = cam.getPickRay(c), rl = cam.getPickRay(l);
         var pc = rc ? scene.globe.pick(rc, scene) : undefined;
         var pl = rl ? scene.globe.pick(rl, scene) : undefined;
+        // Sin teselas de terreno todavia: se mide contra la elipsoide. Es lo
+        // que permite aplicar el encuadre del padre al primer fotograma en vez
+        // de esperar a que el globo termine de cargar el suelo.
+        if (!pc || !pl) {
+          pc = rc ? pickElipsoide(rc) : undefined;
+          pl = rl ? pickElipsoide(rl) : undefined;
+        }
         if (!pc || !pl) return null;
+        // Con la camara todavia sin colocar, el rayo del centro puede dar en
+        // un punto lejisimo (o en ninguno) y la medida sale disparada
+        // (medido: 6263 m/px). Solo vale si el punto cae justo debajo de la
+        // camara, que es lo que se mide con el mapa ya encuadrado.
+        var alt = cam.positionCartographic && cam.positionCartographic.height;
+        if (typeof alt === "number" && alt > 0) {
+          var d = C.Cartesian3.distance(cam.positionWC, pc);
+          if (!(d > alt * 0.5 && d < alt * 1.5)) return null;
+        }
         return C.Cartesian3.distance(pc, pl);
       } catch (e) { return null; }
     }
@@ -2537,6 +2619,15 @@
       var v = this._viewByFrame(ev.source) || (d.vpId ? this.getView(d.vpId) : null);
       if (!v) return;
 
+      // Una vista en Cesium reporta desde su vista por defecto (el globo
+      // entero) mientras la API no la ha colocado donde se le pidio: medido,
+      // 6263 m/px a 4632 km de altitud. Ese reporte no vale y, si se acepta,
+      // el padre se queda con una escala inventada. Como no hay forma de
+      // saberlo desde el iframe (la API recoloca la camara despues de
+      // nuestro setView), el filtro es aqui: solo se acepta lo que llega
+      // despues de haberle mandado el encuadre (ver _encuadreEnviado).
+      if (d.type === "cmpv:view" && v.impl === "cesium" && !v._encuadreEnviado) return;
+
       if (d.type === "cmpv:ready") {
         v.ready = true;
         // El iframe informa de su implementación real al estar listo.
@@ -2724,7 +2815,13 @@
           // NO enviamos zoom: cada vista mantiene el suyo.
         } else if (typeof state.lon === "number") {
           msg.lon = state.lon; msg.lat = state.lat; msg.zoom = state.zoom;
-          if (typeof state.resolution === "number") msg.resolution = state.resolution;
+          if (typeof state.resolution === "number") {
+            msg.resolution = state.resolution;
+            // A partir de aqui el padre ya le ha dicho a esta vista donde
+            // colocarse, asi que sus reportes sirven (ver _encuadreEnviado en
+            // el manejador de cmpv:view).
+            v._encuadreEnviado = true;
+          }
         }
         // Orientación de la cámara: rotación 2D y heading/pitch/roll 3D.
         if (typeof state.rotation === "number") msg.rotation = state.rotation;
