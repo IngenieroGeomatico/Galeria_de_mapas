@@ -1861,6 +1861,7 @@
         if (this._map) this._supra.addTo(this._map);
       }
       this._supra.setVisible(true);
+      this._mostrarEscenario(true);
       this._botonMapaOculto(true);
       return this;
     }
@@ -1871,7 +1872,30 @@
      */
     cerrarBarra() {
       if (this._supra) this._supra.setVisible(false);
+      this._mostrarEscenario(false);
       this._botonMapaOculto(false);
+      return this;
+    }
+
+    /**
+     * Destapa o tapa el escenario con las vistas.
+     *
+     *  El escenario es un div a todo el ancho con los iframes de las vistas,
+     *  colgado del contenedor del mapa por encima de este. Mientras el
+     *  comparador esta cerrado tiene que estar oculto: si no, el mapa del
+     *  visualizador queda debajo y no se ve (medido: al cerrar la barra se
+     *  seguian viendo las dos vistas en vez de volver al mapa).
+     */
+    _mostrarEscenario(v) {
+      if (this._workArea) this._workArea.style.display = v ? "" : "none";
+      // El panel de configuracion es de la barra: cerrado el comparador se
+      // cierra tambien.
+      if (!v && this._nav) this._nav.classList.remove("cmpv-sidenav--open");
+      // El mapa de debajo lleva toda la vida con su tamaño, pero se le avisa
+      // por si el navegador lo había recortado al estar tapado.
+      try {
+        if (this._map && typeof this._map.updateSize === "function") this._map.updateSize();
+      } catch (e) { /* el mapa puede estar ya destruido */ }
       return this;
     }
 
