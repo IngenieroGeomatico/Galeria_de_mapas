@@ -779,3 +779,41 @@
   -webkit-mask-position: center;
   mask-position: center;
 }
+
+/* ── Boton del mapa ────────────────────────────────────────────────────
+   El comparador se anade al mapa con map.addPlugin(): lo que aparece en el
+   area es su boton, y al pulsarlo se esconde y aparece su barra. El icono
+   sale de la opcion `icon` del constructor, pintado como mascara. */
+.botonHerramienta_comparacion {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--g-plugin-bg-color, orangered);
+  cursor: pointer;
+}
+
+.botonHerramienta_comparacion:before {
+  content: "";
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: var(--g-plugin-icon-mask);
+  mask-image: var(--g-plugin-icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* Con la barra abierta el boton del mapa se esconde: la barra es su mando. */
+.m-panel.m-herramienta_comparacion.g-boton-oculto .m-herramienta-container_comparacion {
+  display: none !important;
+}

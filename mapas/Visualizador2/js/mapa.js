@@ -84,9 +84,9 @@ function mapa() {
   });
 
   // ── Comparador de vistas (2D/3D) ─────────────────────────────────────
-  // Cuelga de la barra como un único botón con su icono, que abre y cierra su
-  // panel de configuración. Ese panel se mueve fuera de la barra (al dock,
-  // hermano del mapa) porque la barra es demasiado estrecha para él.
+  // Se anade al mapa: lo que sale en el area es su boton, y al pulsarlo se
+  // esconde y aparece su barra, con su panel de configuracion al lado. La
+  // barra se la lleva el comparador: no hace falta compartir la de las demas.
   //
   // Cada vista es un iframe srcdoc con su propia API (2D o 3D). Aquí se montan
   // dos: una en OpenLayers y otra en Cesium.
@@ -125,7 +125,7 @@ function mapa() {
       },
     ],
   });
-  supra.addItem(comparador);
+  mapajs.addPlugin(comparador);
 
   // ── Plugin selector de capas base (grid de imágenes) ──────────────
   const baseLayerPlugin = new IDEE.plugin.miPlugin_baseLayer({

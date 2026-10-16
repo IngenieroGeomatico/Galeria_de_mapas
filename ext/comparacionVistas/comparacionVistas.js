@@ -1502,13 +1502,18 @@
       this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
       this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
 
-  // Icono del boton de la barra supraplugin (ruta o URL de un SVG, igual que
-  // en miPlugin_catalogo). Sin el no hay icono en la barra, que es lo que
-  // hace que el comparador pueda colgar de ella: no es un plugin de boton y
-  // panel, sino un sidenav, y en la barra solo cabe su mando.
-  this.icon = options.icon || options.icono || options.svg || null;
+      // Icono del boton del mapa (ruta o URL de un SVG, igual que en
+      // miPlugin_catalogo). Ese boton es la entrada al comparador: al
+      // pulsarlo desaparece y aparece la barra.
+      this.icon = options.icon || options.icono || options.svg || null;
 
       this.supra = null;
+      // Barra propia y supraplugins anidados que se le cuelgan.
+      this._supra = null;
+      this._suprasAnidados = [];
+      this._panelMapa = null;
+      this._controlMapa = null;
+      this._botonMapa = null;
       this.ui = null;
       // El sidenav se saca de this.ui y vive aparte (ver _sacarSidenavDeLaBarra).
       this._nav = null;
@@ -1729,6 +1734,168 @@
     }
 
     // --- Contrato de item del supraplugin ----------------------------------
+    // --- Ciclo del mapa: boton, barra y supraplugins anidados ----------------
+
+    /**
+     * Alta del plugin en el mapa: pinta su boton en el area.
+     *
+     *  El boton es la puerta al comparador. Al pulsarlo desaparece (lo esconde
+     *  su propio panel) y aparece la barra, que es su interfaz de verdad. El
+     *  escenario con los mapas vive aparte, en el contenedor del mapa, asi que
+     *  ni la barra ni este boton lo mueven.
+     *
+     * @param {Object} map Mapa API-IDEE anfitrion.
+     * @returns {Object} this
+     */
+    addTo(map) {
+      var self = this;
+      var IDEE = (typeof window !== "undefined") ? (window.IDEE || window.M) : null;
+      this._map = map;
+      if (!IDEE || !IDEE.ui || !IDEE.ui.Panel) {
+        console.warn("[comparacionVistas] la API no esta lista: el comparador se queda sin boton.");
+        return this;
+      }
+
+      var panel = new IDEE.ui.Panel("toolsExtra_comparacion", {
+        collapsible: true,
+        className: "m-herramienta_comparacion",
+        collapsedButtonClass: "m-tools",
+        position: IDEE.ui.position.TL
+      });
+
+      var control = new IDEE.Control(new IDEE.impl.Control(), "control_comparacion");
+      control.createView = function () { return document.createElement("div"); };
+      // Estricto a proposito: sin equals la API no puede retirar el control al
+      // quitar el plugin (mismo motivo que en el resto de plugins del repo).
+      control.equals = function (other) { return other === this; };
+      panel.addControls(control);
+      map.addPanels([panel]);
+      this._panelMapa = panel;
+      this._controlMapa = control;
+
+      // MEDIDO: IDEE.ui.Panel no trae getElement(); el nodo se saca por el
+      // camino real (campo _element o getButtonPanel), igual que en el resto
+      // de plugins del repositorio.
+      var div = this._elementoPanelMapa();
+      var controles = div ? div.querySelector(".m-panel-controls") : null;
+      if (controles) {
+        controles.innerHTML =
+          '<div class="m-control m-herramienta-container_comparacion">' +
+          '  <button type="button" class="botonHerramienta_comparacion" title="Comparación de vistas"></button>' +
+          '</div>';
+        var btn = controles.querySelector(".botonHerramienta_comparacion");
+        if (btn) {
+          if (this.icon) {
+            try { btn.style.setProperty("--g-plugin-icon-mask", this.urlDeIcono(this.icon)); }
+            catch (e) { console.warn("[comparacionVistas] no se pudo aplicar el icono.", e); }
+          }
+          btn.addEventListener("click", function (evt) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            self.alternarBarra();
+          });
+          this._botonMapa = btn;
+        }
+      }
+      control.activate && control.activate();
+      return this;
+    }
+
+    /**
+     * Abre o cierra la barra.
+     * @returns {Object} this
+     */
+    alternarBarra() {
+      return (this.barraVisible()) ? this.cerrarBarra() : this.abrirBarra();
+    }
+
+    /** @returns {boolean} Si la barra esta abierta. */
+    barraVisible() {
+      return !!(this._supra && this._supra.isVisible && this._supra.isVisible());
+    }
+
+    /**
+     * Abre la barra: la construye la primera vez y esconde el boton del mapa.
+     * @returns {Object} this
+     */
+    abrirBarra() {
+      var self = this;
+      if (!this._supra) {
+        var API = (typeof window !== "undefined") ? (window.IDEE || window.M) : null;
+        if (!API || !API.plugin || !API.plugin.miPlugin_supraplugin) {
+          console.warn("[comparacionVistas] no hay miPlugin_supraplugin: el comparador no abre su barra.");
+          return this;
+        }
+        this._supra = new API.plugin.miPlugin_supraplugin({
+          id: "supra-" + (this.options.id || "comparacion"),
+          position: "top",
+          title: this.options.tituloBarra || "Comparación de vistas",
+          collapsed: false,
+          pinned: true,
+          // La aspa de la barra es la forma de volver al mapa sin boton.
+          cerrar: true,
+          onCerrar: function () { self.cerrarBarra(); }
+        });
+        // El comparador es el primer item de su propia barra, y los
+        // supraplugins anidados se cuelgan de ella en cascada.
+        this._supra.addItem(this);
+        this._suprasAnidados.forEach(function (s) { self._supra.addSupraplugin(s); });
+        if (this._map) this._supra.addTo(this._map);
+      }
+      this._supra.setVisible(true);
+      this._botonMapaOculto(true);
+      return this;
+    }
+
+    /**
+     * Cierra la barra y vuelve a enseñar el boton del mapa.
+     * @returns {Object} this
+     */
+    cerrarBarra() {
+      if (this._supra) this._supra.setVisible(false);
+      this._botonMapaOculto(false);
+      return this;
+    }
+
+    /** Muestra u oculta el boton del mapa. */
+    _botonMapaOculto(oculto) {
+      var panel = this._elementoPanelMapa();
+      if (panel) panel.classList.toggle("g-boton-oculto", !!oculto);
+      return this;
+    }
+
+    /**
+     * MEDIDO: IDEE.ui.Panel no expone getElement(); trae getButtonPanel() y el
+     * campo _element. Se van probando los dos caminos.
+     */
+    _elementoPanelMapa() {
+      var pan = this._panelMapa;
+      if (!pan) return null;
+      try { if (pan._element) return pan._element; } catch (e) { /* sigue */ }
+      try {
+        var btn = (typeof pan.getButtonPanel === "function") ? pan.getButtonPanel() : null;
+        if (btn && btn.parentElement) return btn.parentElement;
+      } catch (e) { /* sigue */ }
+      return null;
+    }
+
+    /**
+     * Cuelga un supraplugin anidado: su boton sale en esta barra y, al
+     * pulsarlo, su barra aparece debajo en cascada.
+     *
+     *  Se puede llamar antes o despues de que la barra exista: si todavia no
+     *  esta construida, se guarda en la lista y se cuelga al abrirla.
+     *
+     * @param {Object} supra Instancia de miPlugin_supraplugin.
+     * @returns {Object} this
+     */
+    addSupraplugin(supra) {
+      if (!supra) return this;
+      if (this._suprasAnidados.indexOf(supra) === -1) this._suprasAnidados.push(supra);
+      if (this._supra) this._supra.addSupraplugin(supra);
+      return this;
+    }
+
     getSupraElement(supra) {
       this.supra = supra;
       this._resolveWorkArea();
@@ -1739,15 +1906,9 @@
       // Aplica la configuración de comparación INICIAL (modo + swipe/grid).
       this._applyInitialComparison();
       this._refreshUI();
-  if (this.supra) {
-    // No es un plugin de boton y panel: su UI es un toolbar y un sidenav,
-    // y la barra no puede con ninguno de los dos. Se devuelve un boton con
-    // su icono que abre y cierra el sidenav, que _sacarSidenavDeLaBarra ya
-    // movio al dock (hermano del mapa) para que pueda ser fixed.
-    return this._construirBotonSupra();
-  }
       return this.ui;
     }
+
 
     /**
      * Saca el sidenav de la barra del supraplugin y lo deja como elemento
@@ -4959,7 +5120,17 @@
       // cosas no molesta: quitar un nodo ya desligado es un no-op.
       if (this._nav && this._nav.parentNode) this._nav.parentNode.removeChild(this._nav);
       this._nav = null;
+      // La barra la lleva el comparador, asi que también es suya: se desmonta
+      // entera antes de soltar la referencia, o se queda colgando en el host
+      // cuando el mapa se destruye (por ejemplo al cambiar 2D/3D).
+      if (this._supra) {
+        try { this._supra.remove(); } catch (e) { /* ignora */ }
+      }
       this._supra = null;
+      this._suprasAnidados = [];
+      this._panelMapa = null;
+      this._controlMapa = null;
+      this._botonMapa = null;
     }
   }
 

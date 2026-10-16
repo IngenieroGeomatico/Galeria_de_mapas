@@ -430,3 +430,38 @@
   line-height: 1;
   color: inherit;
 }
+
+/* ---- Aspa de cierre -------------------------------------------------- */
+/* Va en absoluto sobre el extremo derecho de la cabecera para que siga en su
+   sitio con la barra plegada y no se mueva con el titulo. */
+.supra-bar__cerrar {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--supra-fg-dim, rgba(43, 43, 48, 0.62));
+  font: inherit;
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.supra-bar__cerrar:hover {
+  background: var(--supra-hover);
+  color: var(--supra-fg);
+}
+
+.supra-bar__cerrar:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--supra-accent);
+}

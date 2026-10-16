@@ -105,22 +105,13 @@ function iniciar(config) {
   // Mapa anfitrión mínimo (no se ve: el comparador cubre el área con iframes).
   mapajs = IDEE.map({ container: "mapaDIV" });
 
-  // Supraplugin (barra) con el comparador de vistas dentro.
-  const supra = new IDEE.plugin.miPlugin_supraplugin({
-    id: 'supra-comparacion',
-    position: 'top',
-    title: 'Comparación de vistas',
-  });
-
-  // El comparador no es un plugin de botón y panel: en la barra cabe solo su
-  // botón, que abre y cierra el panel de configuración (donde viven su barra de
-  // herramientas y sus opciones). El icono es una opción de construcción; si el
-  // config remoto no trae una, se pone la de serie.
+  // El comparador se anade al mapa: lo que sale en el area es su boton, y al
+  // pulsarlo se esconde y aparece su barra. El icono es una opcion de
+  // construccion; si el config remoto no trae una, se pone la de serie.
   if (!config.icon) config.icon = '../../img/iconos/compare-map.svg';
 
   const comparador = new IDEE.plugin.miPlugin_comparacionVistas(config);
-  supra.addItem(comparador);
-  mapajs.addPlugin(supra);
+  mapajs.addPlugin(comparador);
 
   mapajs.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
     buttonTitle: 'cambiar impl :)',

@@ -90,6 +90,8 @@
      order         Orden por defecto de los items que no declaren el suyo.
      collapsible   Si la barra se puede plegar (defecto: true).
      collapsed     Si ARRANCA plegada (defecto: false).
+     cerrar        Si la barra lleva aspa para cerrarse (defecto: false).
+                    Al cerrarla se esconde y se llama onCerrar.
      pinned        Si el estado plegado es fijo o de hover (defecto: true).
      peek          Si el hover la despliega mientras esté encima
                    (defecto: true; sólo si collapsible).
@@ -232,6 +234,10 @@
       this._plegada = !!this.options.collapsed;
       this._fijada = (this.options.pinned !== undefined) ? !!this.options.pinned : true;
       this._asomando = false;
+      this._cerrable = (this.options.cerrar !== undefined) ? !!this.options.cerrar : false;
+      this._onCerrar = (typeof this.options.onCerrar === "function") ? this.options.onCerrar : null;
+      this._visible = true;
+      this._botonCerrar = null;
 
       // Orden por defecto de los items que no declaren el suyo (CSS `order`
       // sobre su ranura). Mismo parámetro que en los plugins con panel.
@@ -531,6 +537,50 @@
     // no dentro del viewport del mapa: así es transversal y sobrevive al mapa.
     // Todas las barras (la del supraplugin y las de sus hijos anidados) viven en
     // un mismo DOCK, para que se apilen unas debajo de otras.
+    /**
+     * Pinta la aspa de cierre en la cabecera de la barra. Va en absoluto
+     *  sobre el extremo derecho para que siga en su sitio con la barra
+     *  plegada y con el titulo en el otro extremo.
+     */
+    _construirCerrar() {
+      var self = this;
+      if (!this._cerrable || this._botonCerrar) return;
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "supra-bar__cerrar";
+      btn.title = "Cerrar";
+      btn.setAttribute("aria-label", "Cerrar");
+      btn.innerHTML = "&times;";
+      btn.addEventListener("click", function (evt) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        self.cerrar();
+      });
+      (this.cabecera || this.container).appendChild(btn);
+      this._botonCerrar = btn;
+    }
+
+    /** Cierra la barra: la esconde y avisa con onCerrar. */
+    cerrar() {
+      this.setVisible(false);
+      if (this._onCerrar) {
+        try { this._onCerrar(this); } catch (e) { console.warn("[supraplugin] onCerrar falló:", e); }
+      }
+      return this;
+    }
+
+    /** Muestra u esconde la barra entera. */
+    setVisible(v) {
+      this._visible = !!v;
+      if (this.container) this.container.style.display = v ? "" : "none";
+      if (this._dock && this._dock.style) this._dock.style.display = v ? "" : "none";
+      if (v) this._notifyMapResize();
+      return this;
+    }
+
+    /** @returns {boolean} Si la barra esta visible. */
+    isVisible() { return !!this._visible; }
+
     _buildBar() {
       // Localiza el div raíz del visualizador (el que contiene el mapa).
       var host = this._resolveHost();
@@ -639,6 +689,7 @@
       this._aplicarColores();
       this._reflejarEstadoBarra();
       this._observarTamano();
+      this._construirCerrar();
 
       // El asomado: al entrar el puntero en la barra plegada se despliega, y al
       // salir se repliega. Sólo tiene efecto si la barra no está fijada.
