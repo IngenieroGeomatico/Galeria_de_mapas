@@ -1,5 +1,5 @@
 /* =====================================================================
-   Plantilla de visualizador (API-IDEE / API-CNIG)
+   plantillaMapaBase: la partida mínima de un visualizador
    ---------------------------------------------------------------------
    Lo mínimo para tener un visualizador en marcha:
 
