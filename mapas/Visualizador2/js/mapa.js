@@ -92,9 +92,10 @@ function mapa() {
   });
 
   // ── Comparador de vistas (2D/3D) ─────────────────────────────────────
-  // Se anade al mapa: lo que sale en el area es su boton, y al pulsarlo se
-  // esconde y aparece su barra, con su panel de configuracion al lado. La
-  // barra se la lleva el comparador: no hace falta compartir la de las demas.
+  // Cuelga de la barra de herramientas, igual que el resto de plugins de boton y
+  // panel: lo que sale en el area es su boton, y al pulsarlo se esconde y aparece
+  // SU barra, que se apila en cascada debajo de la de "Herramientas", con su
+  // panel de configuracion al lado.
   //
   // NO se declaran vistas: el comparador las deriva del mapa de arriba
   // (implementacion, encuadre y capas). El reparto lo pone `layout` (espejo de
@@ -109,6 +110,7 @@ function mapa() {
     showControls: true,
     icon: '../../img/iconos/compare-map.svg',
   });
+  supra.addItem(comparador);
   mapajs.addPlugin(comparador);
 
   // ── Plugin selector de capas base (grid de imágenes) ──────────────

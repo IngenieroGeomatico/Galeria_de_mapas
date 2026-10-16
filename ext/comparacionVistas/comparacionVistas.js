@@ -1953,6 +1953,7 @@
       this._supra.setVisible(true);
       this._mostrarEscenario(true);
       this._botonMapaOculto(true);
+      this._sincronizarSupra();
       return this;
     }
 
@@ -1964,6 +1965,7 @@
       if (this._supra) this._supra.setVisible(false);
       this._mostrarEscenario(false);
       this._botonMapaOculto(false);
+      this._sincronizarSupra();
       return this;
     }
 
@@ -2033,6 +2035,14 @@
     }
 
     getSupraElement(supra) {
+      // Item de OTRA barra (p. ej. la de herramientas del visualizador): lo
+      // que se devuelve es su boton, que alterna la barra del comparador. La
+      // UI completa (titulo, herramientas y panel) es la de la barra propia,
+      // y se distingue porque su supraplugin es este mismo (_supra).
+      if (supra && supra !== this._supra) {
+        this.supra = supra;
+        return this._construirBotonSupra(supra);
+      }
       this.supra = supra;
       this._resolveWorkArea();
       this.ui = this._buildUI();
@@ -2102,17 +2112,24 @@
    *  con el mismo mecanismo que usa miPlugin_catalogo.
    * @returns {HTMLElement} El nodo raiz para la ranura del item.
    */
-  _construirBotonSupra() {
+  _construirBotonSupra(supra) {
+    // Una sola vez: si la barra se remonta (cambio 2D/3D) se reutiliza el
+    // mismo boton en vez de dejar varios en la ranura.
+    if (this._wrapSupraAjena) { this._sincronizarSupra(); return this._wrapSupraAjena; }
     var self = this;
     var wrap = document.createElement("div");
     wrap.className = "cmpv-supra__wrap";
 
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "supra-bar__boton supra-bar__boton--solo cmpv-supra__boton";
-    btn.title = "Comparacion de vistas";
-    btn.setAttribute("aria-label", "Comparacion de vistas");
-    btn.setAttribute("aria-expanded", "false");
+    // Con `conTexto` en la barra el boton lleva tambien su etiqueta; sin ella
+    // es solo icono (y cuadrado, por --solo).
+    var conTexto = !!(supra && supra.options && supra.options.conTexto);
+    btn.className = "supra-bar__boton " + (conTexto ? "" : "supra-bar__boton--solo ") + "cmpv-supra__boton";
+    var nombre = this.options.tituloBoton || "Comparacion de vistas";
+    btn.title = nombre;
+    btn.setAttribute("aria-label", nombre);
+    btn.setAttribute("aria-pressed", "false");
 
     if (this.icon) {
       try { btn.style.setProperty("--g-plugin-icon-mask", this.urlDeIcono(this.icon)); }
@@ -2124,8 +2141,19 @@
     icono.setAttribute("aria-hidden", "true");
     btn.appendChild(icono);
 
+    if (conTexto) {
+      var texto = document.createElement("span");
+      texto.className = "supra-bar__boton-texto";
+      texto.textContent = nombre;
+      btn.appendChild(texto);
+    }
+
     wrap.appendChild(btn);
+    this._wrapSupraAjena = wrap;
     this._supraBoton = btn;
+    // En una barra el mando es su boton, no el del area: el del mapa se
+    // esconde para siempre (no al cerrar la barra, como cuando va suelto).
+    this._ocultarBotonDelMapa();
 
     // La barra de herramientas del comparador (crear, cortinilla, espejo,
     // molde...) no cabe en la ranura del item, pero sus acciones hacen falta,
@@ -2143,21 +2171,35 @@
       evt.preventDefault();
       // El gesto se queda aqui: la API cierra cosas al pulsar fuera.
       evt.stopPropagation();
-      self.toggleOpciones();
-      self._sincronizarSupra();
+      // Abre o cierra su propia barra, que sale en cascada debajo de la
+      // que lo aloja; con el escenario a la vista.
+      self.alternarBarra();
     });
 
     this._sincronizarSupra();
     return wrap;
   }
 
-  /** Sincroniza el boton de la barra con el estado del sidenav. */
+  /**
+   * Sincroniza el boton de la barra con el estado del comparador: encendido
+   * mientras su barra esta abierta (que es cuando se ve el escenario).
+   */
   _sincronizarSupra() {
     if (!this._supraBoton) return;
-    var nav = this._nav || (this.ui && this.ui.querySelector("[data-role=sidenav]"));
-    var abierto = !!(nav && nav.classList.contains("cmpv-sidenav--open"));
+    var abierto = this.barraVisible();
     this._supraBoton.classList.toggle("supra-bar__boton--activo", abierto);
-    this._supraBoton.setAttribute("aria-expanded", abierto ? "true" : "false");
+    this._supraBoton.setAttribute("aria-pressed", abierto ? "true" : "false");
+  }
+
+  /**
+   * Esconde el boton del mapa para siempre: el comparador vive en una barra
+   * y alli su mando es el boton de esa barra. Es distinto de _botonMapaOculto,
+   * que solo lo tapa mientras la barra esta abierta (para el uso suelto).
+   */
+  _ocultarBotonDelMapa() {
+    this._enBarra = true;
+    var panel = this._elementoPanelMapa();
+    if (panel) panel.classList.add("g-en-barra");
   }
 
   // Version reducida de la urlDeIcono() de ext/catalogo y

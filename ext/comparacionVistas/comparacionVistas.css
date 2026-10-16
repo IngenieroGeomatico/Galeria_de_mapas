@@ -840,6 +840,15 @@
   mask-position: center;
 }
 
+/* Cuando el comparador cuelga de una barra (la de herramientas del
+   visualizador), su boton del mapa se esconde para siempre: el mando es el
+   de la barra. Mismo alcance que la regla siguiente, que tambien lleva
+   !important, para que no le gane la que deja el contenedor sin fondo. */
+.m-areas > div.m-area > div.m-panel.m-herramienta_comparacion.g-en-barra
+  > div.m-panel-controls .m-herramienta-container_comparacion {
+  display: none !important;
+}
+
 /* Con la barra abierta el boton del mapa se esconde: la barra es su mando.
    El selector llega tan lejos como el de arriba, porque las dos reglas son
    !important y si no esta ganaria la que deja el contenedor sin fondo. */
