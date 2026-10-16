@@ -783,8 +783,12 @@
 /* ── Boton del mapa ────────────────────────────────────────────────────
    El comparador se anade al mapa con map.addPlugin(): lo que aparece en el
    area es su boton, y al pulsarlo se esconde y aparece su barra. El icono
-   sale de la opcion `icon` del constructor, pintado como mascara. */
-.botonHerramienta_comparacion {
+   sale de la opcion `icon` del constructor, pintado como mascara.
+   El selector lleva el clase del panel a proposito: sin el, la regla
+   generica de la API para los botones del area gana y el fondo no se ve
+   (medido: el boton salia transparente con el icono blanco encima). */
+.m-areas > div.m-area > div.m-panel.m-herramienta_comparacion
+  > div.m-panel-controls .botonHerramienta_comparacion {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -793,16 +797,17 @@
   padding: 0;
   border: none;
   border-radius: 50%;
-  background-color: var(--g-plugin-bg-color, orangered);
+  background-color: var(--g-plugin-bg-color, orangered) !important;
   cursor: pointer;
 }
 
-.botonHerramienta_comparacion:before {
+.m-areas > div.m-area > div.m-panel.m-herramienta_comparacion
+  > div.m-panel-controls .botonHerramienta_comparacion:before {
   content: "";
   display: inline-block;
   width: 22px;
   height: 22px;
-  background-color: var(--g-plugin-icon-color, #ffffff);
+  background-color: var(--g-plugin-icon-color, #ffffff) !important;
   -webkit-mask-image: var(--g-plugin-icon-mask);
   mask-image: var(--g-plugin-icon-mask);
   -webkit-mask-size: contain;

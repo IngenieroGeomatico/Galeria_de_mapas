@@ -1757,7 +1757,9 @@
       }
 
       var panel = new IDEE.ui.Panel("toolsExtra_comparacion", {
-        collapsible: true,
+        collapsible: false,
+        // El boton va DIRECTO en el area: false deja el panel sin boton
+        // propio, que es justo lo que se quiere aqui (un mando, no un panel).
         className: "m-herramienta_comparacion",
         collapsedButtonClass: "m-tools",
         position: IDEE.ui.position.TL
@@ -1795,6 +1797,22 @@
             self.alternarBarra();
           });
           this._botonMapa = btn;
+          // Los colores del constructor se ponen aqui: el panel los
+          // aplica sobre la UI de la barra, que todavia no existe cuando
+          // se monta el boton del mapa.
+          try {
+            var c1 = this.resolveColor(this.color1);
+            var c2 = this.resolveColor(this.color2);
+            var c3 = this.resolveColor(this.color3);
+            btn.style.setProperty("--g-plugin-bg-color", c1.deactive);
+            btn.style.setProperty("--g-plugin-bg-color-active", c1.active);
+            btn.style.setProperty("--g-plugin-border-color", c2.deactive);
+            btn.style.setProperty("--g-plugin-border-color-active", c2.active);
+            btn.style.setProperty("--g-plugin-icon-color", c3.deactive);
+            btn.style.setProperty("--g-plugin-icon-color-active", c3.active);
+          } catch (e) {
+            console.warn("[comparacionVistas] no se pudieron aplicar los colores al boton.", e);
+          }
         }
       }
       control.activate && control.activate();
