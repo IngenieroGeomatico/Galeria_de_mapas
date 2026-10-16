@@ -759,3 +759,23 @@
 .m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
   box-sizing: border-box;
 }
+
+/* ── Item del supraplugin ───────────────────────────────────────────────
+   Icono del boton con el que el comparador cuelga de una barra. Sale de
+   la opcion `icon` del constructor y se pinta como mascara (ver
+   comparacionVistas.js), igual que en miPlugin_catalogo. */
+.cmpv-supra__icono::before {
+  content: "";
+  display: inline-block;
+  width: 19px;
+  height: 19px;
+  background-color: currentColor;
+  -webkit-mask-image: var(--g-plugin-icon-mask);
+  mask-image: var(--g-plugin-icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}

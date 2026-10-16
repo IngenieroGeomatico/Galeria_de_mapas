@@ -1502,6 +1502,12 @@
       this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
       this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
 
+  // Icono del boton de la barra supraplugin (ruta o URL de un SVG, igual que
+  // en miPlugin_catalogo). Sin el no hay icono en la barra, que es lo que
+  // hace que el comparador pueda colgar de ella: no es un plugin de boton y
+  // panel, sino un sidenav, y en la barra solo cabe su mando.
+  this.icon = options.icon || options.icono || options.svg || null;
+
       this.supra = null;
       this.ui = null;
       // El sidenav se saca de this.ui y vive aparte (ver _sacarSidenavDeLaBarra).
@@ -1733,6 +1739,13 @@
       // Aplica la configuración de comparación INICIAL (modo + swipe/grid).
       this._applyInitialComparison();
       this._refreshUI();
+  if (this.supra) {
+    // No es un plugin de boton y panel: su UI es un toolbar y un sidenav,
+    // y la barra no puede con ninguno de los dos. Se devuelve un boton con
+    // su icono que abre y cierra el sidenav, que _sacarSidenavDeLaBarra ya
+    // movio al dock (hermano del mapa) para que pueda ser fixed.
+    return this._construirBotonSupra();
+  }
       return this.ui;
     }
 
@@ -1766,6 +1779,95 @@
       return nav;
     }
 
+  /**
+   * Construye el boton con el que el comparador cuelga de una barra.
+   *
+   *  El comparador no es un plugin de boton y panel: su UI es una barra de
+   *  herramientas mas un sidenav. Ninguno de los dos cabe en la ranura de un
+   *  item de la barra, asi que lo que se devuelve aqui es un unico boton con
+   *  su icono, que alterna el sidenav (que _sacarSidenavDeLaBarra dejo en el
+   *  dock, hermano del mapa) igual que hace el boton "Opciones" de su propia
+   *  barra de herramientas.
+   *
+   *  La barra de herramientas del comparador se esconde en este montaje: sus
+   *  acciones (crear, cortinilla, espejo...) viven en el sidenav, al que se
+   *  llega con este boton.
+   *
+   *  El icono sale de la opcion `icon` del constructor, pintado como mascara
+   *  con el mismo mecanismo que usa miPlugin_catalogo.
+   * @returns {HTMLElement} El nodo raiz para la ranura del item.
+   */
+  _construirBotonSupra() {
+    var self = this;
+    var wrap = document.createElement("div");
+    wrap.className = "cmpv-supra__wrap";
+
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "supra-bar__boton supra-bar__boton--solo cmpv-supra__boton";
+    btn.title = "Comparacion de vistas";
+    btn.setAttribute("aria-label", "Comparacion de vistas");
+    btn.setAttribute("aria-expanded", "false");
+
+    if (this.icon) {
+      try { btn.style.setProperty("--g-plugin-icon-mask", this.urlDeIcono(this.icon)); }
+      catch (e) { console.warn("[comparacionVistas] no se pudo aplicar el icono.", e); }
+    }
+
+    var icono = document.createElement("span");
+    icono.className = "supra-bar__boton-icono cmpv-supra__icono";
+    icono.setAttribute("aria-hidden", "true");
+    btn.appendChild(icono);
+
+    wrap.appendChild(btn);
+    this._supraBoton = btn;
+
+    // La barra de herramientas del comparador (crear, cortinilla, espejo,
+    // molde...) no cabe en la ranura del item, pero sus acciones hacen falta,
+    // asi que se mudan al sidenav, que es donde vive el resto de su interfaz.
+    // El escenario con los mapas ya no esta aqui (lo mueve _resolveWorkArea al
+    // contenedor del mapa), asi que this.ui solo lleva la toolbar.
+    var nav = this._nav || (this.ui && this.ui.querySelector("[data-role=sidenav]"));
+    if (this.ui && nav) {
+      var tools = this.ui.querySelector(".cmpv-tools");
+      var cuerpo = nav.querySelector(".cmpv-sidenav__body");
+      if (tools && cuerpo) cuerpo.insertBefore(tools, cuerpo.firstChild);
+    }
+
+    btn.addEventListener("click", function (evt) {
+      evt.preventDefault();
+      // El gesto se queda aqui: la API cierra cosas al pulsar fuera.
+      evt.stopPropagation();
+      self.toggleOpciones();
+      self._sincronizarSupra();
+    });
+
+    this._sincronizarSupra();
+    return wrap;
+  }
+
+  /** Sincroniza el boton de la barra con el estado del sidenav. */
+  _sincronizarSupra() {
+    if (!this._supraBoton) return;
+    var nav = this._nav || (this.ui && this.ui.querySelector("[data-role=sidenav]"));
+    var abierto = !!(nav && nav.classList.contains("cmpv-sidenav--open"));
+    this._supraBoton.classList.toggle("supra-bar__boton--activo", abierto);
+    this._supraBoton.setAttribute("aria-expanded", abierto ? "true" : "false");
+  }
+
+  // Version reducida de la urlDeIcono() de ext/catalogo y
+  // ext/plantilla_plugin: acepta una ruta o una URL de SVG y la devuelve
+  // lista para meterla en una variable CSS.
+  urlDeIcono(icono) {
+    if (typeof icono !== "string") return null;
+    const limpio = icono.trim();
+    if (!limpio) return null;
+    const esUrl = /^(data:|https?:|blob:|file:|\/|\.\/|\.\.\/)/i.test(limpio)
+      || /\.svg(?:[?#].*)?$/i.test(limpio);
+    if (!esUrl) return null;
+    return "url(\"" + limpio.replace(/"/g, "%22").replace(/\s/g, "%20") + "\")";
+  }
+
     /**
      * Devuelve {active, deactive} a partir de un color simple o de un objeto.
      *
@@ -1775,7 +1877,7 @@
      * @param {string|Object} c Color u objeto de colores.
      * @returns {{active: string, deactive: string}} Los dos estados.
      */
-    resolveColor(c) {
+  resolveColor(c) {
       return (typeof c === "object" && c !== null)
         ? { active: c.active, deactive: c.deactive }
         : { active: c, deactive: c };

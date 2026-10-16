@@ -112,6 +112,12 @@ function iniciar(config) {
     title: 'Comparación de vistas',
   });
 
+  // El comparador no es un plugin de botón y panel: en la barra cabe solo su
+  // botón, que abre y cierra el panel de configuración (donde viven su barra de
+  // herramientas y sus opciones). El icono es una opción de construcción; si el
+  // config remoto no trae una, se pone la de serie.
+  if (!config.icon) config.icon = '../../img/iconos/compare-map.svg';
+
   const comparador = new IDEE.plugin.miPlugin_comparacionVistas(config);
   supra.addItem(comparador);
   mapajs.addPlugin(supra);

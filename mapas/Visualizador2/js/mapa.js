@@ -83,6 +83,50 @@ function mapa() {
     peek: true
   });
 
+  // ── Comparador de vistas (2D/3D) ─────────────────────────────────────
+  // Cuelga de la barra como un único botón con su icono, que abre y cierra su
+  // panel de configuración. Ese panel se mueve fuera de la barra (al dock,
+  // hermano del mapa) porque la barra es demasiado estrecha para él.
+  //
+  // Cada vista es un iframe srcdoc con su propia API (2D o 3D). Aquí se montan
+  // dos: una en OpenLayers y otra en Cesium.
+  const comparador = new IDEE.plugin.miPlugin_comparacionVistas({
+    id: 'comparador',
+    mode: 'mirror',
+    layout: { type: 'grid', rows: 1, cols: 2 },
+    sync: true,
+    showControls: true,
+    icon: '../../img/iconos/compare-map.svg',
+    views: [
+      {
+        name: 'Callejero 2D',
+        implementation: '2D',
+        isPrimary: true,
+        center: [-3.70, 40.42],
+        zoom: 12,
+        layers: [
+          new IDEE.layer.TMS({
+            url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
+            legend: 'Callejero IGN',
+          }),
+        ],
+      },
+      {
+        name: 'Callejero 3D',
+        implementation: 'Cesium',
+        center: [-3.70, 40.42],
+        zoom: 12,
+        layers: [
+          new IDEE.layer.TMS({
+            url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
+            legend: 'Callejero IGN',
+          }),
+        ],
+      },
+    ],
+  });
+  supra.addItem(comparador);
+
   // ── Plugin selector de capas base (grid de imágenes) ──────────────
   const baseLayerPlugin = new IDEE.plugin.miPlugin_baseLayer({
     rows: 1,
