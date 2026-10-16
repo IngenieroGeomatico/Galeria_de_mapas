@@ -13,9 +13,11 @@
    se hace por postMessage. El plugin es AUTOCONTENIDO: ya no hay vista.html /
    vista.js (el código de la vista vive dentro de comparacionVistas.js).
 
-   El mapa principal aquí es mínimo: sólo sirve de anfitrión para añadir el
-   supraplugin (barra). El área del visualizador la ocupan los iframes de las
-   vistas gestionados por el comparador.
+   El mapa principal es el del VISUALIZADOR, y el comparador trabaja sobre él:
+   aquí no se declara ninguna vista, así que al abrir su barra las deriva de
+   este mapa (implementación, encuadre y capas; ver _capturarMapaVivo en el
+   plugin). Lo que se compara es el mapa del visualizador, no una copia escrita
+   a mano. El comparador toma el control del área y sus iframes la cubren.
 
    ── Configuración externa por URL ─────────────────────────────────────
    El parámetro GET "configViewsJSON" permite pasar la URL de un JSON con
@@ -38,34 +40,15 @@ window.onload = (event) => {
 
 // ── Configuración por defecto (embebida) ────────────────────────────
 function configPorDefecto() {
+  // SIN vistas: se derivan del mapa del visualizador (ver _capturarMapaVivo).
+  // El reparto lo pone `layout` (espejo de 1x2) y cada celda lleva un motor
+  // distinto: el del mapa y el otro, que es lo que se quiere comparar.
   return {
     id: 'comparador-principal',
     mode: 'mirror',
     layout: { type: 'grid', rows: 1, cols: 2 },
     sync: true,
     showControls: true,
-    views: [
-      {
-        name: 'Callejero 2D',
-        implementation: '2D',
-        center: [-3.70, 40.42],
-        zoom: 12,
-        isPrimary: true,
-        layers: [
-          new IDEE.layer.GeoJSON({
-            name: 'Barrios de Madrid',
-            url: '../../datos/madrid_barrios.geojson',
-            legend: 'Barrios (GeoJSON)',
-          }),
-        ],
-      },
-      {
-        name: 'Relieve 3D',
-        implementation: '3D',
-        center: { lon: -3.70, lat: 40.42 },
-        zoom: 12,
-      },
-    ],
   };
 }
 
@@ -102,8 +85,22 @@ function rehidratarCapas(config) {
 function iniciar(config) {
   SVGCarga.hidden = false;
 
-  // Mapa anfitrión mínimo (no se ve: el comparador cubre el área con iframes).
-  mapajs = IDEE.map({ container: "mapaDIV" });
+  // Mapa del visualizador. El centro y el zoom son suyos, y sus capas son las
+  // que hereda el comparador: al abrir la barra, las vistas se derivan de
+  // aquí. La base es la de por defecto de la API (callejero IGN) y el overlay
+  // es el de barrios, que también viaje a cada vista.
+  mapajs = IDEE.map({
+    container: "mapaDIV",
+    center: { x: -411882.1, y: 4927164.5 },  // Madrid
+    zoom: 12,
+  });
+  mapajs.addLayers([
+    new IDEE.layer.GeoJSON({
+      name: 'Barrios de Madrid',
+      url: '../../datos/madrid_barrios.geojson',
+      legend: 'Barrios (GeoJSON)',
+    }),
+  ]);
 
   // El comparador se anade al mapa: lo que sale en el area es su boton, y al
   // pulsarlo se esconde y aparece su barra. El icono es una opcion de
