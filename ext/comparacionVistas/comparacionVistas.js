@@ -1467,6 +1467,11 @@
      *   NOTA: no se aceptan objetos IDEE.map (el motor OL/Cesium es único por
      *   documento). Sí se aceptan IDEE.layer / IDEE.plugin: se serializan aquí y
      *   se reconstruyen dentro de cada iframe.
+     *   Si NO se declara, las vistas se derivan del mapa anfitrión: se leen su
+     *   implementación, su encuadre y sus capas (ver _capturarMapaVivo) y las
+     *   celdas alternan ese motor con el otro (2D/3D). Es lo que hace un
+     *   visualizador que ya configura su mapa en IDEE.map(): no repite aquí lo
+     *   mismo.
      * @param {Array<number|string>} [options.slots] Qué vista ocupa cada slot
      *   inicial (por índice o id). Opcional.
      *
@@ -1518,6 +1523,9 @@
       // El sidenav se saca de this.ui y vive aparte (ver _sacarSidenavDeLaBarra).
       this._nav = null;
       this._workArea = null;
+      // Lo leido del mapa anfitrion cuando el visualizador NO parametriza
+      // vistas (ver _capturarMapaVivo). null = todavia sin capturar.
+      this._mapaVivo = null;
 
       // view = { id, name, impl:'ol'|'cesium', iframe, div, ready, lastView,
       //          _progUpdates, config:{layers,plugins,controls} }
@@ -1887,7 +1895,11 @@
      *  seguian viendo las dos vistas en vez de volver al mapa).
      */
     _mostrarEscenario(v) {
-      if (this._workArea) this._workArea.style.display = v ? "" : "none";
+      // Por clase y NO tocando style.display: ese atributo lo gobierna el
+      // reparto de celdas (display:grid en espejo), y ponerlo a "" lo
+      // deshacia (medido: las vistas se apilaban y media pantalla se
+      // quedaba en blanco).
+      if (this._workArea) this._workArea.classList.toggle("cmpv-stage--oculto", !v);
       // El panel de configuracion es de la barra: cerrado el comparador se
       // cierra tambien.
       if (!v && this._nav) this._nav.classList.remove("cmpv-sidenav--open");
@@ -1941,12 +1953,20 @@
     getSupraElement(supra) {
       this.supra = supra;
       this._resolveWorkArea();
-      this._adoptPrimaryView();
       this.ui = this._buildUI();
       this._sacarSidenavDeLaBarra();
       this._aplicarColores();
+      // Sin parametrización de vistas, la principal se deriva del mapa vivo.
+      // Se captura aquí y no antes a propósito: getSupraElement() se llama al
+      // abrir la barra, que es cuando el mapa ya tiene sus capas puestas (las
+      // del visualizador las añaden sus plugins después de crearse).
+      if (!this._initialViews) this._mapaVivo = this._capturarMapaVivo();
+      this._adoptPrimaryView();
       // Aplica la configuración de comparación INICIAL (modo + swipe/grid).
       this._applyInitialComparison();
+      // Las celdas que se han creado con el motor de la principal se reparten
+      // entre el del mapa vivo y el otro (2D/3D).
+      this._alternarImplsSegunElMapaVivo();
       this._refreshUI();
       return this.ui;
     }
@@ -2164,6 +2184,11 @@
     // La vista primaria también es un iframe (así todas son homogéneas y el 3D
     // por-vista funciona igual para todas). El mapa original de #mapaDIV no se usa
     // como vista: el comparador toma el control del área con sus iframes.
+    //
+    //  Si el constructor trae `views`, esas mandan. Si no, la primaria se deriva
+    //  del mapa vivo (ver _capturarMapaVivo): es la fuente de la comparación,
+    //  para que el visualizador no tenga que repetir aquí lo que ya puso en
+    //  IDEE.map() y en IDEE.config.backgroundlayers.
     _adoptPrimaryView() {
       if (this.views.length) return;
 
@@ -2190,6 +2215,12 @@
         return;
       }
 
+      // Sin parametrización: la vista principal se deriva del mapa vivo.
+      if (this._mapaVivo) {
+        this._montarVistasDelMapaVivo(this._mapaVivo);
+        return;
+      }
+
       // Retrocompat: una sola vista OL con el encuadre lon/lat/zoom clásicos.
       var primary = this._makeView({
         name: "Vista 1",
@@ -2200,10 +2231,135 @@
       this.activeViewId = primary.id;
     }
 
+    /**
+     * Lee del mapa anfitrión lo que las vistas necesitan: implementación,
+     * encuadre y capas. Es el sustituto de la parametrización de mapa del
+     * constructor cuando el visualizador no declara `views`.
+     *
+     *  Lo medido en la API (Visualizador2, con el mapa en 2D y en 3D tras
+     *  el cambio de implementación):
+     *    - getLayers() devuelve un Array síncrono en las dos.
+     *    - getCenter() devuelve {x,y} en EPSG:3857 en 2D y ya en lon/lat
+     *      (EPSG:4979) en 3D, así que solo hay que reproyectar en 2D.
+     *    - getZoom() devuelve un número en 2D y una CADENA en 3D ("14").
+     *    - El mapa trae una capa interna de la API, Vector/__draw__, que no
+     *      se lleva a las vistas.
+     *
+     * @returns {Object|null} { impl, lon, lat, zoom, config } o null si no hay mapa.
+     */
+    _capturarMapaVivo() {
+      var map = this._map;
+      if (!map) return null;
+      var IDEE = (typeof window !== "undefined") ? (window.IDEE || window.M) : null;
+      var es3d = this._implEs3d(map);
+      var cap = {
+        impl: es3d ? "cesium" : "ol",
+        lon: null, lat: null, zoom: null,
+        config: { layers: [], plugins: [], controls: [] },
+      };
+
+      // Encuadre.
+      try {
+        var c = (typeof map.getCenter === "function") ? map.getCenter() : null;
+        if (c) {
+          if (es3d) {
+            cap.lon = Number(c.x); cap.lat = Number(c.y);
+          } else if (IDEE && IDEE.utils && IDEE.utils.reproject) {
+            var ll = IDEE.utils.reproject([Number(c.x), Number(c.y)], "EPSG:3857", "EPSG:4326");
+            cap.lon = Number(ll[0]); cap.lat = Number(ll[1]);
+          }
+        }
+        var z = (typeof map.getZoom === "function") ? map.getZoom() : null;
+        if (z !== null && z !== undefined && isFinite(Number(z))) cap.zoom = Number(z);
+      } catch (e) { /* sin encuadre: se usa el de serie */ }
+
+      // Capas del mapa, menos las internas de la API. NO se copian los plugins
+      // del mapa: el comparador y el propio cambio de implementación dentro de
+      // una vista se traicionarían a sí mismos.
+      try {
+        var capas = (typeof map.getLayers === "function") ? map.getLayers() : null;
+        if (Array.isArray(capas)) {
+          var self = this;
+          cap.config.layers = capas
+            .filter(function (l) { return l && !self._capaInternaDeLaAPI(l); })
+            .map(function (l) { return self._serializeLayer(l); })
+            .filter(Boolean);
+        }
+      } catch (e) { /* sin capas: la vista sale con la de fondo de la API */ }
+
+      return cap;
+    }
+
+    // ¿La implementación del mapa anfitrión es Cesium? El impl de OL no tiene
+    // escena; el de Cesium sí (mismo criterio que checkImpl() en los visualizadores).
+    _implEs3d(map) {
+      try {
+        var mi = (typeof map.getMapImpl === "function") ? map.getMapImpl() : null;
+        return !!(mi && mi.scene && mi.scene.camera);
+      } catch (e) { return false; }
+    }
+
+    // Capas que son de la API y no del visualizador (la de dibujo, Vector/__draw__).
+    _capaInternaDeLaAPI(layer) {
+      var nombre = String(layer.legend || layer.name || "");
+      return nombre.indexOf("__") === 0;
+    }
+
+    // Crea la vista principal a partir de lo capturado del mapa vivo. Las demás
+    // las crea crearVista(), que ya clona la config de la principal.
+    _montarVistasDelMapaVivo(cap) {
+      var primary = this._makeView({
+        name: "Mapa principal",
+        impl: cap.impl,
+        isPrimary: true,
+        lon: cap.lon, lat: cap.lat, zoom: cap.zoom,
+        config: this._cloneConfig(cap.config),
+      });
+      this.activeViewId = primary.id;
+      return primary;
+    }
+
+    /**
+     * Cuando las vistas se derivan del mapa vivo, alterna el motor entre
+     * celdas: la primera conserva el del mapa y las demás van alternando al
+     * otro. Es la comparación que ofrece el plugin (medido: mapa en 2D →
+     * celdas 2D y 3D).
+     *
+     * @returns {number} Cuántos iframes hubo que recargar.
+     */
+    _alternarImplsSegunElMapaVivo() {
+      var cap = this._mapaVivo;
+      if (!cap || this._initialViews) return 0;
+      var otro = (cap.impl === "cesium") ? "ol" : "cesium";
+      var self = this;
+      var cambios = 0;
+      this.views.forEach(function (v, i) {
+        var want = (i % 2 === 0) ? cap.impl : otro;
+        if (v.impl === want) return;
+        v.impl = want;
+        v.ready = false;
+        var cz = self._centerZoomFromState(v.lastView);
+        self._setIframeDoc(v, want, cz.lon, cz.lat, cz.zoom);
+        cambios++;
+      });
+      return cambios;
+    }
+
     // Devuelve la vista principal (isPrimary) o, en su defecto, la primera.
     _getPrimaryView() {
       for (var i = 0; i < this.views.length; i++) if (this.views[i].isPrimary) return this.views[i];
       return this.views[0] || null;
+    }
+
+    // El terreno solo se sabe construir en 3D: si el mapa estaba en Cesium lo
+    // capturamos con la capa Terrain/MDT_Terrain (medido), y esa capa no vale
+    // para una vista en OpenLayers, así que se quita al montar esa vista.
+    _configDeVista(config, impl) {
+      var cfg = config || { layers: [], plugins: [], controls: [] };
+      if (impl !== "ol" || !Array.isArray(cfg.layers)) return cfg;
+      cfg = this._cloneConfig(cfg);
+      cfg.layers = cfg.layers.filter(function (l) { return !(l && l.type === "Terrain"); });
+      return cfg;
     }
 
     // Crea el objeto vista + su iframe dentro del stage.
@@ -2240,7 +2396,7 @@
         _extentReported: false,
         // Config de mapa de la vista (capas/plugins/controles serializados),
         // que se envía al iframe cuando esté listo y se clona al "Crear".
-        config: opts.config || { layers: [], plugins: [], controls: [] },
+        config: this._configDeVista(opts.config, impl),
       };
       this.views.push(view);
       return view;

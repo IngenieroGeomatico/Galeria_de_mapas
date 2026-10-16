@@ -554,6 +554,13 @@
   overflow: hidden;
 }
 
+/* Escenario tapado (comparador cerrado). Es una clase y no un
+   style.display:"" porque el reparto de celdas escribe en ese atributo
+   (display:grid en espejo) y borrarlo lo deshacia. */
+.cmpv-stage.cmpv-stage--oculto {
+  display: none !important;
+}
+
 .cmpv-view {
   position: absolute;
   inset: 0;

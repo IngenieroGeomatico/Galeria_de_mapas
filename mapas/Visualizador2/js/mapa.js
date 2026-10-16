@@ -58,8 +58,16 @@ function mapa() {
   // Cesium no sabe construirlo y lanza "La implementación usada no puede crear
   // controles Scale", abortando la creación del mapa al pasar a 3D. La lectura
   // de escala y nivel de zoom la pone el plugin mapInfo (ver abajo).
+  //
+  // El centro y el zoom son los del VISUALIZADOR: el comparador de vistas los
+  // lee de aquí al abrirse (ver _capturarMapaVivo en el plugin), igual que las
+  // capas, que salen de IDEE.config.backgroundlayers. Por eso su constructor no
+  // declara ninguna vista: el mapa de arriba es el mapa principal de la
+  // comparación.
   mapajs = IDEE.map({
     container: "mapaDIV",
+    center: { x: -411882.1, y: 4927164.5 },
+    zoom: 12,
   });
 
   // ── Supraplugin: barra transversal para los plugins de botón y panel ──
@@ -88,8 +96,11 @@ function mapa() {
   // esconde y aparece su barra, con su panel de configuracion al lado. La
   // barra se la lleva el comparador: no hace falta compartir la de las demas.
   //
-  // Cada vista es un iframe srcdoc con su propia API (2D o 3D). Aquí se montan
-  // dos: una en OpenLayers y otra en Cesium.
+  // NO se declaran vistas: el comparador las deriva del mapa de arriba
+  // (implementacion, encuadre y capas). El reparto lo pone `layout` (espejo de
+  // 1x2) y cada celda lleva un motor distinto: la del mapa vivo y el otro, que
+  // es lo que se quiere comparar. Cada vista sigue siendo un iframe srcdoc con
+  // su propia API, porque una 2D y otra 3D no pueden convivir en un documento.
   const comparador = new IDEE.plugin.miPlugin_comparacionVistas({
     id: 'comparador',
     mode: 'mirror',
@@ -97,33 +108,6 @@ function mapa() {
     sync: true,
     showControls: true,
     icon: '../../img/iconos/compare-map.svg',
-    views: [
-      {
-        name: 'Callejero 2D',
-        implementation: '2D',
-        isPrimary: true,
-        center: [-3.70, 40.42],
-        zoom: 12,
-        layers: [
-          new IDEE.layer.TMS({
-            url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
-            legend: 'Callejero IGN',
-          }),
-        ],
-      },
-      {
-        name: 'Callejero 3D',
-        implementation: 'Cesium',
-        center: [-3.70, 40.42],
-        zoom: 12,
-        layers: [
-          new IDEE.layer.TMS({
-            url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg',
-            legend: 'Callejero IGN',
-          }),
-        ],
-      },
-    ],
   });
   mapajs.addPlugin(comparador);
 
