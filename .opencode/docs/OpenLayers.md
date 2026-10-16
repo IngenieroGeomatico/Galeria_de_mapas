@@ -68,7 +68,7 @@ antimeridiano se ve el planeta repetido, que es lo normal en un mapa generalista
 | `ol.source.TileWMTS` | `WMTS` | sin valor por defecto → **false** |
 | `ol.source.TileWMS` | `WMS` | sin valor por defecto → **false** |
 
-Medido en `mapas/MapaBase`: la capa base «Imagen» (`BASE_PNOA_MA_TMS`) sale con
+Medido en `mapas/Visualizador`: la capa base «Imagen» (`BASE_PNOA_MA_TMS`) sale con
 `wrapX=true` y «Callejero» (`BASE_MapaBase_IGNBaseTodo_WMTS`) con `wrapX=false`, sin
 que el visualizador haya pedido ninguna de las dos cosas.
 
