@@ -34,6 +34,8 @@
    ===================================================================== */
 
 const SVGCarga = document.getElementById("cargaSVG");
+// Configuración con la que arrancó el visualizador (ver iniciar()).
+var CONFIG_ARRANQUE = null;
 window.onload = (event) => {
   SVGCarga.hidden = true;
 };
@@ -82,7 +84,16 @@ function rehidratarCapas(config) {
 }
 
 // ── Arranque con configuración (embebida o remota) ──────────────────
+//   La configuración del arranque se recuerda en CONFIG_ARRANQUE: al cambiar
+//   2D/3D, miPlugin_cambioImpl con `sameMap: true` vuelve a llamar a iniciar()
+//   SIN argumentos, y sin esto `config.icon` reventaba ("Cannot read properties
+//   of undefined (reading 'icon')") antes de añadir el comparador, el propio
+//   cambio de implementación y el resto de plugins, así que el mapa se quedaba
+//   a medias: en Cesium y sin ninguna herramienta (medido: tras pulsar el botón
+//   del cambio, getPlugins() devolvía [] y no había ni botón del cambio).
 function iniciar(config) {
+  if (config) CONFIG_ARRANQUE = config;
+  config = CONFIG_ARRANQUE || configPorDefecto();
   SVGCarga.hidden = false;
 
   // Mapa del visualizador. El centro y el zoom son suyos, y sus capas son las
