@@ -631,6 +631,10 @@
       bar.id = "supra-bar-" + this.id;
       bar.className = "supra-bar supra-bar--" + this.position
         + (claseExtra ? (" " + claseExtra) : "")
+        // El aspa de cierre va en absoluto sobre el extremo derecho, asi que
+        // la barra tiene que decir que la lleva para que el CSS le reserve el
+        // sitio y la ultima herramienta no se le meta debajo.
+        + (this._cerrable ? " supra-bar--cerrable" : "")
         + (this.className ? (" " + this.className) : "");
       bar.setAttribute("role", "toolbar");
       bar.setAttribute("aria-label", this.title || "Barra de herramientas");
@@ -690,10 +694,17 @@
       this._reflejarEstadoBarra();
       this._observarTamano();
       this._construirCerrar();
+      this._observarScrollItems();
 
       // El asomado: al entrar el puntero en la barra plegada se despliega, y al
       // salir se repliega. Sólo tiene efecto si la barra no está fijada.
-      if (this.peek) {
+      //
+      // MEDIDO en táctil: allí no hay hover. Un toque dispara mouseenter y el
+      // mouseleave no llega nunca, así que la barra se quedaba desplegada para
+      // siempre y el siguiente toque al tirador no la plegaba (la clase
+      // --asomando mantenía el cuerpo abierto). Con puntero de verdad se
+      // engancha como siempre; con el dedo, el tirador manda.
+      if (this.peek && this._hayPuntero()) {
         bar.addEventListener("mouseenter", function () { self._setAsomando(true); });
         bar.addEventListener("mouseleave", function () { self._setAsomando(false); });
       }
@@ -830,6 +841,9 @@
       }
       this._observer = new ResizeObserver(function () {
         self._notifyMapResize();
+        // El ancho de la fila también cambia al girar el teléfono: la pista
+        // de desplazamiento se recalcula con él.
+        self._reflejarScrollItems();
       });
       try { this._observer.observe(this.container); } catch (e) { /* ignora */ }
     }
@@ -853,6 +867,68 @@
       }
       this._reflejarEstadoBarra();
       this._notifyMapResize();
+    }
+
+    /**
+     * ¿El aparato tiene puntero de verdad (ratón, lápiz) o solo el dedo?
+     *
+     *  El asomado del hover no tiene sentido en táctil, donde además deja el
+     *  estado pegado (ver _construirBar). `(hover: none)` es exactamente lo
+     *  contrario: true en móvil y tableta, false en un ordenador. Si el
+     *  navegador no sabe contestar, se supone que sí hay puntero, que es el
+     *  comportamiento de siempre.
+     * @returns {boolean}
+     */
+    _hayPuntero() {
+      try {
+        return !(window.matchMedia && window.matchMedia("(hover: none)").matches);
+      } catch (e) {
+        return true;
+      }
+    }
+
+    /**
+     * Avisa a la barra cuando su fila de items se desplaza, para que el CSS
+     *  difumine el borde por el que queda contenido.
+     *
+     *  En el móvil los items van en una sola fila que se desplaza (ver el
+     *  bloque responsive de supraplugin.css): sin esta pista la última
+     *  herramienta queda cortada a hueso al borde y nada dice que se puede
+     *  arrastrar. Sólo se engancha si el contenedor existe.
+     */
+    _observarScrollItems() {
+      if (!this.itemsContainer) return;
+      var self = this;
+      this.itemsContainer.addEventListener("scroll", function () {
+        self._reflejarScrollItems();
+      });
+      this._reflejarScrollItems();
+    }
+
+    /**
+     * Pasa el desbordamiento de la fila de items a tres clases CSS:
+     *  "hay-izquierda" (queda contenido a la izquierda) y "hay-derecha", que
+     *  son las que difuminan ese borde, y "centrada" cuando la fila cabe
+     *  entera. En el movil la fila va alineada a la izquierda mientras se
+     *  desplaza: con el centrado, el principio se queda fuera del area de
+     *  scroll y no hay forma de alcanzar la primera herramienta.
+     */
+    _reflejarScrollItems() {
+      var el = this.itemsContainer;
+      if (!el || !el.classList) return;
+      var sobra = el.scrollWidth - el.clientWidth;
+      var hay = sobra > 1;
+      var izquierda = hay && el.scrollLeft > 1;
+      var derecha = hay && el.scrollLeft < sobra - 1;
+      el.classList.toggle("supra-bar__items--hay-izquierda", izquierda);
+      el.classList.toggle("supra-bar__items--hay-derecha", derecha);
+      el.classList.toggle("supra-bar__items--centrada", !hay);
+      // El titulo tambien es cosa de esta medida: si la fila no cabe, se apaga
+      // aunque la pantalla no sea de movil (una tableta estrecha con muchas
+      // herramientas pisa el titulo igual que un telefono).
+      if (this.container && this.container.classList) {
+        this.container.classList.toggle("supra-bar--items-llenos", hay);
+      }
     }
 
     /** Asomado: sólo si está plegada, no está fijada y se permite el peek. */
@@ -969,6 +1045,10 @@
       if (!this.itemsContainer) return;
       var self = this;
       this.items.forEach(function (record) { self._mountItem(record); });
+      // Con los items ya dentro se sabe si la fila desborda. Se deja pasar el
+      // frame: hasta que el navegador no ha hecho el layout, scrollWidth no es
+      // el de verdad.
+      requestAnimationFrame(function () { self._reflejarScrollItems(); });
     }
 
     _mountItem(record) {
@@ -1013,7 +1093,12 @@
         // Promise<HTMLElement>
         var self = this;
         el.then(function (resolved) {
-          if (resolved) { slot.appendChild(resolved); record.mountedEl = resolved; self._notifyMapResize(); }
+          if (resolved) {
+            slot.appendChild(resolved);
+            record.mountedEl = resolved;
+            self._notifyMapResize();
+            self._reflejarScrollItems();
+          }
         }).catch(function (e) { console.warn("[supraplugin] item async falló:", e); });
       } else if (el) {
         slot.appendChild(el);

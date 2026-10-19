@@ -290,6 +290,14 @@
   color: var(--supra-accent);
 }
 
+/* Si la fila de items no cabe a lo ancho, el titulo se apaga para dejarle el
+   sitio. No es el caso normal en el escritorio (la fila se envuelve en varias
+   lineas y nunca desborda), pero si el de un item que no puede partirse, como
+   la tira de herramientas del comparador, cuando la barra es mas estrecha que
+   el: entonces pisa el titulo. La clase la pone _reflejarScrollItems() midiendo
+   el desbordamiento real. */
+.supra-bar--items-llenos .supra-bar__titulo { display: none; }
+
 /* Una rayita vertical suave entre el título y los items: separa sin robar
    sitio, como los separadores de las barras de Ubuntu. */
 .supra-bar__titulo::after {
@@ -414,13 +422,6 @@
 .supra-bar--hija .supra-bar__boton--activo,
 .supra-bar--hija .supra-bar__boton--activo:hover { color: #ffffff; }
 
-/* ---- Responsive ------------------------------------------------------- */
-@media (max-width: 640px) {
-  .supra-dock { padding: 5px 6px; }
-  .supra-bar__cuerpo { gap: 8px; padding: 5px 8px 6px; }
-  .supra-bar__titulo { font-size: 12px; }
-  .supra-bar__boton { height: 30px; padding: 0 10px; }
-}
 /* Etiqueta del boton, cuando el visualizador pone `conTexto: true` en el
    constructor de la barra. Por defecto los botones de la barra son solo icono
    (el nombre sale en el title al pasar por encima). */
@@ -464,4 +465,143 @@
 .supra-bar__cerrar:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--supra-accent);
+}
+
+/* =====================================================================
+   RESPONSIVE (movil y tactil)
+   --------------------------------------------------------------------
+   Dos disparadores distintos, porque son dos problemas distintos:
+
+     - el ANCHO manda en la composicion. Medido a 390 px de ancho con la
+       barra abierta: el titulo llegaba hasta x=111 y el primer boton
+       empezaba en x=83, o sea 28 px de solape, y los siete items del
+       comparador, al envolverse, ponia la barra a 77 px de alto. Aqui el
+       titulo se apaga, los items van en UNA fila que se desplaza y el alto
+       de la barra deja de depender de cuantas herramientas tenga.
+
+     - el PUNTERO manda en el tamano de los mandos: un dedo necesita 44 px
+       de lado y un raton se conforma con 40, y no tiene sentido agrandar
+       los botones de la barra en el escritorio por culpa del movil.
+
+   Ojo con el orden: esto va al FINAL del fichero a proposito, porque el
+   CSS no da prioridad a las media queries y aqui se pisan reglas que estan
+   mas arriba (.supra-bar__boton--solo, .supra-bar__cerrar,
+   .supra-bar__cuerpo de la barra de abajo...).
+   ===================================================================== */
+
+@media (max-width: 640px) {
+  /* El dock respeta las zonas seguras (muesca y barra de gestos) y aprieta
+     un poco el aire: cada pixel de aqui se lo quita al mapa. */
+  .supra-dock {
+    gap: 4px;
+    padding-left: max(6px, env(safe-area-inset-left, 0px));
+    padding-right: max(6px, env(safe-area-inset-right, 0px));
+  }
+
+  .supra-dock--bottom { padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)); }
+
+  .supra-bar { margin: 4px 0; border-radius: 10px; }
+
+  /* El titulo se apaga: es lo que ya anunciaba el comentario de
+     .supra-bar__titulo ("en pantallas estrechas se apaga") y no estaba
+     hecho. En una franja estrecha el titulo y los iconos pelean por el
+     mismo sitio (medido: 28 px de solape), y una barra de herramientas se
+     identifica por sus iconos. */
+  .supra-bar__titulo { display: none; }
+
+  /* Los items, en UNA fila que se desplaza con el dedo. Envolviendose, una
+     barra con siete herramientas se ponia a dos y tres filas y se comia la
+     pantalla; asi el alto de la barra es el de una fila siempre. */
+  .supra-bar__items {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+  }
+
+  /* Cuando la fila cabe entera no hay nada que desplazar y se centra, como en
+     el escritorio; alineada a la izquierda solo cuando de verdad se sale. Con
+     `center` y desbordamiento, el principio de la fila se queda fuera del area
+     de scroll y no habria forma de llegar a la primera herramienta: por eso el
+     centrado es la excepcion y la clase la pone _reflejarScrollItems(). */
+  .supra-bar__items--centrada { justify-content: center; }
+
+  .supra-bar__items::-webkit-scrollbar { display: none; }
+
+  /* Una ranura NO se encoge: cada herramienta conserva su tamano natural y
+     lo que sobra se desplaza. Encogiendo, las etiquetas se parten en dos
+     lineas y la fila crece de alto. */
+  .supra-bar__ranura { flex: 0 0 auto; }
+
+  /* El cuerpo aprieta el aire lateral: en una pantalla estrecha cada pixel de
+     aqui es una herramienta mas que entra en la fila.
+     OJO: solo los lados. Con el atajo `padding` se pisaba el
+     `padding-top/bottom: 0` de `.supra-bar--plegada .supra-bar__cuerpo`, que
+     tiene la misma especificidad y va antes, y la barra plegada de abajo
+     medía 35 px en vez de 24 (medido). */
+  .supra-bar__cuerpo,
+  .supra-bar--bottom .supra-bar__cuerpo { padding-left: 8px; padding-right: 8px; }
+
+  /* Pista de desplazamiento: el borde por el que queda contenido se
+     difumina en vez de cortar la herramienta a hueso. Las clases las pone
+     _reflejarScrollItems() leyendo scrollLeft, asi que solo aparece cuando
+     de verdad hay algo fuera. */
+  .supra-bar__items--hay-derecha {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  }
+
+  .supra-bar__items--hay-izquierda {
+    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
+  }
+
+  .supra-bar__items--hay-izquierda.supra-bar__items--hay-derecha {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+  }
+
+  /* Aire para el aspa de cierre, que esta centrada en el extremo derecho de la
+     barra (su contenedor es la barra, no la cabecera: la cabecera no esta
+     posicionada). El aspa mide 26 px y esta a 6 px del borde, o sea que ocupa
+     hasta 32 px; 34 deja 2 de aire. No se reserva mas: cada pixel de aqui es
+     una herramienta que se sale. Solo el lado derecho, por el mismo motivo que
+     arriba. */
+  .supra-bar--cerrable .supra-bar__cuerpo,
+  .supra-bar--cerrable.supra-bar--bottom .supra-bar__cuerpo {
+    padding-right: 34px;
+  }
+}
+
+@media (pointer: coarse) {
+  /* Los mandos crecen para el dedo: los botones con etiqueta de las barras
+     anidadas pasan de 32 a 40 px de alto, y los de solo icono a 44x44, que es
+     el minimo comodo (los 40x40 del escritorio se quedan cortos).
+     OJO CON EL ORDEN: `.supra-bar__boton--solo` es UNA clase, igual que
+     `.supra-bar__boton`, asi que las dos tienen la misma especificidad y gana
+     la que va despues. Puesta antes, el `height` de 40 px le pisaba el de 44
+     (medido: el boton salia 44x40). */
+  .supra-bar__boton { height: 40px; }
+  .supra-bar__boton--solo { width: 44px; height: 44px; }
+  .supra-bar__boton-icono { font-size: 21px; }
+
+  /* El tirador es la UNICA forma de desplegar la barra con el dedo (no hay
+     hover): la franja pasa de 10 a 22 px de alto y el tirador ocupa todo su
+     ancho, para poder agarrarla desde cualquier punto. La linea que se ve
+     sigue siendo fina. */
+  .supra-bar__cabecera { height: 22px; }
+  .supra-bar__tirador { width: 100%; height: 22px; }
+  .supra-bar__agarre { width: 34px; height: 4px; }
+
+  /* El aspa, algo mas grande sin salirse de la franja (26 en una cabecera
+     de 22: 2 px por lado, dentro del margen de la barra). */
+  .supra-bar__cerrar { width: 26px; height: 26px; font-size: 21px; }
+
+  /* Sin el retardo de 300 ms del doble toque. */
+  .supra-bar__boton,
+  .supra-bar__tirador,
+  .supra-bar__cerrar { touch-action: manipulation; }
 }
