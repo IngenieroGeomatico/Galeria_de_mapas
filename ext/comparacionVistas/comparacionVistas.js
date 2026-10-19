@@ -1770,6 +1770,10 @@
       // Lo leido del mapa anfitrion cuando el visualizador NO parametriza
       // vistas (ver _capturarMapaVivo). null = todavia sin capturar.
       this._mapaVivo = null;
+      // Verdadero mientras setState() reabre el comparador tras un cambio
+      // 2D/3D: la UI se monta sin repartir motores ni reaplicar la comparacion
+      // inicial, porque las vistas ya vienen del snapshot.
+      this._restaurando = false;
 
       // view = { id, name, impl:'ol'|'cesium', iframe, div, ready, lastView,
       //          _progUpdates, config:{layers,plugins,controls} }
@@ -2223,11 +2227,18 @@
       // la suya (ver _adoptPrimaryView).
       if (!this._mapaVivo) this._mapaVivo = this._capturarMapaVivo();
       this._adoptPrimaryView();
-      // Aplica la configuración de comparación INICIAL (modo + swipe/grid).
-      this._applyInitialComparison();
-      // Las celdas que se han creado con el motor de la principal se reparten
-      // entre el del mapa vivo y el otro (2D/3D).
-      this._alternarImplsSegunElMapaVivo();
+      // Aplica la configuración de comparación INICIAL (modo + swipe/grid) y
+      // reparte los motores entre las celdas (2D/3D). Al RESTAURAR tras un
+      // cambio 2D/3D no se hace ninguna de las dos cosas: las vistas ya llegan
+      // del snapshot con su motor y su encuadre, y el reparto volvía a
+      // alternarlos aplicando el zoom de OL a la celda que pasa a Cesium, que
+      // son escalas distintas (medido: la resolucion restaurada salia al doble,
+      // 29,1 -> 57,25 m/px, que es el factor 1,98 de siempre entre motores).
+      // Ver setState().
+      if (!this._restaurando) {
+        this._applyInitialComparison();
+        this._alternarImplsSegunElMapaVivo();
+      }
       this._refreshUI();
       return this.ui;
     }
@@ -3311,6 +3322,21 @@
       if (!state || typeof state !== "object") return;
       try {
         this._applySnapshot(state);
+        // La barra vuelve como estaba. El escenario nace VISIBLE al montarse
+        // (solo lo tapa _mostrarEscenario al cerrar la barra), asi que si el
+        // comparador estaba cerrado hay que cerrarlo tambien aqui: si no, las
+        // vistas se quedan encima del mapa con su barra cerrada y el boton del
+        // area a la vista, que es justo lo que se veia al pasar a 3D en
+        // Visualizador2. Abierto, se reabre con su barra y su panel.
+        if (state.abierto) {
+          // Reabrir sin repartir motores: el snapshot ya trae el de cada celda
+          // y el reparto reaplicaba el zoom de OL sobre la celda Cesium (ver
+          // getSupraElement).
+          this._restaurando = true;
+          try { this.abrirBarra(); } finally { this._restaurando = false; }
+        } else {
+          this.cerrarBarra();
+        }
       } catch (e) {
         // Fallback defensivo: no interrumpir el flujo de restauración
       }
@@ -3347,6 +3373,10 @@
           };
         }),
         mode: this.mode || "single",
+        // Si la barra estaba abierta (y con ella el escenario a la vista). Sin
+        // este dato, la restauracion no puede distinguir el comparador cerrado
+        // del abierto y deja las vistas encima del mapa (ver setState).
+        abierto: this.barraVisible(),
         activeViewId: this.activeViewId,
         sync: Boolean(this.sync),
         syncMode: this.syncMode === "center" ? "center" : "extent",
@@ -3465,7 +3495,15 @@
       this._applyingRemote = true;
       var self = this;
       try {
-        if (!this._workArea || !this._workArea.parentNode) {
+        // El escenario (el div que aloja los iframes) solo se crea si hay
+        // vistas que meter dentro: es un div a pantalla completa dentro del
+        // contenedor del mapa y, aunque este vacio, se come sus eventos.
+        // MEDIDO en Visualizador2: al cambiar a 3D con el comparador sin abrir
+        // nunca, el snapshot llegaba con views vacio y esta restauracion
+        // montaba un stage y una vista encima del mapa (el iframe tapaba la
+        // pantalla y el comparador parecia activado).
+        var hayVistasEnEstado = Array.isArray(s.views) && s.views.length > 0;
+        if ((hayVistasEnEstado || this.views.length) && (!this._workArea || !this._workArea.parentNode)) {
           this._resolveWorkArea();
         }
 
@@ -3619,11 +3657,16 @@
         if (typeof s.syncSid === "string") this.syncSid = s.syncSid;
 
         // 4) Aplica el modo (relayout + refreshUI) y sincroniza encuadres.
-        if (typeof s.mode === "string" && ["single", "swipe", "mirror", "molde"].indexOf(s.mode) !== -1) {
-          this.setMode(s.mode);
-        } else {
-          this._relayout();
-          this._refreshUI();
+        //    Solo con vistas: setMode() completa el modo creando las celdas que
+        //    falten, y con un snapshot sin vistas (comparador que no se ha
+        //    abierto) eso fabricaba una vista y su escenario (ver arriba).
+        if (this.views.length) {
+          if (typeof s.mode === "string" && ["single", "swipe", "mirror", "molde"].indexOf(s.mode) !== -1) {
+            this.setMode(s.mode);
+          } else {
+            this._relayout();
+            this._refreshUI();
+          }
         }
         this._broadcastControls();
         this._resyncFromActive();

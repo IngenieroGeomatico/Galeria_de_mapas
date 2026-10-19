@@ -210,11 +210,25 @@ Implementa el contrato `getState()` / `setState(state, map)` coordinado por `win
 
 - `getState()` → `_snapshot()`: objeto serializable con `views` (id, nombre, impl, `isPrimary`,
   `lastView` —lon/lat/zoom/resolution/rotation/heading/pitch/roll/extent—, `config` serializada),
-  `mode`, `activeViewId`, `sync`, `syncMode`, `showControls`, `swipe` (layout, slots y posiciones de
-  los tres divisores), `grid`, `layoutType`, `customSpec`, `divStyle`, `mold` (base, seleccionado y
-  lista de moldes), `syncWinKind`, `syncViewId` y `syncSid`. Si algo falla, devuelve `null`.
+  `mode`, `abierto` (si su barra estaba abierta), `activeViewId`, `sync`, `syncMode`, `showControls`,
+  `swipe` (layout, slots y posiciones de los tres divisores), `grid`, `layoutType`, `customSpec`,
+  `divStyle`, `mold` (base, seleccionado y lista de moldes), `syncWinKind`, `syncViewId` y `syncSid`.
+  Si algo falla, devuelve `null`.
 - `setState(state, map)` → `_applySnapshot(state)`: recrea vistas, re-aplica modo, divisores y
   sincronización. Es no bloqueante (los iframes se rehidratan por `postMessage`, sin esperar respuestas).
+- La restauración respeta si el comparador estaba abierto o cerrado (`abierto`):
+  - **Nunca abierto** (snapshot sin vistas): no se monta nada, ni escenario ni vista. Medido en
+    `Visualizador2`: al pasar a 3D, el snapshot vacío hacía que `setMode("mirror")` creara una vista y
+    su iframe tapaba el mapa entero, con la barra cerrada, así que parecía que el comparador se había
+    activado solo.
+  - **Cerrado con vistas** (se usó y se cerró): las vistas se rehidratan pero el escenario se vuelve a
+    tapar al terminar la restauración. Es un div a pantalla completa dentro del contenedor del mapa y,
+    aunque no tenga hijos visibles, se come sus eventos.
+  - **Abierto**: se reabre con su barra y su panel, y **sin** volver a repartir el motor de las celdas
+    (`_alternarImplsSegunElMapaVivo`) ni a aplicar la comparación inicial: el motor y el encuadre de
+    cada celda salen del snapshot. Medido: al reaplicarlos, la celda que pasaba a Cesium recibía el
+    zoom de OL y la escala restaurada salía al doble (resolución 29,1 → 57,25 m/px, el factor 1,98 de
+    siempre entre los dos motores).
 
 Los `idLayer` **no** se guardan: en cada swap las capas se recrean desde `config`, que guarda la
 definición serializable del plugin (tipo + parámetros) o el string API-IDEE.
