@@ -460,6 +460,28 @@ class miPlugin_baseLayer {
       '<div class="bl-grid" style="grid-template-columns:repeat(' + cols + ', 110px)">' +
       htmlItems + '</div>';
 
+    // ── Capas que trajo la última selección ─────────────────────────────
+    // Quitar `getBaseLayers()` no basta en 3D: el impl de Cesium solo contempla
+    // UNA capa base (`getBaseLayers() { return this.getLayers().filter(l => l.isBase === true) }`)
+    // y, además, quitar un LayerGroup no se lleva a sus hijas (medido: siguen
+    // como capas sueltas). Con el Híbrido eso dejaba el nomenclátor pintado
+    // sobre la base siguiente (medido: 2 imageries al pasar a Imagen y 3 al
+    // volver). Guardando la diferencia de `getLayers()` antes/después de
+    // `addLayers` sabemos exactamente qué hay que quitar la próxima vez: sirva
+    // para una capa suelta (WMTS/TMS) o para un grupo con sus hijas.
+    var anadidas = [];
+
+    var quitarAnadidas = function () {
+      if (!anadidas.length) return;
+      var lote = anadidas;
+      anadidas = [];
+      try {
+        map.removeLayers(lote);
+      } catch (e) {
+        lote.forEach(function (l) { try { map.removeLayers(l); } catch (err) {} });
+      }
+    };
+
     // ── Función de cambio de capa base ─────────────────────────────────
     var changeBase = function (layerId) {
       self._activeLayerId = layerId;
@@ -468,13 +490,26 @@ class miPlugin_baseLayer {
       if (currentBase && currentBase.length) {
         currentBase.forEach(function (l) { try { map.removeLayers(l); } catch (e) {} });
       }
+      // Y lo que trajo la selección anterior (grupos e hijas incluidas).
+      quitarAnadidas();
       if (layerId === '__none__') {
         localStorage.setItem('baseLayer_ID', layerId);
         return;
       }
       var selected = items.find(function (l) { return l.id === layerId; });
       if (!selected) return;
+      // Aviso a las extensiones de capas antes de añadir la base: el Híbrido de
+      // 3D necesita rehacer las banderas de sus hijas (en Cesium la capa base va
+      // al fondo y esas banderas se estropean al quitar el grupo). Mismo patrón
+      // que `window.miWrapX.aplica(map)` de más abajo, y opcional.
+      try {
+        if (window.quicklayers_cesium && typeof window.quicklayers_cesium.antesDeAnadirBase === 'function') {
+          window.quicklayers_cesium.antesDeAnadirBase();
+        }
+      } catch (e) {}
+      var antes = map.getLayers().slice();
       map.addLayers(selected.layers);
+      anadidas = map.getLayers().filter(function (l) { return antes.indexOf(l) === -1; });
       // Ver el comentario del otro alta: el wrapX de las capas base sale del
       // defecto de cada clase de fuente y se iguala a true (window.miWrapX).
       if (window.miWrapX) window.miWrapX.aplica(map);

@@ -38,6 +38,11 @@ const URL_ENGRANAJE = (() => {
  *     parche de arranque: se instala solo por sondeo.
  *   - `layergroup_cesium`: LayerGroup funcional en Cesium (capas hijas, orden
  *     z, ...). Tambien parche de arranque.
+ *   - `quicklayers_cesium`: repone en el catalogo de capas rapidas de la build
+ *     de Cesium las entradas que esa build deja sin definir (BASE_HIBRIDO_
+ *     LayerGroup, BTN_Completa_MapLibre), construyendolas con las fachadas
+ *     parcheadas. Parche de arranque, y ademas `cambioImpl` lo llama en los dos
+ *     momentos que importan (ver `reponerCapasRapidas3D`).
  *   - `geotiffLayer` y `MVTLayer`: fachada + impl de `IDEE.layer.GeoTIFF` y
  *     `IDEE.layer.MVT` para Cesium. Estos SI son plugins (miPlugin_...): se
  *     anaden al mapa nuevo despues de crearlo, si el visualizador no los ha
@@ -49,6 +54,7 @@ const URL_ENGRANAJE = (() => {
 const EXTENSIONES_CAPAS_3D = [
     { ruta: 'getWMC_cesium/getWMC_cesium.js' },
     { ruta: 'layergroup_cesium/layergroup_cesium.js' },
+    { ruta: 'quicklayers_cesium/quicklayers_cesium.js' },
     { ruta: 'geotiffLayer/geotiffLayer.js', plugin: 'miPlugin_geotiffLayer' },
     { ruta: 'MVTLayer/MVTLayer.js', plugin: 'miPlugin_MVTLayer' }
 ];
@@ -152,6 +158,37 @@ function anadirPluginsCapas3D(map) {
             console.warn('cambioImpl: no se pudo anadir ' + ext.plugin, e);
         }
     });
+}
+
+/**
+ * Repone en el catalogo de capas rapidas de la build nueva las entradas que la
+ * build de Cesium deja sin definir (ver ext/quicklayers_cesium/).
+ *
+ * El momento importa y por eso se llama a mano: la extension hace un "get/set"
+ * del catalogo (`getQuickLayers()` y `addQuickLayers(catalogo, true)`), y ese
+ * `get` construye el catalogo ENTERO en ese instante. Si se llamara antes de que
+ * la build tenga la config de la pagina (medido: el build esta vivo a los
+ * ~0,8 s y la config llega a los ~2,0 s), las entradas que leen la config se
+ * quedarian con la de por defecto.
+ *
+ * Hay dos llamadas, cada una en su momento:
+ *
+ *   - tras `IDEE.config = await loadConfig(...)` y ANTES de `reiniciarMapa()`:
+ *     es cuando `mapa()` resuelve las capas base, incluida la que el usuario
+ *     tenia recordada en localStorage;
+ *   - tras `anadirPluginsCapas3D()`: `IDEE.layer.MVT` solo esta parcheada
+ *     cuando miPlugin_MVTLayer ha sustituido la clase.
+ *
+ * La extension es idempotente y por receta, asi que una llamada de mas no hace
+ * nada y una que no pueda aplicarse se reintenta en la siguiente.
+ */
+function reponerCapasRapidas3D() {
+    try {
+        const ext = window.quicklayers_cesium;
+        if (ext && typeof ext.reponer === 'function') ext.reponer();
+    } catch (e) {
+        console.warn('cambioImpl: al reponer las capas rapidas de la build 3D', e);
+    }
 }
 
 class miPlugin_cambioImpl {
@@ -492,6 +529,7 @@ class miPlugin_cambioImpl {
         if (window.IDEE && window.IDEE.impl && window.IDEE.impl.cesium) {
             asegurarExtensionesCapas3D()
                 .then(() => anadirPluginsCapas3D(map))
+                .then(() => reponerCapasRapidas3D())
                 .catch(() => { /* cargarExtension3D ya avisa por consola */ });
         }
 
@@ -875,6 +913,10 @@ class miPlugin_cambioImpl {
                 // Extensiones de capas 3D que son plugin (GeoTIFF, MVT): si el
                 // visualizador no las ha anadido en su mapa(), se anaden aqui.
                 anadirPluginsCapas3D(newMap);
+                // Y con los plugins ya puestos (IDEE.layer.MVT parcheada) se
+                // reintenta la reposicion de capas rapidas: la que depende del
+                // MVT no ha podido entrar antes de `reiniciarMapa()`.
+                reponerCapasRapidas3D();
                 btn = await document.getElementById('APIIDEE-herramienta-button');
                 await btn.classList.add("activated");
 
@@ -1041,6 +1083,13 @@ class miPlugin_cambioImpl {
             // IDEE.plugin vacio; repoblar los namespaces desde los globales
             // miPlugin_* (los unicos registros que sobreviven al swap).
             reRegistrarPluginsTrasSwap();
+
+            // Aqui la build nueva YA tiene la config de la pagina (la llamada de
+            // arriba la deja puesta) y todavia NO se ha creado el mapa: es el
+            // momento exacto para reponer las capas rapidas que la build de
+            // Cesium deja sin definir, porque lo siguiente que pasa es
+            // `reiniciarMapa()` -> `mapa()`, que resuelve las capas base.
+            reponerCapasRapidas3D();
 
 
             /* ===============================
