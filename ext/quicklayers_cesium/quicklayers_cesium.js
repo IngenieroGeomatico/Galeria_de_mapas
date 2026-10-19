@@ -18,17 +18,18 @@
  *    BTN_Completa_MapLibre: _()
  *      // _ = () => new c.Z({url:"https://vt-btn.idee.es/files/styles/BTN_Completa.json", ...})
  *
- *  (`a.Z` es la fachada interna de LayerGroup y `c.Z` la de MVT; en el bundle
- *  de Cesium sus implementaciones no existen, de ahi que lanzen).
+ *  (`a.Z` es la fachada interna de LayerGroup y `c.Z` la de MapLibre; en el
+ *  bundle de Cesium la implementacion de LayerGroup no existe y el modulo de
+ *  implementacion de MapLibre es un stub vacio, de ahi que lanzen las dos).
  *
  *  Medido en vivo: 2D -> 0 entradas `undefined`; 3D -> esas 2. Al pedirlas, la
  *  API avisa "No se encuentra definida X como capa rapida" y no anade nada.
  *
  *  Y el detalle que lo explica todo: en el bundle de Cesium no hay ni una
- *  aparicion de `new IDEE.layer.LayerGroup` ni de `new IDEE.layer.MVT`. El
+ *  aparicion de `new IDEE.layer.LayerGroup` ni de `new IDEE.layer.MapLibre`. El
  *  catalogo NO usa los globales, asi que los parches de `ext/layergroup_cesium`
- *  y `ext/MVTLayer` (que sustituyen `IDEE.layer.*`) no llegan nunca a esas dos
- *  entradas. Por eso esto no se arregla cargando scripts antes o despues del
+ *  y `ext/maplibreLayer` (que sustituyen `IDEE.layer.*`) no llegan nunca a esas
+ *  dos entradas. Por eso esto no se arregla cargando scripts antes o despues del
  *  bundle, ni "justo antes de mapa()": no es CUANDO, es QUE objeto se construye.
  *
  *  QUE HACE ESTA EXTENSION
@@ -45,28 +46,25 @@
  *
  *  Las entradas se reponen copiando la definicion de la build (mismos datos,
  *  URLs y opciones) pero construidas con las fachadas del GLOBAL, que en 3D son
- *  las parcheadas: el LayerGroup de ext/layergroup_cesium y el MVT de
- *  ext/MVTLayer.
+ *  las parcheadas: el LayerGroup de ext/layergroup_cesium y la capa MapLibre de
+ *  ext/maplibreLayer. Las dos son parches de arranque, o sea que ya estan puestas
+ *  cuando se llama a `reponer()`.
  *
  *  OJO CON EL MOMENTO. El `get` construye el catalogo entero en ese instante (y
  *  el `set` lo deja fijo), asi que si se llamara antes de que la build tenga la
  *  config de la pagina -medido: el build esta vivo a los ~0,8 s y la config de
  *  la pagina llega a los ~2,0 s- las entradas que leen la config (la atribucion
- *  kml del PNOA) se quedarian con la de por defecto. Por eso:
- *
- *    - `cambioImpl` llama a `reponer()` despues de
- *      `IDEE.config = await loadConfig(...)` y ANTES de `reiniciarMapa()`, que
- *      es cuando `mapa()` resuelve las capas base (incluida la que el usuario
- *      tenia recordada en localStorage);
- *    - y otra vez despues de `anadirPluginsCapas3D()`, porque `IDEE.layer.MVT`
- *      solo esta parcheada cuando miPlugin_MVTLayer ha sustituido la clase.
+ *  kml del PNOA) se quedarian con la de por defecto. Por eso `cambioImpl` llama a
+ *  `reponer()` despues de `IDEE.config = await loadConfig(...)` y ANTES de
+ *  `reiniciarMapa()`, que es cuando `mapa()` resuelve las capas base (incluida la
+ *  que el usuario tenia recordada en localStorage).
  *
  *  `reponer()` es idempotente por build y por clave: cada receta se aplica
  *  cuando su clase ya esta disponible y la entrada sigue `undefined`; si la
- *  clase aun no esta (por ejemplo el MVT antes de su plugin), no se toca nada y
- *  se reintenta en la siguiente llamada. Una entrada que quede `undefined` y no
- *  tenga receta aqui se avisa por consola una sola vez por build, para que no
- *  vuelva a pasar en silencio.
+ *  clase aun no esta (por ejemplo la capa MapLibre antes de su parche), no se
+ *  toca nada y se reintenta en la siguiente llamada. Una entrada que quede
+ *  `undefined` y no tenga receta aqui se avisa por consola una sola vez por
+ *  build, para que no vuelva a pasar en silencio.
  *
  *  Para el Hibrido hay ademas un `normalizar()`: rehace las banderas `isBase` de
  *  sus hijas antes de cada alta de capa base (el selector avisa con
@@ -159,16 +157,17 @@
 
     /**
      * `BTN_Completa_MapLibre` es la capa vectorial BTN Completa del estilo que
-     * sirve el IGN, una MVT.
+     * sirve el IGN. No es una MVT (esa es otra clase): es una capa MapLibre,
+     * que pinta el estilo con MapLibre GL.
      *
-     * En 3D necesita `IDEE.layer.MVT` parcheada por ext/MVTLayer: mientras el
-     * plugin no este anadido, el constructor lanza y la receta se reintenta.
+     * En 3D necesita la fachada de ext/maplibreLayer. Mientras no este puesta,
+     * el constructor lanza y la receta se reintenta en la siguiente llamada.
      *
      * @param {Object} IDEE La API (build de Cesium en curso).
-     * @returns {Object} Capa MVT lista para registrar como capa rapida.
+     * @returns {Object} Capa MapLibre lista para registrar como capa rapida.
      */
     BTN_Completa_MapLibre: function (IDEE) {
-      return new IDEE.layer.MVT({
+      return new IDEE.layer.MapLibre({
         url: 'https://vt-btn.idee.es/files/styles/BTN_Completa.json',
         name: 'BTN_Completa',
         legend: 'BTN Completa',
@@ -266,8 +265,8 @@
       try {
         capa = receta(IDEE);
       } catch (e) {
-        // Su clase todavia no esta parcheada (p. ej. el MVT antes de su
-        // plugin): la entrada se deja como esta y se reintenta mas adelante.
+        // Su clase todavia no esta parcheada (p. ej. la capa MapLibre antes de
+        // su parche): la entrada se deja como esta y se reintenta mas adelante.
         pendientes++;
         return;
       }

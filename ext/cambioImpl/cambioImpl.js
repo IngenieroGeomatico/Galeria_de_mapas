@@ -43,6 +43,9 @@ const URL_ENGRANAJE = (() => {
  *     LayerGroup, BTN_Completa_MapLibre), construyendolas con las fachadas
  *     parcheadas. Parche de arranque, y ademas `cambioImpl` lo llama en los dos
  *     momentos que importan (ver `reponerCapasRapidas3D`).
+ *   - `maplibreLayer`: fachada + impl de `IDEE.layer.MapLibre` para Cesium (el
+ *     bundle deja su modulo de implementacion vacio). Parche de arranque, porque
+ *     las capas MapLibre pueden crearse dentro de `mapa()`.
  *   - `geotiffLayer` y `MVTLayer`: fachada + impl de `IDEE.layer.GeoTIFF` y
  *     `IDEE.layer.MVT` para Cesium. Estos SI son plugins (miPlugin_...): se
  *     anaden al mapa nuevo despues de crearlo, si el visualizador no los ha
@@ -55,6 +58,7 @@ const EXTENSIONES_CAPAS_3D = [
     { ruta: 'getWMC_cesium/getWMC_cesium.js' },
     { ruta: 'layergroup_cesium/layergroup_cesium.js' },
     { ruta: 'quicklayers_cesium/quicklayers_cesium.js' },
+    { ruta: 'maplibreLayer/maplibreLayer.js' },
     { ruta: 'geotiffLayer/geotiffLayer.js', plugin: 'miPlugin_geotiffLayer' },
     { ruta: 'MVTLayer/MVTLayer.js', plugin: 'miPlugin_MVTLayer' }
 ];
@@ -169,18 +173,18 @@ function anadirPluginsCapas3D(map) {
  * `get` construye el catalogo ENTERO en ese instante. Si se llamara antes de que
  * la build tenga la config de la pagina (medido: el build esta vivo a los
  * ~0,8 s y la config llega a los ~2,0 s), las entradas que leen la config se
- * quedarian con la de por defecto.
+ * quedarian con la de por defecto. Se llama en los dos sitios donde la build de
+ * Cesium ya existe y `mapa()` todavia no ha corrido:
  *
- * Hay dos llamadas, cada una en su momento:
+ *   - al cambiar de implementacion, tras `IDEE.config = await loadConfig(...)` y
+ *     ANTES de `reiniciarMapa()`: es cuando `mapa()` resuelve las capas base,
+ *     incluida la que el usuario tenia recordada en localStorage;
+ *   - al arrancar el visor ya en 3D (`addTo`), tras cargar las extensiones.
  *
- *   - tras `IDEE.config = await loadConfig(...)` y ANTES de `reiniciarMapa()`:
- *     es cuando `mapa()` resuelve las capas base, incluida la que el usuario
- *     tenia recordada en localStorage;
- *   - tras `anadirPluginsCapas3D()`: `IDEE.layer.MVT` solo esta parcheada
- *     cuando miPlugin_MVTLayer ha sustituido la clase.
- *
- * La extension es idempotente y por receta, asi que una llamada de mas no hace
- * nada y una que no pueda aplicarse se reintenta en la siguiente.
+ * Las fachadas que usan las recetas (LayerGroup y MapLibre) son parches de
+ * arranque, asi que ya estan puestas en los dos casos. La extension es
+ * idempotente y por receta, asi que una llamada de mas no hace nada y una que no
+ * pueda aplicarse se reintenta en la siguiente.
  */
 function reponerCapasRapidas3D() {
     try {
@@ -913,10 +917,6 @@ class miPlugin_cambioImpl {
                 // Extensiones de capas 3D que son plugin (GeoTIFF, MVT): si el
                 // visualizador no las ha anadido en su mapa(), se anaden aqui.
                 anadirPluginsCapas3D(newMap);
-                // Y con los plugins ya puestos (IDEE.layer.MVT parcheada) se
-                // reintenta la reposicion de capas rapidas: la que depende del
-                // MVT no ha podido entrar antes de `reiniciarMapa()`.
-                reponerCapasRapidas3D();
                 btn = await document.getElementById('APIIDEE-herramienta-button');
                 await btn.classList.add("activated");
 
