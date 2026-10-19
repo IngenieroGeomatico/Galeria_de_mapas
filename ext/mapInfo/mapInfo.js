@@ -107,9 +107,17 @@
       estiramiento de Mercator es real y se ve, pero en la ESCALA de al lado,
       que sí lo lleva; un nivel de zoom no se mueve por irte al norte.
 
-      Lo que sí mueve el número es cambiar de proyección, porque entonces la
-      resolución del plano va en otras unidades. Es lo que hace la propia API y
-      no tiene arreglo.
+      Lo que sí movía el número era cambiar de proyección, porque ahí la
+      resolución del plano va en otras unidades y la API se lleva la pirámide de
+      resoluciones de 3857 a la proyección nueva sin rehacerla. Medido al pasar a
+      4326: la vista quedaba con una resolución máxima de 156.543,03392804097
+      "grados" por píxel, el nivel saltaba de 3,00 a 19,76 y map.setZoom(3) ponía
+      19.567 GRADOS por píxel, que es medio planeta en un píxel. Ya no: al
+      cambiar de proyección se rehace la pirámide con el patrón de la API (ver
+      _rehacerPiramideDeResoluciones) y el nivel se queda donde estaba: 3,00 en
+      3857 sigue siendo 3,00 en 4326 en el ecuador, y en Madrid 12,00 pasa a
+      12,21 con los metros de suelo por píxel clavados en 29,0997 y el zoom
+      profundo hasta donde llega un mapa nacido en esa proyección.
 
       Por eso _irAZoom() anima la RESOLUCIÓN y no el zoom: si se animara el
       zoom, OpenLayers lo interpretaría con su propia cuenta, que es esta
@@ -2341,15 +2349,26 @@
      *
      * En 3D no se usa: allí los metros por píxel salen de la geometría de la
      * cámara y ya son de suelo, sin proyección de por medio.
+     *
+     * El punto se puede dar a mano, y al cambiar de proyección hay que darlo: en
+     * ese momento la vista todavía puede estar en (0,0), con el centro bueno sin
+     * poner o incluso recortado por la restricción de extensión de la vista, y
+     * preguntarle a ella da el factor del ecuador (medido: 111.195,08 en Madrid,
+     * donde toca 97.929,63, y por eso la escala se iba un 12 %). Con el punto
+     * explícito no se depende de lo que esté haciendo la vista en ese instante.
      * @param {Object} vista Vista de OpenLayers.
+     * @param {Array<number>} [punto] Punto [x, y] en la proyección de la vista,
+     *  en lugar del centro que tenga ahora.
      * @returns {number|null} Factor, o null si no se puede calcular.
      */
-    _factorProyeccion(vista) {
+    _factorProyeccion(vista, punto) {
       try {
         if (!vista || typeof vista.getProjection !== 'function') return null;
         const proyeccion = vista.getProjection();
         if (!proyeccion) return null;
-        const centro = this._centroVista(vista);
+        const centro = (punto && isFinite(punto[0]) && isFinite(punto[1]))
+          ? [Number(punto[0]), Number(punto[1])]
+          : this._centroVista(vista);
         if (centro === null) return null;
 
         const mpu = (typeof proyeccion.getMetersPerUnit === 'function')
@@ -2357,18 +2376,18 @@
         if (!isFinite(mpu) || mpu <= 0) return null;
 
         const ol = window.ol;
-        let punto;
+        let delPunto;
         if (ol && ol.proj && typeof ol.proj.getPointResolution === 'function') {
-          punto = ol.proj.getPointResolution(proyeccion, 1 / mpu, centro, 'm');
+          delPunto = ol.proj.getPointResolution(proyeccion, 1 / mpu, centro, 'm');
         } else if (typeof proyeccion.getPointResolutionFunc === 'function') {
           // Reserva: la propia proyección trae su función, que es lo que
           // llama por dentro getPointResolution(), pero devuelve en las
           // unidades de la proyección, así que hay que pasarlas a metros.
-          punto = Number(proyeccion.getPointResolutionFunc()(1 / mpu, centro)) * mpu;
+          delPunto = Number(proyeccion.getPointResolutionFunc()(1 / mpu, centro)) * mpu;
         } else {
-          punto = 1 / mpu;
+          delPunto = 1 / mpu;
         }
-        const factor = Number(punto) * mpu;
+        const factor = Number(delPunto) * mpu;
         return (isFinite(factor) && factor > 0) ? factor : null;
       } catch (e) {
         return null;
@@ -2376,24 +2395,179 @@
     }
 
     /**
-     * Resolución a la que corresponde el nivel de zoom 0, en metros de suelo.
+     * Resolución a la que corresponde el nivel de zoom 0, EN LAS UNIDADES DE LA
+     * VISTA.
      *
      *  Se pregunta primero a la vista, que es la que usa OpenLayers para su
      *  getZoom(), y solo si no contesta se cae al valor del ejemplo de OpenLayers
      *  (RESOLUCION_MAXIMA).
+     *
+     *  Pero la vista puede traer una pirámide que no es la de su proyección: la
+     *  API cambia de proyección sin rehacerla y le deja la de 3857, que está en
+     *  metros (medido: 156.543,03392804097 en una vista de GRADOS, donde su sitio
+     *  es 1,40625). Comparar grados con metros daba un nivel de 19,76 donde toca
+     *  3,00, y escribir 3 ponía 19.567 grados por píxel. Se reconoce por la
+     *  medida: una resolución máxima mayor que el mundo entero de esa proyección
+     *  no puede ser la suya.
+     *
+     *  Es la red de seguridad de _rehacerPiramideDeResoluciones(), que ya deja la
+     *  pirámide bien al cambiar de proyección; esto salta solo si aquello no
+     *  llegó a hacerlo.
      * @param {Object} vista Vista de OpenLayers.
      * @returns {number} Resolución máxima.
      */
     _resolucionMaxima(vista) {
+      let deLaVista = null;
       try {
         if (vista && typeof vista.getMaxResolution === 'function') {
           const v = Number(vista.getMaxResolution());
-          if (isFinite(v) && v > 0) return v;
+          if (isFinite(v) && v > 0) deLaVista = v;
         }
       } catch (e) {
-        /* se usa el valor por defecto */
+        /* sin dato de la vista se mira el de la proyección */
       }
+      let proyeccion = null;
+      try {
+        proyeccion = (vista && typeof vista.getProjection === 'function') ? vista.getProjection() : null;
+      } catch (e) {
+        proyeccion = null;
+      }
+      const deLaProyeccion = this._resolucionMaximaDeLaProyeccion(proyeccion);
+      if (deLaProyeccion !== null && (deLaVista === null || deLaVista > deLaProyeccion * 256)) {
+        return deLaProyeccion;
+      }
+      if (deLaVista !== null) return deLaVista;
       return RESOLUCION_MAXIMA;
+    }
+
+    /**
+     * Resolución máxima de la pirámide que le corresponde a una proyección, en
+     * SUS unidades.
+     *
+     *  Es el máximo del ancho y el alto de su extensión entre 256, que es el
+     *  patrón con el que la API crea sus mapas. Medido en las seis proyecciones
+     *  que ofrece el visualizador: 3857 -> 156.543,03392804097 (40075016,69/256);
+     *  4326 -> 1,40625 (360/256), CRS:84 -> 156.543,03392804097 (su extensión es
+     *  la de 3857 en este bundle); 4258 -> 0,2177734375 (55,75/256); 25830 ->
+     *  22.669,3159 (5.803.344,87/256) y 3395 -> 156.543,03392804097. En las seis,
+     *  la resolución mínima de la vista quedaba en el máximo partido por 2^28,
+     *  que es su tope de zoom 28.
+     *
+     *  La extensión que manda es la PROPIA de la proyección (`extentPropio`), no
+     *  la que el plugin le ponga después para recortar o abrir en global, que esa
+     *  ya no es la del mapa con el que se mide.
+     * @param {Object} proyeccion Proyección de OpenLayers.
+     * @returns {number|null} Resolución del nivel 0, o null si no se puede saber.
+     */
+    _resolucionMaximaDeLaProyeccion(proyeccion) {
+      if (!proyeccion) return null;
+      try {
+        const extent = proyeccion.extentPropio
+          || ((typeof proyeccion.getExtent === 'function') ? proyeccion.getExtent() : null);
+        if (!extent || extent.length !== 4) return null;
+        const ancho = Math.abs(Number(extent[2]) - Number(extent[0]));
+        const alto = Math.abs(Number(extent[3]) - Number(extent[1]));
+        const mayor = Math.max(ancho, alto);
+        if (!isFinite(mayor) || mayor <= 0) return null;
+        return mayor / 256;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Rehace la pirámide de resoluciones de la vista para la proyección que
+     * tenga puesta, con el mismo patrón con el que la API crea un mapa.
+     *
+     *  La API cambia de proyección sin rehacer la pirámide: se lleva la de 3857
+     *  (en metros) a la proyección nueva y la deja ahí. Medido al pasar a 4326:
+     *  la vista quedaba con una resolución máxima de 156.543,03392804097
+     *  "grados" por píxel y una mínima de 0,0005831682455839253, el nivel de zoom
+     *  saltaba de 3,00 a 19,76, map.getZoom() decía 19,76 y map.setZoom(3) ponía
+     *  19.567 grados por píxel. Y encima el zoom profundo se cortaba en 65 m por
+     *  píxel, que es donde corta la resolución mínima heredada, aunque el mapa se
+     *  viera igual. En cambio, un mapa NACIDO en 4326 tiene máximo 1,40625 y
+     *  mínimo 5,238689482212067e-9, y su getZoom() es 3 con zoom 3.
+     *
+     *  Se rehace sustituyendo la vista por otra de su misma clase y con sus
+     *  mismos ajustes, pero con los números de _resolucionMaximaDeLaProyeccion.
+     *  Sustituir la vista es lo que hace la propia API en su setProjection, y
+     *  es lo que la deja igual que una nacida en esa proyección: con solo la
+     *  resolución máxima de su extensión y la mínima que sale de su tope de
+     *  zoom, sin lista de resoluciones. Con la lista (vista.setResolutions) el
+     *  resultado también es correcto, pero entonces getZoom() pasa a devolver
+     *  el escalón de la lista (medido: 13 donde la resolución es la del nivel
+     *  12,2084) y un setZoom() con ese número se lleva la resolución al
+     *  escalón, un 41 % de más. Medido con la vista sustituida: máximo 1,40625
+     *  en 4326, mínimo 5,238689482212067e-9, getZoom() 12,2084 (el mismo
+     *  número que calcula el plugin) y el zoom 15 aplicado tal cual.
+     *
+     *  En 3D no hay vista de OpenLayers y devuelve false sin tocar nada.
+     * @returns {boolean} true si se llegó a rehacer la pirámide.
+     */
+    _rehacerPiramideDeResoluciones() {
+      const vista = this._vistaOL();
+      if (!vista || typeof vista.constructor !== 'function') return false;
+      const impl = this._impl();
+      if (!impl || typeof impl.setView !== 'function') return false;
+      let proyeccion = null;
+      try {
+        proyeccion = (typeof vista.getProjection === 'function') ? vista.getProjection() : null;
+      } catch (e) {
+        return false;
+      }
+      const maximo = this._resolucionMaximaDeLaProyeccion(proyeccion);
+      if (maximo === null) return false;
+      // Los escalones son los de la propia vista: de su tope de zoom a su
+      // mínimo, que en las de la API son 28 y 0, o sea 29 niveles.
+      let niveles = 29;
+      try {
+        const tope = Number(vista.getMaxZoom());
+        const suelo = Number(vista.getMinZoom());
+        if (isFinite(tope) && isFinite(suelo) && tope >= suelo) niveles = Math.round(tope - suelo) + 1;
+      } catch (e) {
+        /* con el patrón de la API */
+      }
+      const minimo = maximo / Math.pow(2, niveles - 1);
+      const resolucion = Number(vista.getResolution());
+      let opciones = null;
+      try {
+        // Los ajustes que ya traiga la vista (la extensión del alcance, el
+        // tope de resolución, su clase de siempre...) más los de la pirámide
+        // nueva. El resolutions a undefined es a propósito: es lo que deja la
+        // vista sin lista, como una nacida en la proyección.
+        const base = (typeof vista.getUpdatedOptions_ === 'function') ? vista.getUpdatedOptions_({}) : {};
+        opciones = Object.assign({}, base, {
+          resolutions: undefined,
+          maxResolution: maximo,
+          minResolution: minimo,
+          projection: proyeccion,
+          center: (typeof vista.getCenter === 'function') ? vista.getCenter() : undefined,
+          resolution: (isFinite(resolucion) && resolucion > 0) ? resolucion : undefined,
+          rotation: (typeof vista.getRotation === 'function') ? vista.getRotation() : undefined,
+        });
+      } catch (e) {
+        console.warn(`${this.name}: no se pudieron preparar los ajustes de la vista.`, e);
+        return false;
+      }
+      let nueva = null;
+      try {
+        nueva = new (vista.constructor)(opciones);
+        impl.setView(nueva);
+      } catch (e) {
+        console.warn(`${this.name}: no se pudo rehacer la pirámide de resoluciones.`, e);
+        return false;
+      }
+      // El constructor puede haber acotado la resolución (la extensión del
+      // alcance manda), así que se devuelve la que se estaba viendo.
+      if (isFinite(resolucion) && resolucion > 0) {
+        try {
+          nueva.setResolution(resolucion);
+        } catch (e) {
+          /* se queda la que haya dejado el constructor, que es la de la API */
+        }
+      }
+      return true;
     }
 
     /**
@@ -2418,9 +2592,11 @@
      *  nivel de zoom no se mueve por irte al norte. Con esto el número que sale
      *  es exactamente el getZoom() de la API, y se queda quieto al desplazarse.
      *
-     *  Lo que sí mueve el número es cambiar de proyección, porque entonces la
-     *  resolución del plano va en otras unidades. Eso no tiene arreglo y es lo
-     *  que hace la propia API.
+     *  Lo que sí movía el número era cambiar de proyección, y tampoco debería:
+     *  la resolución del plano va en otras unidades, pero el nivel se mide sobre
+     *  la pirámide de la proyección nueva, que el plugin rehace (ver
+     *  _rehacerPiramideDeResoluciones). Medido en Madrid: 12,00 en 3857 y 12,21
+     *  en 4326, con los metros de suelo por píxel clavados.
      * @param {number} resolucion Resolución de la vista, en sus unidades.
      * @param {Object} vista Vista de OpenLayers.
      * @returns {number|null} Nivel de zoom, o null si no se puede.
@@ -4273,6 +4449,16 @@
      * que sabe pasar de un sistema al otro. La resolución se reparte con el
      * factor de la proyección nueva, para que el detalle sea el mismo que
      * antes y no el que le toque por su cuenta.
+     *
+     * Y entre una cosa y otra se rehace la pirámide de resoluciones de la
+     * vista, que la API no rehace y se lleva la de 3857 a la proyección nueva:
+     * sin eso el nivel de zoom saltaba de 3,00 a 19,76 al pasar a 4326 (ver
+     * _rehacerPiramideDeResoluciones).
+     *
+     * Al devolver la vista se pone primero la resolución y después el centro:
+     * con la resolución de ajuste con la que la deja la API, la vista es tan
+     * grande que su restricción de extensión no deja centrarla y el centro se
+     * queda pegado a y = 0, que además falsea el factor de suelo. Ver el paso 3.
      * @param {string} codigo Código EPSG destino.
      * @returns {boolean} true si el cambio se llegó a hacer.
      */
@@ -4353,11 +4539,26 @@
       // la extensión que hay que tocar es la de la nueva.
       this._aplicarAlcance(codigo);
 
+      // 2 bis) la pirámide de resoluciones de la vista, que la API NO rehace al
+      // cambiar de proyección y se lleva la de 3857 a la nueva (ver
+      // _rehacerPiramideDeResoluciones). Va antes de devolver la vista, para que
+      // la resolución que se le pida justo después no la tope una pirámide que
+      // no es la suya; y después de _aplicarAlcance(), que es quien guarda la
+      // extensión propia de la proyección con la que se mide la pirámide.
+      this._rehacerPiramideDeResoluciones();
+
       // 3) devolver la vista a lo que se estaba viendo.
+      //
+      // La resolución va ANTES que el centro, y no es un capricho: la API deja
+      // la vista con la resolución de ajuste al alcance, que es tan gruesa que
+      // la restricción de extensión de la vista no deja poner el centro donde
+      // toca y lo pega a y = 0 (medido en Madrid: el centro se quedaba en
+      // -3,71/0). Con la resolución ya puesta, la vista es pequeña, el centro
+      // entra y el factor de suelo se calcula sobre el punto bueno.
       const vistaNueva = this._vistaOL() || vista;
       if (vistaNueva) {
+        let centro = null;
         if (antes.centro) {
-          let centro = null;
           try {
             const ol = window.ol;
             centro = ol.proj.transform(antes.centro, proyeccionVieja, vistaNueva.getProjection());
@@ -4366,10 +4567,10 @@
           }
           // Sin transformación el centro se queda donde lo dejó la API, que es
           // (0,0), y mejor eso que un centro sin sentido calculado a medias.
-          if (centro && isFinite(centro[0]) && isFinite(centro[1])) vistaNueva.setCenter(centro);
+          if (!(centro && isFinite(centro[0]) && isFinite(centro[1]))) centro = null;
         }
         if (antes.sueloPorPx !== null) {
-          const factor = this._factorProyeccion(vistaNueva);
+          const factor = this._factorProyeccion(vistaNueva, centro);
           if (factor !== null && factor > 0) {
             try {
               vistaNueva.setResolution(antes.sueloPorPx / factor);
@@ -4378,6 +4579,7 @@
             }
           }
         }
+        if (centro) vistaNueva.setCenter(centro);
       }
 
       this._epsgActivo = codigo;
