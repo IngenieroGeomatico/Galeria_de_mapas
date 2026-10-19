@@ -1549,11 +1549,15 @@
      *   NOTA: no se aceptan objetos IDEE.map (el motor OL/Cesium es único por
      *   documento). Sí se aceptan IDEE.layer / IDEE.plugin: se serializan aquí y
      *   se reconstruyen dentro de cada iframe.
-     *   Si NO se declara, las vistas se derivan del mapa anfitrión: se leen su
-     *   implementación, su encuadre y sus capas (ver _capturarMapaVivo) y las
-     *   celdas alternan ese motor con el otro (2D/3D). Es lo que hace un
-     *   visualizador que ya configura su mapa en IDEE.map(): no repite aquí lo
-     *   mismo.
+     *   Si una vista no trae configuración de mapa (sin `layers`), se resuelve
+     *   con el mapa anfitrión: sus capas, su motor (si la vista no declara
+     *   `implementation`) y su encuadre (si no declara `center`/`zoom`). Es el
+     *   mapa que se está viendo, que es el que se quiere comparar.
+     *   Si NO se declara `views`, TODAS las vistas se derivan del mapa anfitrión:
+     *   se leen su implementación, su encuadre y sus capas (ver
+     *   _capturarMapaVivo) y las celdas alternan ese motor con el otro (2D/3D).
+     *   Es lo que hace un visualizador que ya configura su mapa en IDEE.map(): no
+     *   repite aquí lo mismo.
      * @param {Array<number|string>} [options.slots] Qué vista ocupa cada slot
      *   inicial (por índice o id). Opcional.
      *
@@ -1577,6 +1581,14 @@
       this.initLon = (typeof this.options.lon === "number") ? this.options.lon : -3.70;
       this.initLat = (typeof this.options.lat === "number") ? this.options.lat : 40.42;
       this.initZoom = (typeof this.options.zoom === "number") ? this.options.zoom : 12;
+      // ¿El constructor fijó el encuadre a mano? Los tres valores de arriba son
+      // valores por defecto; esto distingue los puestos a propósito, que mandan
+      // sobre el encuadre del mapa vivo en las vistas que no traen el suyo.
+      this._encuadreDeclarado = {
+        lon: (typeof this.options.lon === "number"),
+        lat: (typeof this.options.lat === "number"),
+        zoom: (typeof this.options.zoom === "number"),
+      };
 
       // Colores configurables, con el mismo reparto y los mismos valores por
       // defecto que el resto de plugins del repositorio (color1 = fondo,
@@ -1810,6 +1822,11 @@
         var controls = Array.isArray(v.controls) ? v.controls.slice() : [];
         return {
           name: v.name || ("Vista " + (i + 1)),
+          // ¿El visualizador eligió motor? Si no lo dijo, manda el del mapa vivo
+          // (ver _adoptPrimaryView): una vista sin configuración de mapa es el
+          // mapa activo, también en 2D/3D.
+          implDeclarada: (v.implementation !== undefined && v.implementation !== null
+            && v.implementation !== ""),
           impl: self._normalizeImpl(v.implementation),
           lon: center ? center.lon : undefined,
           lat: center ? center.lat : undefined,
@@ -2048,11 +2065,13 @@
       this.ui = this._buildUI();
       this._sacarSidenavDeLaBarra();
       this._aplicarColores();
-      // Sin parametrización de vistas, la principal se deriva del mapa vivo.
-      // Se captura aquí y no antes a propósito: getSupraElement() se llama al
-      // abrir la barra, que es cuando el mapa ya tiene sus capas puestas (las
-      // del visualizador las añaden sus plugins después de crearse).
-      if (!this._initialViews) this._mapaVivo = this._capturarMapaVivo();
+      // El mapa vivo se captura aquí y no antes a propósito: getSupraElement()
+      // se llama al abrir la barra, que es cuando el mapa ya tiene sus capas
+      // puestas (las del visualizador las añaden sus plugins después de
+      // crearse). Se captura SIEMPRE, haya o no vistas declaradas: es el mapa
+      // activo, y hace de configuración por defecto de las vistas que no traen
+      // la suya (ver _adoptPrimaryView).
+      if (!this._mapaVivo) this._mapaVivo = this._capturarMapaVivo();
       this._adoptPrimaryView();
       // Aplica la configuración de comparación INICIAL (modo + swipe/grid).
       this._applyInitialComparison();
@@ -2319,19 +2338,35 @@
       // Ventana espejo: no crea vistas propias; espera el snapshot del maestro.
       if (this.syncRole === "child") return;
 
-      // Si el constructor trajo vistas iniciales, créalas todas con su config.
+      // Si el constructor trajo vistas iniciales, créalas todas con su config,
+      // y cada una que NO traiga configuración de mapa (sin capas) se resuelve
+      // con el mapa activo: es lo que se quiere comparar, así que se le dan sus
+      // capas, su motor y su encuadre (ver _capturarMapaVivo). Sin esto, una
+      // lista de vistas con nombre y motor pero sin capas dejaba celdas con el
+      // fondo de la API en vez de con el mapa del visualizador (medido: solo
+      // IGNBaseTodo, sin el PNOA ni el GeoJSON de barrios que sí tiene el mapa
+      // de arriba).
       if (this._initialViews && this._initialViews.length) {
         var self = this;
+        var vivo = this._mapaVivo;
         var firstPrimaryId = null;
         this._initialViews.forEach(function (vc) {
+          var sinMapa = !vc.config || !Array.isArray(vc.config.layers) || !vc.config.layers.length;
+          var config = (sinMapa && vivo) ? self._cloneConfig(vivo.config) : vc.config;
           var v = self._makeView({
             name: vc.name,
-            impl: vc.impl,
+            impl: vc.implDeclarada ? vc.impl : (vivo ? vivo.impl : vc.impl),
             isPrimary: vc.isPrimary,
-            lon: (typeof vc.lon === "number") ? vc.lon : self.initLon,
-            lat: (typeof vc.lat === "number") ? vc.lat : self.initLat,
-            zoom: (typeof vc.zoom === "number") ? vc.zoom : self.initZoom,
-            config: vc.config,
+            lon: (typeof vc.lon === "number") ? vc.lon
+              : (self._encuadreDeclarado.lon ? self.initLon
+                : ((vivo && typeof vivo.lon === "number") ? vivo.lon : self.initLon)),
+            lat: (typeof vc.lat === "number") ? vc.lat
+              : (self._encuadreDeclarado.lat ? self.initLat
+                : ((vivo && typeof vivo.lat === "number") ? vivo.lat : self.initLat)),
+            zoom: (typeof vc.zoom === "number") ? vc.zoom
+              : (self._encuadreDeclarado.zoom ? self.initZoom
+                : ((vivo && typeof vivo.zoom === "number") ? vivo.zoom : self.initZoom)),
+            config: config,
           });
           if (vc.isPrimary && !firstPrimaryId) firstPrimaryId = v.id;
         });

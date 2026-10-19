@@ -61,7 +61,7 @@ consola («no hay miPlugin_supraplugin: el comparador no abre su barra») y no m
 | `mode` | `"single"` \| `"swipe"` \| `"mirror"` \| `"molde"` | `"single"` | Modo de comparación con el que arranca. Cualquier otro valor cae a `"single"`. |
 | `swipe` | `Object` | `{ layout: "1x1" }` | Configuración de la cortinilla. `layout`: `"1x1"` (2 vistas: izq \| der), `"2x1"` (3), `"1x2"` (3) o `"2x2"` (4). |
 | `layout` | `Object` | `{ type: "grid", rows: 1, cols: 2 }` | Reparto del espejo. `{ type:"grid", rows, cols }` o `{ type:"custom", spec:[1,3,1] }` (celdas por fila). |
-| `views` | `Array<Object>` | sin definir | Vistas iniciales. Si **no** se declara, las deriva del mapa anfitrión (implementación, encuadre y capas; ver `_capturarMapaVivo`). Ver «Vistas iniciales» abajo. |
+| `views` | `Array<Object>` | sin definir | Vistas iniciales. Si una vista no trae configuración de mapa (sin `layers`), se resuelve con el mapa activo (sus capas, su motor y su encuadre). Si **no** se declara, todas se derivan del mapa anfitrión (implementación, encuadre y capas; ver `_capturarMapaVivo`). Ver «Vistas iniciales» abajo. |
 | `slots` | `Array<number\|string>` | sin definir | Qué vista ocupa cada slot inicial (por índice o por id). |
 | `sync` | `boolean` | `true` | Sincronizar el encuadre entre vistas (`options.sync !== false`). |
 | `syncMode` | `"extent"` \| `"center"` | `"extent"` | Estrategia de sincronización. Cualquier valor distinto de `"center"` usa `"extent"`. |
@@ -94,6 +94,15 @@ Cada entrada admite:
 
 > No se aceptan objetos `IDEE.map`: el motor OL/Cesium es único por documento. Sí se aceptan
 > `IDEE.layer` / `IDEE.plugin`, que se serializan y se reconstruyen dentro de cada iframe.
+
+**Vista sin configuración de mapa = mapa activo.** Si una vista no declara `layers` (o las
+declara vacías), se monta con el mapa anfitrión: se le dan sus capas, su `implementation` (solo
+si la vista no la declara) y su `center`/`zoom` (solo si no los declara; si el constructor llevó
+`lon`/`lat`/`zoom` puestos a mano, mandan esos). Es lo que se está viendo en el visualizador,
+que es justo lo que se quiere comparar; sin esto, una lista de vistas con nombre y motor pero
+sin capas dejaba celdas con el fondo de la API (medido: solo `IGNBaseTodo`, sin el PNOA ni el
+GeoJSON de barrios que sí tenía el mapa de arriba). Las vistas que sí declaran capas se dejan
+tal cual (y la API les pone su capa base por defecto).
 
 ## 🚀 Ejemplo de uso
 
