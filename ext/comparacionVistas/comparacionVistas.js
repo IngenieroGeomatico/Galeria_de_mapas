@@ -67,6 +67,47 @@
   function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
 
   // =====================================================================
+  //  Iconos de la interfaz (herramientas, botones y tabla de vistas)
+  // ---------------------------------------------------------------------
+  // Vienen de SVG Repo (packs monocolor de trazo fino) y se pintan EN LÍNEA
+  // en el DOM, nunca con <img> ni con una URL de fondo: así el trazo es
+  // currentColor y el icono toma el color del botón que lo contiene (gris
+  // normal, naranja al pasar el ratón y blanco en la herramienta activa), sin
+  // escribir ningún color aquí. Los ficheros originales, con su ficha y su
+  // pack, están guardados en img/iconos/.
+  // A los nueve se les ha quitado el grosor propio (unos traían 1, otros 1,5 y
+  // otros 2) y se les ha puesto 1.6 en el nodo raíz: el mismo trazo para todos
+  // es lo que hace que parezcan una familia. Los que traen formas rellenas
+  // llevan stroke="none" en ellas, que si no heredarían el trazo y engordarían.
+  function cmpvIconoSvg(interior) {
+    return '<svg class="cmpv-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"' +
+      ' fill="none" stroke="currentColor" stroke-width="1.6"' +
+      ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+      interior + '</svg>';
+  }
+
+  var CMPV_ICONO = {
+    // Crear -> add (SVG Repo 458480, Lets Light Line Interface Icons).
+    crear: cmpvIconoSvg('<path d="M12 6L12 18" stroke-linecap="square" stroke-linejoin="round"/><path d="M18 12L6 12" stroke-linecap="square" stroke-linejoin="round"/>'),
+    // Ver -> view-alt (SVG Repo 458429, Lets Light Line Interface Icons).
+    ver: cmpvIconoSvg('<circle cx="12" cy="12" r="2.5"/><path d="M18.2265 11.3805C18.3552 11.634 18.4195 11.7607 18.4195 12C18.4195 12.2393 18.3552 12.366 18.2265 12.6195C17.6001 13.8533 15.812 16.5 12 16.5C8.18799 16.5 6.39992 13.8533 5.77348 12.6195C5.64481 12.366 5.58048 12.2393 5.58048 12C5.58048 11.7607 5.64481 11.634 5.77348 11.3805C6.39992 10.1467 8.18799 7.5 12 7.5C15.812 7.5 17.6001 10.1467 18.2265 11.3805Z"/><path d="M17.5 3.5H17.7C19.4913 3.5 20.387 3.5 20.9435 4.0565C21.5 4.61299 21.5 5.50866 21.5 7.3V7.5"/><path d="M17.5 20.5H17.7C19.4913 20.5 20.387 20.5 20.9435 19.9435C21.5 19.387 21.5 18.4913 21.5 16.7V16.5"/><path d="M6.5 3.5H6.3C4.50866 3.5 3.61299 3.5 3.0565 4.0565C2.5 4.61299 2.5 5.50866 2.5 7.3V7.5"/><path d="M6.5 20.5H6.3C4.50866 20.5 3.61299 20.5 3.0565 19.9435C2.5 19.387 2.5 18.4913 2.5 16.7V16.5"/>'),
+    // Cortinilla -> columns-two (SVG Repo 488876, Iconcino Interface Icons).
+    cortinilla: cmpvIconoSvg('<path d="M12 4V20M6 20H18C19.1046 20 20 19.1046 20 18V6C20 4.89543 19.1046 4 18 4H6C4.89543 4 4 4.89543 4 6V18C4 19.1046 4.89543 20 6 20Z"/>'),
+    // Espejo -> grid-4 (SVG Repo 506211, Software Mansion Curved Line Icons).
+    espejo: cmpvIconoSvg('<path d="M6.75 3C3.88235 3 3 3.88235 3 6.75C3 9.61765 3.88235 10.5 6.75 10.5C9.61765 10.5 10.5 9.61765 10.5 6.75C10.5 3.88235 9.61765 3 6.75 3Z"/><path d="M17.25 3C14.3824 3 13.5 3.88235 13.5 6.75C13.5 9.61765 14.3824 10.5 17.25 10.5C20.1176 10.5 21 9.61765 21 6.75C21 3.88235 20.1176 3 17.25 3Z"/><path d="M6.75 13.5C3.88235 13.5 3 14.3824 3 17.25C3 20.1176 3.88235 21 6.75 21C9.61765 21 10.5 20.1176 10.5 17.25C10.5 14.3824 9.61765 13.5 6.75 13.5Z"/><path d="M17.25 13.5C14.3824 13.5 13.5 14.3824 13.5 17.25C13.5 20.1176 14.3824 21 17.25 21C20.1176 21 21 20.1176 21 17.25C21 14.3824 20.1176 13.5 17.25 13.5Z"/>'),
+    // Molde -> dimond (SVG Repo 458142, Lets Light Line Interface Icons).
+    molde: cmpvIconoSvg('<path d="M4.87403 12.874L10.5858 18.5858C11.2525 19.2525 11.5858 19.5858 12 19.5858C12.4142 19.5858 12.7475 19.2525 13.4142 18.5858L19.126 12.874C19.5512 12.4488 19.7639 12.2361 19.8291 11.9597C19.8944 11.6832 19.7993 11.3979 19.6091 10.8274L18.9117 8.73509C18.4717 7.41505 18.2517 6.75503 17.7279 6.37752C17.2041 6 16.5084 6 15.117 6H8.88304C7.49159 6 6.79587 6 6.2721 6.37752C5.74832 6.75503 5.52832 7.41505 5.0883 8.73509L4.39088 10.8274C4.2007 11.3979 4.10561 11.6832 4.17087 11.9597C4.23614 12.2361 4.44877 12.4488 4.87403 12.874Z"/>'),
+    // Ventana -> img-out-box (SVG Repo 458237, Lets Light Line Interface Icons).
+    ventana: cmpvIconoSvg('<path d="M21 11V13C21 16.7712 21 18.6569 19.8284 19.8284C18.6569 21 16.7712 21 13 21H11C7.22876 21 5.34315 21 4.17157 19.8284C3 18.6569 3 16.7712 3 13V11C3 7.22876 3 5.34315 4.17157 4.17157C5.34315 3 7.22876 3 11 3H12"/><path fill="currentColor" stroke="none" fill-rule="evenodd" clip-rule="evenodd" d="M18.9976 14.2904L18.4033 13.6961C18.3245 13.6173 18.2784 13.5712 18.2394 13.5353C17.0477 12.4403 15.1454 12.749 14.3611 14.1647C14.3354 14.2111 14.3062 14.2694 14.2628 14.3561L14.2564 14.369C14.227 14.4278 14.22 14.4416 14.2161 14.4486C14.0513 14.7448 13.6458 14.7948 13.4142 14.5474C13.4087 14.5415 13.3985 14.5298 13.3557 14.4799L8.37962 8.67449C8.19991 8.46483 7.88426 8.44055 7.6746 8.62026C7.46494 8.79997 7.44065 9.11562 7.62037 9.32528L12.5964 15.1307C12.6352 15.1759 12.6614 15.2066 12.6842 15.2309C13.3793 15.9731 14.5957 15.8233 15.09 14.9348C15.1062 14.9056 15.1242 14.8695 15.1458 14.8263L15.1508 14.8162C15.203 14.712 15.2218 14.6746 15.2358 14.6493C15.7064 13.7999 16.8478 13.6147 17.5628 14.2717C17.5841 14.2912 17.6138 14.3208 17.6962 14.4032L18.9755 15.6825C18.9887 15.2721 18.9948 14.812 18.9976 14.2904Z"/><path fill="currentColor" stroke="none" d="M21 3V2.5H21.5V3H21ZM16.3123 7.39043C16.0967 7.56294 15.7821 7.52798 15.6096 7.31235C15.4371 7.09672 15.472 6.78207 15.6877 6.60957L16.3123 7.39043ZM20.5 8V3H21.5V8H20.5ZM21 3.5H16V2.5H21V3.5ZM21.3123 3.39043L16.3123 7.39043L15.6877 6.60957L20.6877 2.60957L21.3123 3.39043Z"/>'),
+    // Opciones -> setting-alt-line (SVG Repo 458349, Lets Light Line Interface Icons).
+    opciones: cmpvIconoSvg('<path d="M3.08168 13.9445C2.55298 12.9941 2.28862 12.5188 2.28862 12C2.28862 11.4812 2.55298 11.0059 3.08169 10.0555L4.43094 7.63L5.85685 5.24876C6.4156 4.31567 6.69498 3.84912 7.14431 3.5897C7.59364 3.33028 8.13737 3.3216 9.22483 3.30426L12 3.26L14.7752 3.30426C15.8626 3.3216 16.4064 3.33028 16.8557 3.5897C17.305 3.84912 17.5844 4.31567 18.1431 5.24876L19.5691 7.63L20.9183 10.0555C21.447 11.0059 21.7114 11.4812 21.7114 12C21.7114 12.5188 21.447 12.9941 20.9183 13.9445L19.5691 16.37L18.1431 18.7512C17.5844 19.6843 17.305 20.1509 16.8557 20.4103C16.4064 20.6697 15.8626 20.6784 14.7752 20.6957L12 20.74L9.22483 20.6957C8.13737 20.6784 7.59364 20.6697 7.14431 20.4103C6.69498 20.1509 6.4156 19.6843 5.85685 18.7512L4.43094 16.37L3.08168 13.9445Z"/><circle cx="12" cy="12" r="3"/>'),
+    // Ojo de la tabla de vistas -> eye (SVG Repo 458171).
+    ojo: cmpvIconoSvg('<path d="M12 5C6.55576 5 3.53109 9.23425 2.45554 11.1164C2.23488 11.5025 2.12456 11.6956 2.1367 11.9836C2.14885 12.2716 2.27857 12.4598 2.53799 12.8362C3.8182 14.6935 7.29389 19 12 19C16.7061 19 20.1818 14.6935 21.462 12.8362C21.7214 12.4598 21.8511 12.2716 21.8633 11.9836C21.8754 11.6956 21.7651 11.5025 21.5445 11.1164C20.4689 9.23425 17.4442 5 12 5Z"/><circle cx="12" cy="12" r="3"/>'),
+    // Papelera -> trash (SVG Repo 458407).
+    papelera: cmpvIconoSvg('<path d="M9.5 14.5L9.5 11.5"/><path d="M14.5 14.5L14.5 11.5"/><path d="M3 6.5H21V6.5C19.5955 6.5 18.8933 6.5 18.3889 6.83706C18.1705 6.98298 17.983 7.17048 17.8371 7.38886C17.5 7.89331 17.5 8.59554 17.5 10V15.5C17.5 17.3856 17.5 18.3284 16.9142 18.9142C16.3284 19.5 15.3856 19.5 13.5 19.5H10.5C8.61438 19.5 7.67157 19.5 7.08579 18.9142C6.5 18.3284 6.5 17.3856 6.5 15.5V10C6.5 8.59554 6.5 7.89331 6.16294 7.38886C6.01702 7.17048 5.82952 6.98298 5.61114 6.83706C5.10669 6.5 4.40446 6.5 3 6.5V6.5Z"/><path d="M9.5 3.50024C9.5 3.50024 10 2.5 12 2.5C14 2.5 14.5 3.5 14.5 3.5"/>')
+  };
+
+  // =====================================================================
   //  Documento de VISTA (antes: vista.html + vista.js). Ahora se genera
   //  dinámicamente y se inyecta en cada iframe vía srcdoc, para que el
   //  plugin sea AUTOCONTENIDO (no depende de ficheros en mapas/).
@@ -3683,19 +3724,19 @@
       root.innerHTML =
         '<div class="cmpv-tools" role="toolbar" aria-label="Comparación de vistas">' +
         '  <button type="button" class="cmpv-tool" data-act="crear" title="Crear una vista nueva">' +
-        '    <span class="cmpv-ico">➕</span><span class="cmpv-lbl">Crear</span></button>' +
+        '    <span class="cmpv-ico">' + CMPV_ICONO.crear + '</span><span class="cmpv-lbl">Crear</span></button>' +
         '  <button type="button" class="cmpv-tool" data-act="single" title="Ver una sola vista">' +
-        '    <span class="cmpv-ico">👁</span><span class="cmpv-lbl">Ver</span></button>' +
+        '    <span class="cmpv-ico">' + CMPV_ICONO.ver + '</span><span class="cmpv-lbl">Ver</span></button>' +
         '  <button type="button" class="cmpv-tool" data-act="cortinilla" title="Comparar con cortinilla">' +
-        '    <span class="cmpv-ico">🪟</span><span class="cmpv-lbl">Cortinilla</span></button>' +
+        '    <span class="cmpv-ico">' + CMPV_ICONO.cortinilla + '</span><span class="cmpv-lbl">Cortinilla</span></button>' +
         '  <button type="button" class="cmpv-tool" data-act="espejo" title="Comparar en espejo">' +
-        '    <span class="cmpv-ico">🪞</span><span class="cmpv-lbl">Espejo</span></button>' +
+        '    <span class="cmpv-ico">' + CMPV_ICONO.espejo + '</span><span class="cmpv-lbl">Espejo</span></button>' +
         '  <button type="button" class="cmpv-tool" data-act="molde" title="Comparar con molde (una figura recorta la vista superior)">' +
-        '    <span class="cmpv-ico">🔷</span><span class="cmpv-lbl">Molde</span></button>' +
+        '    <span class="cmpv-ico">' + CMPV_ICONO.molde + '</span><span class="cmpv-lbl">Molde</span></button>' +
         '  <button type="button" class="cmpv-tool" data-act="sync-win" title="Abrir una ventana sincronizada (ideal para dos pantallas)">' +
-        '    <span class="cmpv-ico">🔗</span><span class="cmpv-lbl">Ventana</span></button>' +
+        '    <span class="cmpv-ico">' + CMPV_ICONO.ventana + '</span><span class="cmpv-lbl">Ventana</span></button>' +
         '  <button type="button" class="cmpv-tool cmpv-tool--cfg" data-act="opciones" title="Opciones / configuración">' +
-        '    <span class="cmpv-ico">⚙</span><span class="cmpv-lbl">Opciones</span></button>' +
+        '    <span class="cmpv-ico">' + CMPV_ICONO.opciones + '</span><span class="cmpv-lbl">Opciones</span></button>' +
         '</div>' +
         '<div class="cmpv-sidenav" data-role="sidenav">' +
         '  <div class="cmpv-sidenav__header">' +
@@ -3726,7 +3767,7 @@
         '            <option value="tab">Pestaña</option>' +
         '            <option value="popup">Ventana nueva</option>' +
         '          </select></label>' +
-        '        <button type="button" class="cmpv-moldbar__btn" data-act="open-sync-win" title="Abrir una ventana sincronizada con esa vista (ideal para dos pantallas)">🔗 Abrir ventana</button>' +
+        '        <button type="button" class="cmpv-moldbar__btn" data-act="open-sync-win" title="Abrir una ventana sincronizada con esa vista (ideal para dos pantallas)"><span class="cmpv-btnico">' + CMPV_ICONO.ventana + '</span>Abrir ventana</button>' +
         '        <div class="cmpv-field--sep"></div>' +
         '        <span class="cmpv-field__title">Apariencia de los divisores</span>' +
         '        <label class="cmpv-field"><input type="checkbox" data-role="div-visible" checked> Mostrar barras de división</label>' +
@@ -3765,7 +3806,7 @@
         '          <div class="cmpv-custom" data-role="custom-inputs" style="display:none">' +
         '            <div class="cmpv-custom__hint">Define cada fila y cuántas celdas (vistas) tiene. Cada fila reparte su ancho entre sus celdas.</div>' +
         '            <div class="cmpv-custom__rows" data-role="custom-rows"></div>' +
-        '            <button type="button" class="cmpv-custom__add" data-role="add-row">➕ Añadir fila</button>' +
+        '            <button type="button" class="cmpv-custom__add" data-role="add-row"><span class="cmpv-btnico">' + CMPV_ICONO.crear + '</span>Añadir fila</button>' +
         '          </div>' +
         '        </div>' +
         '        <div class="cmpv-field cmpv-field--grid" data-only="molde">' +
@@ -3773,9 +3814,9 @@
         '            <span class="cmpv-grid__title">Moldes</span>' +
         '            <div class="cmpv-moldbar__row">' +
         '              <select class="cmpv-select cmpv-moldbar__sel" data-role="mold-select" title="Molde activo"></select>' +
-        '              <button type="button" class="cmpv-moldbar__btn" data-role="mold-add" title="Añadir molde">➕ Añadir</button>' +
+        '              <button type="button" class="cmpv-moldbar__btn" data-role="mold-add" title="Añadir molde"><span class="cmpv-btnico">' + CMPV_ICONO.crear + '</span>Añadir</button>' +
         '            </div>' +
-        '            <button type="button" class="cmpv-moldbar__btn cmpv-moldbar__del" data-role="mold-del" title="Eliminar el molde activo">🗑 Eliminar molde</button>' +
+        '            <button type="button" class="cmpv-moldbar__btn cmpv-moldbar__del" data-role="mold-del" title="Eliminar el molde activo"><span class="cmpv-btnico">' + CMPV_ICONO.papelera + '</span>Eliminar molde</button>' +
         '          </div>' +
         '          <span class="cmpv-grid__title">Figura del molde</span>' +
         '          <label class="cmpv-field">Figura' +
@@ -4183,7 +4224,12 @@
 
     _renderListaVistas() {
       var self = this;
-      var lista = this.ui.querySelector('[data-role="lista"]');
+      // La tabla NO cuelga de this.ui: el sidenav entero (tabla incluida) lo
+      // movió _sacarSidenavDeLaBarra al dock del supraplugin o al body, y su
+      // referencia quedó en this._nav. Buscándolo en this.ui no se encontraba
+      // nunca y la tabla se quedaba vacía (medido: 0 filas con 2 vistas).
+      var raiz = this._nav || this.ui;
+      var lista = raiz ? raiz.querySelector('[data-role="lista"]') : null;
       if (!lista) return;
 
       // La columna ojo (seleccionar vista activa) sólo aparece en modo "ver".
@@ -4223,7 +4269,7 @@
           var eye = document.createElement("button");
           eye.type = "button";
           eye.className = "cmpv-eye" + (v.id === self.activeViewId ? " cmpv-eye--active" : "");
-          eye.textContent = "👁";
+          eye.innerHTML = CMPV_ICONO.ojo;
           eye.title = "Mostrar esta vista";
           eye.addEventListener("click", function () { self.verVista(v.id); });
           tdEye.appendChild(eye);
@@ -4232,7 +4278,7 @@
 
         var tdDel = document.createElement("td");
         var del = document.createElement("button");
-        del.type = "button"; del.className = "cmpv-vdel"; del.textContent = "🗑";
+        del.type = "button"; del.className = "cmpv-vdel"; del.innerHTML = CMPV_ICONO.papelera;
         del.title = "Eliminar vista";
         del.disabled = v.isPrimary;
         del.addEventListener("click", function () { self.eliminarVista(v.id); });
@@ -4460,7 +4506,7 @@
         var del = document.createElement("button");
         del.type = "button";
         del.className = "cmpv-custom__del";
-        del.textContent = "🗑";
+        del.innerHTML = CMPV_ICONO.papelera;
         del.title = "Eliminar fila";
         del.disabled = (self.customSpec.length <= 1);
         del.addEventListener("click", function () {

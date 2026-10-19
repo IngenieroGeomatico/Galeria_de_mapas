@@ -1,0 +1,15 @@
+<!--
+  Icono: add (herramienta "Crear" del comparador de vistas)
+  Ficha:   https://www.svgrepo.com/svg/458480/add
+  Descarga: https://www.svgrepo.com/show/458480/add.svg
+  Pack:    Lets Light Line Interface Icons
+  Nota: se pinta EN LINEA en el DOM desde ext/comparacionVistas/comparacionVistas.js
+        (mapa CMPV_ICONO), con stroke en currentColor para que herede el color
+        del boton que lo contiene. Trazo unificado a 1.6: el original no declara
+        grosor (SVG aplica 1) y el resto de la familia va igualado al mismo.
+        Sin <?xml?>, sin <!DOCTYPE>, sin <style> y sin colores fijos.
+-->
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+  <path d="M12 6L12 18" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M18 12L6 12" stroke-linecap="square" stroke-linejoin="round"/>
+</svg>

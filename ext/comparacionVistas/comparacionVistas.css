@@ -48,14 +48,33 @@
   background: rgba(245, 113, 5, 0.12);
   color: var(--cmpv-orange);
 }
+/* El icono es un <svg> en línea (mapa CMPV_ICONO en comparacionVistas.js): se
+   dimensiona AQUÍ y el color lo hereda del botón por currentColor, de modo que
+   ni el color del icono ni el del botón se escriben en esta regla. */
 .cmpv-tool .cmpv-ico {
-  font-size: 24px;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+.cmpv-tool .cmpv-ico .cmpv-svg { width: 24px; height: 24px; }
 .cmpv-tool .cmpv-lbl {
   font-size: 11px;
   white-space: nowrap;
 }
+
+/* Iconos SVG en línea: nunca llevan color propio (currentColor), así que no
+   hay aquí ninguna regla de color para ellos. */
+.cmpv-svg { display: block; }
+
+/* Icono dentro de un botón con texto (Añadir, Eliminar, Abrir ventana...). Va
+   envuelto en su propio span para poder alinearlo con la línea de texto. */
+.cmpv-btnico {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -3px;
+  margin-right: 6px;
+}
+.cmpv-btnico .cmpv-svg { width: 15px; height: 15px; }
 
 /* Herramienta activa: resaltada en naranja (equivalente a .activeSVG). */
 .cmpv-tool--active,
@@ -443,6 +462,7 @@
 }
 .cmpv-custom__del:hover:not(:disabled) { background: #fdecea; border-color: var(--cmpv-orange); }
 .cmpv-custom__del:disabled { opacity: 0.4; cursor: not-allowed; }
+.cmpv-custom__del .cmpv-svg { width: 16px; height: 16px; }
 .cmpv-custom__add {
   align-self: flex-start;
   border: 1px dashed var(--cmpv-orange);
@@ -517,6 +537,7 @@
   padding: 3px 8px;
   font-size: 14px;
 }
+.cmpv-vdel .cmpv-svg { width: 16px; height: 16px; }
 .cmpv-vdel:hover:not(:disabled) { background: #fdecea; border-color: var(--cmpv-orange); }
 .cmpv-vdel:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -527,11 +548,10 @@
   border-radius: 4px;
   cursor: pointer;
   padding: 2px 6px;
-  font-size: 16px;
   line-height: 1;
   opacity: 0.5;
-  filter: grayscale(1);
 }
+.cmpv-eye .cmpv-svg { width: 18px; height: 18px; }
 .cmpv-eye:hover { opacity: 0.85; background: #f2f2f2; }
 .cmpv-eye--active {
   opacity: 1;

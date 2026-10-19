@@ -1,0 +1,14 @@
+<!--
+  Icono: columns-two (herramienta "Cortinilla" del comparador de vistas)
+  Ficha:   https://www.svgrepo.com/svg/488876/columns-two
+  Descarga: https://www.svgrepo.com/show/488876/columns-two.svg
+  Pack:    Iconcino Interface Icons
+  Nota: se pinta EN LINEA en el DOM desde ext/comparacionVistas/comparacionVistas.js
+        (mapa CMPV_ICONO), con stroke en currentColor para que herede el color
+        del boton que lo contiene. Trazo unificado a 1.6: el original declara 2
+        y el resto de la familia va igualado al mismo grosor.
+        Sin <?xml?>, sin <!DOCTYPE>, sin <style> y sin colores fijos.
+-->
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+  <path d="M12 4V20M6 20H18C19.1046 20 20 19.1046 20 18V6C20 4.89543 19.1046 4 18 4H6C4.89543 4 4 4.89543 4 6V18C4 19.1046 4.89543 20 6 20Z"/>
+</svg>

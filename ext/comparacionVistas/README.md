@@ -39,6 +39,18 @@ Es un **item de supraplugin**: la clase implementa `getSupraElement(supra)`, y a
 El comparador crea su barra con `API.plugin.miPlugin_supraplugin`; sin ese script, al abrir avisa por
 consola («no hay miPlugin_supraplugin: el comparador no abre su barra») y no monta nada.
 
+**Iconos de la interfaz**: la barra de herramientas (Crear, Ver, Cortinilla, Espejo, Molde,
+Ventana y Opciones), los botones del panel (Añadir fila, Añadir, Eliminar molde, Abrir ventana) y
+la tabla de gestión de vistas (ojo y papelera) usan SVG de
+[SVG Repo](https://www.svgrepo.com/collections/monocolor/) en vez de emoji. Se pintan **en línea**
+en el DOM desde el mapa `CMPV_ICONO` de `comparacionVistas.js` (nunca con `<img>` ni como imagen de
+fondo) y con `stroke`/`fill` en `currentColor`: el icono toma el color del botón que lo contiene
+(gris normal, naranja al pasar el ratón y blanco en la herramienta activa), sin fijar ningún color
+en el CSS. Los ficheros originales, con su ficha y su pack, están en `img/iconos/` (`add`,
+`view-alt`, `columns-two`, `grid-4`, `dimond`, `img-out-box`, `setting-alt-line`, `eye` y `trash`).
+A todos se les ha quitado el grosor propio (unos traían 1, otros 1,5 y otros 2) y se les ha puesto
+1.6 en el nodo raíz: el mismo trazo para los nueve es lo que hace que parezcan una familia.
+
 ## 🔧 Integración en un visualizador
 
 ```html
