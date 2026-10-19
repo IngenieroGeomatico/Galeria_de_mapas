@@ -18,7 +18,7 @@ Este plugin sustituye a ese control con una lectura propia colgada en la **banda
 - ➕ **Alta de un EPSG nuevo** pegando su WKT (`PROJCS`), sin depender de un servicio de definiciones por red.
 - 🔁 **Repetición lateral** del mapa al pasar de ±180°, con la extensión de las capas ajustada y `wrapX` igualado.
 - 🎨 **Colores configurables** (`color1`, `color2`, `color3`) inyectados como variables CSS.
-- 💾 **Contrato de estado** `getState()` / `setState()`: la proyección, el recorte y el modo de vista 3D sobreviven al cambio 2D/3D.
+- 💾 **Contrato de estado** `getState()` / `setState()`: la proyección, el recorte, el modo de vista 3D, el centro y la escala de suelo sobreviven al cambio 2D/3D.
 
 ## 📁 Archivos
 
@@ -115,8 +115,8 @@ En la parte inferior de la ventana hay dos campos —código y definición— y 
 
 El plugin implementa el contrato **`getState()` / `setState(state, map)`** de `ext/cambioImpl`:
 
-- `getState()` devuelve `{ visible: boolean, epsg: string|null, recortar: boolean, epsg3D: string }`. La proyección entra porque el mapa nuevo vuelve a `EPSG:3857`; el recorte, porque es una manera de ver el mapa; y `epsg3D` viaja aparte porque `epsg` es lo de 2D y el modo de vista 3D solo existe en 3D.
-- `setState(state, map)` restaura la visibilidad, el recorte **antes** de cambiar la proyección, devuelve el mapa a la proyección elegida conservando la vista, y restaura el modo de la vista de Cesium (`globo` / `plano`) cuando el mapa es 3D.
+- `getState()` devuelve `{ visible: boolean, epsg: string|null, recortar: boolean, epsg3D: string, centro: [lon, lat]|null, sueloPorPx: number|null }`. La proyección entra porque el mapa nuevo vuelve a `EPSG:3857`; el recorte, porque es una manera de ver el mapa; y `epsg3D` viaja aparte porque `epsg` es lo de 2D y el modo de vista 3D solo existe en 3D. El **centro** (en 4326, que es la única proyección que existe en los dos mundos: en 2D es el centro de la vista reproyectado y en 3D el punto del centro de la pantalla sobre el elipsoide) y los **metros de suelo por píxel** entran porque son "lo que se está viendo" y el mapa de destino no los hereda de ninguna parte: medido, al volver de 3D el visualizador se quedaba en el golfo de Guinea (centro -0,00003/0,00036) con la escala del ecuador.
+- `setState(state, map)` restaura la visibilidad, el recorte **antes** de cambiar la proyección, devuelve el mapa a la proyección elegida conservando la vista, devuelve la vista llana al centro y al detalle guardados (la resolución antes que el centro, por lo mismo que en el cambio de proyección) y pone la altura de la cámara de Cesium a la que corresponde a esa escala de suelo. Con esto el viaje de ida y el de vuelta dicen lo mismo: medido en Madrid con nivel 12, 29,0997 m de suelo por píxel y escala 1 : 82.487 en 2D, 20.160,8 m de altura y los mismos 29,0997 en 3D, y a la vuelta la 4326, el mismo centro, los mismos 29,0997 y el mismo 12,21 de la barra, aguantando ida y vuelta varias veces seguidas. La altura de la API (29.554 m en ese mismo caso) eran 42,6578 m por píxel, un 46 % más. El modo de vista 3D (`globo` / `plano`) se guarda siempre, aunque el mapa sea 2D, y se aplica solo en 3D: sin eso, después de pasar por 2D, volver a 3D devolvía el globo aunque se hubiera elegido el plano.
 
 ## 🧩 Métodos públicos
 

@@ -2826,6 +2826,166 @@
     }
 
     /**
+     * Metros de SUELO por píxel de la implementación que esté activa.
+     *
+     *  Es el número que se conserva al cambiar de proyección, y también el que
+     *  viaja en el estado al alternar entre 2D y 3D: en los dos mundos mide lo
+     *  mismo (una distancia real sobre el terreno), así que devolverlo al mapa
+     *  de destino deja la vista con el detalle que tenía. En 3D sale de la
+     *  geometría de la cámara, que ya es suelo (ver _escala3D).
+     * @returns {number|null} Metros de suelo por píxel, o null si no se puede.
+     */
+    _sueloPorPxActual() {
+      const vista = this._vistaOL();
+      if (vista) {
+        const suelo = this._metrosDeSueloPorPx(vista);
+        if (suelo !== null && isFinite(suelo) && suelo > 0) return suelo;
+      }
+      const escala = this._escala3D();
+      if (escala !== null && isFinite(escala) && escala > 0) return escala * M_POR_PX;
+      return null;
+    }
+
+    /**
+     * Punto que se está mirando, en longitud y latitud (EPSG:4326).
+     *
+     *  Es la forma de llevar el centro de un mundo al otro: en 2D el centro de
+     *  la vista reproyectado desde su proyección, y en 3D el punto del centro
+     *  del lienzo sobre el elipsoide (`camera.pickEllipsoid`, el mismo método
+     *  con el que se lee el puntero). Se guarda en 4326 porque es la única
+     *  proyección que existe en los dos mundos: en 3D la del visor es la 4979,
+     *  que lleva además la altura.
+     * @returns {Array<number>|null} [longitud, latitud] en grados, o null.
+     */
+    _centro4326() {
+      // 2D: el centro de la vista, que ya está en la proyección del mapa.
+      const vista = this._vistaOL();
+      if (vista) {
+        const centro = this._centroVista(vista);
+        if (centro) {
+          try {
+            const ol = window.ol;
+            const proyeccion = (typeof vista.getProjection === 'function') ? vista.getProjection() : null;
+            if (ol && ol.proj && typeof ol.proj.transform === 'function' && proyeccion) {
+              const grados = ol.proj.transform(centro, proyeccion, 'EPSG:4326');
+              if (grados && isFinite(grados[0]) && isFinite(grados[1])) return [grados[0], grados[1]];
+            }
+          } catch (e) {
+            /* se prueba con la cámara */
+          }
+        }
+      }
+      // 3D: lo que hay en el centro de la pantalla. Es lo mismo que mira una
+      // vista llana y funciona igual con el globo inclinado que en plano.
+      const escena = this._escenaCesium();
+      const camara = this._camaraCesium();
+      const Cesium = window.Cesium;
+      if (!escena || !camara || !Cesium || !Cesium.Cartesian2) return null;
+      try {
+        const lienzo = escena.canvas;
+        const ancho = (lienzo && lienzo.clientWidth) ? lienzo.clientWidth : 0;
+        const alto = (lienzo && lienzo.clientHeight) ? lienzo.clientHeight : 0;
+        if (!ancho || !alto || typeof camara.pickEllipsoid !== 'function') return null;
+        const elipsoide = this._elipsoideCesium(camara);
+        const punto = camara.pickEllipsoid(new Cesium.Cartesian2(ancho / 2, alto / 2), elipsoide);
+        if (!punto || !Cesium.Cartographic || typeof Cesium.Cartographic.fromCartesian !== 'function') return null;
+        const carto = Cesium.Cartographic.fromCartesian(punto, elipsoide);
+        if (!carto || !isFinite(carto.longitude) || !isFinite(carto.latitude)) return null;
+        return [carto.longitude * 180 / Math.PI, carto.latitude * 180 / Math.PI];
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Lleva la vista llana al centro y al detalle que traiga un estado.
+     *
+     *  Al volver de 3D el mapa de destino es nuevo: nace en 3857, en (0,0) y
+     *  con su pirámide. La API no devuelve ahí el centro de donde se venía, y
+     *  medido el visualizador se quedaba en el golfo de Guinea (centro
+     *  -0,00003/0,00036) y con la escala del ecuador. Esto lo devuelve a lo que
+     *  se estaba viendo, con el mismo reparto que al cambiar de proyección: la
+     *  resolución primero y el centro después, porque con la resolución de
+     *  ajuste la restricción de extensión de la vista no deja centrar (ver el
+     *  paso 3 de _cambiarProyeccion).
+     *
+     *  En 3D no se llama: de colocar la cámara se encarga la API con su estado
+     *  de vista compartida, y medido que lo hace bien (de 2D a 3D llegaba con
+     *  el mismo punto y la misma altura); lo que faltaba era la vuelta.
+     * @param {Object} state Estado capturado con getState().
+     * @returns {boolean} true si se llegó a tocar la vista.
+     */
+    _aplicarVistaDelEstado(state) {
+      if (!state || typeof state !== 'object') return false;
+      const vista = this._vistaOL();
+      if (!vista) return false;
+      const grados = (state.centro && state.centro.length === 2
+        && isFinite(state.centro[0]) && isFinite(state.centro[1])) ? state.centro : null;
+      const suelo = Number(state.sueloPorPx);
+      const haySuelo = isFinite(suelo) && suelo > 0;
+      if (!grados && !haySuelo) return false;
+
+      // El centro, pasado a la proyección que tenga la vista ahora mismo.
+      let centro = null;
+      if (grados) {
+        try {
+          const ol = window.ol;
+          const proyeccion = (typeof vista.getProjection === 'function') ? vista.getProjection() : null;
+          if (ol && ol.proj && proyeccion) {
+            centro = ol.proj.transform(grados, 'EPSG:4326', proyeccion);
+          }
+          if (!(centro && isFinite(centro[0]) && isFinite(centro[1]))) centro = null;
+        } catch (e) {
+          centro = null;
+        }
+      }
+
+      if (haySuelo) {
+        const factor = this._factorProyeccion(vista, centro);
+        if (factor !== null && factor > 0) {
+          try {
+            vista.setResolution(suelo / factor);
+          } catch (e) {
+            /* se queda con la resolución que le haya dado la API */
+          }
+        }
+      }
+      if (centro) {
+        try {
+          vista.setCenter(centro);
+        } catch (e) {
+          /* se queda donde la haya dejado la API */
+        }
+      }
+      return true;
+    }
+
+    /**
+     * Lleva la cámara de Cesium a la escala de suelo que traiga un estado.
+     *
+     *  La API coloca la cámara al pasar de 2D a 3D, pero no con la escala del
+     *  plugin: medido, un nivel 12 en Madrid (29,0997 m de suelo por píxel)
+     *  llegaba a 3D con 29.554 m de altura, que por la fórmula de lectura son
+     *  42,6578 m por píxel, un 46 % más. Con la altura que corresponde a la
+     *  escala capturada, la ida y la vuelta dicen lo mismo.
+     *
+     *  El centro y la orientación no se tocan: de eso se encarga la API con su
+     *  estado de vista compartida, y medido que lo deja en el mismo punto (el
+     *  2D a nivel 12 en Madrid llegaba con la cámara sobre Madrid).
+     * @param {Object} state Estado capturado con getState().
+     * @returns {boolean} true si se llegó a tocar la cámara.
+     */
+    _aplicarEscalaDelEstado3D(state) {
+      const suelo = Number(state && state.sueloPorPx);
+      if (!isFinite(suelo) || suelo <= 0) return false;
+      if (!this._camaraCesium()) return false;
+      const altura = this._alturaParaEscala3D(suelo / M_POR_PX);
+      if (altura === null || !isFinite(altura) || altura <= 0) return false;
+      this._fijarAlturaCamara(this._acotar(altura, ALTURA_MINIMA, ALTURA_MAXIMA));
+      return true;
+    }
+
+    /**
      * Refresca los dos valores según la implementación activa.
      */
     _actualizar() {
@@ -5521,7 +5681,12 @@
      * El recorte entra por el mismo motivo: es una manera de ver el mapa, y si
      * no se guarda, al volver de 3D a 2D el visor saldría en global aunque el
      * usuario lo tuviera recortado a la franja de su proyección.
-     * @returns {{visible: boolean, epsg: string|null, recortar: boolean}} Estado.
+     *
+     * El centro y los metros de suelo por píxel también, porque son "lo que se
+     * está viendo" y el mapa de destino no los hereda de ninguna otra parte
+     * (ver _centro4326 y _sueloPorPxActual).
+     * @returns {{visible: boolean, epsg: string|null, recortar: boolean,
+     *  epsg3D: string, centro: Array<number>|null, sueloPorPx: number|null}} Estado.
      */
     getState() {
       let epsg = this._epsgActivo;
@@ -5539,12 +5704,22 @@
         // lo de 2D y este modo solo existe en 3D: sin campo propio, al ir de 2D a
         // 3D el visualizador volvía siempre al modo globo.
         epsg3D: this._epsg3D,
+        // El centro y el detalle que se están viendo viajan aquí porque la API no
+        // los devuelve al volver de 3D: el mapa de destino nace en 3857, en (0,0)
+        // y con su pirámide (medido: el visualizador se quedaba en el golfo de
+        // Guinea, con centro -0,00003/0,00036 y la escala del ecuador).
+        centro: this._centro4326(),
+        sueloPorPx: this._sueloPorPxActual(),
       };
     }
 
     /**
      * Restaura el estado en la instancia ya montada (addTo ya se ejecutó
      * tras el swap 2D/3D). No reconstruye la interfaz.
+     *
+     *  Además de la visibilidad, la proyección, el recorte y el modo de 3D,
+     *  devuelve la vista llana al centro y al detalle que se estaban viendo
+     *  (`centro` y `sueloPorPx`), que el mapa nuevo no hereda de ninguna parte.
      * @param {Object} state Estado previamente capturado con getState().
      * @param {Object} [map] Nueva instancia del mapa.
      */
@@ -5580,11 +5755,23 @@
         this._epsgActivo = state.epsg;
       }
 
-      // El modo de la vista de Cesium se restaura aquí, y solo en 3D: es lo que
-      // decide si se ve el globo o el plano y en qué unidades se leen las
-      // coordenadas. Sin esto, al volver de 2D a 3D salía siempre en globo.
-      if (this._es3D(this._map) && state && typeof state === 'object' && MODO_3D[state.epsg3D]) {
+      // Y el centro con el detalle que se estaban viendo, que el mapa de destino
+      // no trae de ninguna parte (ver _aplicarVistaDelEstado). Va después del
+      // cambio de proyección, que es quien deja la vista en la proyección buena.
+      if (this._es3D(this._map)) {
+        this._aplicarEscalaDelEstado3D(state);
+      } else {
+        this._aplicarVistaDelEstado(state);
+      }
+
+      // El modo de la vista de Cesium se guarda siempre, aunque el mapa sea 2D:
+      // es la única memoria de lo que se eligió, y sin esto, después de pasar
+      // por 2D, volver a 3D devolvía el globo aunque el usuario hubiera puesto
+      // el plano (medido). Aplicarlo, solo en 3D, que es donde existe.
+      if (state && typeof state === 'object' && MODO_3D[state.epsg3D]) {
         this._epsg3D = state.epsg3D;
+      }
+      if (this._es3D(this._map) && state && typeof state === 'object' && MODO_3D[state.epsg3D]) {
         this._aplicarModo3D(MODO_3D[state.epsg3D]);
       }
 
