@@ -208,12 +208,22 @@
         if (!pc || !pl) return null;
         // Con la camara todavia sin colocar, el rayo del centro puede dar en
         // un punto lejisimo (o en ninguno) y la medida sale disparada
-        // (medido: 6263 m/px). Solo vale si el punto cae justo debajo de la
-        // camara, que es lo que se mide con el mapa ya encuadrado.
+        // (medido: 6263 m/px). Se compara con la distancia ESPERADA al punto
+        // de mira, que con la camara inclinada es alt/sin(inclinacion) y no
+        // alt: con el limite fijo alt..1,5*alt toda inclinacion de mas de ~42
+        // grados se descartaba como si la camara no estuviera colocada y la
+        // vista 3D dejaba de sincronizar (medido: a -0,70 rad la medida solo
+        // pasaba con el terreno cargado, y a -0,40 rad ya daba null).
         var alt = cam.positionCartographic && cam.positionCartographic.height;
         if (typeof alt === "number" && alt > 0) {
           var d = C.Cartesian3.distance(cam.positionWC, pc);
-          if (!(d > alt * 0.5 && d < alt * 1.5)) return null;
+          var inc = cam.pitch;
+          var esperada = alt;
+          if (typeof inc === "number" && isFinite(inc) && inc < -1e-4) {
+            esperada = alt / Math.sin(-inc);
+          }
+          if (!(esperada > 0) || !isFinite(esperada)) esperada = alt;
+          if (!(d > esperada * 0.5 && d < esperada * 1.5)) return null;
         }
         return C.Cartesian3.distance(pc, pl);
       } catch (e) { return null; }
@@ -225,16 +235,24 @@
     // no a la altitud elipsoidal (que deja la cámara ~660 m demasiado alta sobre
     // terreno elevado tipo Madrid). Si el terreno aún no está cargado en ese
     // punto devuelve undefined (se cae a la conversión lineal actual).
-    function cesiumGroundHeight(impl) {
+    function cesiumGroundHeight(impl, lon, lat) {
       try {
         var C = window.Cesium;
         var cam = impl.camera, scene = impl.scene;
         var globe = scene && scene.globe;
         if (!globe || !cam || !cam.positionCartographic) return undefined;
         var carto = cam.positionCartographic;
+        // Sin coordenadas se consulta bajo la cámara; con ellas, en ese punto:
+        // la elevación del punto de mira no es la de debajo de la cámara y, al
+        // colocar la cámara, esa diferencia desplazaba el encuadre (medido:
+        // 62 m de latitud por eco con la cámara a -0,70 rad).
+        var consulta = carto;
+        if (typeof lon === "number" && typeof lat === "number" && typeof C.Cartographic.fromDegrees === "function") {
+          consulta = C.Cartographic.fromDegrees(lon, lat);
+        }
         var h;
         if (typeof globe.getHeight === "function") {
-          h = globe.getHeight(new C.Cartographic(carto.longitude, carto.latitude));
+          h = globe.getHeight(new C.Cartographic(consulta.longitude, consulta.latitude));
         }
         if (typeof h !== "number") {
           // Fallback: elevación del punto del globo al que apunta el centro de
@@ -421,6 +439,67 @@
       return null;
     }
 
+    // Coloca la cámara de Cesium de modo que (lon, lat) quede en el CENTRO de
+    // la pantalla, que es lo que representa el encuadre de una vista (su punto
+    // de mira, no la posición de la cámara). Con la cámara inclinada los dos
+    // puntos no coinciden: colocarla SOBRE el punto de mira desplazaba el
+    // encuadre en cada eco con la otra vista, y devolverla a la vertical para
+    // evitarlo es el salto que se notaba al inclinar (medido: pitch -0,70 →
+    // -1,5708 rad al mover la celda 2D). Con la cámara vertical esto es
+    // exactamente el setView de antes (destino = lon/lat/alt).
+    function cesiumLookAt(impl, lon, lat, alt, heading, pitch, roll) {
+      var C = window.Cesium;
+      var cam = impl.camera;
+      var orient = { heading: heading, pitch: pitch, roll: roll };
+      try {
+        var gnd = cesiumGroundHeight(impl, lon, lat);
+        var suelo = (typeof gnd === "number") ? gnd : 0;
+        var objetivo = C.Cartesian3.fromDegrees(lon, lat, suelo);
+        var sobreSuelo = Math.max(1, alt - suelo);
+        // Seno de la inclinación: 1 con la cámara vertical (nadir) y menor
+        // cuanto más se inclina. La distancia cámara→punto de mira es
+        // alt/seno (con nadir, exactamente la altura).
+        var seno = Math.sin(-pitch);
+        if (C.Transforms && C.Matrix4 && seno > 1e-4) {
+          var rango = sobreSuelo / seno;
+          // Dirección de la mirada en el sistema local ENU del punto de mira.
+          var dir = new C.Cartesian3(
+            Math.cos(pitch) * Math.sin(heading),
+            Math.cos(pitch) * Math.cos(heading),
+            Math.sin(pitch));
+          var destino = C.Cartesian3.subtract(
+            objetivo,
+            C.Cartesian3.multiplyByScalar(
+              C.Matrix4.multiplyByPointAsVector(C.Transforms.eastNorthUpToFixedFrame(objetivo), dir, new C.Cartesian3()),
+              rango, new C.Cartesian3()),
+            new C.Cartesian3());
+          // Dos correcciones que se repiten juntas:
+          //  - la orientación de setView se mide en el ENU de la POSICIÓN de la
+          //    cámara, no en el del punto de mira: esa diferencia de curvatura
+          //    (~0,25 % de la distancia) hacía que el rayo no pasase por el
+          //    punto de mira y el desvío se sumaba en cada eco (medido: +90 m
+          //    de latitud por segundo con la cámara a -0,70 rad);
+          //  - la altura elipsoidal no es la del plano del punto de mira: a 28
+          //    km la curvatura se come ~36 m y la cámara quedaba más baja en
+          //    cada eco (medido: -35,8 m por eco).
+          for (var i = 0; i < 4; i++) {
+            var enuP = C.Transforms.eastNorthUpToFixedFrame(destino);
+            var dirP = C.Matrix4.multiplyByPointAsVector(enuP, dir, new C.Cartesian3());
+            C.Cartesian3.normalize(dirP, dirP);
+            destino = C.Cartesian3.subtract(
+              objetivo,
+              C.Cartesian3.multiplyByScalar(dirP, rango, new C.Cartesian3()),
+              new C.Cartesian3());
+            var hPos = C.Cartographic ? C.Cartographic.fromCartesian(destino).height : undefined;
+            if (typeof hPos === "number") rango += (alt - hPos) / seno;
+          }
+          cam.setView({ destination: destino, orientation: orient });
+          return;
+        }
+      } catch (e) {}
+      cam.setView({ destination: C.Cartesian3.fromDegrees(lon, lat, alt), orientation: orient });
+    }
+
     function applyView(map, v) {
       try {
         // Ignora encuadres sin coordenadas válidas (p.ej. un extent rechazado
@@ -446,15 +525,18 @@
           var C = window.Cesium;
           var cam = impl.camera;
           var curAlt = cam.positionCartographic.height;
+          // Sin inclinación ni alabeo en el mensaje se CONSERVAN los de la
+          // cámara: una vista 2D no los tiene, y poner el de serie (-PI/2)
+          // devolvía a la vertical la vista 3D en cada eco de la 2D.
           var applyCam = function (alt) {
-            cam.setView({
-              destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
-              orientation: {
-                heading: (typeof v.heading === "number") ? v.heading : 0.0,
-                pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
-                roll: (typeof v.roll === "number") ? v.roll : 0.0,
-              },
-            });
+            var heading = (typeof v.heading === "number") ? v.heading
+              : ((typeof v.rotation === "number") ? -v.rotation
+                : ((typeof cam.heading === "number") ? cam.heading : 0.0));
+            var pitch = (typeof v.pitch === "number") ? v.pitch
+              : ((typeof cam.pitch === "number") ? cam.pitch : -C.Math.PI_OVER_TWO);
+            var roll = (typeof v.roll === "number") ? v.roll
+              : ((typeof cam.roll === "number") ? cam.roll : 0.0);
+            cesiumLookAt(impl, v.lon, v.lat, alt, heading, pitch, roll);
           };
           // Altitud objetivo a partir de la resolución (m/px) remota, que es
           // la métrica de escala común con OL. La conversión exacta exige
@@ -483,7 +565,7 @@
             // proporcional a la ALTURA SOBRE EL TERRENO (alt − elevación), no a
             // la altitud elipsoidal; si no, se cae a la conversión lineal.
             impl.__cmpvRetryRes = undefined; // convergencia directa
-            var gnd = cesiumGroundHeight(impl);
+            var gnd = cesiumGroundHeight(impl, v.lon, v.lat);
             var hAb = (typeof gnd === "number") ? (curAlt - gnd) : curAlt;
             impl.__cmpvCal = curRes / Math.max(1, hAb);
             impl.__cmpvGround = gnd;
@@ -738,7 +820,10 @@
                     impl.__cmpvRetryRes = undefined; // limpiar ANTES de mover
                     var cam = impl.camera;
                     var h = cam.positionCartographic.height;
-                    var gnd = cesiumGroundHeight(impl);
+                    var rv = impl.__cmpvRetryView || {};
+                    var gnd = cesiumGroundHeight(impl,
+                      rv.lon || window.Cesium.Math.toDegrees(cam.positionCartographic.longitude),
+                      rv.lat || window.Cesium.Math.toDegrees(cam.positionCartographic.latitude));
                     impl.__cmpvGround = gnd;
                     var hAb = (typeof gnd === "number") ? (h - gnd) : h;
                     impl.__cmpvCal = cr / Math.max(1, hAb);
@@ -746,18 +831,13 @@
                       ? (gnd + hAb * (tgtRes / cr))
                       : (h * (tgtRes / cr));
                     if (Math.abs(a - h) > 0.5) {
-                      var rv = impl.__cmpvRetryView || {};
-                      cam.setView({
-                        destination: window.Cesium.Cartesian3.fromDegrees(
-                          rv.lon || window.Cesium.Math.toDegrees(cam.positionCartographic.longitude),
-                          rv.lat || window.Cesium.Math.toDegrees(cam.positionCartographic.latitude),
-                          a),
-                        orientation: {
-                          heading: (typeof rv.heading === "number") ? rv.heading : cam.heading,
-                          pitch: (typeof rv.pitch === "number") ? rv.pitch : cam.pitch,
-                          roll: (typeof rv.roll === "number") ? rv.roll : cam.roll,
-                        },
-                      });
+                      cesiumLookAt(impl,
+                        rv.lon || window.Cesium.Math.toDegrees(cam.positionCartographic.longitude),
+                        rv.lat || window.Cesium.Math.toDegrees(cam.positionCartographic.latitude),
+                        a,
+                        (typeof rv.heading === "number") ? rv.heading : cam.heading,
+                        (typeof rv.pitch === "number") ? rv.pitch : cam.pitch,
+                        (typeof rv.roll === "number") ? rv.roll : cam.roll);
                     }
                   }
                 } catch (e) {}
@@ -968,12 +1048,22 @@
         if (!pc || !pl) return null;
         // Con la camara todavia sin colocar, el rayo del centro puede dar en
         // un punto lejisimo (o en ninguno) y la medida sale disparada
-        // (medido: 6263 m/px). Solo vale si el punto cae justo debajo de la
-        // camara, que es lo que se mide con el mapa ya encuadrado.
+        // (medido: 6263 m/px). Se compara con la distancia ESPERADA al punto
+        // de mira, que con la camara inclinada es alt/sin(inclinacion) y no
+        // alt: con el limite fijo alt..1,5*alt toda inclinacion de mas de ~42
+        // grados se descartaba como si la camara no estuviera colocada y la
+        // vista 3D dejaba de sincronizar (medido: a -0,70 rad la medida solo
+        // pasaba con el terreno cargado, y a -0,40 rad ya daba null).
         var alt = cam.positionCartographic && cam.positionCartographic.height;
         if (typeof alt === "number" && alt > 0) {
           var d = C.Cartesian3.distance(cam.positionWC, pc);
-          if (!(d > alt * 0.5 && d < alt * 1.5)) return null;
+          var inc = cam.pitch;
+          var esperada = alt;
+          if (typeof inc === "number" && isFinite(inc) && inc < -1e-4) {
+            esperada = alt / Math.sin(-inc);
+          }
+          if (!(esperada > 0) || !isFinite(esperada)) esperada = alt;
+          if (!(d > esperada * 0.5 && d < esperada * 1.5)) return null;
         }
         return C.Cartesian3.distance(pc, pl);
       } catch (e) { return null; }
@@ -984,16 +1074,24 @@
     // descontando el terreno, porque la resolución de un píxel es proporcional
     // a la altura sobre el terreno (alt − elevación), no a la altitud
     // elipsoidal. undefined si el terreno aún no está cargado en ese punto.
-    function cesiumGroundHeight(impl) {
+    function cesiumGroundHeight(impl, lon, lat) {
       try {
         var C = window.Cesium;
         var cam = impl.camera, scene = impl.scene;
         var globe = scene && scene.globe;
         if (!globe || !cam || !cam.positionCartographic) return undefined;
         var carto = cam.positionCartographic;
+        // Sin coordenadas se consulta bajo la cámara; con ellas, en ese punto:
+        // la elevación del punto de mira no es la de debajo de la cámara y, al
+        // colocar la cámara, esa diferencia desplazaba el encuadre (medido:
+        // 62 m de latitud por eco con la cámara a -0,70 rad).
+        var consulta = carto;
+        if (typeof lon === "number" && typeof lat === "number" && typeof C.Cartographic.fromDegrees === "function") {
+          consulta = C.Cartographic.fromDegrees(lon, lat);
+        }
         var h;
         if (typeof globe.getHeight === "function") {
-          h = globe.getHeight(new C.Cartographic(carto.longitude, carto.latitude));
+          h = globe.getHeight(new C.Cartographic(consulta.longitude, consulta.latitude));
         }
         if (typeof h !== "number") {
           // Fallback: elevación del punto del globo al que apunta el centro de
@@ -1174,6 +1272,55 @@
       return null;
     }
 
+    // Coloca la cámara de Cesium de modo que (lon, lat) quede en el CENTRO de
+    // la pantalla (el encuadre de una vista es su punto de mira, no la posición
+    // de la cámara). Con la cámara inclinada ambos puntos no coinciden: ver
+    // cesiumLookAt de la vista (aquí se duplica porque cada documento de la
+    // comparación serializa sus propias funciones).
+    function cesiumLookAt(impl, lon, lat, alt, heading, pitch, roll) {
+      var C = window.Cesium;
+      var cam = impl.camera;
+      var orient = { heading: heading, pitch: pitch, roll: roll };
+      try {
+        var gnd = cesiumGroundHeight(impl, lon, lat);
+        var suelo = (typeof gnd === "number") ? gnd : 0;
+        var objetivo = C.Cartesian3.fromDegrees(lon, lat, suelo);
+        var sobreSuelo = Math.max(1, alt - suelo);
+        var seno = Math.sin(-pitch);
+        if (C.Transforms && C.Matrix4 && seno > 1e-4) {
+          var rango = sobreSuelo / seno;
+          var dir = new C.Cartesian3(
+            Math.cos(pitch) * Math.sin(heading),
+            Math.cos(pitch) * Math.cos(heading),
+            Math.sin(pitch));
+          var destino = C.Cartesian3.subtract(
+            objetivo,
+            C.Cartesian3.multiplyByScalar(
+              C.Matrix4.multiplyByPointAsVector(C.Transforms.eastNorthUpToFixedFrame(objetivo), dir, new C.Cartesian3()),
+              rango, new C.Cartesian3()),
+            new C.Cartesian3());
+          // La orientación se mide en el ENU de la POSICIÓN de la cámara y la
+          // altura elipsoidal no es la del plano del punto de mira: se corrige
+          // la posición (rayo y altura) hasta que el punto queda en el centro
+          // con la altitud pedida (ver cesiumLookAt de la vista).
+          for (var i = 0; i < 4; i++) {
+            var enuP = C.Transforms.eastNorthUpToFixedFrame(destino);
+            var dirP = C.Matrix4.multiplyByPointAsVector(enuP, dir, new C.Cartesian3());
+            C.Cartesian3.normalize(dirP, dirP);
+            destino = C.Cartesian3.subtract(
+              objetivo,
+              C.Cartesian3.multiplyByScalar(dirP, rango, new C.Cartesian3()),
+              new C.Cartesian3());
+            var hPos = C.Cartographic ? C.Cartographic.fromCartesian(destino).height : undefined;
+            if (typeof hPos === "number") rango += (alt - hPos) / seno;
+          }
+          cam.setView({ destination: destino, orientation: orient });
+          return;
+        }
+      } catch (e) {}
+      cam.setView({ destination: C.Cartesian3.fromDegrees(lon, lat, alt), orientation: orient });
+    }
+
     function applyView(m, v) {
       try {
         // Ignora encuadres sin coordenadas válidas (p.ej. un extent rechazado
@@ -1199,15 +1346,18 @@
           var C = window.Cesium;
           var cam = impl.camera;
           var curAlt = cam.positionCartographic.height;
+          // Sin inclinación ni alabeo en el mensaje se CONSERVAN los de la
+          // cámara: una vista 2D no los tiene, y poner el de serie (-PI/2)
+          // devolvía a la vertical la vista 3D en cada eco de la 2D.
           var applyCam = function (alt) {
-            cam.setView({
-              destination: C.Cartesian3.fromDegrees(v.lon, v.lat, alt),
-              orientation: {
-                heading: (typeof v.heading === "number") ? v.heading : 0.0,
-                pitch: (typeof v.pitch === "number") ? v.pitch : -C.Math.PI_OVER_TWO,
-                roll: (typeof v.roll === "number") ? v.roll : 0.0,
-              },
-            });
+            var heading = (typeof v.heading === "number") ? v.heading
+              : ((typeof v.rotation === "number") ? -v.rotation
+                : ((typeof cam.heading === "number") ? cam.heading : 0.0));
+            var pitch = (typeof v.pitch === "number") ? v.pitch
+              : ((typeof cam.pitch === "number") ? cam.pitch : -C.Math.PI_OVER_TWO);
+            var roll = (typeof v.roll === "number") ? v.roll
+              : ((typeof cam.roll === "number") ? cam.roll : 0.0);
+            cesiumLookAt(impl, v.lon, v.lat, alt, heading, pitch, roll);
           };
           // Altitud objetivo a partir de la resolución (m/px) remota, que es
           // la métrica de escala común con OL. La conversión exacta exige
@@ -1243,7 +1393,7 @@
             // proporcional a la ALTURA SOBRE EL TERRENO (alt − elevación), no a
             // la altitud elipsoidal; si no, se cae a la conversión lineal.
             impl.__cmpvRetryRes = undefined; // convergencia directa
-            var gnd = cesiumGroundHeight(impl);
+            var gnd = cesiumGroundHeight(impl, v.lon, v.lat);
             var hAb = (typeof gnd === "number") ? (curAlt - gnd) : curAlt;
             impl.__cmpvCal = curRes / Math.max(1, hAb);
             impl.__cmpvGround = gnd;
@@ -1288,15 +1438,15 @@
           if (typeof orient.rotation === "number") view.setRotation(orient.rotation);
           return true;
         } else if (impl && impl.scene && impl.camera) {
-          var C = window.Cesium;
-          impl.camera.setView({
-            destination: C.Cartesian3.fromDegrees(lon, lat, impl.camera.positionCartographic.height),
-            orientation: {
-              heading: (typeof orient.heading === "number") ? orient.heading : 0.0,
-              pitch: (typeof orient.pitch === "number") ? orient.pitch : -C.Math.PI_OVER_TWO,
-              roll: (typeof orient.roll === "number") ? orient.roll : 0.0,
-            },
-          });
+          var cam = impl.camera;
+          var heading = (typeof orient.heading === "number") ? orient.heading
+            : ((typeof orient.rotation === "number") ? -orient.rotation
+              : ((typeof cam.heading === "number") ? cam.heading : 0.0));
+          var pitch = (typeof orient.pitch === "number") ? orient.pitch
+            : ((typeof cam.pitch === "number") ? cam.pitch : -window.Cesium.Math.PI_OVER_TWO);
+          var roll = (typeof orient.roll === "number") ? orient.roll
+            : ((typeof cam.roll === "number") ? cam.roll : 0.0);
+          cesiumLookAt(impl, lon, lat, cam.positionCartographic.height, heading, pitch, roll);
           return true;
         }
       } catch (e) {}
