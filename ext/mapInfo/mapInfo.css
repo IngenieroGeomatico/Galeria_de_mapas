@@ -122,6 +122,25 @@
   white-space: nowrap;
 }
 
+/* El dato de la S.C.R. es el ÚNICO que puede encogerse por debajo de su
+   contenido. Su nombre es largo ("WGS 84 / Pseudo-Mercator (EPSG:3857)", 223 px
+   medidos en la barra) y un flex item no baja de su min-content por defecto, así
+   que en una barra estrecha no le quedaba otra salida que salirse: medido a
+   280 px de ancho, 20 px fuera de la caja naranja; a 260, 40 px fuera y ya fuera
+   de la pantalla; a 240, 60 px fuera de la caja y 34 de la pantalla.
+   Con `min-width: 0` encoge y el nombre se recorta con puntos suspensivos
+   (.g-mapInfo-selector-codigo), que es lo que ya hacía cuando pasaba de 26em, y
+   el nombre entero sigue estando en la ventana modal. Los demás datos NO lo
+   llevan: son cortos y encogidos se recortarían por gusto ("Escala = 1 : 82.477"
+   sin su cifra no dice nada). */
+.g-mapInfo-caja .g-mapInfo-dato--scr {
+  min-width: 0;
+}
+
+.g-mapInfo-caja .g-mapInfo-dato--scr .g-mapInfo-selector {
+  min-width: 0;
+}
+
 /* La etiqueta va un punto más apagada que el número: separa lo que se lee de lo
    que se está midiendo sin gastar un color nuevo ni un separador más. */
 /* El hueco entre la etiqueta y su número va en el `gap` del dato y no en el

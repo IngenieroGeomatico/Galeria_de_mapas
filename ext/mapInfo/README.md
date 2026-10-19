@@ -100,6 +100,7 @@ El botón `S.C.R. EPSG:n` de la tira abre una **ventana modal** (no un desplegab
 - Los rótulos salen de la tabla `NOMBRES_EPSG`, con los nombres oficiales del EPSG (los de `<gml:name>` del servicio de definiciones del OGC), porque el objeto `Projection` de OpenLayers no guarda su nombre.
 - `map.setProjection(codigo)` **no conserva la vista**: la deja en (0,0). El plugin lo arregla midiendo los metros de suelo por píxel antes del cambio y repartiéndolos en la resolución de la vista nueva.
 - **En 3D** el globo es geodésico y siempre `EPSG:4979`: el botón aparece **deshabilitado** con la explicación en el título, y la casilla de recorte se deshabilita con él. Solo se ofrecen `EPSG:4326` (modo *globo*) y `EPSG:3857` (modo *plano*).
+- El nombre del S.C.R. se **recorta con puntos suspensivos** cuando no cabe en la tira (la clase `g-mapInfo-dato--scr` es la que le deja encogerse; los demás datos, cortos, no encogen nunca): el nombre entero está en la ventana modal. Sin eso, en una barra estrecha el texto se salía de la caja naranja (medido: a 280 px de ancho, 20 px fuera; a 240, 34 px fuera de la pantalla).
 
 ### Alta de un EPSG nuevo
 

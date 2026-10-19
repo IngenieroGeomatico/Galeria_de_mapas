@@ -995,7 +995,10 @@
       // va con él a la ventana, y con ella y con la etiqueta del desplegable se
       // recuperan los 52 px de la casilla.
       const bloqueProj = document.createElement('span');
-      bloqueProj.className = 'g-mapInfo-dato';
+      // La clase --scr es lo que le permite ENCOGERSE por debajo de su
+      // contenido (ver el CSS): es el único dato con un texto que puede ser
+      // largo de verdad, y sin eso se sale de la barra en pantallas estrechas.
+      bloqueProj.className = 'g-mapInfo-dato g-mapInfo-dato--scr';
       const etiquetaSelector = document.createElement('span');
       etiquetaSelector.className = 'g-mapInfo-etiqueta';
       etiquetaSelector.textContent = 'S.C.R.';
