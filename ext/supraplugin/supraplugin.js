@@ -253,6 +253,9 @@
       this.tirador = null;      // botón del tirador
       this.cuerpo = null;       // .supra-bar__cuerpo (lo que se pliega)
       this.itemsContainer = null;
+      this._botonMas = null;    // flecha de "hay más" a la derecha de la fila
+      this._masAtras = null;    // último sentido pintado en la flecha
+      this._overflowX = null;   // overflow-x medido de la fila (caché)
       this.items = [];          // {item, opts, mountedEl, slot}
 
       this._padre = null;       // supraplugin anfitrión si es anidado
@@ -681,6 +684,25 @@
       itemsEl.className = "supra-bar__items";
       cuerpo.appendChild(itemsEl);
 
+      // Indicador de "hay más": una flecha en un carril propio a la derecha de
+      // la fila. Va DESPUÉS de los items, en el flujo, para que quede sobre el
+      // fondo de la barra y no encima de la última herramienta; el CSS le da
+      // ancho CERO (invisible) y solo lo abre cuando la fila de verdad se
+      // desplaza (clase --con-mas, la pone _reflejarScrollItems()). Además de
+      // avisar, se puede pulsar: en un ordenador con ratón no hay arrastre
+      // horizontal, así que sin esto la flecha sería un adorno muerto.
+      var mas = document.createElement("button");
+      mas.type = "button";
+      mas.className = "supra-bar__mas";
+      mas.title = "Ver más herramientas";
+      mas.setAttribute("aria-label", "Ver más herramientas");
+      mas.addEventListener("click", function (evt) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        self._desplazarItems();
+      });
+      cuerpo.appendChild(mas);
+
       bar.appendChild(cuerpo);
       dock.appendChild(bar);
 
@@ -689,6 +711,7 @@
       this.tirador = tir;
       this.cuerpo = cuerpo;
       this.itemsContainer = itemsEl;
+      this._botonMas = mas;
 
       this._aplicarColores();
       this._reflejarEstadoBarra();
@@ -842,7 +865,9 @@
       this._observer = new ResizeObserver(function () {
         self._notifyMapResize();
         // El ancho de la fila también cambia al girar el teléfono: la pista
-        // de desplazamiento se recalcula con él.
+        // de desplazamiento se recalcula con él, y el overflow-x medido se
+        // tira porque es lo que decide el breakpoint del CSS.
+        self._overflowX = null;
         self._reflejarScrollItems();
       });
       try { this._observer.observe(this.container); } catch (e) { /* ignora */ }
@@ -906,29 +931,105 @@
     }
 
     /**
-     * Pasa el desbordamiento de la fila de items a tres clases CSS:
+     * Pasa el desbordamiento de la fila de items a clases CSS:
      *  "hay-izquierda" (queda contenido a la izquierda) y "hay-derecha", que
-     *  son las que difuminan ese borde, y "centrada" cuando la fila cabe
-     *  entera. En el movil la fila va alineada a la izquierda mientras se
-     *  desplaza: con el centrado, el principio se queda fuera del area de
-     *  scroll y no hay forma de alcanzar la primera herramienta.
+     *  son las que difuminan ese borde, "centrada" cuando la fila cabe entera
+     *  y "--con-mas", que abre el carril de la flecha. En el móvil la fila va
+     *  alineada a la izquierda mientras se desplaza: con el centrado, el
+     *  principio se queda fuera del área de scroll y no hay forma de alcanzar
+     *  la primera herramienta.
+     *
+     *  OJO CON EL CARRIL: abrir la flecha le roba ancho a la fila, y eso podría
+     *  cambiar la propia decisión de "hay más" y quedarse oscilando. No pasa:
+     *  la decisión es monótona. Si con el carril cerrado ya desborda, con el
+     *  carril abierto también; y si con el carril abierto no desborda, al
+     *  cerrarlo (más ancho) tampoco. Solo se abre el carril con la fila
+     *  desplazable de verdad (overflow-x auto o scroll): un item que no se
+     *  puede partir sobresale del contenedor en el escritorio sin que haya nada
+     *  que desplazar, y allí la flecha no tendría a dónde llevar.
      */
     _reflejarScrollItems() {
       var el = this.itemsContainer;
       if (!el || !el.classList) return;
       var sobra = el.scrollWidth - el.clientWidth;
-      var hay = sobra > 1;
-      var izquierda = hay && el.scrollLeft > 1;
-      var derecha = hay && el.scrollLeft < sobra - 1;
+      var lleno = sobra > 1;
+      var desplazable = lleno && this._itemsDesplazables();
+      var izquierda = desplazable && el.scrollLeft > 1;
+      var derecha = desplazable && el.scrollLeft < sobra - 1;
       el.classList.toggle("supra-bar__items--hay-izquierda", izquierda);
       el.classList.toggle("supra-bar__items--hay-derecha", derecha);
-      el.classList.toggle("supra-bar__items--centrada", !hay);
+      el.classList.toggle("supra-bar__items--centrada", !lleno);
       // El titulo tambien es cosa de esta medida: si la fila no cabe, se apaga
       // aunque la pantalla no sea de movil (una tableta estrecha con muchas
       // herramientas pisa el titulo igual que un telefono).
       if (this.container && this.container.classList) {
-        this.container.classList.toggle("supra-bar--items-llenos", hay);
+        this.container.classList.toggle("supra-bar--items-llenos", lleno);
+        this.container.classList.toggle("supra-bar--con-mas", desplazable);
       }
+      this._reflejarBotonMas(desplazable, derecha);
+    }
+
+    /**
+     * La flecha de "hay más": se ve mientras la fila se desplace y apunta
+     *  siempre a lo que queda por ver, a la derecha mientras haya contenido
+     *  delante y hacia atrás cuando ya se ha llegado al final. Así el carril
+     *  nunca se queda de relleno y el botón siempre hace algo.
+     */
+    _reflejarBotonMas(desplazable, derecha) {
+      var mas = this._botonMas;
+      if (!mas || !mas.classList) return;
+      var atras = !!desplazable && !derecha;
+      mas.classList.toggle("supra-bar__mas--visible", !!desplazable);
+      mas.classList.toggle("supra-bar__mas--izquierda", atras);
+      // El texto de ayuda solo se reescribe cuando cambia de sentido.
+      if (this._masAtras !== atras) {
+        this._masAtras = atras;
+        var texto = atras ? "Ver las herramientas anteriores" : "Ver más herramientas";
+        mas.title = texto;
+        mas.setAttribute("aria-label", texto);
+      }
+    }
+
+    /**
+     * ¿La fila de items se puede desplazar de verdad? El desbordamiento lo
+     *  pone el CSS del bloque responsive, así que no se da por supuesto: se
+     *  lee. Se guarda en caché porque esta función se llama en cada evento
+     *  scroll y un getComputedStyle por evento fuerza recálculo de estilos; el
+     *  caché se tira al cambiar el tamaño de la barra, que es cuando puede
+     *  cambiar el breakpoint (girar el teléfono).
+     * @returns {boolean}
+     */
+    _itemsDesplazables() {
+      var el = this.itemsContainer;
+      if (!el || !window.getComputedStyle) return false;
+      if (this._overflowX === null) {
+        try {
+          this._overflowX = window.getComputedStyle(el).overflowX;
+        } catch (e) {
+          this._overflowX = "visible";
+        }
+      }
+      return this._overflowX === "auto" || this._overflowX === "scroll";
+    }
+
+    /**
+     * La acción de la flecha de "hay más": avanza casi una pantalla, o
+     *  retrocede si ya se está en el final (que es cuando la flecha mira hacia
+     *  atrás), o sea lo mismo que se hace arrastrando con el dedo.
+     */
+    _desplazarItems() {
+      var el = this.itemsContainer;
+      if (!el) return;
+      var salto = Math.max(96, Math.round(el.clientWidth * 0.8));
+      var alFinal = el.scrollLeft >= (el.scrollWidth - el.clientWidth) - 1;
+      var destino = alFinal ? Math.max(0, el.scrollLeft - salto) : el.scrollLeft + salto;
+      if (typeof el.scrollTo === "function") {
+        try {
+          el.scrollTo({ left: destino, behavior: "smooth" });
+          return;
+        } catch (e) { /* el navegador no acepta el objeto: se pone a mano */ }
+      }
+      el.scrollLeft = destino;
     }
 
     /** Asomado: sólo si está plegada, no está fijada y se permite el peek. */
@@ -1045,6 +1146,9 @@
       if (!this.itemsContainer) return;
       var self = this;
       this.items.forEach(function (record) { self._mountItem(record); });
+      // El overflow-x medido se tira: entre la construcción de la barra y el
+      // montaje de los items puede haber entrado el CSS del plugin.
+      this._overflowX = null;
       // Con los items ya dentro se sabe si la fila desborda. Se deja pasar el
       // frame: hasta que el navegador no ha hecho el layout, scrollWidth no es
       // el de verdad.
@@ -1290,6 +1394,9 @@
       this.tirador = null;
       this.cuerpo = null;
       this.itemsContainer = null;
+      this._botonMas = null;
+      this._masAtras = null;
+      this._overflowX = null;
 
       // Los items que se hayan montado se desmontan ellos mismos: quitar el
       // DOM no basta para los que tengan recursos fuera de él (oyentes en

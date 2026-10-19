@@ -338,6 +338,74 @@
   align-items: center;
 }
 
+/* ---- Flecha de "hay más" ---------------------------------------------- */
+/* Cuando la fila de items se desplaza (el móvil, o una barra más estrecha que
+   un item que no se puede partir), a su derecha se abre un carril con una
+   flecha: es el aviso explícito de que se puede arrastrar para ver el resto,
+   que el difuminado del borde solo insinuaba.
+
+   El elemento va en el flujo, DETRÁS de los items, para que la flecha quede
+   sobre el fondo de la barra y no encima de la última herramienta. De serie
+   mide CERO: el carril lo abre la clase --con-mas, que solo se pone cuando la
+   fila se desplaza de verdad, así que en el caso normal no ocupa ni un pixel. */
+.supra-bar__mas {
+  flex: 0 0 auto;
+  width: 0;
+  min-width: 0;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* El cuerpo reparte 10 px de gap entre sus hijos. El carril se come ese gap
+     con un margen negativo: así, cuando mide 0 (que es siempre en el
+     escritorio y en cualquier barra que quepa), no aporta NADA al ancho de la
+     fila y la composición de antes queda intacta al pixel. Con el carril
+     abierto la flecha queda pegada al último icono, que total ya llega
+     difuminado por el degradado. */
+  margin: 0 0 0 -10px;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--supra-fg-dim, rgba(43, 43, 48, 0.62));
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  /* La flecha apunta SIEMPRE a lo que queda por ver (ver _reflejarScrollItems)
+     y el carril no se cierra hasta que la fila deja de desplazarse: cerrarlo
+     al llegar al final le devolvería el ancho a la fila y la flecha
+     parpadearía. Cuando está escondida, con `visibility` no se puede pulsar ni
+     tabular. */
+  visibility: hidden;
+  transition: color 0.16s ease;
+}
+
+.supra-bar--con-mas .supra-bar__mas { width: 24px; }
+
+.supra-bar__mas--visible { visibility: visible; }
+
+/* El glifo es el de la propia API (g-cartografia: flecha derecha e izquierda),
+   pintado con `content`: una clase g-cartografia-* en un botón nuestro
+   arrastraría los estilos del panel de la API. */
+.supra-bar__mas::before {
+  content: "\e907";
+  font-family: g-cartografia;
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* Ya en el final de la fila, la flecha mira hacia atrás: es el camino de
+   vuelta y el carril no se queda de relleno. */
+.supra-bar__mas--izquierda::before { content: "\e908"; }
+
+.supra-bar__mas:hover { color: var(--supra-fg); }
+.supra-bar__mas:active { transform: scale(0.92); }
+
+.supra-bar__mas:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--supra-accent);
+}
+
 /* ---- Controles HTML colgados como items ------------------------------- */
 /* Un <select> o un <input> que se meta en la barra se pinta con la superficie
    del tema: su estilo nativo es blanco y sobre la tarjeta oscura rompe el
@@ -599,6 +667,11 @@
   /* El aspa, algo mas grande sin salirse de la franja (26 en una cabecera
      de 22: 2 px por lado, dentro del margen de la barra). */
   .supra-bar__cerrar { width: 26px; height: 26px; font-size: 21px; }
+
+  /* La flecha de "hay más" crece con los mandos: con el dedo hay que poder
+     acertarla sin apuntar. */
+  .supra-bar--con-mas .supra-bar__mas { width: 30px; }
+  .supra-bar__mas::before { font-size: 19px; }
 
   /* Sin el retardo de 300 ms del doble toque. */
   .supra-bar__boton,
