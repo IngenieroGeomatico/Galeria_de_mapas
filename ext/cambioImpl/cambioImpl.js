@@ -25,6 +25,135 @@ const URL_ENGRANAJE = (() => {
   }
 })();
 
+/**
+ * Extensiones que amplian capas en la implementacion 3D.
+ *
+ * Antes de esto, cada visualizador tenia que acordarse de cargar su <script> en
+ * el index.html. Ahora las carga el propio cambio de implementacion, que es
+ * quien sabe cuando se pasa a Cesium y quien vuelve a levantar el mapa:
+ *
+ *   - `getWMC_cesium`: el contrato getWMC/addWMC/removeWMC del impl del Mapa.
+ *     Tiene que estar puesto ANTES de que `mapa()` cree las capas base (una
+ *     WMTS de base llama a `getMaxExtent()` -> `getWMC()`), asi que es un
+ *     parche de arranque: se instala solo por sondeo.
+ *   - `layergroup_cesium`: LayerGroup funcional en Cesium (capas hijas, orden
+ *     z, ...). Tambien parche de arranque.
+ *   - `geotiffLayer` y `MVTLayer`: fachada + impl de `IDEE.layer.GeoTIFF` y
+ *     `IDEE.layer.MVT` para Cesium. Estos SI son plugins (miPlugin_...): se
+ *     anaden al mapa nuevo despues de crearlo, si el visualizador no los ha
+ *     anadido ya.
+ *
+ * `plugin` es el nombre con el que la extension se registra en `IDEE.plugin`;
+ * las que no lo llevan no se anaden al mapa, se instalan solas al cargarse.
+ */
+const EXTENSIONES_CAPAS_3D = [
+    { ruta: 'getWMC_cesium/getWMC_cesium.js' },
+    { ruta: 'layergroup_cesium/layergroup_cesium.js' },
+    { ruta: 'geotiffLayer/geotiffLayer.js', plugin: 'miPlugin_geotiffLayer' },
+    { ruta: 'MVTLayer/MVTLayer.js', plugin: 'miPlugin_MVTLayer' }
+];
+
+// La base se resuelve desde este mismo fichero (ext/cambioImpl/), igual que
+// URL_ENGRANAJE: asi funciona en la raiz, en un subdirectorio y en GitHub Pages.
+const URL_BASE_EXTENSIONES_3D = (() => {
+    try {
+        const propio = (document.currentScript && document.currentScript.src) || '';
+        return new URL('../../ext/', propio || location.href).href;
+    } catch (e) {
+        return '/ext/';
+    }
+})();
+
+// Promesas de carga por URL: cada extension se pide una sola vez.
+const CARGA_EXTENSIONES_3D = new Map();
+
+/**
+ * Carga (una sola vez) el <script> de una extension de capas 3D.
+ *
+ * Si el visualizador ya la trae en su index.html no se vuelve a cargar: el
+ * parser la ha ejecutado antes que a este plugin, y una segunda ejecucion del
+ * fichero duplicaria sus intervalos y registros.
+ *
+ * @param {string} url URL absoluta del fichero.
+ * @returns {Promise<boolean>} true si esta cargada (o ya lo estaba).
+ */
+function cargarExtension3D(url) {
+    if (CARGA_EXTENSIONES_3D.has(url)) return CARGA_EXTENSIONES_3D.get(url);
+
+    const promesa = new Promise((resolve) => {
+        let yaEsta = false;
+        try {
+            yaEsta = Array.from(document.querySelectorAll('script[src]'))
+                .some((s) => s.src === url);
+        } catch (e) {
+            yaEsta = false;
+        }
+        if (yaEsta) {
+            resolve(true);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = url;
+        script.async = false;
+        script.onload = () => resolve(true);
+        script.onerror = () => {
+            console.warn('cambioImpl: no se pudo cargar la extension 3D ' + url);
+            resolve(false);
+        };
+        (document.head || document.documentElement).appendChild(script);
+    });
+
+    CARGA_EXTENSIONES_3D.set(url, promesa);
+    return promesa;
+}
+
+/**
+ * Deja cargadas todas las extensiones de capas 3D.
+ * @returns {Promise<Array<boolean>>}
+ */
+function asegurarExtensionesCapas3D() {
+    return Promise.all(EXTENSIONES_CAPAS_3D.map((ext) =>
+        cargarExtension3D(new URL(ext.ruta, URL_BASE_EXTENSIONES_3D).href)
+    ));
+}
+
+/**
+ * Anade al mapa las extensiones que son plugin (GeoTIFF y MVT) si no estan ya.
+ *
+ * Se hace justo despues de crear el mapa porque es el primer momento en que
+ * existe. Un visualizador que cree capas GeoTIFF/MVT dentro de su `mapa()` las
+ * sigue creando despues de su propio `addPlugin` (es el orden que ya tienen
+ * GDAL_JS y paroEspMun), asi que aqui solo se cubre el caso de que no lo haga:
+ * las capas que se anadan despues del cambio ya encuentran la fachada.
+ *
+ * @param {Object} map Mapa recien creado (instancia IDEE.Map).
+ */
+function anadirPluginsCapas3D(map) {
+    const IDEE = window.IDEE;
+    if (!IDEE || !IDEE.plugin || !map) return;
+
+    let plugins = [];
+    try {
+        plugins = (typeof map.getPlugins === 'function') ? (map.getPlugins() || []) : [];
+    } catch (e) {
+        plugins = [];
+    }
+    const yaPuestos = plugins.map((p) => p && p.name).filter(Boolean);
+
+    EXTENSIONES_CAPAS_3D.forEach((ext) => {
+        if (!ext.plugin || yaPuestos.indexOf(ext.plugin) !== -1) return;
+        const Clase = IDEE.plugin[ext.plugin];
+        if (typeof Clase !== 'function') return;   // la extension no ha cargado
+        try {
+            map.addPlugin(new Clase());
+            yaPuestos.push(ext.plugin);
+        } catch (e) {
+            console.warn('cambioImpl: no se pudo anadir ' + ext.plugin, e);
+        }
+    });
+}
+
 class miPlugin_cambioImpl {
     constructor(options = {}) {
         this.name = 'miPlugin_cambioImpl';
@@ -355,6 +484,17 @@ class miPlugin_cambioImpl {
     // `addTo` será invocado por el framework cuando el plugin se añada al mapa
     addTo(map) {
         this._map = map;
+
+        // Si el visor arranca ya en 3D (el bundle de Cesium va en el
+        // index.html, sin pasar por el cambio), las extensiones de capas tienen
+        // que quedar cargadas igualmente: el mapa y sus capas ya existen, pero
+        // siguen haciendo falta para todo lo que se anada despues.
+        if (window.IDEE && window.IDEE.impl && window.IDEE.impl.cesium) {
+            asegurarExtensionesCapas3D()
+                .then(() => anadirPluginsCapas3D(map))
+                .catch(() => { /* cargarExtension3D ya avisa por consola */ });
+        }
+
         const opts = this.options || {};
         const buttonTitle = opts.buttonTitle || 'Herramienta';
         // mapsFunction puede ser:
@@ -732,6 +872,9 @@ class miPlugin_cambioImpl {
 
                 await cambioImpl(tipo);
                 var newMap = await reiniciarMapa(tipo);
+                // Extensiones de capas 3D que son plugin (GeoTIFF, MVT): si el
+                // visualizador no las ha anadido en su mapa(), se anaden aqui.
+                anadirPluginsCapas3D(newMap);
                 btn = await document.getElementById('APIIDEE-herramienta-button');
                 await btn.classList.add("activated");
 
@@ -855,6 +998,12 @@ class miPlugin_cambioImpl {
             const cesiumCSS = ".cesium.min.css";
 
             const a3D = tipo === "Cesium";
+
+            // Las extensiones de capas 3D se cargan ANTES de recargar el bundle.
+            // Sus parches se re-aplican solos (sondeo de 10 ms y evento `load`
+            // del <script> del bundle), asi que quedan puestos en la build nueva
+            // antes de que corra `mapa()` y cree las capas base.
+            if (a3D) await asegurarExtensionesCapas3D();
 
 
             const jsFrom = a3D ? olJS : cesiumJS;
