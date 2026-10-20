@@ -3,9 +3,9 @@
    ---------------------------------------------------------------------
    Dos partes:
      1. El botón de la barra de herramientas. No tiene panel: es un único
-        botón de 40x40 con el icono de información de la fuente de la API
-        (`g-cartografia-info`, glifo \e90a). Los colores entran por las
-        variables CSS que inyecta el plugin desde color1/color2/color3.
+        botón de 40x40 con el SVG `img/iconos/icono-informacion.svg` en línea.
+        Los colores entran por las variables CSS que inyecta el plugin desde
+        color1/color2/color3.
      2. El contenido del popup: cabecera de capa, selector de formato
         (HTML/JSON), selector de plantilla y las fichas/tablas/JSON.
    ===================================================================== */
@@ -52,16 +52,15 @@
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-/* El icono es el de la propia API, pintado con la fuente g-cartografia. */
-.g-information-boton::before {
-  content: "\e90a";
+/* El icono va en línea para que herede color3 por `currentColor`. El dibujo
+   ocupa algo menos que el viewBox, así que la caja es mayor que el glifo
+   anterior para que se vea con el mismo peso dentro del círculo. */
+.g-information-boton .g-information-icono {
   display: block;
-  font-family: "g-cartografia" !important;
-  font-size: 21px;
-  font-style: normal;
-  font-weight: 400;
-  line-height: 1;
-  color: inherit;
+  width: 30px;
+  height: 30px;
+  fill: currentColor;
+  pointer-events: none;
 }
 
 .g-information-boton:hover,

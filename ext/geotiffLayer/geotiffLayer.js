@@ -77,6 +77,11 @@
   const TAG_MODEL_TRANSFORMATION = 34264;
   const TAG_MODEL_PIXEL_SCALE = 33550;
   const TAG_MODEL_TIEPOINT = 33922;
+  // Transparencia y valor nodata. `ExtraSamples` dice si la última muestra es
+  // alfa (1 = asociada, 2 = no asociada); `GDAL_NODATA` es el valor que el
+  // productor marca como "sin dato".
+  const TAG_EXTRA_SAMPLES = 338;
+  const TAG_GDAL_NODATA = 42113;
 
   /**
    * Lee un campo del directorio de una imagen de geotiff.js. En los ficheros
@@ -106,6 +111,33 @@
       }
     }
     return null;
+  }
+
+  /**
+   * Índice (0-based) de la muestra alfa, o -1 si el GeoTIFF no la declara.
+   * Se apoya en `ExtraSamples`, que es la única marca fiable: un GeoTIFF de
+   * cuatro bandas puede ser RGBA o RGB+NIR.
+   */
+  function indiceAlfa(imagen, muestras) {
+    if (!muestras || muestras < 2) return -1;
+    const extra = campoDirectorio(imagen, 'ExtraSamples', TAG_EXTRA_SAMPLES);
+    if (extra === null || extra === undefined) return -1;
+    const lista = Array.isArray(extra) ? extra : [extra];
+    const tieneAlfa = lista.some(function (valor) {
+      return Number(valor) === 1 || Number(valor) === 2;
+    });
+    return tieneAlfa ? muestras - 1 : -1;
+  }
+
+  /**
+   * Valor nodata declarado por el GeoTIFF, o null si no lo hay. `GDAL_NODATA`
+   * llega como texto ("0", "-9999") y se normaliza a número.
+   */
+  function valorNodata(imagen) {
+    const bruto = campoDirectorio(imagen, 'GDAL_NODATA', TAG_GDAL_NODATA);
+    if (bruto === null || bruto === undefined || bruto === '') return null;
+    const numero = Number(String(bruto).trim());
+    return isFinite(numero) ? numero : null;
   }
 
   // Lado mayor del lienzo al que se rasteriza. Es un techo, no un destino: un
@@ -456,6 +488,8 @@
 
       const muestras = principal.getSamplesPerPixel();
       if (!muestras || muestras < 1) return null;
+      const indiceAlfaMuestra = indiceAlfa(principal, muestras);
+      const nodata = valorNodata(principal);
       const samples = [];
       for (let i = 0; i < muestras; i += 1) samples.push(i);
 
@@ -476,6 +510,10 @@
         ancho: principal.getWidth(),
         alto: principal.getHeight(),
         epsg: epsg,
+        alpha: indiceAlfaMuestra >= 0 && datos[indiceAlfaMuestra]
+          ? datos[indiceAlfaMuestra][0]
+          : null,
+        nodata: nodata,
       };
     }
 

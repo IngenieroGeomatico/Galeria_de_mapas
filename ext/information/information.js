@@ -67,6 +67,33 @@
 
   var VERSION = '1.0.0';
 
+  /**
+   * Icono del botón: `img/iconos/icono-informacion.svg`, del pack "Modern UI
+   * Icons" de SVG Repo (https://www.svgrepo.com/svg/369975/cursor-information).
+   * Va en línea, y no como `<img>` ni como fondo CSS, para que el `fill` sea
+   * `currentColor` y herede el color3 del botón. El `viewBox` es el original;
+   * el tamaño lo pone el CSS.
+   */
+  var SVG_ICONO_INFORMACION = '<svg xmlns="http://www.w3.org/2000/svg"'
+    + ' class="g-information-icono" viewBox="0 0 76 76"'
+    + ' aria-hidden="true" focusable="false">'
+    + '<path fill="currentColor" fill-opacity="1" stroke-width="0.2"'
+    + ' stroke-linejoin="round" d="M 22.975,18L 46.225,41.1667L 37.0615,42.6585'
+    + 'L 44.792,56.6949L 37.802,60.4115L 29.975,46.25L 22.975,53.25L 22.975,18 Z'
+    + ' M 49.5,19C 54.1944,19 58,22.8056 58,27.5C 58,32.1944 54.1944,36 49.5,36'
+    + 'C 44.8056,36 41,32.1944 41,27.5C 41,22.8056 44.8056,19 49.5,19 Z'
+    + ' M 47.375,25.375L 47.375,26.7917L 48.7916,26.7917L 48.7916,31.75L 47.375,31.75'
+    + 'L 47.375,33.1667L 52.3333,33.1667L 52.3333,31.75L 50.9166,31.75L 50.9166,26.7917'
+    + 'L 50.9166,25.375L 47.375,25.375 Z'
+    + ' M 49.8542,21.8333C 49.2674,21.8333 48.7917,22.309 48.7917,22.8958'
+    + 'C 48.7917,23.4826 49.2674,23.9583 49.8542,23.9583C 50.441,23.9583 50.9167,23.4826'
+    + ' 50.9167,22.8958C 50.9167,22.309 50.441,21.8333 49.8542,21.8333 Z "/></svg>';
+
+  // Etiquetas TIFF que no se pintan, pero deciden si el píxel tiene
+  // información: alfa (ExtraSamples) y valor nodata (GDAL_NODATA).
+  var TAG_EXTRA_SAMPLES = 338;
+  var TAG_GDAL_NODATA = 42113;
+
   // ---------------------------------------------------------------------
   // Utilidades generales
   // ---------------------------------------------------------------------
@@ -546,6 +573,7 @@
         var boton = document.createElement('button');
         boton.type = 'button';
         boton.className = 'g-information-boton';
+        boton.innerHTML = SVG_ICONO_INFORMACION;
         boton.title = self.buttonTitle;
         boton.setAttribute('aria-label', self.buttonTitle);
         boton.setAttribute('aria-pressed', self._activo ? 'true' : 'false');
@@ -1198,6 +1226,9 @@
       if (tipo === 'raster') {
         return this._consultarRaster(capa, punto, pixel, cartesiano, mpp, generacion);
       }
+      if (tipo === 'base') {
+        return this._consultarBase(capa, punto, pixel, cartesiano, mpp, generacion);
+      }
       return Promise.resolve({ omitida: true });
     }
 
@@ -1320,8 +1351,8 @@
       } catch (e) {
         return this._resultadoError(capa, e, punto, mpp, generacion);
       }
-      if (!datos || !datos.valores || !datos.valores.length) {
-        return { omitida: true, motivo: 'El punto está fuera de la imagen.' };
+      if (this._datosRasterVacios(datos)) {
+        return { omitida: true, motivo: 'El punto no tiene información.' };
       }
 
       var propiedades = {};
@@ -1386,6 +1417,48 @@
         mpp: mpp || 1,
         generacion: generacion,
       };
+    }
+
+    /**
+     * ¿La lectura del ráster no aporta nada? Se descartan las respuestas sin
+     * bandas, con todas las bandas vacías, con alfa 0 (píxel transparente) o
+     * con todas las bandas iguales al valor nodata declarado por el GeoTIFF.
+     */
+    _datosRasterVacios(datos) {
+      if (!datos || !datos.valores || !datos.valores.length) return true;
+
+      if (datos.alpha !== null && datos.alpha !== undefined
+        && Number(valorRaster(datos.alpha)) === 0) {
+        return true;
+      }
+
+      var valores = datos.valores.map(function (banda) {
+        return valorRaster(banda.valor);
+      });
+      var hayValor = valores.some(function (valor) {
+        return valor !== null && valor !== undefined
+          && !(typeof valor === 'number' && !isFinite(valor));
+      });
+      if (!hayValor) return true;
+
+      if (datos.nodata !== null && datos.nodata !== undefined) {
+        var self = this;
+        var todosNodata = valores.every(function (valor) {
+          return self._mismoValorRaster(valor, datos.nodata);
+        });
+        if (todosNodata) return true;
+      }
+
+      return false;
+    }
+
+    _mismoValorRaster(a, b) {
+      var va = valorRaster(a);
+      var vb = valorRaster(b);
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return (isNaN(va) && isNaN(vb)) || va === vb;
+      }
+      return String(va) === String(vb);
     }
 
     /** Limita la espera de la lectura para que no bloquee el popup. */
@@ -1509,6 +1582,29 @@
     }
 
     /**
+     * Índice (0-based) de la banda alfa, o -1 si no la hay. `ExtraSamples`
+     * distingue un RGBA de un RGB+NIR: solo el primero declara alfa.
+     */
+    _indiceAlfaImagen(imagen, total) {
+      if (!total || total < 2) return -1;
+      var extra = campoImagen(imagen, 'ExtraSamples', TAG_EXTRA_SAMPLES);
+      if (extra === null || extra === undefined) return -1;
+      var lista = Array.isArray(extra) ? extra : [extra];
+      var tieneAlfa = lista.some(function (valor) {
+        return Number(valor) === 1 || Number(valor) === 2;
+      });
+      return tieneAlfa ? total - 1 : -1;
+    }
+
+    /** Valor nodata declarado por el GeoTIFF, o null si no lo hay. */
+    _nodataImagen(imagen) {
+      var bruto = campoImagen(imagen, 'GDAL_NODATA', TAG_GDAL_NODATA);
+      if (bruto === null || bruto === undefined || bruto === '') return null;
+      var numero = Number(String(bruto).trim());
+      return isFinite(numero) ? numero : null;
+    }
+
+    /**
      * Punto del mundo (en el SRC del fichero) a píxel de la imagen. Misma
      * lógica que LectorGeoTIFF._pixelDesdeMundo, pero aquí se usa la imagen
      * que ya tiene abierta OpenLayers en 2D.
@@ -1603,22 +1699,529 @@
         });
       }
 
+      // El alfa puede quedar fuera de `bands_` (por ejemplo, una capa que
+      // pinta solo las bandas 1-3 de un RGBA). En ese caso se lee aparte para
+      // poder descartar el píxel transparente.
+      var indiceAlfa = this._indiceAlfaImagen(imagen, total);
+      var alfa = null;
+      if (indiceAlfa >= 0) {
+        var posicionAlfa = seleccion.indexOf(indiceAlfa);
+        if (posicionAlfa >= 0) {
+          alfa = datos[posicionAlfa] ? datos[posicionAlfa][0] : null;
+        } else {
+          var datosAlfa = await imagen.readRasters({
+            window: [pixel.x, pixel.y, pixel.x + 1, pixel.y + 1],
+            samples: [indiceAlfa],
+            interleave: false,
+          });
+          alfa = datosAlfa && datosAlfa[0] ? datosAlfa[0][0] : null;
+        }
+      }
+
       return {
         valores: valores,
         pixel: { x: pixel.x, y: pixel.y },
         ancho: pixel.ancho,
         alto: pixel.alto,
         epsg: epsg,
+        alpha: alfa,
+        nodata: this._nodataImagen(imagen),
       };
     }
 
-    /** Capas visibles y de un tipo que sabemos consultar (WMS, vectorial o ráster). */
+    // ===================================================================
+    //  Capa base: color RGB(A) del píxel
+    // ===================================================================
+
+    /**
+     * Capas base que se pueden leer como ráster (TMS, WMTS, XYZ, OSM,
+     * MBTiles raster o un grupo que contenga alguna de ellas). En 3D la API
+     * puede devolver en `getBaseLayers()` solo la hija base del grupo (por
+     * ejemplo `PNOA_MA` del Híbrido) mientras el grupo sigue en `getLayers()`
+     * con `isBase: true`; por eso se unen las dos fuentes.
+     *
+     * Si hay un grupo base, se prefiere el grupo y se descartan sus hijas para
+     * no repetir la misma información en dos pestañas.
+     */
+    _capasBase() {
+      if (!this._map) return [];
+      var candidatas = [];
+      var anadir = function (capa) {
+        if (capa && candidatas.indexOf(capa) === -1) candidatas.push(capa);
+      };
+
+      try {
+        var bases = this._map.getBaseLayers ? this._map.getBaseLayers() : [];
+        (bases || []).forEach(anadir);
+      } catch (e) { /* sin capas base */ }
+
+      try {
+        var capas = this._map.getLayers ? this._map.getLayers() : [];
+        (capas || []).forEach(function (capa) {
+          if (capa && capa.isBase === true) anadir(capa);
+        });
+      } catch (e) { /* sin capas */ }
+
+      // Hijas de los grupos base: si el grupo es la capa base, sus hijas no
+      // se consultan por separado.
+      var self = this;
+      var descendientes = [];
+      var marcar = function (capa) {
+        var hijas = self._hijasCapa(capa);
+        hijas.forEach(function (hija) {
+          if (!hija) return;
+          if (descendientes.indexOf(hija) === -1) {
+            descendientes.push(hija);
+            marcar(hija);
+          }
+        });
+      };
+      candidatas.forEach(marcar);
+
+      return candidatas.filter(function (capa) {
+        if (descendientes.indexOf(capa) !== -1) return false;
+        if (!self._esVisible(capa)) return false;
+        return self._esRasterBase(capa);
+      });
+    }
+
+    _esCapaBase(capa) {
+      if (!capa) return false;
+      try {
+        if (capa.isBase === true) return true;
+        if (esFuncion(capa.isBase)) return !!capa.isBase();
+      } catch (e) { /* sin isBase */ }
+      return false;
+    }
+
+    /**
+     * ¿La capa (o alguna hija de un grupo) es una fuente ráster de teselas?
+     * Las capas base WMS no entran aquí: se consultan por GetFeatureInfo como
+     * cualquier WMS.
+     */
+    _esRasterBase(capa) {
+      if (!capa) return false;
+      var tipo = String(capa.type || '').toUpperCase();
+      if (tipo === 'TMS' || tipo === 'WMTS' || tipo === 'XYZ' || tipo === 'OSM'
+        || tipo === 'MBTILES' || tipo === 'GENERICRASTER' || tipo === 'RASTER') {
+        return true;
+      }
+      if (esFuncion(capa.getLayers)) {
+        var hijas = this._hijasCapa(capa);
+        for (var i = 0; i < hijas.length; i += 1) {
+          if (this._esRasterBase(hijas[i])) return true;
+        }
+      }
+      return false;
+    }
+
+    _hijasCapa(capa) {
+      if (!capa || !esFuncion(capa.getLayers)) return [];
+      try {
+        var hijas = capa.getLayers();
+        if (!hijas) return [];
+        if (Array.isArray(hijas)) return hijas;
+        if (esFuncion(hijas.getArray)) return hijas.getArray();
+        if (typeof hijas.length === 'number') {
+          var lista = [];
+          for (var i = 0; i < hijas.length; i += 1) lista.push(hijas[i]);
+          return lista;
+        }
+      } catch (e) { /* sin hijas */ }
+      return [];
+    }
+
+    _descendientesBase(bases) {
+      var self = this;
+      var salida = new Set();
+      var marcar = function (capa) {
+        self._hijasCapa(capa).forEach(function (hija) {
+          if (!hija || salida.has(hija)) return;
+          salida.add(hija);
+          marcar(hija);
+        });
+      };
+      (bases || []).forEach(marcar);
+      return salida;
+    }
+
+    /**
+     * Información de una capa base: color RGB(A) del píxel pulsado. En los
+     * grupos base se compone el color de sus hijas visibles, de abajo a
+     * arriba. Si el píxel es transparente o no se puede leer (CORS, tesela no
+     * disponible), la pestaña se omite.
+     */
+    async _consultarBase(capa, punto, pixel, cartesiano, mpp, generacion) {
+      var color = null;
+      try {
+        color = this._esCesium()
+          ? await this._colorBase3D(capa, punto)
+          : await this._colorBase2D(capa, punto);
+      } catch (e) {
+        color = null;
+      }
+      if (this._esColorTransparente(color)) {
+        return { omitida: true, motivo: 'El píxel de la capa base es transparente.' };
+      }
+
+      var r = Math.max(0, Math.min(255, Math.round(color.r)));
+      var g = Math.max(0, Math.min(255, Math.round(color.g)));
+      var b = Math.max(0, Math.min(255, Math.round(color.b)));
+      var a = Math.max(0, Math.min(255, Math.round(color.a)));
+      var hex = this._hexColor(r, g, b);
+
+      var propiedades = { R: r, G: g, B: b, A: a, Hex: hex };
+      var campos = [
+        { clave: 'R', etiqueta: 'R', valor: r, texto: String(r) },
+        { clave: 'G', etiqueta: 'G', valor: g, texto: String(g) },
+        { clave: 'B', etiqueta: 'B', valor: b, texto: String(b) },
+        { clave: 'A', etiqueta: 'A', valor: a, texto: String(a) },
+        { clave: 'Hex', etiqueta: 'Color', valor: hex, texto: hex },
+      ];
+      var elemento = {
+        id: null,
+        titulo: 'Color en el punto',
+        propiedades: propiedades,
+        campos: campos,
+        geometria: null,
+        crudo: {
+          type: 'Feature',
+          id: null,
+          geometry: {
+            type: 'Point',
+            coordinates: [punto.lon, punto.lat],
+          },
+          properties: propiedades,
+        },
+        fuente: 'base',
+      };
+
+      return {
+        uid: '',
+        tipo: 'base',
+        capa: capa,
+        clave: this._claveCapa(capa),
+        formatos: [{ id: 'color', etiqueta: 'Color', infoFormat: 'color' }],
+        formatoActual: 'color',
+        porFormato: {
+          color: { estado: 'ok', tipo: 'json', features: [elemento] },
+        },
+        error: null,
+        caps: null,
+        punto: {
+          x: punto.x,
+          y: punto.y,
+          lon: punto.lon,
+          lat: punto.lat,
+        },
+        mpp: mpp || 1,
+        generacion: generacion,
+      };
+    }
+
+    async _colorBase2D(capa, punto) {
+      var hijas = this._hijasCapa(capa);
+      if (hijas.length) {
+        var colores = [];
+        for (var i = 0; i < hijas.length; i += 1) {
+          colores.push(await this._colorBase2D(hijas[i], punto));
+        }
+        return this._componerColores(colores);
+      }
+
+      var impl = null;
+      try { impl = capa.getImpl ? capa.getImpl() : null; } catch (e) { impl = null; }
+      var olLayer = impl && impl.olLayer;
+      if (!olLayer) return null;
+      return this._colorOlLayer(olLayer, punto);
+    }
+
+    async _colorOlLayer(olLayer, punto) {
+      if (!olLayer) return null;
+      try {
+        if (esFuncion(olLayer.getVisible) && !olLayer.getVisible()) return null;
+      } catch (e) { /* sin visibilidad */ }
+
+      if (esFuncion(olLayer.getLayers)) {
+        var coleccion = null;
+        try { coleccion = olLayer.getLayers(); } catch (e) { coleccion = null; }
+        var lista = [];
+        if (coleccion && esFuncion(coleccion.getArray)) lista = coleccion.getArray();
+        else if (Array.isArray(coleccion)) lista = coleccion;
+        var colores = [];
+        for (var i = 0; i < lista.length; i += 1) {
+          colores.push(await this._colorOlLayer(lista[i], punto));
+        }
+        return this._componerColores(colores);
+      }
+
+      var source = null;
+      try { source = esFuncion(olLayer.getSource) ? olLayer.getSource() : null; } catch (e) { source = null; }
+      if (!source) return null;
+      var color = await this._colorTile2D(source, punto);
+      if (!color) return null;
+
+      try {
+        var opacidad = esFuncion(olLayer.getOpacity) ? olLayer.getOpacity() : 1;
+        if (typeof opacidad === 'number' && opacidad >= 0 && opacidad < 1) {
+          color.a = Math.round(color.a * opacidad);
+        }
+      } catch (e) { /* sin opacidad */ }
+      return color;
+    }
+
+    async _colorTile2D(source, punto) {
+      if (!source || !esFuncion(source.getTileUrlFunction)
+        || !esFuncion(source.getTileGrid)) {
+        return null;
+      }
+      var grid = null;
+      try { grid = source.getTileGrid(); } catch (e) { grid = null; }
+      if (!grid || !esFuncion(grid.getTileCoordForCoordAndResolution)) return null;
+
+      var impl = this._getImpl();
+      if (!impl || !esFuncion(impl.getView)) return null;
+      var vista = null;
+      try { vista = impl.getView(); } catch (e) { vista = null; }
+      if (!vista) return null;
+      var resolucion = vista.getResolution();
+      var proyeccionVista = vista.getProjection();
+      var proyeccionFuente = esFuncion(source.getProjection) ? source.getProjection() : null;
+      if (!proyeccionFuente) proyeccionFuente = proyeccionVista;
+
+      var codigoVista = proyeccionVista && esFuncion(proyeccionVista.getCode)
+        ? proyeccionVista.getCode() : 'EPSG:3857';
+      var codigoFuente = proyeccionFuente && esFuncion(proyeccionFuente.getCode)
+        ? proyeccionFuente.getCode() : codigoVista;
+      // La resolución de la vista no se puede reutilizar en otra proyección
+      // sin convertir unidades; las capas base de la galería son 3857.
+      if (codigoFuente !== codigoVista) return null;
+
+      var coordenada = [punto.x, punto.y];
+      var tileCoord = null;
+      try {
+        tileCoord = grid.getTileCoordForCoordAndResolution(coordenada, resolucion);
+      } catch (e) { tileCoord = null; }
+      if (!tileCoord) return null;
+
+      var extension = null;
+      try { extension = grid.getTileCoordExtent(tileCoord); } catch (e) { extension = null; }
+      if (!extension) return null;
+      var ancho = extension[2] - extension[0];
+      var alto = extension[3] - extension[1];
+      if (!(ancho > 0) || !(alto > 0)) return null;
+
+      var u = (coordenada[0] - extension[0]) / ancho;
+      var v = (extension[3] - coordenada[1]) / alto;
+      if (!isFinite(u) || !isFinite(v) || u < 0 || u > 1 || v < 0 || v > 1) return null;
+
+      var url = null;
+      try {
+        url = source.getTileUrlFunction()(tileCoord, 1, proyeccionFuente);
+      } catch (e) { url = null; }
+      if (!url) return null;
+
+      return this._leerPixelUrl(String(url), u, v);
+    }
+
+    _leerPixelUrl(url, u, v) {
+      return new Promise(function (resolve) {
+        var terminado = false;
+        var temporizador = null;
+        var fin = function (color) {
+          if (terminado) return;
+          terminado = true;
+          if (temporizador !== null) clearTimeout(temporizador);
+          resolve(color || null);
+        };
+        if (!url) { fin(null); return; }
+        temporizador = setTimeout(function () { fin(null); }, 8000);
+
+        var imagen = new Image();
+        imagen.crossOrigin = 'anonymous';
+        imagen.onload = function () {
+          try {
+            var ancho = imagen.naturalWidth || imagen.width;
+            var alto = imagen.naturalHeight || imagen.height;
+            if (!ancho || !alto) { fin(null); return; }
+            var lienzo = document.createElement('canvas');
+            lienzo.width = ancho;
+            lienzo.height = alto;
+            var contexto = lienzo.getContext('2d', { willReadFrequently: true });
+            if (!contexto) { fin(null); return; }
+            contexto.drawImage(imagen, 0, 0);
+            var px = Math.min(ancho - 1, Math.max(0, Math.floor(u * ancho)));
+            var py = Math.min(alto - 1, Math.max(0, Math.floor(v * alto)));
+            var datos = contexto.getImageData(px, py, 1, 1).data;
+            fin({ r: datos[0], g: datos[1], b: datos[2], a: datos[3] });
+          } catch (e) {
+            fin(null);
+          }
+        };
+        imagen.onerror = function () { fin(null); };
+        try { imagen.src = url; } catch (e) { fin(null); }
+      });
+    }
+
+    async _colorBase3D(capa, punto) {
+      var hijas = this._hijasCapa(capa);
+      if (hijas.length) {
+        var colores = [];
+        for (var i = 0; i < hijas.length; i += 1) {
+          colores.push(await this._colorBase3D(hijas[i], punto));
+        }
+        return this._componerColores(colores);
+      }
+
+      var impl = null;
+      try { impl = capa.getImpl ? capa.getImpl() : null; } catch (e) { impl = null; }
+      var imageryLayer = impl && (impl.cesiumLayer || impl.imageryLayer || impl.layer);
+      if (!imageryLayer) return null;
+      try { if (imageryLayer.show === false) return null; } catch (e) { /* sin show */ }
+
+      var provider = imageryLayer.imageryProvider;
+      if (!provider || !esFuncion(provider.requestImage)) return null;
+      var scheme = provider.tilingScheme;
+      if (!scheme || !esFuncion(scheme.positionToTileXY)) return null;
+
+      var Cesium = global.Cesium;
+      if (!Cesium || !Cesium.Cartographic || !Cesium.Cartesian2) return null;
+
+      var cartografica = null;
+      try {
+        cartografica = Cesium.Cartographic.fromDegrees(punto.lon, punto.lat);
+      } catch (e) {
+        return null;
+      }
+      if (!cartografica) return null;
+
+      var nivel = 15;
+      try {
+        var maximo = provider.maximumLevel;
+        if (typeof maximo === 'number' && isFinite(maximo)) {
+          nivel = Math.max(0, Math.min(Math.floor(maximo), 17));
+        }
+      } catch (e) { /* sin máximo */ }
+
+      var xy = null;
+      try {
+        xy = scheme.positionToTileXY(cartografica, nivel, new Cesium.Cartesian2());
+      } catch (e) { xy = null; }
+      if (!xy) return null;
+
+      var rectangulo = null;
+      var nativo = null;
+      try {
+        if (esFuncion(scheme.tileXYToNativeRectangle)) {
+          rectangulo = scheme.tileXYToNativeRectangle(xy.x, xy.y, nivel);
+          nativo = esFuncion(scheme.projection.project)
+            ? scheme.projection.project(cartografica)
+            : cartografica;
+        } else if (esFuncion(scheme.tileXYToRectangle)) {
+          rectangulo = scheme.tileXYToRectangle(xy.x, xy.y, nivel);
+          nativo = cartografica;
+        }
+      } catch (e) {
+        rectangulo = null;
+      }
+      if (!rectangulo || !nativo) return null;
+
+      var u = (nativo.x - rectangulo.west) / (rectangulo.east - rectangulo.west);
+      var v = (rectangulo.north - nativo.y) / (rectangulo.north - rectangulo.south);
+      if (!isFinite(u) || !isFinite(v)) return null;
+
+      var imagen = null;
+      try {
+        imagen = await provider.requestImage(xy.x, xy.y, nivel);
+      } catch (e) {
+        imagen = null;
+      }
+      if (!imagen) return null;
+
+      var color = this._pixelDeImagen(imagen, u, v);
+      if (!color) return null;
+
+      try {
+        var alfaCapa = typeof imageryLayer.alpha === 'number' ? imageryLayer.alpha : 1;
+        if (alfaCapa >= 0 && alfaCapa < 1) {
+          color.a = Math.round(color.a * alfaCapa);
+        }
+      } catch (e) { /* sin alfa */ }
+      return color;
+    }
+
+    _pixelDeImagen(imagen, u, v) {
+      try {
+        var ancho = imagen.naturalWidth || imagen.width;
+        var alto = imagen.naturalHeight || imagen.height;
+        if (!ancho || !alto) return null;
+        var lienzo = document.createElement('canvas');
+        lienzo.width = ancho;
+        lienzo.height = alto;
+        var contexto = lienzo.getContext('2d', { willReadFrequently: true });
+        if (!contexto) return null;
+        contexto.drawImage(imagen, 0, 0);
+        var px = Math.min(ancho - 1, Math.max(0, Math.floor(u * ancho)));
+        var py = Math.min(alto - 1, Math.max(0, Math.floor(v * alto)));
+        var datos = contexto.getImageData(px, py, 1, 1).data;
+        return { r: datos[0], g: datos[1], b: datos[2], a: datos[3] };
+      } catch (e) {
+        return null;
+      }
+    }
+
+    _componerColores(colores) {
+      var salida = { r: 0, g: 0, b: 0, a: 0 };
+      var hay = false;
+      (colores || []).forEach(function (color) {
+        if (!color || !isFinite(color.a) || color.a <= 0) return;
+        hay = true;
+        var origenA = color.a / 255;
+        var destinoA = salida.a / 255;
+        var finalA = origenA + destinoA * (1 - origenA);
+        if (finalA <= 0) return;
+        salida.r = (color.r * origenA + salida.r * destinoA * (1 - origenA)) / finalA;
+        salida.g = (color.g * origenA + salida.g * destinoA * (1 - origenA)) / finalA;
+        salida.b = (color.b * origenA + salida.b * destinoA * (1 - origenA)) / finalA;
+        salida.a = finalA * 255;
+      });
+      if (!hay) return null;
+      salida.r = Math.round(salida.r);
+      salida.g = Math.round(salida.g);
+      salida.b = Math.round(salida.b);
+      salida.a = Math.round(salida.a);
+      return salida;
+    }
+
+    _esColorTransparente(color) {
+      return !color || !isFinite(color.a) || color.a <= 0;
+    }
+
+    _hexColor(r, g, b) {
+      var hex = function (valor) {
+        var texto = Math.max(0, Math.min(255, Math.round(valor))).toString(16);
+        return texto.length < 2 ? '0' + texto : texto;
+      };
+      return '#' + hex(r) + hex(g) + hex(b);
+    }
+
+    /** Capas visibles y de un tipo que sabemos consultar (base, WMS, vectorial o ráster). */
     _capasConsultables() {
       var salida = [];
       var self = this;
+      var bases = this._capasBase();
+      var basesSet = new Set(bases);
+      var descendientes = this._descendientesBase(bases);
+      var contador = 0;
+
+      bases.forEach(function (capa) {
+        salida.push({ capa: capa, tipo: 'base', orden: contador++ });
+      });
+
       var visitar = function (lista) {
         (lista || []).forEach(function (capa) {
           if (!capa) return;
+          if (basesSet.has(capa) || descendientes.has(capa)) return;
           if (esFuncion(capa.getLayers)) {
             var hijas = null;
             try { hijas = capa.getLayers(); } catch (e) { hijas = null; }
@@ -1629,13 +2232,15 @@
           }
           if (!self._esVisible(capa)) return;
           var tipo = String(capa.type || '').toUpperCase();
-          if (tipo === 'WMS') salida.push({ capa: capa, tipo: 'wms' });
-          else if (self._esGeoTIFF(capa)) salida.push({ capa: capa, tipo: 'raster' });
-          else if (tipo === 'GEOJSON' || tipo === 'VECTOR' || tipo === 'KML'
+          if (tipo === 'WMS') {
+            salida.push({ capa: capa, tipo: 'wms', orden: contador++ });
+          } else if (self._esGeoTIFF(capa)) {
+            salida.push({ capa: capa, tipo: 'raster', orden: contador++ });
+          } else if (tipo === 'GEOJSON' || tipo === 'VECTOR' || tipo === 'KML'
             || tipo === 'WFS' || tipo === 'OGCAPIFEATURES' || tipo === 'MVT'
             || tipo === 'MBTILESVECTOR' || tipo === 'MAPLIBRE'
             || tipo === 'GENERICVECTOR' || tipo === 'WKT') {
-            salida.push({ capa: capa, tipo: 'vector' });
+            salida.push({ capa: capa, tipo: 'vector', orden: contador++ });
           }
         });
       };
@@ -1644,7 +2249,43 @@
       } catch (e) {
         /* sin capas */
       }
+
+      // Las pestañas se ordenan como se apilan las capas: primero la de mayor
+      // z-index (la que queda por encima). A igualdad de z-index se mantiene
+      // el orden visual de la colección, con la última añadida delante.
+      salida.sort(function (a, b) {
+        var za = self._zIndexCapa(a.capa);
+        var zb = self._zIndexCapa(b.capa);
+        if (za !== zb) return zb - za;
+        return b.orden - a.orden;
+      });
       return salida;
+    }
+
+    _zIndexCapa(capa) {
+      if (!capa) return 0;
+      // La capa base es siempre el fondo. En 3D la API le asigna a veces el
+      // índice de la colección (el grupo se añade al final) y no refleja el
+      // apilado visual, así que se fuerza por debajo de cualquier superpuesta.
+      if (this._esCapaBase(capa)) return -1000000;
+      try {
+        if (esFuncion(capa.getZIndex)) {
+          var z = capa.getZIndex();
+          if (typeof z === 'number' && isFinite(z)) return z;
+        }
+        if (typeof capa.zIndex_ === 'number' && isFinite(capa.zIndex_)) return capa.zIndex_;
+        if (typeof capa.zIndex === 'number' && isFinite(capa.zIndex)) return capa.zIndex;
+        var impl = esFuncion(capa.getImpl) ? capa.getImpl() : null;
+        if (impl && typeof impl.zIndex_ === 'number' && isFinite(impl.zIndex_)) {
+          return impl.zIndex_;
+        }
+        var ol = impl && impl.olLayer;
+        if (ol && esFuncion(ol.getZIndex)) {
+          var zo = ol.getZIndex();
+          if (typeof zo === 'number' && isFinite(zo)) return zo;
+        }
+      } catch (e) { /* sin z-index */ }
+      return 0;
     }
 
     _esVisible(capa) {
@@ -2163,6 +2804,8 @@
       var id = (feature.id !== undefined && feature.id !== null)
         ? feature.id
         : (props.id !== undefined && props.id !== null ? props.id : null);
+      // Un objeto vacío ({}, {"type":"FeatureCollection"}) no es una entidad.
+      if (!Object.keys(props || {}).length && !geometria) return null;
       return this._prepararElemento({
         propiedades: props,
         geometria: geometria ? { tipo: geometria.type || null, coordenadas: geometria.coordinates || null } : null,
@@ -2322,6 +2965,8 @@
         id = null;
       }
       if (id === null && props.id !== undefined) id = props.id;
+      // Sin atributos ni geometría no hay nada que contar.
+      if (!Object.keys(props || {}).length && !geometria) return null;
 
       var crudo = {
         type: 'Feature',
@@ -2656,6 +3301,8 @@
       } catch (e) {
         id = null;
       }
+      // Sin atributos ni forma no hay nada que contar.
+      if (!Object.keys(props || {}).length && !tipo) return null;
 
       var crudo = {
         type: 'Feature',
@@ -2956,9 +3603,64 @@
       var estado = resultado.porFormato && resultado.porFormato[resultado.formatoActual];
       if (!estado) return !!resultado.error;
       if (estado.estado === 'error') return true;
-      if (estado.tipo === 'html') return !!(estado.html && String(estado.html).trim());
-      if (estado.tipo === 'texto') return !!(estado.texto && String(estado.texto).trim());
+      if (estado.tipo === 'html') {
+        return !!(estado.html && String(estado.html).trim())
+          && !this._textoSinInformacion(estado.html);
+      }
+      if (estado.tipo === 'texto') {
+        var texto = estado.texto;
+        if (!texto || !String(texto).trim()) return false;
+        // Un XML/GML de WFS sin miembros no aporta nada.
+        if (/<gml:featureMember|<gml:featureMembers|<wfs:member/i.test(texto)) return true;
+        if (/<(?:wfs:)?FeatureCollection/i.test(texto)
+          && !/<(?:gml|wfs):/i.test(texto)) {
+          return false;
+        }
+        return !this._textoSinInformacion(texto);
+      }
       return !!(estado.features && estado.features.length);
+    }
+
+    /** Texto visible de una respuesta HTML/XML, sin etiquetas ni espacios de más. */
+    _textoVisible(valor) {
+      var texto = String(valor || '');
+      try {
+        var contenedor = document.createElement('div');
+        contenedor.innerHTML = texto;
+        return (contenedor.textContent || contenedor.innerText || '')
+          .replace(/\s+/g, ' ').trim();
+      } catch (e) {
+        return texto.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+    }
+
+    /**
+     * Algunos WMS responden con una página HTML válida que solo dice que no
+     * hay entidades. Sin esta comprobación se abriría una pestaña vacía.
+     */
+    _textoSinInformacion(valor) {
+      var visible = this._textoVisible(valor);
+      if (!visible) return true;
+      var bajo = visible.toLowerCase();
+      var marcas = [
+        'no matching features',
+        'no features were found',
+        'no features found',
+        'no feature found',
+        'no se encontraron',
+        'no se ha encontrado',
+        'no hay informacion',
+        'no hay información',
+        'nothing found',
+        'no results found',
+        'sin resultados',
+        'no records found',
+        'no se encontro informacion',
+        'no se encontró información',
+      ];
+      return marcas.some(function (marca) {
+        return bajo.indexOf(marca) !== -1;
+      });
     }
 
     /**

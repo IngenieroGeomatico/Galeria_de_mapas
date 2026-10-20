@@ -4,11 +4,14 @@ Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. N
 
 ## Características
 
-- **Botón circular**: 40x40, sin panel, con `color1` (fondo), `color2` (borde) y `color3` (icono).
+- **Botón circular**: 40x40, sin panel, con `color1` (fondo), `color2` (borde) y `color3` (icono). El icono es el SVG `img/iconos/icono-informacion.svg` (cursor con insignia de información, pack «Modern UI Icons» de SVG Repo), en línea para que herede `color3` por `currentColor`.
 - **Cursor de consulta**: una cruz de precisión con insignia «i» (`img/iconos/cursor-informacion.svg`) y `help` como respaldo nativo.
 - **WMS**: pide `GetCapabilities` y usa `GetFeatureInfo`. Si el servicio declara JSON y HTML, el popup permite alternar entre los dos sin volver a pinchar. Si no declara ninguno de los dos, se usan texto o XML como respaldo.
 - **Capas vectoriales**: lee los features que caen bajo el clic en 2D y, cuando la implementación los dibuja, también en 3D.
 - **GeoTIFF**: lee los valores reales de las bandas en el punto. En 2D usa las imágenes que ya tiene abiertas el origen `GeoTIFF` de OpenLayers; en 3D usa el `LectorGeoTIFF` de `ext/geotiffLayer`. El valor se presenta como un elemento con una propiedad por banda y funciona con las plantillas `ficha`, `tabla` y `json`.
+- **Capa base**: lee el color RGB(A) del píxel de la capa base (TMS, WMTS, XYZ, OSM o el grupo Híbrido). En 2D usa la tesela que pinta OpenLayers; en 3D el `imageryProvider` de Cesium. En los grupos se componen las hijas visibles de abajo arriba.
+- **Sin información, sin pestaña**: se omite la pestaña si la capa no devuelve features, si `GetFeatureInfo` responde vacío, si el GeoTIFF da un píxel transparente o todo nodata, o si la capa base es transparente en ese punto.
+- **Orden de pestañas**: de mayor a menor z-index, para que la primera pestaña sea la capa que se ve arriba. La capa base se considera siempre el fondo y queda al final.
 - **Varias capas y varios elementos**: una pestaña por capa y todos los features (o las bandas) del punto dentro de la pestaña.
 - **Plantillas configurables**: `ficha`, `tabla` y `json` de serie; se pueden añadir o sustituir por constructor o con `registrarPlantilla()`.
 - **`extract` sincronizado**: mientras el plugin está añadido al mapa, las capas vectoriales llevan `extract=false` si la herramienta está desactivada y `extract=true` si está activa. Las capas añadidas después se sincronizan con `ADDED_LAYER`/`ADDED_LAYERGROUP`; `destroy()` restaura el valor original.
@@ -20,6 +23,7 @@ Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. N
 |---|---|
 | `information.js` | Clase `miPlugin_information`: botón, consulta WMS/vectorial/GeoTIFF, popup, plantillas, `extract` y contrato de estado. |
 | `information.css` | Botón de 40x40, cursor de consulta, pestañas del popup, fichas, tablas y salida JSON/HTML. |
+| `../../img/iconos/icono-informacion.svg` | Icono del botón: cursor con insignia de información. Se copia en línea en el DOM para que tome `color3` por `currentColor`. |
 | `../../img/iconos/cursor-informacion.svg` | Cursor de cruz con insignia «i». Los colores son fijos porque el navegador lo pinta como imagen de cursor. |
 
 ## Integración
@@ -119,6 +123,7 @@ info.registrarPlantilla({
 ## Capas consultables
 
 - `WMS` mediante `GetFeatureInfo`.
+- La **capa base** (TMS, WMTS, XYZ, OSM, MBTiles ráster o un grupo como Híbrido) leyendo el color RGB(A) del píxel. Si el color tiene alfa 0 o la tesela no se puede leer, no se añade la pestaña.
 - `GeoTIFF` leyendo las bandas del fichero en el píxel del clic. La lectura usa la transformación afín completa (`ModelTransformation`), no solo el origen y la resolución, para no desviar el píxel en los GeoTIFF rotados.
 - `GeoJSON`, `Vector`, `KML`, `WFS`, `OGCAPIFeatures`, `MVT`, `MBTilesVector`, `MapLibre`, `GenericVector` y `WKT` como capas vectoriales.
 
