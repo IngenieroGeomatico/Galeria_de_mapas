@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>WFS | Tipos de capa</title>
+  <meta name="description" content="Capa WFS de la API-IDEE: entidades descargadas de un servicio OGC, en 2D y en 3D.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Arbol de capas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">WFS <span class="barra__clase">IDEE.layer.WFS</span></h1>
+      <p class="barra__desc">
+        Entidades geográficas que se descargan enteras y se dibujan en el cliente. Aquí,
+        los yacimientos arqueológicos declarados en Navarra: un millar de puntos de un solo WFS.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.WFS</h3>
+    <p>
+      El WFS necesita el espacio de nombres (<code>namespace</code>) y el nombre del
+      tipo de entidad (<code>name</code>): juntos forman el <code>typeName</code>.
+      La API pide antes el <code>DescribeFeatureType</code> para saber qué geometría trae
+      y después descarga todas las entidades.
+    </p>
+    <p>
+      El formato de salida, si no se indica otra cosa, es GeoJSON
+      (<code>application/json</code>). El servicio devuelve las coordenadas en el
+      sistema del mapa y la capa las trata como GeoJSON estándar.
+    </p>
+    <pre class="codigo"><code>const capa = new IDEE.layer.WFS({
+  url: 'https://idena.navarra.es/ogc/wfs?',
+  namespace: 'IDENA',
+  name: 'PATRIM_Sym_BICarqueo',
+  legend: 'Yacimientos arqueologicos (WFS)',
+}, {});
+
+mapajs.addLayers(capa);</code></pre>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>

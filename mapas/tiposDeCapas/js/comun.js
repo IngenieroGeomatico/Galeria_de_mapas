@@ -1,0 +1,80 @@
+/* =====================================================================
+   Piezas comunes a las paginas de tipos de capa
+   ---------------------------------------------------------------------
+   Cada pagina hija solo declara SU capa (js/mapa.js). Aqui viven el
+   arranque del mapa, el proxy y los tres plugins que se repiten:
+
+   - miPlugin_cambioImpl: alterna 2D (OpenLayers) y 3D (Cesium). Al
+     cambiar, la API recarga su bundle y vuelve a llamar a `mapa()`, por
+     eso recibe la funcion como `mapsFunction`.
+   - miPlugin_layerSwitcher: arbol de capas, para encender y apagar la
+     capa de la pagina sin recargar.
+   - miPlugin_modal: el boton que abre el codigo de la capa. El HTML del
+     snippet esta en un <template id="codigo"> de cada index.html.
+   ===================================================================== */
+
+// La rueda de carga tapa el mapa hasta que la pagina (y con ella la API) ha
+// terminado de cargar. Se oculta con el evento load, pero tambien al final de
+// mapa(): una capa lenta (un WFS grande, por ejemplo) retrasa el load y
+// dejaria la pagina en negro aunque el mapa ya estuviera montado.
+const SVGCarga = document.getElementById('cargaSVG');
+
+function ocultarCarga() {
+  if (SVGCarga) SVGCarga.hidden = true;
+}
+
+if (SVGCarga) {
+  window.addEventListener('load', ocultarCarga);
+  document.addEventListener('DOMContentLoaded', ocultarCarga);
+  // Tope de seguridad: ni un recurso externo colgado puede tapar el mapa.
+  setTimeout(ocultarCarga, 4000);
+}
+
+/**
+ * Deja la API lista antes de crear el mapa.
+ *
+ * @param {Object} [opciones]
+ * @param {boolean} [opciones.proxy=false] Usa el proxy de la API para leer los
+ *   servicios. Solo lo necesita el WFS del IGN, que no manda cabecera CORS: el
+ *   resto de servicios publicos se leen directamente.
+ */
+function prepararFondo(opciones) {
+  const opts = opciones || {};
+  // Sin proxy, cualquier servicio que no mande CORS falla y la capa no se
+  // dibuja. Por eso el valor por defecto es "directo": es lo que hace el resto
+  // de visualizadores del repositorio.
+  IDEE.proxy(opts.proxy === true);
+}
+
+/**
+ * Anade los plugins comunes al mapa recien creado.
+ *
+ * @param {Object} map Mapa de la API-IDEE.
+ * @param {Function} recrear Funcion que vuelve a montar el mapa entero. Es la
+ *   que usa el cambio 2D/3D tras recargar el bundle.
+ */
+function anadirPluginsTipos(map, recrear) {
+  // El mapa ya existe: la rueda de carga puede irse.
+  ocultarCarga();
+
+  // 2D / 3D. `shareView` conserva el encuadre que el visitante tenia: la capa
+  // se recrea desde cero, pero no se le mueve el mapa de sitio debajo.
+  map.addPlugin(new IDEE.plugin.miPlugin_cambioImpl({
+    buttonTitle: 'Cambiar entre 2D y 3D',
+    mapsFunction: recrear,
+    shareView: true,
+  }));
+
+  // Arbol de capas: la capa de la pagina aparece con su leyenda y se puede
+  // apagar para ver el fondo que hay debajo.
+  map.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
+
+  // Codigo de la capa. El contenido no viaja en el plugin: se lee del
+  // <template id="codigo"> que hay en el propio index.html.
+  map.addPlugin(new IDEE.plugin.miPlugin_modal({
+    position: 'TR',
+    order: 2,
+    tooltip: 'Ver el codigo de esta capa',
+    contentSelector: '#codigo',
+  }));
+}

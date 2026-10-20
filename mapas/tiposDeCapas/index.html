@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Tipos de capa | Galería de mapas</title>
+  <meta name="description" content="Una página por cada tipo de capa de la API-IDEE: cómo se declara, cómo se ve en 2D y en 3D y el código necesario para crearla.">
+
+  <!-- favicon transparente para evitar el 404 de /favicon.ico -->
+  <link rel="icon" href="data:,">
+
+  <link href="./css/estilos.css" rel="stylesheet">
+</head>
+
+<body>
+
+  <!-- Luces y trama del fondo, puramente decorativas -->
+  <div class="fondo" aria-hidden="true">
+    <span class="fondo__brillo fondo__brillo--uno"></span>
+    <span class="fondo__brillo fondo__brillo--dos"></span>
+    <span class="fondo__trama"></span>
+  </div>
+
+  <main class="pagina">
+
+    <header class="cabecera">
+      <!-- Pila de capas: el icono se pinta con currentColor (--acento) -->
+      <svg class="capas" viewBox="0 0 24 24" role="img" aria-label="Pila de capas">
+        <path fill="currentColor" d="M12 2 1 8l11 6 11-6-11-6zm0 2.3L19.7 8 12 11.7 4.3 8 12 4.3z" />
+        <path fill="currentColor" opacity=".65" d="m3.2 12.1-2.2 1.2 11 6 11-6-2.2-1.2-8.8 4.8-8.8-4.8z" />
+        <path fill="currentColor" opacity=".4" d="m3.2 16.4-2.2 1.2 11 6 11-6-2.2-1.2-8.8 4.8-8.8-4.8z" />
+      </svg>
+
+      <p class="cabecera__antetitulo">Galería de mapas</p>
+      <h1 class="cabecera__titulo">Tipos de capa</h1>
+      <p class="cabecera__bajada">
+        Cada tipo de capa de la API-IDEE en una página propia: la capa real sobre el mapa,
+        el mismo mapa en 2D y en 3D, y el código mínimo que la crea.
+      </p>
+    </header>
+
+    <!-- ------------------------------------------------------------ ráster -->
+    <section class="grupo">
+      <h2 class="grupo__titulo">Ráster y teselas</h2>
+      <div class="rejilla">
+
+        <a class="tarjeta" href="./capas/wms/index.html">
+          <h3 class="tarjeta__titulo">WMS</h3>
+          <p class="tarjeta__clase">IDEE.layer.WMS</p>
+          <p class="tarjeta__texto">Mapas servidos como imagen por un servicio OGC.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">OGC</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/wmts/index.html">
+          <h3 class="tarjeta__titulo">WMTS</h3>
+          <p class="tarjeta__clase">IDEE.layer.WMTS</p>
+          <p class="tarjeta__texto">Teselas pregeneradas con una matriz de niveles fija.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">OGC</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/tms/index.html">
+          <h3 class="tarjeta__titulo">TMS</h3>
+          <p class="tarjeta__clase">IDEE.layer.TMS</p>
+          <p class="tarjeta__texto">Teselas con la fila contada desde abajo ({-y}).</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Teselas</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/xyz/index.html">
+          <h3 class="tarjeta__titulo">XYZ</h3>
+          <p class="tarjeta__clase">IDEE.layer.XYZ</p>
+          <p class="tarjeta__texto">Teselas por z, x e y: cualquier servicio de mosaicos.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Teselas</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/osm/index.html">
+          <h3 class="tarjeta__titulo">OSM</h3>
+          <p class="tarjeta__clase">IDEE.layer.OSM</p>
+          <p class="tarjeta__texto">OpenStreetMap ya resuelto: solo hay que pedirlo.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Teselas</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- vectorial -->
+    <section class="grupo">
+      <h2 class="grupo__titulo">Vectorial y servicios OGC</h2>
+      <div class="rejilla">
+
+        <a class="tarjeta" href="./capas/wfs/index.html">
+          <h3 class="tarjeta__titulo">WFS</h3>
+          <p class="tarjeta__clase">IDEE.layer.WFS</p>
+          <p class="tarjeta__texto">Entidades geográficas descargadas de un servicio OGC.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">OGC</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/kml/index.html">
+          <h3 class="tarjeta__titulo">KML</h3>
+          <p class="tarjeta__clase">IDEE.layer.KML</p>
+          <p class="tarjeta__texto">Ficheros KML de Google Earth, leídos tal cual.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Fichero</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/geojson/index.html">
+          <h3 class="tarjeta__titulo">GeoJSON</h3>
+          <p class="tarjeta__clase">IDEE.layer.GeoJSON</p>
+          <p class="tarjeta__texto">Un GeoJSON por URL, con estilo propio.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Fichero</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/vector/index.html">
+          <h3 class="tarjeta__titulo">Vector</h3>
+          <p class="tarjeta__clase">IDEE.layer.Vector</p>
+          <p class="tarjeta__texto">Geometrías en memoria, sin pedir nada a la red.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Memoria</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/mvt/index.html">
+          <h3 class="tarjeta__titulo">MVT</h3>
+          <p class="tarjeta__clase">IDEE.layer.MVT</p>
+          <p class="tarjeta__texto">Teselas vectoriales Mapbox sobre el mapa.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Vectorial</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/maplibre/index.html">
+          <h3 class="tarjeta__titulo">MapLibre</h3>
+          <p class="tarjeta__clase">IDEE.layer.MapLibre</p>
+          <p class="tarjeta__texto">Un style.json completo, con sus capas y sus colores.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Vectorial</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/ogcapi/index.html">
+          <h3 class="tarjeta__titulo">OGC API Features</h3>
+          <p class="tarjeta__clase">IDEE.layer.OGCAPIFeatures</p>
+          <p class="tarjeta__texto">La colección de un servicio OGC API por su nombre.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">OGC API</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+      </div>
+    </section>
+
+    <!-- -------------------------------------- ficheros, grupos y contextos -->
+    <section class="grupo">
+      <h2 class="grupo__titulo">Ficheros, agrupaciones y contextos</h2>
+      <div class="rejilla">
+
+        <a class="tarjeta" href="./capas/geotiff/index.html">
+          <h3 class="tarjeta__titulo">GeoTIFF</h3>
+          <p class="tarjeta__clase">IDEE.layer.GeoTIFF</p>
+          <p class="tarjeta__texto">Ráster georreferenciado, leído por teselas (COG).</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Fichero</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/mbtiles/index.html">
+          <h3 class="tarjeta__titulo">MBTiles</h3>
+          <p class="tarjeta__clase">IDEE.layer.MBTiles</p>
+          <p class="tarjeta__texto">Mosaicos empaquetados en un contenedor SQLite.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Fichero</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/layergroup/index.html">
+          <h3 class="tarjeta__titulo">LayerGroup</h3>
+          <p class="tarjeta__clase">IDEE.layer.LayerGroup</p>
+          <p class="tarjeta__texto">Varias capas bajo una sola entrada del árbol.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Agrupación</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+        <a class="tarjeta" href="./capas/wmc/index.html">
+          <h3 class="tarjeta__titulo">WMC</h3>
+          <p class="tarjeta__clase">IDEE.layer.WMC</p>
+          <p class="tarjeta__texto">Un contexto de mapas OGC: capas ya configuradas.</p>
+          <span class="tarjeta__pie">
+            <span class="tarjeta__etiqueta">Contexto</span>
+            <span class="tarjeta__ir">Abrir <span class="tarjeta__flecha" aria-hidden="true">→</span></span>
+          </span>
+        </a>
+
+      </div>
+    </section>
+
+    <footer class="pie">
+      <p>
+        Todas las páginas usan la API-IDEE en local y su plugin de cambio 2D/3D.
+        Los servicios son públicos: si alguno no responde, la capa no se dibuja y el resto de la página sigue igual.
+      </p>
+    </footer>
+
+  </main>
+
+</body>
+
+</html>

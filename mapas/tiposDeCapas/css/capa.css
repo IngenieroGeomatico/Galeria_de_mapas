@@ -1,0 +1,172 @@
+/*
+ * Hoja de estilos comun a las paginas de tipo de capa.
+ *
+ * La pagina es una barra superior con el nombre del tipo y, debajo, el mapa
+ * ocupando todo el resto del alto. Asi los paneles de la API (arriba a la
+ * izquierda) y el boton 2D/3D (arriba a la derecha) no chocan con la cabecera.
+ *
+ * El bloque de codigo del modal se pinta aqui: el modal vive fuera del mapa,
+ * pero su contenido es HTML nuestro y necesita su propia tipografia.
+ */
+
+:root {
+  --barra-fondo: #0b1220;
+  --barra-tinta: #eef3fb;
+  --barra-tenue: #9fb0c8;
+  --barra-acento: #5eead4;
+  --barra-linea: rgba(255, 255, 255, 0.14);
+  --tipo: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --tipo-codigo: 'Cascadia Code', 'Consolas', 'SFMono-Regular', Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--tipo);
+  background: var(--barra-fondo);
+  color: var(--barra-tinta);
+}
+
+/* ------------------------------------------------------------------ barra */
+.barra {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem clamp(0.9rem, 2.5vw, 1.6rem);
+  border-bottom: 1px solid var(--barra-linea);
+  background: var(--barra-fondo);
+}
+
+.barra__volver {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--barra-linea);
+  border-radius: 999px;
+  color: var(--barra-tenue);
+  font-size: 0.82rem;
+  text-decoration: none;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.barra__volver:hover,
+.barra__volver:focus-visible {
+  color: var(--barra-acento);
+  border-color: var(--barra-acento);
+  outline: none;
+}
+
+.barra__texto {
+  min-width: 0;
+}
+
+.barra__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0;
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.barra__clase {
+  font-family: var(--tipo-codigo);
+  font-size: 0.76rem;
+  font-weight: 400;
+  color: var(--barra-acento);
+}
+
+.barra__desc {
+  margin: 0.15rem 0 0;
+  color: var(--barra-tenue);
+  font-size: clamp(0.78rem, 1.4vw, 0.88rem);
+  line-height: 1.35;
+}
+
+/* -------------------------------------------------------------------- mapa */
+#mapaDIV {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------ carga inicial */
+#cargaSVG {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--barra-fondo);
+}
+
+#cargaSVG[hidden] {
+  display: none;
+}
+
+#cargaSVG img {
+  width: 46px;
+  height: 46px;
+}
+
+/* -------------------------------------------------- codigo dentro del modal */
+/* El modal abierto se centra en pantalla con la hoja del plugin. Aqui solo se
+   le da ancho maximo y aire: el contenido entra directo en .m-modal, sin el
+   div#popup-box de la plantilla por defecto. */
+.m-modal {
+  width: min(44rem, 86vw);
+  max-height: 78vh;
+  overflow: auto;
+  padding: 1.1rem 3.2rem 1.2rem 1.3rem;
+  color: #1a202c;
+  font-size: 0.9rem;
+}
+
+/* La X de cierre del modal abierto se pinta con color3, que en este plugin es
+   blanco, sobre el fondo blanco del propio modal: se le fija un color legible
+   directamente al pseudo-elemento, que es el que dibuja la cruz. */
+.m-panel-modal.opened > button.m-panel-btn::before {
+  color: #1a202c !important;
+}
+
+.m-modal h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
+}
+
+.m-modal p {
+  margin: 0 0 0.8rem;
+  color: #4a5568;
+}
+
+.m-modal .codigo {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border-radius: 8px;
+  background: #0b1220;
+  color: #eef3fb;
+  font-family: var(--tipo-codigo);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+}

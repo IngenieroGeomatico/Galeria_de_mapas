@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+  Contexto WMC (OGC Web Map Context 1.1.0) de ejemplo para la pagina
+  "tipos de capa" de la Galeria de mapas.
+
+  Un WMC guarda, en un solo XML, la lista de capas de un visor y el encuadre
+  con el que se estaba mirando. Aqui apunta al WMS de unidades administrativas
+  del IGN y guarda el encuadre de la península en EPSG:3857, que es el sistema
+  en el que trabaja el mapa en 2D.
+
+  Ojo: la API aplica el BoundingBox tal cual, sin reproyectar; por eso este
+  contexto se escribe directamente en EPSG:3857.
+-->
+<ViewContext xmlns="http://www.opengis.net/context" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="tiposDeCapas" version="1.1.0" xsi:schemaLocation="http://www.opengis.net/context http://schemas.opengis.net/context/1.1.0/context.xsd">
+  <General>
+    <Window height="600" width="900"/>
+    <BoundingBox SRS="EPSG:3857" maxx="389000" maxy="5460000" minx="-1057000" miny="4300000"/>
+    <Title>Unidades administrativas de España</Title>
+    <Abstract>Contexto WMC de ejemplo: una capa WMS del IGN y su encuadre.</Abstract>
+    <KeywordList>
+      <Keyword>WMC</Keyword>
+      <Keyword>IGN</Keyword>
+      <Keyword>Galeria de mapas</Keyword>
+    </KeywordList>
+  </General>
+
+  <LayerList>
+    <Layer hidden="0" queryable="0">
+      <Server service="OGC:WMS" title="IGN" version="1.1.1">
+        <OnlineResource xmlns:xlink="http://www.w3.org/1999/xlink" xlink:type="simple" xlink:href="https://www.ign.es/wms-inspire/unidades-administrativas?"/>
+      </Server>
+      <Name>AU.AdministrativeUnit</Name>
+      <Title>Unidades administrativas</Title>
+      <SRS>EPSG:3857</SRS>
+      <FormatList>
+        <Format current="1">image/png</Format>
+      </FormatList>
+      <Extension>
+        <ol:transparent xmlns:ol="http://openlayers.org/context">true</ol:transparent>
+        <ol:isBaseLayer xmlns:ol="http://openlayers.org/context">false</ol:isBaseLayer>
+        <ol:displayInLayerSwitcher xmlns:ol="http://openlayers.org/context">true</ol:displayInLayerSwitcher>
+        <ol:singleTile xmlns:ol="http://openlayers.org/context">false</ol:singleTile>
+      </Extension>
+      <StyleList>
+        <Style current="1">
+          <Name/>
+          <Title>Estilo de la leyenda</Title>
+        </Style>
+      </StyleList>
+    </Layer>
+  </LayerList>
+</ViewContext>

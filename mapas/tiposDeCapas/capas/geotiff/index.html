@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>GeoTIFF | Tipos de capa</title>
+  <meta name="description" content="Capa GeoTIFF de la API-IDEE: un COG de Sentinel-2 leido por teselas, en 2D y en 3D.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Arbol de capas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+
+  <!-- En Cesium, IDEE.layer.GeoTIFF la aporta esta extension. Se carga tambien
+       en 2D, donde no hace nada, para que el cambio 2D/3D la encuentre ya
+       puesta al reejecutar mapa(). -->
+  <script src="../../../../ext/geotiffLayer/geotiffLayer.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">GeoTIFF <span class="barra__clase">IDEE.layer.GeoTIFF</span></h1>
+      <p class="barra__desc">
+        Ráster georreferenciado en un solo fichero. Es un fotograma del vuelo PNOA 2021
+        de la costa de Cataluña: un COG de 300 MB del que el navegador solo descarga las
+        teselas que necesita.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.GeoTIFF</h3>
+    <p>
+      El GeoTIFF se declara con la URL del fichero. Al ser un COG, la API pide
+      solo los trozos que necesita según el encuadre y el zoom.
+    </p>
+    <pre class="codigo"><code>const capa = new IDEE.layer.GeoTIFF({
+  url: 'https://ftpcdd.cnig.es/Vuelos_2021/Vuelos_2021/catalunya_2021/' +
+    'Costa/01.VF/01.08_PNOA_2021_CAT_COSTA_22cm_VF_img8c_rgb_hu31/' +
+    'h50_0219_fot_002-0001_cog.tif',
+  name: 'PNOA Costa Cataluna',
+  legend: 'PNOA 2021 Costa Cataluna (GeoTIFF)',
+}, {
+  nodata: 0,
+});
+
+mapajs.addLayers(capa);</code></pre>
+    <p>
+      En 3D, la fachada de <code>IDEE.layer.GeoTIFF</code> la registra
+      <code>ext/geotiffLayer</code>. La página espera a que esté instalada antes
+      de crear la capa; en 2D la clase viene en el bundle y no hay que esperar.
+    </p>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>

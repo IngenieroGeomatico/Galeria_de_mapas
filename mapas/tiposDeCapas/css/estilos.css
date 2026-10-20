@@ -1,0 +1,297 @@
+/*
+ * Hoja de estilos del indice de tipos de capa.
+ *
+ * Misma piel que el indice del Camino de los Faros: pagina autonoma, sin
+ * Bootstrap, con todos los colores y medidas en variables. El icono de la
+ * cabecera (una pila de capas) se dibuja con fill="currentColor", asi que el
+ * color se cambia en un unico sitio: --acento.
+ */
+
+/* ---------------------------------------------------------------- variables */
+:root {
+    --fondo: #0b1220;
+    --fondo-alto: #131f33;
+    --tinta: #eef3fb;
+    --tinta-tenue: #9fb0c8;
+    --tinta-muy-tenue: #6d8099;
+    --acento: #5eead4;
+    --acento-claro: #99f6e4;
+    --linea: rgba(255, 255, 255, 0.12);
+    --linea-fuerte: rgba(255, 255, 255, 0.22);
+    --cristal: rgba(255, 255, 255, 0.045);
+    --cristal-al-pasar: rgba(255, 255, 255, 0.08);
+
+    --radio: 18px;
+    --radio-pequeno: 10px;
+    --sombra: 0 18px 40px rgba(0, 0, 0, 0.45);
+    --transicion: 180ms ease;
+    --tipo: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --tipo-codigo: 'Cascadia Code', 'Consolas', 'SFMono-Regular', Menlo, monospace;
+}
+
+/* ------------------------------------------------------------------ resets */
+* {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--tipo);
+    color: var(--tinta);
+    background: var(--fondo);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------- fondo */
+.fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+/* Dos luces suaves, sin imagenes ni peticiones de red. */
+.fondo__brillo {
+    position: absolute;
+    display: block;
+    border-radius: 50%;
+    filter: blur(70px);
+    opacity: 0.5;
+}
+
+.fondo__brillo--uno {
+    width: 46rem;
+    height: 46rem;
+    top: -18rem;
+    left: -12rem;
+    background: radial-gradient(circle, #0d9488 0%, rgba(13, 148, 136, 0) 70%);
+}
+
+.fondo__brillo--dos {
+    width: 38rem;
+    height: 38rem;
+    right: -14rem;
+    bottom: -16rem;
+    background: radial-gradient(circle, #1d4ed8 0%, rgba(29, 78, 216, 0) 70%);
+    opacity: 0.45;
+}
+
+.fondo__trama {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+    background-size: 22px 22px;
+    -webkit-mask-image: linear-gradient(to bottom, black, transparent 75%);
+    mask-image: linear-gradient(to bottom, black, transparent 75%);
+}
+
+/* ------------------------------------------------------------------ pagina */
+.pagina {
+    position: relative;
+    z-index: 1;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1rem, 3vw, 2rem) 3rem;
+}
+
+/* --------------------------------------------------------------- cabecera */
+.cabecera {
+    max-width: 46rem;
+    margin-bottom: clamp(2rem, 4vw, 3.25rem);
+}
+
+.capas {
+    width: 2.75rem;
+    height: auto;
+    color: var(--acento);
+    margin-bottom: 1.25rem;
+}
+
+.cabecera__antetitulo {
+    margin: 0 0 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--acento);
+}
+
+.cabecera__titulo {
+    margin: 0 0 0.75rem;
+    font-size: clamp(2.1rem, 5.5vw, 3.4rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+}
+
+.cabecera__bajada {
+    margin: 0;
+    max-width: 40rem;
+    color: var(--tinta-tenue);
+    font-size: clamp(1rem, 1.6vw, 1.1rem);
+}
+
+/* ------------------------------------------------------------------ grupo */
+.grupo {
+    margin-bottom: clamp(1.75rem, 3.5vw, 2.75rem);
+}
+
+.grupo__titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--tinta-muy-tenue);
+}
+
+.grupo__titulo::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--linea);
+}
+
+/* ---------------------------------------------------------------- rejilla */
+.rejilla {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16.5rem, 1fr));
+    gap: clamp(0.85rem, 2vw, 1.25rem);
+}
+
+/* --------------------------------------------------------------- tarjeta */
+.tarjeta {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 10.5rem;
+    padding: 1.4rem 1.4rem 1.15rem;
+    border: 1px solid var(--linea);
+    border-radius: var(--radio);
+    background: var(--cristal);
+    color: var(--tinta);
+    text-decoration: none;
+    overflow: hidden;
+    transition: transform var(--transicion), background var(--transicion),
+        border-color var(--transicion), box-shadow var(--transicion);
+}
+
+.tarjeta:hover,
+.tarjeta:focus-visible {
+    transform: translateY(-4px);
+    background: var(--cristal-al-pasar);
+    border-color: var(--linea-fuerte);
+    box-shadow: var(--sombra);
+}
+
+.tarjeta:focus-visible {
+    outline: 2px solid var(--acento);
+    outline-offset: 3px;
+}
+
+.tarjeta__titulo {
+    margin: 0 0 0.35rem;
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+}
+
+/* El nombre real de la clase de la API, en monoespaciada y tenue: es el dato
+   que el visitante va a buscar en la documentacion. */
+.tarjeta__clase {
+    margin: 0 0 0.6rem;
+    font-family: var(--tipo-codigo);
+    font-size: 0.78rem;
+    color: var(--acento);
+}
+
+.tarjeta__texto {
+    margin: 0;
+    color: var(--tinta-tenue);
+    font-size: 0.9rem;
+}
+
+.tarjeta__pie {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: auto;
+    padding-top: 1.25rem;
+}
+
+.tarjeta__etiqueta {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tinta-muy-tenue);
+}
+
+.tarjeta__ir {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--acento);
+    opacity: 0.85;
+    transition: opacity var(--transicion), gap var(--transicion);
+}
+
+.tarjeta:hover .tarjeta__ir,
+.tarjeta:focus-visible .tarjeta__ir {
+    opacity: 1;
+    gap: 0.65rem;
+}
+
+.tarjeta__flecha {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* -------------------------------------------------------------------- pie */
+.pie {
+    margin-top: clamp(2rem, 4vw, 3rem);
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--linea);
+    color: var(--tinta-muy-tenue);
+    font-size: 0.85rem;
+}
+
+.pie p {
+    margin: 0;
+}
+
+.pie a {
+    color: var(--tinta-tenue);
+}
+
+.pie a:hover {
+    color: var(--acento);
+}
+
+/* -------------------------------------------------------------- movimiento */
+@media (prefers-reduced-motion: reduce) {
+
+    .tarjeta,
+    .tarjeta__ir {
+        transition: none;
+    }
+
+    .tarjeta:hover,
+    .tarjeta:focus-visible {
+        transform: none;
+    }
+}

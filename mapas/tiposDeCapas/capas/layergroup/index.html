@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>LayerGroup | Tipos de capa</title>
+  <meta name="description" content="LayerGroup de la API-IDEE: varias capas bajo una sola entrada del arbol, en 2D y en 3D.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Arbol de capas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">LayerGroup <span class="barra__clase">IDEE.layer.LayerGroup</span></h1>
+      <p class="barra__desc">
+        Varias capas bajo una sola entrada del árbol, para encenderlas y apagarlas juntas.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.LayerGroup</h3>
+    <p>
+      El grupo se crea, se añade al mapa y después se le pasan las capas hijas con <code>addLayers</code>. Cada capa se añade solo a su contenedor: al mapa o al grupo, nunca a los dos.
+    </p>
+    <pre class="codigo"><code>const grupo = new IDEE.layer.LayerGroup({
+  name: 'GrupoLimites',
+  legend: 'Grupo: limites y barrios',
+  collapsed: false,
+});
+mapajs.addLayers(grupo);
+
+grupo.addLayers(new IDEE.layer.WMS({
+  url: 'https://www.ign.es/wms-inspire/unidades-administrativas?',
+  name: 'AU.AdministrativeUnit',
+  legend: 'Limites administrativos',
+  tiled: false,
+}, {}));
+
+grupo.addLayers(new IDEE.layer.GeoJSON({
+  url: '../../../../datos/madrid_barrios.geojson',
+  name: 'Barrios de Madrid',
+  legend: 'Barrios de Madrid',
+}, {
+  style: new IDEE.style.Generic({
+    polygon: {
+      fill: { color: '#ffb257', opacity: 0.3 },
+      stroke: { color: '#b45309', width: 2 },
+    },
+  }),
+}));</code></pre>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>

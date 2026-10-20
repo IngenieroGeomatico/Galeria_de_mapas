@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>MVT | Tipos de capa</title>
+  <meta name="description" content="Capa MVT de la API-IDEE: teselas vectoriales Mapbox, en 2D y en 3D.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Arbol de capas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+
+  <!-- En 3D IDEE.layer.MVT la aporta esta extension: hay que tenerla cargada
+       antes de crear la capa (ver js/mapa.js). -->
+  <script src="../../../../ext/MVTLayer/MVTLayer.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">MVT <span class="barra__clase">IDEE.layer.MVT</span></h1>
+      <p class="barra__desc">
+        Teselas vectoriales Mapbox: el servicio manda geometría, no imagen, y el cliente la pinta.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.MVT</h3>
+    <p>
+      El MVT se declara con la plantilla de teselas y el nombre de la capa dentro de la tesela (<code>layers</code>). En 3D la fachada la aporta <code>ext/MVTLayer</code>, que la página instala antes de crear la capa.
+    </p>
+    <pre class="codigo"><code>const capa = new IDEE.layer.MVT({
+  url: 'https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf',
+  name: 'Municipios',
+  legend: 'Municipios (MVT)',
+  layers: 'municipio',
+  extract: false,
+}, {});
+
+mapajs.addLayers(capa);</code></pre>
+    <p>En 3D, <code>ext/MVTLayer</code> mantiene la estructura de la capa y lee el servicio, pero el dibujo de las teselas todavía no está implementado: la capa se crea y no se pinta.</p>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>

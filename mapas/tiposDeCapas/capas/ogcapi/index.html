@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>OGC API Features | Tipos de capa</title>
+  <meta name="description" content="Capa OGC API Features de la API-IDEE: una coleccion del servicio, en 2D y en 3D.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Arbol de capas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">OGC API Features <span class="barra__clase">IDEE.layer.OGCAPIFeatures</span></h1>
+      <p class="barra__desc">
+        Una colección de un servicio OGC API Features, pedida por su nombre. Es el sustituto moderno del WFS.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.OGCAPIFeatures</h3>
+    <p>
+      La capa necesita la URL del servicio y el nombre de la colección (<code>name</code>). El resto lo negocia la API: formato, sistema de referencia y paginación. El servicio devuelve diez entidades por defecto, así que <code>limit</code> pide todas las de la colección.
+    </p>
+    <pre class="codigo"><code>const capa = new IDEE.layer.OGCAPIFeatures({
+  url: 'https://api-features.idee.es/collections/',
+  name: 'falls',
+  limit: 300,
+  legend: 'Cascadas (OGC API Features)',
+}, {
+  style: new IDEE.style.Generic({
+    point: {
+      radius: 5,
+      fill: { color: '#2563eb' },
+      stroke: { color: '#ffffff', width: 1 },
+    },
+  }),
+});
+
+mapajs.addLayers(capa);</code></pre>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>
