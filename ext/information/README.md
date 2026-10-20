@@ -4,6 +4,7 @@ Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. N
 
 ## Características
 
+- **Botón circular**: 40x40, sin panel, con `color1` (fondo), `color2` (borde) y `color3` (icono).
 - **WMS**: pide `GetCapabilities` y usa `GetFeatureInfo`. Si el servicio declara JSON y HTML, el popup permite alternar entre los dos sin volver a pinchar. Si no declara ninguno de los dos, se usan texto o XML como respaldo.
 - **Capas vectoriales**: lee los features que caen bajo el clic en 2D y, cuando la implementación los dibuja, también en 3D.
 - **Varias capas y varios elementos**: una pestaña por capa y todos los features del punto dentro de la pestaña.

@@ -21,6 +21,20 @@
   margin: 0;
 }
 
+/* Varias hojas de plugins pintan el contenedor del control con fondo blanco
+   y border-radius 0. Este panel no tiene contenido, solo el botón, así que
+   hay que dejar el contenedor transparente con más especificidad que la regla
+   genérica. Si no, se ve un cuadrado blanco detrás del círculo. */
+.m-areas > div.m-area > div.m-panel.g-herramienta_information > div.m-panel-controls > div.m-control.g-information-control {
+  background-color: transparent;
+  border-radius: 50%;
+  overflow: visible;
+}
+
+/* La API pinta los botones de control con `background: none` y una
+   especificidad alta. El fondo, el borde y el color del icono van con
+   `!important` para que manden los colores del constructor (color1, color2 y
+   color3) y el botón se vea como el resto de plugins. */
 .g-information-boton {
   display: flex !important;
   align-items: center !important;
@@ -30,10 +44,10 @@
   padding: 0;
   margin: 0;
   box-sizing: border-box;
-  border: 2px solid var(--g-information-borde-inactivo, #ffffff);
-  border-radius: 50%;
-  background-color: var(--g-information-fondo-inactivo, orangered);
-  color: var(--g-information-icono-inactivo, #ffffff);
+  border: 2px solid var(--g-information-borde-inactivo, #ffffff) !important;
+  border-radius: 50% !important;
+  background-color: var(--g-information-fondo-inactivo, orangered) !important;
+  color: var(--g-information-icono-inactivo, #ffffff) !important;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
@@ -57,9 +71,9 @@
 }
 
 .g-information-boton.activated {
-  border-color: var(--g-information-borde-activo, #71A7D3);
-  background-color: var(--g-information-fondo-activo, #ffffff);
-  color: var(--g-information-icono-activo, #71A7D3);
+  border-color: var(--g-information-borde-activo, #71A7D3) !important;
+  background-color: var(--g-information-fondo-activo, #ffffff) !important;
+  color: var(--g-information-icono-activo, #71A7D3) !important;
 }
 
 /* ---------------------------------------------------------------------
