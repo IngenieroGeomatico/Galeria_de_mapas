@@ -128,45 +128,175 @@ body {
 }
 
 /* -------------------------------------------------- codigo dentro del modal */
-/* El modal abierto se centra en pantalla con la hoja del plugin. Aqui solo se
-   le da ancho maximo y aire: el contenido entra directo en .m-modal, sin el
-   div#popup-box de la plantilla por defecto. */
-.m-modal {
-  width: min(44rem, 86vw);
-  max-height: 78vh;
-  overflow: auto;
-  padding: 1.1rem 3.2rem 1.2rem 1.3rem;
-  color: #1a202c;
+/* El modal abierto se centra en pantalla con la hoja del plugin y su contenido
+   entra directo en .m-modal, sin el div#popup-box de la plantilla por defecto.
+   Aqui se repinta entero en la gama naranja de los botones del resto de
+   visualizadores (el `orangered` de los plugins), con la ventana redondeada y
+   una cabecera a sangre con el nombre de la clase de capa.
+
+   Los selectores llevan la ruta completa a proposito: la hoja del plugin fija
+   fondo, padding y display con selectores de 4-5 clases, y con `.m-modal` a
+   secas perderia la cascada. */
+
+/* Ventana: sin marco propio (el borde lo dibuja la sombra) y recortada para
+   que la cabecera herede las esquinas redondeadas. */
+.m-areas > div.m-area > div.m-panel.m-panel-modal.opened {
+  border: 0;
+  border-radius: 14px;
+  background-color: #fffaf6;
+  box-shadow: 0 30px 70px rgba(70, 20, 0, 0.4), 0 3px 12px rgba(70, 20, 0, 0.2);
+  overflow: hidden;
+  animation: tiposModalIn 160ms ease-out;
+}
+
+@keyframes tiposModalIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* El scroll vive en el contenido, no en #popup-box. El selector repite la
+   cadena entera (incluido .opened) porque la hoja del plugin fija `width:
+   auto` con 5 clases y 3 elementos: sin esta especificidad el ancho se
+   quedaba en el max-content del bloque de codigo y desbordaba en movil. */
+.m-areas > div.m-area > div.m-panel.m-panel-modal.opened > div.m-panel-controls > div.m-modal {
+  display: block;
+  width: min(46rem, 88vw);
+  max-height: 76vh;
+  padding: 0 0 1.2rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #fffaf6;
+  color: #3c2a1e;
   font-size: 0.9rem;
+  line-height: 1.6;
+  scrollbar-width: thin;
+  scrollbar-color: #f0a06a #fff0e4;
 }
 
-/* La X de cierre del modal abierto se pinta con color3, que en este plugin es
-   blanco, sobre el fondo blanco del propio modal: se le fija un color legible
-   directamente al pseudo-elemento, que es el que dibuja la cruz. */
-.m-panel-modal.opened > button.m-panel-btn::before {
-  color: #1a202c !important;
+.m-modal::-webkit-scrollbar {
+  width: 10px;
 }
 
+.m-modal::-webkit-scrollbar-track {
+  background: #fff0e4;
+}
+
+.m-modal::-webkit-scrollbar-thumb {
+  border: 2px solid #fff0e4;
+  border-radius: 99px;
+  background: #f0a06a;
+}
+
+/* Cabecera: banda naranja a sangre. El padding derecho deja sitio a la X. */
 .m-modal h3 {
-  margin: 0 0 0.4rem;
-  font-size: 1.15rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 1rem 3.4rem 1rem 1.5rem;
+  background: linear-gradient(120deg, #ff8a3d 0%, #f9640f 55%, #e04a06 100%);
+  color: #fff;
+  font-size: 1.04rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Chapita de codigo a la izquierda del titulo: </> en un cuadro translucido. */
+.m-modal h3::before {
+  content: '</>';
+  flex: none;
+  padding: 0.16rem 0.42rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.22);
+  font-family: var(--tipo-codigo);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 .m-modal p {
-  margin: 0 0 0.8rem;
-  color: #4a5568;
+  margin: 0;
+  padding: 0.95rem 1.5rem 0;
+  color: #5f4a3c;
 }
 
-.m-modal .codigo {
-  margin: 0;
-  padding: 0.9rem 1rem;
-  border-radius: 8px;
-  background: #0b1220;
-  color: #eef3fb;
+.m-modal p+p {
+  padding-top: 0.7rem;
+}
+
+/* Nombres de clase y ficheros sueltos dentro del texto. Nunca el <code> que
+   envuelve el bloque de codigo: ese hereda el color y la tipografia del <pre>. */
+.m-modal p code,
+.m-modal h3 code {
+  padding: 0.08em 0.36em;
+  border-radius: 5px;
+  background: #ffe7d6;
+  color: #b8390a;
   font-family: var(--tipo-codigo);
-  font-size: 0.8rem;
-  line-height: 1.55;
+  font-size: 0.86em;
+}
+
+.m-modal .codigo code {
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+/* Bloques de codigo: tarjeta oscura calida con filo naranja arriba. */
+.m-modal .codigo {
+  margin: 1rem 1.5rem 0;
+  padding: 0.95rem 1.05rem;
+  border-top: 3px solid #ff7a29;
+  border-radius: 12px;
+  background: #241610;
+  color: #ffe9db;
+  font-family: var(--tipo-codigo);
+  font-size: 0.78rem;
+  line-height: 1.6;
   overflow-x: auto;
   white-space: pre;
   tab-size: 2;
+  box-shadow: inset 0 0 0 1px #3b2519;
+}
+
+.m-modal .codigo:last-child {
+  margin-bottom: 0.15rem;
+}
+
+/* La X de cierre va sobre la banda naranja: blanca, con una sombra minima. */
+.m-panel-modal.opened > button.m-panel-btn::before {
+  color: #fff !important;
+  text-shadow: 0 1px 2px rgba(90, 25, 0, 0.35);
+}
+
+/* En pantallas estrechas el modal ocupa el ancho util y reduce el aire: la
+   cabecera y los bloques de codigo se siguen leyendo sin scroll horizontal. */
+@media (max-width: 600px) {
+  .m-areas > div.m-area > div.m-panel.m-panel-modal.opened > div.m-panel-controls > div.m-modal {
+    width: calc(100vw - 28px);
+    font-size: 0.85rem;
+  }
+
+  .m-modal h3 {
+    padding: 0.85rem 2.9rem 0.85rem 1rem;
+    font-size: 0.95rem;
+  }
+
+  .m-modal p {
+    padding: 0.8rem 1rem 0;
+  }
+
+  .m-modal .codigo {
+    margin: 0.8rem 1rem 0;
+    padding: 0.8rem;
+    font-size: 0.72rem;
+  }
 }

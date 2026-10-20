@@ -2,13 +2,15 @@
    Piezas comunes a las paginas de tipos de capa
    ---------------------------------------------------------------------
    Cada pagina hija solo declara SU capa (js/mapa.js). Aqui viven el
-   arranque del mapa, el proxy y los tres plugins que se repiten:
+   arranque del mapa, el proxy y los plugins que se repiten:
 
    - miPlugin_cambioImpl: alterna 2D (OpenLayers) y 3D (Cesium). Al
      cambiar, la API recarga su bundle y vuelve a llamar a `mapa()`, por
      eso recibe la funcion como `mapsFunction`.
-   - miPlugin_layerSwitcher: arbol de capas, para encender y apagar la
-     capa de la pagina sin recargar.
+   - miPlugin_baseLayer: selector de capas base con miniaturas.
+   - miPlugin_layerSwitcher: arbol de capas superpuestas, para encender y
+     apagar la capa de la pagina sin recargar.
+   - miPlugin_mapInfo: lectura de escala y coordenadas del puntero.
    - miPlugin_modal: el boton que abre el codigo de la capa. El HTML del
      snippet esta en un <template id="codigo"> de cada index.html.
    ===================================================================== */
@@ -29,6 +31,35 @@ if (SVGCarga) {
   // Tope de seguridad: ni un recurso externo colgado puede tapar el mapa.
   setTimeout(ocultarCarga, 4000);
 }
+
+/**
+ * Capas base que ofrece el selector comun.
+ *
+ * `imgPreview` es una URL relativa al DOCUMENTO (la resuelve el <img> del
+ * panel), por eso sube dos niveles hasta la carpeta img/ de tiposDeCapas.
+ * `layers` usa la sintaxis QUICK* de la API: cada entrada del catalogo
+ * `IDEE.config.quicklayers` se construye con su clase real (TMS, WMTS o grupo).
+ */
+const CAPAS_BASE_TIPOS = [
+  {
+    id: 'mapa',
+    title: 'Callejero',
+    imgPreview: '../../img/IGNBase.jpg',
+    layers: ['QUICK*Base_IGNBaseTodo_TMS'],
+  },
+  {
+    id: 'imagen',
+    title: 'Imagen',
+    imgPreview: '../../img/imagen.jpg',
+    layers: ['QUICK*BASE_PNOA_MA_TMS'],
+  },
+  {
+    id: 'hibrido',
+    title: 'Hibrido',
+    imgPreview: '../../img/hibrido.jpg',
+    layers: ['QUICK*BASE_HIBRIDO_LayerGroup'],
+  },
+];
 
 /**
  * Deja la API lista antes de crear el mapa.
@@ -65,16 +96,38 @@ function anadirPluginsTipos(map, recrear) {
     shareView: true,
   }));
 
-  // Arbol de capas: la capa de la pagina aparece con su leyenda y se puede
-  // apagar para ver el fondo que hay debajo.
-  map.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher());
+  // Selector de capas base: una fila de miniaturas (Callejero / Imagen /
+  // Hibrido). Va antes que el arbol en la esquina TL (`order`), que es el
+  // orden natural: primero el fondo, despues lo que se superpone.
+  map.addPlugin(new IDEE.plugin.miPlugin_baseLayer({
+    layers: CAPAS_BASE_TIPOS,
+    rows: 1,
+    title: 'Capas base',
+    order: 0,
+  }));
+
+  // Arbol de capas superpuestas: la capa de la pagina aparece con su leyenda y
+  // se puede apagar para ver el fondo que hay debajo.
+  map.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher({ order: 1 }));
+
+  // Escala / nivel de zoom y coordenadas del puntero. Sustituye al control
+  // 'scale' de la API, que Cesium no sabe construir y abortaria el 3D.
+  map.addPlugin(new IDEE.plugin.miPlugin_mapInfo({
+    order: 0,
+    openPosition: 'bottom',
+  }));
 
   // Codigo de la capa. El contenido no viaja en el plugin: se lee del
-  // <template id="codigo"> que hay en el propio index.html.
+  // <template id="codigo"> que hay en el propio index.html. El naranja de los
+  // botones es el del resto de visualizadores; la ventana abierta se pinta con
+  // la hoja de la pagina (css/capa.css).
   map.addPlugin(new IDEE.plugin.miPlugin_modal({
     position: 'TR',
     order: 2,
     tooltip: 'Ver el codigo de esta capa',
     contentSelector: '#codigo',
+    color1: { active: '#ffffff', deactive: 'orangered' },
+    color2: { active: '#ffd9c2', deactive: '#ffffff' },
+    color3: { active: '#ffffff', deactive: '#ffffff' },
   }));
 }
