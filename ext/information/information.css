@@ -1,0 +1,426 @@
+/* =====================================================================
+   Plugin de información del punto
+   ---------------------------------------------------------------------
+   Dos partes:
+     1. El botón de la barra de herramientas. No tiene panel: es un único
+        botón de 40x40 con el icono de información de la fuente de la API
+        (`g-cartografia-info`, glifo \e90a). Los colores entran por las
+        variables CSS que inyecta el plugin desde color1/color2/color3.
+     2. El contenido del popup: cabecera de capa, selector de formato
+        (HTML/JSON), selector de plantilla y las fichas/tablas/JSON.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------------
+   Botón
+   --------------------------------------------------------------------- */
+
+.g-information-control {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 0;
+}
+
+.g-information-boton {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  border: 2px solid var(--g-information-borde-inactivo, #ffffff);
+  border-radius: 50%;
+  background-color: var(--g-information-fondo-inactivo, orangered);
+  color: var(--g-information-icono-inactivo, #ffffff);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+/* El icono es el de la propia API, pintado con la fuente g-cartografia. */
+.g-information-boton::before {
+  content: "\e90a";
+  display: block;
+  font-family: "g-cartografia" !important;
+  font-size: 21px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  color: inherit;
+}
+
+.g-information-boton:hover,
+.g-information-boton:focus-visible {
+  filter: brightness(1.06);
+  outline: none;
+}
+
+.g-information-boton.activated {
+  border-color: var(--g-information-borde-activo, #71A7D3);
+  background-color: var(--g-information-fondo-activo, #ffffff);
+  color: var(--g-information-icono-activo, #71A7D3);
+}
+
+/* ---------------------------------------------------------------------
+   Popup
+   --------------------------------------------------------------------- */
+
+/* La API pinta el popup con un ancho fijo cómodo para texto corto. La
+   información de GetFeatureInfo trae tablas y valores largos, así que se
+   ensancha un poco sin pasarse en móvil. */
+.m-popup.g-information-popup {
+  width: min(440px, 92vw);
+  max-width: 92vw;
+}
+
+.g-information-popup .m-body {
+  padding: 0;
+}
+
+.g-information-popup .m-header {
+  padding-right: 30px;
+}
+
+/* La plantilla del popup de la API pinta las pestañas solo con un icono.
+   Como aquí puede haber una pestaña por capa, se añade el nombre de la capa
+   y se deja la barra con scroll horizontal si no cabe. */
+.g-information-popup .m-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 26px;
+  padding: 2px 28px 2px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #eef2f7;
+  border-bottom: 1px solid #dbe2ea;
+}
+
+.g-information-popup .m-tab {
+  display: flex !important;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: auto !important;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px 4px 0 0;
+  color: #475569;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.g-information-popup .m-tab i {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.g-information-popup .m-tab .g-information-tab-texto {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  line-height: 1;
+}
+
+.g-information-popup .m-tab.m-activated {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: inset 0 -2px 0 var(--g-information-borde-activo, #71A7D3);
+}
+
+.g-information-contenido {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: #1f2937;
+}
+
+.g-information-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.g-information-titulo-capa {
+  flex: 1 1 160px;
+  min-width: 0;
+  font-weight: 600;
+  color: #111827;
+}
+
+.g-information-formatos {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.g-information-etiqueta {
+  margin-right: 2px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+}
+
+.g-information-formato {
+  padding: 3px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #334155;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.g-information-formato:hover {
+  border-color: var(--g-information-borde-activo, #71A7D3);
+}
+
+.g-information-formato.activo {
+  border-color: var(--g-information-borde-activo, #71A7D3);
+  background: var(--g-information-borde-activo, #71A7D3);
+  color: #ffffff;
+}
+
+.g-information-cuerpo {
+  padding: 10px 12px 12px;
+  max-height: min(56vh, 520px);
+  overflow: auto;
+}
+
+.g-information-cargando {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 4px;
+  color: #4b5563;
+}
+
+.g-information-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #d1d5db;
+  border-top-color: var(--g-information-borde-activo, #71A7D3);
+  border-radius: 50%;
+  animation: g-information-girar 0.8s linear infinite;
+}
+
+@keyframes g-information-girar {
+  to { transform: rotate(360deg); }
+}
+
+.g-information-vacio {
+  margin: 6px 0;
+  color: #6b7280;
+}
+
+.g-information-error {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-left: 3px solid #dc2626;
+  background: #fef2f2;
+  color: #991b1b;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------------
+   Plantillas
+   --------------------------------------------------------------------- */
+
+.g-information-plantilla {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  color: #4b5563;
+}
+
+.g-information-plantilla select {
+  padding: 3px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.75rem;
+  color: #1f2937;
+}
+
+.g-information-elementos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.g-information-elemento {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  background: #ffffff;
+}
+
+.g-information-elemento-cabecera {
+  margin: -8px -9px 8px;
+  padding: 4px 9px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.g-information-ficha-titulo {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  color: #111827;
+}
+
+.g-information-ficha-campos {
+  margin: 0;
+}
+
+.g-information-ficha-fila {
+  display: grid;
+  grid-template-columns: minmax(90px, 38%) 1fr;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.g-information-ficha-fila:last-child {
+  border-bottom: 0;
+}
+
+.g-information-ficha-fila dt {
+  color: #6b7280;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.g-information-ficha-fila dd {
+  margin: 0;
+  color: #111827;
+  overflow-wrap: anywhere;
+}
+
+.g-information-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.g-information-tabla th,
+.g-information-tabla td {
+  padding: 4px 6px;
+  border: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.g-information-tabla thead th {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.g-information-tabla tbody th {
+  width: 38%;
+  background: #f8fafc;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.g-information-geometria {
+  margin: 8px 0 0;
+  color: #6b7280;
+  font-size: 0.74rem;
+}
+
+.g-information-pre {
+  margin: 0;
+  padding: 8px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: "Consolas", "Menlo", monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------------
+   Salida HTML de los servicios WMS
+   --------------------------------------------------------------------- */
+
+.g-information-html {
+  overflow-x: auto;
+  font-size: 0.78rem;
+}
+
+.g-information-html table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4px 0;
+}
+
+.g-information-html th,
+.g-information-html td {
+  padding: 4px 6px;
+  border: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.g-information-html th {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.g-information-html h1,
+.g-information-html h2,
+.g-information-html h3,
+.g-information-html h4 {
+  margin: 6px 0;
+  font-size: 0.88rem;
+  color: #111827;
+}
+
+.g-information-html p {
+  margin: 4px 0;
+}
+
+.g-information-html img {
+  max-width: 100%;
+  height: auto;
+}
+
+.g-information-html a {
+  color: #1d4ed8;
+  overflow-wrap: anywhere;
+}

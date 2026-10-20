@@ -11,6 +11,9 @@
    - miPlugin_layerSwitcher: arbol de capas superpuestas, para encender y
      apagar la capa de la pagina sin recargar.
    - miPlugin_mapInfo: lectura de escala y coordenadas del puntero.
+   - miPlugin_information: boton de informacion del punto. En WMS consulta
+     GetFeatureInfo (HTML/JSON) y en capas vectoriales lista los elementos
+     del clic con plantillas configurables.
    - miPlugin_modal: el boton que abre el codigo de la capa. El HTML del
      snippet esta en un <template id="codigo"> de cada index.html.
    ===================================================================== */
@@ -115,6 +118,19 @@ function anadirPluginsTipos(map, recrear) {
   map.addPlugin(new IDEE.plugin.miPlugin_mapInfo({
     order: 0,
     openPosition: 'bottom',
+  }));
+
+  // Informacion del punto. No tiene panel: solo un boton que se queda
+  // activado mientras se consultan las capas. En WMS pregunta por
+  // GetFeatureInfo y deja cambiar entre HTML y JSON; en vectoriales lista
+  // todos los elementos del clic con plantillas (ficha, tabla o JSON).
+  map.addPlugin(new IDEE.plugin.miPlugin_information({
+    position: 'TL',
+    order: 2,
+    buttonTitle: 'Consultar información del punto',
+    color1: { active: '#ffffff', deactive: 'orangered' },
+    color2: { active: '#71A7D3', deactive: '#ffffff' },
+    color3: { active: '#71A7D3', deactive: '#ffffff' },
   }));
 
   // Codigo de la capa. El contenido no viaja en el plugin: se lee del

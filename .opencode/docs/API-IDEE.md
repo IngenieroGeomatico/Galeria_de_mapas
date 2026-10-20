@@ -83,6 +83,7 @@ Cada carpeta de `ext/` contiene 1-2 clases `miPlugin_*` (una clase por plugin):
 | `selectorCapas` | `miPlugin_layerSwitcher`, `miPlugin_baseLayer` | `miPlugin_layerSwitcher`, `miPlugin_baseLayer` |
 | `cambioImpl` | `miPlugin_cambioImpl` | `miPlugin_cambioImpl` |
 | `modal` | `miPlugin_modal` | `miPlugin_modal` |
+| `information` | `miPlugin_information` | `miPlugin_information` |
 | `attribution` | `miPlugin_attribution` | `miPlugin_attribution` |
 | `supraplugin` | `miPlugin_supraplugin` | `miPlugin_supraplugin` |
 | `estereoscopia` | `miPlugin_estereoscopia` | `miPlugin_estereoscopia` |
