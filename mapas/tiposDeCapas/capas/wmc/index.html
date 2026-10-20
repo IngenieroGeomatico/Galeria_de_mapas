@@ -46,7 +46,7 @@
     <div class="barra__texto">
       <h1 class="barra__titulo">WMC <span class="barra__clase">IDEE.layer.WMC</span></h1>
       <p class="barra__desc">
-        Un contexto de mapas OGC: un XML que ya trae las capas montadas y el encuadre. La API lo abre, añade lo que describe y lleva la vista a su sitio.
+        Un contexto de mapas OGC: un XML que ya trae las capas montadas y el encuadre. La API lo abre, añade lo que describe y lleva la vista a su sitio. En 3D esta versión de la API no trae la clase WMC, así que el cambio deja solo el globo.
       </p>
     </div>
   </header>
@@ -64,6 +64,11 @@
       recalcula las resoluciones del mapa. Por eso el mapa se declara con
       <code>projection</code> y <code>resolutions</code> explícitas: así el contexto no le
       cambia el sistema de referencia ni deja la vista sin zoom.
+    </p>
+    <p>
+      En 3D no hay ficha que enseñar: la implementación de Cesium de esta versión no trae
+      <code>WMC</code> y el constructor lanza. La página lo comprueba antes de crear la capa y
+      deja el globo con el fondo, para que el cambio 2D/3D siga funcionando.
     </p>
     <pre class="codigo"><code>// El WMC trae su encuadre y su proyeccion: el mapa se declara con
 // projection y resolutions para que no se las cambie.
