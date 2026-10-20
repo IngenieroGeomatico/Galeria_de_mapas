@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <title>WMTS | Tipos de capa</title>
-  <meta name="description" content="Capa WMTS de la API-IDEE: teselas pregeneradas con su matriz de niveles, en 2D y en 3D.">
+  <title>WMTS DANA | Tipos de capa</title>
+  <meta name="description" content="Capa WMTS de la API-IDEE con los modelos digitales de elevaciones de la DANA del IGN, en 2D y en 3D.">
 
   <link rel="icon" href="data:,">
 
@@ -55,9 +55,9 @@
       <span aria-hidden="true">&#8592;</span> Tipos de capa
     </a>
     <div class="barra__texto">
-      <h1 class="barra__titulo">WMTS <span class="barra__clase">IDEE.layer.WMTS</span></h1>
+      <h1 class="barra__titulo">WMTS DANA <span class="barra__clase">IDEE.layer.WMTS</span></h1>
       <p class="barra__desc">
-        Teselas pregeneradas por el servicio, con su matriz de niveles. La API lee las capacidades del WMTS para saber qué capas, formatos y estilos ofrece antes de pedir la primera tesela.
+        Modelos digitales de elevaciones de la DANA (29/10/2024) del IGN. El servicio publica cuatro capas: MDT y MDS, en versión preevento y en la del Barranc de Torrent (11/11/2024). La API lee las capacidades del WMTS y el árbol de capas permite encender una cada vez para compararlas.
       </p>
     </div>
   </header>
@@ -68,16 +68,32 @@
   <template id="codigo">
     <h3>IDEE.layer.WMTS</h3>
     <p>
-      El WMTS se declara con la URL del servicio y el nombre de la capa. La API descarga las capacidades (<code>GetCapabilities</code>) y toma de ahí la matriz de teselas y el formato.
+      El WMTS se declara con la URL del servicio y el nombre de la capa. La API descarga las capacidades (<code>GetCapabilities</code>) y toma de ahí la matriz de teselas, el formato y el estilo. Este servicio publica cuatro capas; se añaden todas y solo una queda visible al arrancar.
     </p>
-    <pre class="codigo"><code>const capa = new IDEE.layer.WMTS({
-  url: 'https://www.ign.es/wmts/pnoa-ma?',
-  name: 'OI.OrthoimageCoverage',
-  matrixSet: 'GoogleMapsCompatible',
-  legend: 'Ortofoto PNOA (WMTS)',
-}, {});
+    <pre class="codigo"><code>const URL_MDE_DANA = 'https://wmts-mde-dana.idee.es/dana?';
 
-mapajs.addLayers(capa);</code></pre>
+const CAPAS_MDE_DANA = [
+  { name: 'RectifiedGridCoveragePre',
+    legend: 'MDS Preevento', visible: false },
+  { name: 'RectifiedGridCoverageBncTorrent',
+    legend: 'MDS Barranc de Torrent (11/11/2024)', visible: true },
+  { name: 'EL.ElevationGridCoveragePre',
+    legend: 'MDT Preevento', visible: false },
+  { name: 'EL.ElevationGridCoverageBncTorrent',
+    legend: 'MDT Barranc de Torrent (11/11/2024)', visible: false },
+];
+
+CAPAS_MDE_DANA.forEach(function (capa) {
+  mapajs.addLayers(new IDEE.layer.WMTS({
+    url: URL_MDE_DANA,
+    name: capa.name,
+    matrixSet: 'GoogleMapsCompatible',
+    legend: capa.legend,
+  }, {
+    visibility: capa.visible,
+    opacity: 0.9,
+  }));
+});</code></pre>
   </template>
 
   <script src="../../js/comun.js"></script>
