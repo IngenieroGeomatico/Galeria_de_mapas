@@ -1,6 +1,6 @@
 # Información del punto
 
-Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. No tiene panel: es un único botón que se queda activado mientras la herramienta está en uso. Cada clic abre un popup con una vista por capa y, dentro de cada vista, tantos elementos como haya en ese punto. Si hay varias capas, un selector en la cabecera permite cambiar de capa sin scroll horizontal.
+Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. No tiene panel: es un único botón que se queda activado mientras la herramienta está en uso. Cada clic abre un popup con una vista por capa y, dentro de cada vista, tantos objetos geográficos como haya en ese punto. Si hay varias capas, un selector en la cabecera permite cambiar de capa sin scroll horizontal.
 
 ## Características
 
@@ -9,11 +9,11 @@ Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. N
 - **WMS**: pide `GetCapabilities` y usa `GetFeatureInfo`. Si el servicio declara JSON y HTML, el popup permite alternar entre los dos sin volver a pinchar. Si no declara ninguno de los dos, se usan texto o XML como respaldo.
 - **Bandas en WMS ráster**: si la respuesta de `GetFeatureInfo` es ráster (no trae features con geometría), se añade la pestaña `Bandas`. Muestra los canales **RGBA de la imagen renderizada** en el píxel pulsado, no el valor numérico de `GetFeatureInfo`. Para ello pide un `GetMap` de 3×3 píxeles centrado en el clic, con el mismo `BBOX` y resolución que la consulta, y lee el píxel central del PNG. La petición es perezosa: se lanza al activar la pestaña, no en el clic inicial de todas las capas. En capas WMS vectoriales no aparece, porque el píxel es el símbolo y no una banda.
 - **Capas vectoriales**: lee los features que caen bajo el clic en 2D y, cuando la implementación los dibuja, también en 3D.
-- **GeoTIFF**: lee los valores reales de las bandas en el punto. En 2D usa las imágenes que ya tiene abiertas el origen `GeoTIFF` de OpenLayers; en 3D usa el `LectorGeoTIFF` de `ext/geotiffLayer`. El valor se presenta como un elemento con una propiedad por banda y funciona con las plantillas `ficha`, `tabla` y `json`.
+- **GeoTIFF**: lee los valores reales de las bandas en el punto. En 2D usa las imágenes que ya tiene abiertas el origen `GeoTIFF` de OpenLayers; en 3D usa el `LectorGeoTIFF` de `ext/geotiffLayer`. El valor se presenta como un objeto geográfico con una propiedad por banda y funciona con las plantillas `ficha`, `tabla` y `json`.
 - **Capa base**: lee el color RGB(A) del píxel de la capa base (TMS, WMTS, XYZ, OSM o el grupo Híbrido). En 2D usa la tesela que pinta OpenLayers; en 3D el `imageryProvider` de Cesium. En los grupos se componen las hijas visibles de abajo arriba.
 - **Sin información, sin capa en el popup**: se omite la capa si no devuelve features, si `GetFeatureInfo` responde vacío, si el GeoTIFF da un píxel transparente o todo nodata, o si la capa base es transparente en ese punto.
 - **Orden de capas**: de mayor a menor z-index, para que la primera sea la capa que se ve arriba. La capa base se considera siempre el fondo y queda al final.
-- **Varias capas y varios elementos**: todas las capas aparecen en el selector de la cabecera y todos los features (o los canales RGBA de la imagen WMS) del punto se listan dentro de la capa elegida.
+- **Varias capas y varios objetos geográficos**: todas las capas aparecen en el selector de la cabecera y todos los features (o los canales RGBA de la imagen WMS) del punto se listan dentro de la capa elegida.
 - **Plantillas configurables**: `ficha`, `tabla` y `json` de serie; se pueden añadir o sustituir por constructor o con `registrarPlantilla()`.
 - **`extract` sincronizado**: mientras el plugin está añadido al mapa, las capas vectoriales llevan `extract=false` si la herramienta está desactivada y `extract=true` si está activa. Las capas añadidas después se sincronizan con `ADDED_LAYER`/`ADDED_LAYERGROUP`; `destroy()` restaura el valor original.
 - **Estado 2D/3D**: implementa `getState()`/`setState(state, map)` para conservar la activación, las preferencias por capa y el popup abierto al cambiar de implementación.
@@ -71,11 +71,11 @@ El plugin se expone como `IDEE.plugin.miPlugin_information`, `M.plugin.miPlugin_
 
 Una plantilla es un objeto `{ id, nombre, descripcion, render(elemento, contexto) }`. `render` devuelve HTML (o un nodo con `outerHTML`). Las tres plantillas de serie son `ficha`, `tabla` y `json`.
 
-`elemento` contiene:
+El objeto geográfico (`elemento`) contiene:
 
 - `propiedades`: objeto con los campos originales.
 - `campos`: array de `{ clave, etiqueta, valor, texto }` ya filtrado por `camposOcultos` y `mostrarVacios`.
-- `titulo`: nombre legible del elemento.
+- `titulo`: nombre legible del objeto geográfico.
 - `id`: identificador del feature, si lo tiene.
 - `geometria`: `{ tipo, coordenadas }` o `{ tipo }` cuando la implementación 3D no expone las coordenadas; en los GeoTIFF es `null` y el punto queda solo en `crudo`.
 - `crudo`: feature GeoJSON original, si está disponible.
@@ -84,7 +84,7 @@ Una plantilla es un objeto `{ id, nombre, descripcion, render(elemento, contexto
 
 En los GeoTIFF, `propiedades` y `campos` contienen una entrada por banda (`Banda 1`, `Banda 2`, …) con el valor real leído en el píxel. `crudo` es un `Feature` sintético con esas propiedades, el `SRC`, el píxel y el tamaño de la imagen.
 
-En WMS ráster, la pestaña `Bandas` construye un elemento `Canales de la imagen` con las propiedades `R`, `G`, `B`, `A` y `Hex`, y `fuente: 'wms'`. Los cuatro canales son los del PNG que el servicio pinta en ese punto; `A` puede ser `0` si el píxel es transparente. El valor numérico de origen (`GRAY_INDEX`, `value_0`…) sigue disponible en las pestañas `JSON` y `HTML` de `GetFeatureInfo`.
+En WMS ráster, la pestaña `Bandas` construye un objeto geográfico `Canales de la imagen` con las propiedades `R`, `G`, `B`, `A` y `Hex`, y `fuente: 'wms'`. Los cuatro canales son los del PNG que el servicio pinta en ese punto; `A` puede ser `0` si el píxel es transparente. El valor numérico de origen (`GRAY_INDEX`, `value_0`…) sigue disponible en las pestañas `JSON` y `HTML` de `GetFeatureInfo`.
 
 `contexto` ofrece:
 
@@ -92,7 +92,7 @@ En WMS ráster, la pestaña `Bandas` construye un elemento `Canales de la imagen
 - `texto(valor)`: convierte un valor a texto legible.
 - `etiqueta(clave)`: etiqueta configurada o nombre humanizado.
 - `campo(clave)`: valor de un campo concreto.
-- `json()`: JSON formateado del elemento.
+- `json()`: JSON formateado del objeto geográfico.
 - `indice`, `total`, `capa`, `formato`, `plantilla` y `plugin`.
 
 Ejemplo de plantilla propia:
@@ -102,7 +102,7 @@ mapajs.addPlugin(new IDEE.plugin.miPlugin_information({
   plantillas: [{
     id: 'compacta',
     nombre: 'Compacta',
-    descripcion: 'Solo el nombre del elemento.',
+    descripcion: 'Solo el nombre del objeto geográfico.',
     render: function (elemento, ctx) {
       return '<p class="mi-compacta">' + ctx.escapar(elemento.titulo) + '</p>';
     },
@@ -130,7 +130,7 @@ info.registrarPlantilla({
 - `GeoTIFF` leyendo las bandas del fichero en el píxel del clic. La lectura usa la transformación afín completa (`ModelTransformation`), no solo el origen y la resolución, para no desviar el píxel en los GeoTIFF rotados.
 - `GeoJSON`, `Vector`, `KML`, `WFS`, `OGCAPIFeatures`, `MVT`, `MBTilesVector`, `MapLibre`, `GenericVector` y `WKT` como capas vectoriales.
 
-En 3D la consulta vectorial depende de que la implementación dibuje la capa y de que sus entidades estén en la posición correcta. `MVT`, por ejemplo, no se dibuja en Cesium en esta versión de la API y el popup mostrará que no hay información. La ficha `mapas/tiposDeCapas/capas/vector` declara sus geometrías en EPSG:3857; Cesium las interpreta como grados, así que en 3D la capa no está en Madrid y la consulta no encuentra esos elementos. Es una limitación de esa ficha/API, no del plugin.
+En 3D la consulta vectorial depende de que la implementación dibuje la capa y de que sus entidades estén en la posición correcta. `MVT`, por ejemplo, no se dibuja en Cesium en esta versión de la API y el popup mostrará que no hay información. La ficha `mapas/tiposDeCapas/capas/vector` declara sus geometrías en EPSG:3857; Cesium las interpreta como grados, así que en 3D la capa no está en Madrid y la consulta no encuentra esos objetos geográficos. Es una limitación de esa ficha/API, no del plugin.
 
 Los servicios de teselas (`TMS`, `WMTS`, `XYZ`, `OSM`) no permiten pedir una imagen concreta de una capa en un punto, así que no ofrecen la pestaña `Bandas`. En WMS sí: la pestaña lee los canales RGBA de la imagen que el servicio renderiza en el píxel pulsado, no el color compuesto de la pantalla. El valor numérico de origen, si el servicio lo publica, sigue en `GetFeatureInfo` (JSON/HTML). La lectura de la imagen necesita CORS en el `GetMap`, igual que `GetFeatureInfo`.
 

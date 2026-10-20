@@ -269,7 +269,7 @@
     {
       id: 'ficha',
       nombre: 'Ficha',
-      descripcion: 'Título y lista de campos del elemento, uno por línea.',
+      descripcion: 'Título y lista de campos del objeto geográfico, uno por línea.',
       render: function (elemento, ctx) {
         var campos = elemento.campos || [];
         var html = '<div class="g-information-ficha">';
@@ -322,7 +322,7 @@
     {
       id: 'json',
       nombre: 'JSON',
-      descripcion: 'El elemento original formateado como JSON.',
+      descripcion: 'El objeto geográfico original formateado como JSON.',
       render: function (elemento, ctx) {
         return '<pre class="g-information-pre">' + ctx.escapar(ctx.json()) + '</pre>';
       },
@@ -432,8 +432,8 @@
             'información encontrada.</p>' +
             '<p>En los servicios WMS se usa la operación GetFeatureInfo y se ' +
             'puede alternar entre la salida HTML y JSON si el servicio ofrece ' +
-            'las dos. En las capas vectoriales se listan todos los elementos ' +
-            'del punto y en los GeoTIFF se muestran los valores de sus bandas. ' +
+            'las dos. En las capas vectoriales se listan todos los objetos ' +
+            'geográficos del punto y en los GeoTIFF se muestran los valores de sus bandas. ' +
             'En todos los casos se pueden cambiar las plantillas de ' +
             'presentación.</p>' +
             '</div>';
@@ -4049,8 +4049,8 @@
           features.forEach(function (elemento, indice) {
             html += '<article class="g-information-elemento">';
             if (features.length > 1) {
-              html += '<div class="g-information-elemento-cabecera">Elemento ' +
-                (indice + 1) + ' de ' + features.length + '</div>';
+              html += '<div class="g-information-elemento-cabecera">' +
+                'Objeto geográfico ' + (indice + 1) + ' de ' + features.length + '</div>';
             }
             html += this._renderPlantilla(elemento, resultado, indice);
             html += '</article>';
