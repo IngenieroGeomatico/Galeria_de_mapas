@@ -10,7 +10,10 @@
 
      - En capas WMS se pide GetFeatureInfo al servicio. Si el servicio
        declara salida JSON y HTML en sus capacidades, el popup ofrece las dos
-       y se puede cambiar de una a otra sin volver a pinchar.
+       y se puede cambiar de una a otra sin volver a pinchar. En las capas
+       ráster se añade además Bandas, que lee los canales RGBA del PNG que
+       el servicio renderiza en el píxel (GetMap de 3x3 al activar la
+       pestaña, no en el clic inicial).
      - En capas vectoriales (GeoJSON, Vector, KML, WFS, OGC API Features,
        MVT, MBTiles vectorial, MapLibre, GenericVector y WKT) se leen los
        features que caen bajo el clic, tanto en 2D como en 3D cuando la
@@ -18,8 +21,9 @@
      - En capas GeoTIFF se leen los valores reales de sus bandas en el punto,
        en 2D (imágenes del origen de OpenLayers) y en 3D (LectorGeoTIFF de
        ext/geotiffLayer).
-     - Con varias capas se abre una pestaña por capa y, dentro de cada una,
-       se listan TODOS los features del punto (no solo el primero).
+     - Con varias capas se abre una vista por capa, con un selector en la
+       cabecera para cambiar sin scroll horizontal. Dentro de cada vista se
+       listan TODOS los features del punto (no solo el primero).
      - La salida JSON, los features vectoriales y las bandas del ráster se
        pintan con plantillas configurables. El plugin trae tres (ficha, tabla
        y json) y admite plantillas propias por constructor o con
@@ -1301,6 +1305,27 @@
               plantilla: pref.plantilla || null,
             };
           }
+
+          // La pestaña Bandas solo tiene sentido en capas WMS ráster: lee
+          // los canales RGBA de la imagen en el píxel pulsado. En una capa
+          // vectorial el píxel es el símbolo, no una banda, así que se deja
+          // la ficha de GetFeatureInfo y no se ofrece la pestaña.
+          // La imagen se pide de forma perezosa al abrir la pestaña, no en
+          // este momento: con 18 capas WMS no conviene lanzar 18 GetMap más.
+          var esVector = this._resultadoWMSesVector(datos);
+          if (!esVector && this._resultadoTieneContenido(resultado)) {
+            resultado.porFormato.bandas = { estado: 'pendiente' };
+            if (!resultado.formatos.some(function (f) { return f.id === 'bandas'; })) {
+              resultado.formatos.unshift({ id: 'bandas', etiqueta: 'Bandas' });
+            }
+            var prefActual = this._preferencias[clave] || {};
+            if (prefActual.formato === 'bandas' || !prefActual.formato) {
+              // En una capa ráster WMS los canales de la imagen son la
+              // información más directa; en una vectorial no se llega aquí.
+              resultado.formatoActual = 'bandas';
+            }
+          }
+
           return resultado;
         } catch (e) {
           ultimoError = e;
@@ -1314,6 +1339,175 @@
       resultado.error = this._mensajeError(ultimoError);
       resultado.formatoActual = candidatos.length ? candidatos[0].id : null;
       return resultado;
+    }
+
+    // ===================================================================
+    //  Canales RGBA de la imagen WMS
+    // ===================================================================
+
+    /**
+     * Construye la URL de un GetMap de `tamano` x `tamano` píxeles centrado
+     * en el punto. Se usa el mismo BBOX sintético que GetFeatureInfo, con la
+     * resolución real de la vista, para leer el color del píxel pulsado.
+     */
+    _urlGetMap(capa, punto, caps, mpp, tamano) {
+      var url = this._urlServicio(capa);
+      if (!url) return '';
+      var version = (caps && caps.version) || '1.3.0';
+      var crs = (caps && caps.crsPreferido) || this._crsPreferido(caps);
+      var n = (isFinite(tamano) && tamano > 0) ? Math.round(tamano) : 3;
+      var metros = (isFinite(mpp) && mpp > 0) ? mpp : 1;
+      var mitadX = (n * metros) / 2;
+      var mitadY = mitadX;
+      var bbox = null;
+
+      if (crs === 'EPSG:4326') {
+        var lon = punto.lon;
+        var lat = punto.lat;
+        var mitadLon = mitadX / (111320 * Math.max(0.05, Math.cos(lat * Math.PI / 180)));
+        var mitadLat = mitadY / 110540;
+        var minLon = lon - mitadLon;
+        var maxLon = lon + mitadLon;
+        var minLat = lat - mitadLat;
+        var maxLat = lat + mitadLat;
+        bbox = (version === '1.3.0')
+          ? [minLat, minLon, maxLat, maxLon]
+          : [minLon, minLat, maxLon, maxLat];
+      } else {
+        bbox = [
+          punto.x - mitadX,
+          punto.y - mitadY,
+          punto.x + mitadX,
+          punto.y + mitadY,
+        ];
+      }
+
+      var nombre = Array.isArray(capa.name) ? capa.name.join(',') : capa.name;
+      var u;
+      try {
+        u = new URL(url, global.location.href);
+      } catch (e) {
+        return '';
+      }
+      u.searchParams.set('SERVICE', 'WMS');
+      u.searchParams.set('VERSION', version);
+      u.searchParams.set('REQUEST', 'GetMap');
+      u.searchParams.set('LAYERS', nombre);
+      u.searchParams.set('STYLES', '');
+      u.searchParams.set('FORMAT', 'image/png');
+      u.searchParams.set('TRANSPARENT', 'TRUE');
+      u.searchParams.set('WIDTH', String(n));
+      u.searchParams.set('HEIGHT', String(n));
+      u.searchParams.set('BBOX', bbox.join(','));
+      if (version === '1.3.0') u.searchParams.set('CRS', crs);
+      else u.searchParams.set('SRS', crs);
+      return u.toString();
+    }
+
+    /**
+     * Lee el canal RGBA del píxel central de la imagen WMS. Devuelve null si
+     * la imagen no se puede leer (CORS, error) o si se agota el tiempo. Un
+     * píxel transparente sí se devuelve: el valor de A=0 también es un canal
+     * de la imagen y el usuario ha pedido ver RGBA. No lanza: la pestaña
+     * Bandas es opcional y no debe tumbar la información de GetFeatureInfo.
+     */
+    async _canalesWMS(capa, punto, caps, mpp) {
+      try {
+        var url = this._urlGetMap(capa, punto, caps, mpp, 3);
+        if (!url) return null;
+        var color = await this._leerPixelUrl(url, 0.5, 0.5, 8000);
+        if (!color) return null;
+        return {
+          r: Math.max(0, Math.min(255, Math.round(color.r))),
+          g: Math.max(0, Math.min(255, Math.round(color.g))),
+          b: Math.max(0, Math.min(255, Math.round(color.b))),
+          a: Math.max(0, Math.min(255, Math.round(color.a))),
+        };
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /** Elemento «Canales de la imagen» que pintan las plantillas. */
+    _elementoCanalesWMS(capa, color, punto) {
+      var r = color.r;
+      var g = color.g;
+      var b = color.b;
+      var a = color.a;
+      var hex = this._hexColor(r, g, b);
+      var propiedades = { R: r, G: g, B: b, A: a, Hex: hex };
+      var campos = [
+        { clave: 'R', etiqueta: 'R', valor: r, texto: String(r) },
+        { clave: 'G', etiqueta: 'G', valor: g, texto: String(g) },
+        { clave: 'B', etiqueta: 'B', valor: b, texto: String(b) },
+        { clave: 'A', etiqueta: 'A', valor: a, texto: String(a) },
+        { clave: 'Hex', etiqueta: 'Color', valor: hex, texto: hex },
+      ];
+      return {
+        id: null,
+        titulo: 'Canales de la imagen',
+        propiedades: propiedades,
+        campos: campos,
+        geometria: null,
+        crudo: {
+          type: 'Feature',
+          id: null,
+          geometry: punto ? { type: 'Point', coordinates: [punto.lon, punto.lat] } : null,
+          properties: propiedades,
+        },
+        fuente: 'wms',
+        capa: {
+          name: capa ? capa.name : '',
+          legend: capa ? capa.legend : '',
+          type: capa ? capa.type : '',
+          idLayer: capa ? capa.idLayer : '',
+        },
+      };
+    }
+
+    /** ¿El GetFeatureInfo ha devuelto features con geometría (vectorial)? */
+    _resultadoWMSesVector(datos) {
+      if (!datos || datos.tipo !== 'json' || !Array.isArray(datos.features)) return false;
+      return datos.features.some(function (elemento) {
+        return !!(elemento && elemento.geometria
+          && (elemento.geometria.tipo || elemento.geometria.coordenadas));
+      });
+    }
+
+    /**
+     * Carga de forma perezosa los canales RGBA de la imagen WMS. Solo se
+     * llama cuando la pestaña Bandas de una capa ráster pasa a estar activa,
+     * de modo que un clic con 18 capas WMS no lanza 18 GetMap adicionales.
+     * La petición se guarda en el propio resultado: si se cambia de capa
+     * mientras carga, el estado sigue disponible al volver.
+     */
+    _cargarCanalesWMS(resultado) {
+      if (!resultado || resultado.tipo !== 'wms') return;
+      var estado = resultado.porFormato && resultado.porFormato.bandas;
+      if (estado && (estado.estado === 'ok' || estado.estado === 'cargando')) return;
+
+      var self = this;
+      var generacion = this._generacion;
+      resultado.porFormato.bandas = { estado: 'cargando' };
+      if (resultado.formatoActual === 'bandas') this._actualizarTab(resultado);
+
+      this._canalesWMS(resultado.capa, resultado.punto, resultado.caps, resultado.mpp)
+        .then(function (color) {
+          if (generacion !== self._generacion || self._resultados.indexOf(resultado) === -1) return;
+          if (color) {
+            resultado.porFormato.bandas = {
+              estado: 'ok',
+              tipo: 'json',
+              features: [self._elementoCanalesWMS(resultado.capa, color, resultado.punto)],
+            };
+          } else {
+            resultado.porFormato.bandas = {
+              estado: 'error',
+              error: 'No se pudo leer el píxel de la imagen WMS en este punto.',
+            };
+          }
+          self._actualizarTab(resultado);
+        });
     }
 
     // ===================================================================
@@ -2024,7 +2218,7 @@
       return this._leerPixelUrl(String(url), u, v);
     }
 
-    _leerPixelUrl(url, u, v) {
+    _leerPixelUrl(url, u, v, tiempoMaximo) {
       return new Promise(function (resolve) {
         var terminado = false;
         var temporizador = null;
@@ -2035,7 +2229,8 @@
           resolve(color || null);
         };
         if (!url) { fin(null); return; }
-        temporizador = setTimeout(function () { fin(null); }, 8000);
+        var espera = (isFinite(tiempoMaximo) && tiempoMaximo > 0) ? tiempoMaximo : 8000;
+        temporizador = setTimeout(function () { fin(null); }, espera);
 
         var imagen = new Image();
         imagen.crossOrigin = 'anonymous';
@@ -3388,11 +3583,67 @@
       for (var i = 0; i < tabs.length; i += 1) {
         tabs[i].classList.toggle('m-activated', i === indice);
       }
+      var selector = root.querySelector('.g-information-selector-select');
+      if (selector) selector.value = String(indice);
       try {
         this._popup.switchTab(indice);
       } catch (e) {
         /* pestaña fuera de rango */
       }
+
+      // La pestaña Bandas de una capa WMS ráster carga su imagen al pasar a
+      // estar activa, no durante la consulta inicial de todas las capas.
+      var resultado = this._resultados && this._resultados[indice];
+      if (resultado && resultado.formatoActual === 'bandas') {
+        this._cargarCanalesWMS(resultado);
+      }
+    }
+
+    /**
+     * Sustituye la fila de pestañas por un selector de capa en la cabecera.
+     * El popup de la API sigue controlando el contenido con switchTab(); el
+     * selector solo llama a _activarTab() con el índice elegido.
+     */
+    _crearSelectorCapas(header, resultados) {
+      var self = this;
+      var contenedor = document.createElement('label');
+      contenedor.className = 'g-information-selector';
+
+      var icono = document.createElement('i');
+      icono.className = 'g-cartografia-capas g-information-selector-icono';
+      icono.setAttribute('aria-hidden', 'true');
+
+      var select = document.createElement('select');
+      select.className = 'g-information-selector-select';
+      select.setAttribute('aria-label', 'Capa consultada');
+      resultados.forEach(function (resultado, indice) {
+        var titulo = self._tituloCapa(resultado.capa);
+        var opcion = document.createElement('option');
+        opcion.value = String(indice);
+        opcion.textContent = titulo;
+        opcion.title = titulo;
+        select.appendChild(opcion);
+      });
+      select.value = String(this._indiceTabActivo());
+
+      select.addEventListener('change', function () {
+        var indice = Number(select.value);
+        if (!isFinite(indice)) return;
+        self._activarTab(indice);
+      });
+
+      // El header del popup de la API escucha clics para plegarlo. El
+      // selector no debe propagar los suyos.
+      ['click', 'mousedown', 'pointerdown', 'touchstart'].forEach(function (tipo) {
+        contenedor.addEventListener(tipo, function (evt) {
+          evt.stopPropagation();
+        });
+      });
+
+      contenedor.appendChild(icono);
+      contenedor.appendChild(select);
+      header.classList.add('g-information-con-selector');
+      header.insertBefore(contenedor, header.firstChild);
     }
 
     _marcarPopup(popup, resultados) {
@@ -3404,16 +3655,24 @@
           if (!root) return;
           root.classList.add('g-information-popup');
 
-          // La plantilla del popup de la API pinta las pestañas solo con el
-          // icono. Con varias capas eso deja una fila de iconos idénticos,
-          // así que se añade el nombre de la capa (truncado por CSS) y el
-          // título completo como tooltip/aria-label.
-          if (!resultados || !resultados.length || root.getAttribute('data-info-etiquetado') === '1') return;
           var tabs = root.querySelectorAll('.m-tab');
           // El DOM del popup puede tardar un instante en montar las
           // pestañas. Si aún no están, no se marca como etiquetado para que
           // los reintentos de 0 y 120 ms lo hagan.
           if (!tabs.length) return;
+
+          // La fila de pestañas de la API obliga a hacer scroll horizontal
+          // cuando hay varias capas. Se oculta y, si hay más de una, se
+          // sustituye por un selector en la cabecera del popup. Con una sola
+          // capa no hace falta navegación.
+          var header = root.querySelector('.m-content > .m-header');
+          if (resultados && resultados.length > 1 && !header) return;
+          root.classList.add('g-information-tabs-ocultas');
+
+          if (!resultados || !resultados.length || root.getAttribute('data-info-etiquetado') === '1') return;
+
+          // Se conserva el nombre de la capa en cada pestaña (aunque la fila
+          // esté oculta) por si alguna vez se vuelve a mostrar.
           for (var i = 0; i < tabs.length; i += 1) {
             var resultado = resultados[i];
             if (!resultado) continue;
@@ -3427,12 +3686,52 @@
               tabs[i].appendChild(texto);
             }
           }
+
+          if (resultados.length > 1 && header
+            && !header.querySelector('.g-information-selector')) {
+            self._crearSelectorCapas(header, resultados);
+          }
+
           root.setAttribute('data-info-etiquetado', '1');
         } catch (e) { /* popup ya cerrado */ }
       };
       marcar();
       setTimeout(marcar, 0);
       setTimeout(marcar, 120);
+    }
+
+    /**
+     * El popup de la API nace en estado `m-collapsed` (solo la cabecera) y
+     * se despliega pulsando la fila de pestañas. El plugin oculta esa fila
+     * para poner un selector, así que hay que abrirlo explícitamente: si no,
+     * el cuerpo queda con altura 0 y la información no se ve.
+     */
+    _expandirPopup(popup) {
+      if (!popup) return;
+      try {
+        var elemento = popup.element_;
+        // El popup vive dentro de .ol-overlaycontainer-stopevent, que la API
+        // deja con z-index 0. La barra de coordenadas de ext/mapInfo usa 850,
+        // así que sin elevar este contenedor tapa el final del popup.
+        var contenedor = elemento && elemento.closest
+          ? elemento.closest('.ol-overlaycontainer-stopevent')
+          : null;
+        if (contenedor) contenedor.classList.add('g-information-overlays');
+      } catch (e) { /* sin contenedor de overlays */ }
+
+      try {
+        if (typeof popup.setStatus_ === 'function') {
+          popup.setStatus_('m-default');
+          return;
+        }
+      } catch (e2) { /* se intenta con las clases */ }
+      try {
+        var elemento2 = popup.element_;
+        if (!elemento2) return;
+        elemento2.classList.remove('m-collapsed', 'm-full');
+        elemento2.classList.add('m-default');
+        popup.status_ = 'm-default';
+      } catch (e3) { /* popup ya cerrado */ }
     }
 
     _cerrarPopup() {
@@ -3443,6 +3742,12 @@
           /* el popup ya no está */
         }
       }
+      try {
+        var contenedor = document.querySelector(
+          '.ol-overlaycontainer-stopevent.g-information-overlays'
+        );
+        if (contenedor) contenedor.classList.remove('g-information-overlays');
+      } catch (e) { /* sin contenedor de overlays */ }
       this._popup = null;
       this._popupAbierto = false;
     }
@@ -3513,6 +3818,7 @@
         this._popupAbierto = false;
         return;
       }
+      this._expandirPopup(popup);
       this._marcarPopup(popup);
     }
 
@@ -3544,6 +3850,7 @@
         this._popupAbierto = false;
         return;
       }
+      this._expandirPopup(popup);
       this._marcarPopup(popup);
     }
 
@@ -3578,6 +3885,7 @@
         this._popupAbierto = false;
         return;
       }
+      this._expandirPopup(popup);
       this._marcarPopup(popup, resultados);
 
       var indice = 0;
@@ -3602,6 +3910,10 @@
       if (resultado.tipo === 'error') return !!resultado.error;
       var estado = resultado.porFormato && resultado.porFormato[resultado.formatoActual];
       if (!estado) return !!resultado.error;
+      // La pestaña Bandas se rellena después, al activarla. El contenido de
+      // GetFeatureInfo ya se ha comprobado antes de ofrecerla, así que una
+      // capa con Bandas pendientes no debe descartarse.
+      if (estado.estado === 'pendiente' || estado.estado === 'cargando') return true;
       if (estado.estado === 'error') return true;
       if (estado.tipo === 'html') {
         return !!(estado.html && String(estado.html).trim())
@@ -3676,9 +3988,12 @@
       var plantillaActual = this._plantillaPara(resultado);
       var estado = resultado.porFormato ? resultado.porFormato[formatoActual] : null;
       var cargando = resultado.cargandoFormato === formatoActual
-        || (estado && estado.estado === 'cargando');
+        || (estado && (estado.estado === 'cargando' || estado.estado === 'pendiente'));
       var error = resultado.error
         || (estado && estado.estado === 'error' ? estado.error : null);
+      var textoCarga = formatoActual === 'bandas'
+        ? 'Leyendo los canales de la imagen…'
+        : 'Obteniendo información…';
 
       var html = '<div class="g-information-contenido" data-info-tab="' + escaparHtml(uid) + '">';
       html += '<div class="g-information-cabecera">';
@@ -3704,7 +4019,7 @@
       if (cargando) {
         html += '<div class="g-information-cargando">' +
           '<span class="g-information-spinner" aria-hidden="true"></span>' +
-          ' Obteniendo información…</div>';
+          ' ' + escaparHtml(textoCarga) + '</div>';
       } else if (error) {
         html += '<p class="g-information-error">' + escaparHtml(error) + '</p>';
       } else if (estado && estado.tipo === 'html') {
@@ -3855,6 +4170,21 @@
     _cambiarFormato(resultado, formatoId) {
       var formato = (resultado.formatos || []).find(function (f) { return f.id === formatoId; });
       if (!formato) return;
+
+      if (formatoId === 'bandas') {
+        var prefBandas = this._preferencias[resultado.clave] || {};
+        this._preferencias[resultado.clave] = {
+          formato: 'bandas',
+          plantilla: prefBandas.plantilla || null,
+        };
+        resultado.formatoActual = 'bandas';
+        var estadoBandas = resultado.porFormato.bandas;
+        if (!estadoBandas || estadoBandas.estado === 'ok' || estadoBandas.estado === 'error') {
+          this._actualizarTab(resultado);
+        }
+        this._cargarCanalesWMS(resultado);
+        return;
+      }
 
       var estadoPrevio = resultado.porFormato[formatoId];
       if (resultado.formatoActual === formatoId && estadoPrevio

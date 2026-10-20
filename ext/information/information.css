@@ -98,6 +98,14 @@
   max-width: 92vw;
 }
 
+/* El popup se monta dentro de .ol-overlaycontainer-stopevent, que la API
+   deja con z-index 0. La barra de coordenadas de ext/mapInfo usa z-index 850
+   y, sin elevar este contenedor mientras el popup está abierto, tapa el
+   final del cuerpo. La clase la pone y la quita el plugin. */
+.ol-overlaycontainer-stopevent.g-information-overlays {
+  z-index: 1200 !important;
+}
+
 .g-information-popup .m-body {
   padding: 0;
 }
@@ -106,58 +114,71 @@
   padding-right: 30px;
 }
 
-/* La plantilla del popup de la API pinta las pestañas solo con un icono.
-   Como aquí puede haber una pestaña por capa, se añade el nombre de la capa
-   y se deja la barra con scroll horizontal si no cabe. */
-.g-information-popup .m-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 2px;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-  min-height: 26px;
-  padding: 2px 28px 2px 4px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  background: #eef2f7;
-  border-bottom: 1px solid #dbe2ea;
+/* La fila de pestañas de la API obliga a hacer scroll horizontal cuando hay
+   varias capas. El plugin la oculta y, si hay más de una, pone un selector en
+   la cabecera del popup. Así todas las capas están en un desplegable y no hay
+   que arrastrar una barra. */
+.g-information-popup.g-information-tabs-ocultas > .m-tabs {
+  display: none !important;
 }
 
-.g-information-popup .m-tab {
-  display: flex !important;
-  flex: 0 0 auto;
+/* Sin la fila superior, el popup recupera la esquina redondeada. */
+.g-information-popup.g-information-tabs-ocultas {
+  border-top-left-radius: 5px;
+}
+
+/* Cabecera con el selector. El padding derecho deja libre el botón de cerrar,
+   que la API coloca en la esquina superior derecha. */
+.g-information-popup.g-information-tabs-ocultas > .m-content > .m-header.g-information-con-selector {
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   box-sizing: border-box;
-  width: auto !important;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 4px 4px 0 0;
-  color: #475569;
-  white-space: nowrap;
+  min-height: 32px;
+  margin: 0 0 8px;
+  padding: 0 24px 8px 0;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: default;
+}
+
+.g-information-selector {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
   cursor: pointer;
 }
 
-.g-information-popup .m-tab i {
-  font-size: 14px;
-  line-height: 1;
+.g-information-selector-icono {
+  flex: 0 0 auto;
+  font-size: 16px;
+  color: #64748b;
 }
 
-.g-information-popup .m-tab .g-information-tab-texto {
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10.5px;
-  line-height: 1;
-}
-
-.g-information-popup .m-tab.m-activated {
+.g-information-selector-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 2px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
   background: #ffffff;
-  color: #0f172a;
-  box-shadow: inset 0 -2px 0 var(--g-information-borde-activo, #71A7D3);
+  color: #1f2937;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.g-information-selector-select:hover {
+  border-color: var(--g-information-borde-activo, #71A7D3);
+}
+
+.g-information-selector-select:focus {
+  border-color: var(--g-information-borde-activo, #71A7D3);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.18);
 }
 
 .g-information-contenido {
