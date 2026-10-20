@@ -77,6 +77,17 @@
 }
 
 /* ---------------------------------------------------------------------
+   Cursor de consulta
+   --------------------------------------------------------------------- */
+
+/* Cruz de precisión con insignia "i". La URL es relativa a esta hoja de
+   estilos; `help` es el respaldo nativo si el SVG no se puede cargar. El
+   `!important` gana al cursor que la API o Cesium ponen en línea. */
+.g-information-cursor {
+  cursor: url("../../img/iconos/cursor-informacion.svg") 12 12, help !important;
+}
+
+/* ---------------------------------------------------------------------
    Popup
    --------------------------------------------------------------------- */
 

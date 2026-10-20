@@ -73,6 +73,41 @@
     return window.IDEE || window.M;
   }
 
+  // Etiquetas TIFF de la georreferenciación.
+  const TAG_MODEL_TRANSFORMATION = 34264;
+  const TAG_MODEL_PIXEL_SCALE = 33550;
+  const TAG_MODEL_TIEPOINT = 33922;
+
+  /**
+   * Lee un campo del directorio de una imagen de geotiff.js. En los ficheros
+   * abiertos con `fromUrl`/`fromBlob` el `fileDirectory` es un objeto perezoso:
+   * los campos resueltos están en `actualizedFields` como pares [etiqueta,
+   * valor] y no como propiedades. Sin esto, `ModelTransformation` parece no
+   * existir y se pierde la rotación del GeoTIFF.
+   *
+   * @param {Object} imagen Imagen de geotiff.js.
+   * @param {string} nombre Nombre del campo en el directorio.
+   * @param {number} etiqueta Etiqueta TIFF del campo.
+   * @returns {*} El valor del campo, o null si no está.
+   */
+  function campoDirectorio(imagen, nombre, etiqueta) {
+    const fd = imagen && imagen.fileDirectory;
+    if (!fd) return null;
+    if (fd[nombre] !== undefined) return fd[nombre];
+    const campos = fd.actualizedFields;
+    if (campos && typeof campos.get === 'function') {
+      const valor = campos.get(etiqueta);
+      if (valor !== undefined) return valor;
+    }
+    if (Array.isArray(campos)) {
+      for (let i = 0; i < campos.length; i += 1) {
+        const par = campos[i];
+        if (par && par[0] === etiqueta) return par[1];
+      }
+    }
+    return null;
+  }
+
   // Lado mayor del lienzo al que se rasteriza. Es un techo, no un destino: un
   // GeoTIFF de 20000x20000 se pinta en 2048 y se escala. El número es el mismo
   // que usa el visualizador en su `gdal_translate -outsize 2048 0`, para que las
@@ -178,6 +213,74 @@
       // propio blob cuando lo hay (los Blob no se comparan por valor y son
       // objetos únicos, así que sirve de identidad), y la URL cuando no.
       this._cache = new Map();
+      // El fichero abierto y la imagen principal se guardan aparte del canvas
+      // porque la consulta de bandas y el pintado comparten la misma lectura.
+      this._clave = null;
+      this._tif = null;
+      this._tifPromesa = null;
+      this._principal = null;
+      this._principalPromesa = null;
+    }
+
+    /** La identidad del fichero que hay ahora en blob/url. */
+    _claveActual() {
+      return this.blob || this.url || null;
+    }
+
+    /**
+     * Si cambia el fichero, se tiran el GeoTIFF abierto y la imagen principal.
+     * No se tocan `_cache` (que ya va por clave) para no perder los canvas de
+     * los ficheros anteriores.
+     */
+    _prepararClave() {
+      const clave = this._claveActual();
+      if (this._clave === clave) return;
+      this._clave = clave;
+      this._tif = null;
+      this._tifPromesa = null;
+      this._principal = null;
+      this._principalPromesa = null;
+    }
+
+    /**
+     * Abre el fichero una sola vez. La promesa se guarda para que dos llamadas
+     * simultáneas (pintar y consultar bandas) no abran dos GeoTIFF.
+     * @returns {Promise<Object>} El GeoTIFF de geotiff.js.
+     */
+    async _abrirTif() {
+      this._prepararClave();
+      if (this._tif) return this._tif;
+      if (this._tifPromesa) return this._tifPromesa;
+      this._tifPromesa = (async () => {
+        const mod = await cargarGeoTIFF();
+        this._tif = await this._abrir(mod);
+        return this._tif;
+      })();
+      try {
+        return await this._tifPromesa;
+      } finally {
+        this._tifPromesa = null;
+      }
+    }
+
+    /**
+     * La imagen 0 del fichero, que es la de resolución completa y la que lleva
+     * la georreferenciación. Las overviews pueden no tenerla.
+     * @returns {Promise<Object>}
+     */
+    async _imagenPrincipal() {
+      if (this._principal) return this._principal;
+      if (this._principalPromesa) return this._principalPromesa;
+      this._principalPromesa = (async () => {
+        const tif = await this._abrirTif();
+        this._principal = await tif.getImage();
+        return this._principal;
+      })();
+      try {
+        return await this._principalPromesa;
+      } finally {
+        this._principalPromesa = null;
+      }
     }
 
     /**
@@ -188,9 +291,8 @@
       const clave = this.blob || this.url;
       if (clave && this._cache.has(clave)) return this._cache.get(clave);
 
-      const mod = await cargarGeoTIFF();
-      const tif = await this._abrir(mod);
-      const principal = await tif.getImage();
+      const tif = await this._abrirTif();
+      const principal = await this._imagenPrincipal();
 
       const ancho = principal.getWidth();
       const alto = principal.getHeight();
@@ -245,6 +347,136 @@
       // Sin clave proyectada: si el SRC es geográfico es 4326, que es lo único
       // que se puede suponer sin inventar.
       return 'EPSG:4326';
+    }
+
+    /**
+     * Traduce un punto del mundo (en el SRC del fichero) a la columna y la fila
+     * del píxel. Se usa el `ModelTransformation` cuando existe, que es lo que
+     * resuelve los GeoTIFF ligeramente rotados; si no, `ModelPixelScale` +
+     * `ModelTiepoint`, y como último recurso `getOrigin()`/`getResolution()`.
+     *
+     * @param {Object} imagen Imagen de geotiff.js.
+     * @param {number} x Coordenada X en el SRC del fichero.
+     * @param {number} y Coordenada Y en el SRC del fichero.
+     * @returns {{x:number,y:number}|null} Píxel entero, o null si cae fuera.
+     */
+    _pixelDesdeMundo(imagen, x, y) {
+      let px = null;
+      let py = null;
+      const m = campoDirectorio(imagen, 'ModelTransformation', TAG_MODEL_TRANSFORMATION);
+
+      if (m && (m.length >= 8 || m[0] !== undefined)) {
+        // ModelTransformation es una matriz 4x4 aplanada:
+        //   [a, b, 0, c,  d, e, 0, f,  0, 0, 1, 0,  0, 0, 0, 1]
+        // X = a*x + b*y + c,  Y = d*x + e*y + f
+        const val = (i) => (typeof m[i] === 'number' ? m[i] : Number(m[String(i)]));
+        const a = val(0);
+        const b = val(1);
+        const c = val(3);
+        const d = val(4);
+        const e = val(5);
+        const f = val(7);
+        const det = a * e - b * d;
+        if (!det) return null;
+        px = (e * (x - c) - b * (y - f)) / det;
+        py = (-d * (x - c) + a * (y - f)) / det;
+      } else {
+        const escala = campoDirectorio(imagen, 'ModelPixelScale', TAG_MODEL_PIXEL_SCALE);
+        const tie = campoDirectorio(imagen, 'ModelTiepoint', TAG_MODEL_TIEPOINT);
+        if (escala && tie && escala[0] && escala[1]) {
+          const i = tie[0];
+          const j = tie[1];
+          const x0 = tie[3];
+          const y0 = tie[4];
+          px = i + (x - x0) / escala[0];
+          py = j + (y0 - y) / escala[1];
+        } else if (typeof imagen.getOrigin === 'function'
+          && typeof imagen.getResolution === 'function') {
+          try {
+            const origen = imagen.getOrigin();
+            const resolucion = imagen.getResolution();
+            px = (x - origen[0]) / resolucion[0];
+            py = (y - origen[1]) / resolucion[1];
+          } catch (e) {
+            return null;
+          }
+        } else {
+          return null;
+        }
+      }
+
+      if (!isFinite(px) || !isFinite(py)) return null;
+      const ix = Math.floor(px);
+      const iy = Math.floor(py);
+      if (ix < 0 || iy < 0 || ix >= imagen.getWidth() || iy >= imagen.getHeight()) return null;
+      return { x: ix, y: iy };
+    }
+
+    /**
+     * Lee el valor de cada banda en un punto lon/lat.
+     *
+     * Va a la imagen de resolución completa (no a la overview con la que se
+     * pinta) porque aquí no interesa el color: interesan los valores reales de
+     * las bandas. geotiff.js pide solo la tesela que contiene ese píxel, así que
+     * en un COG no se descarga el fichero entero.
+     *
+     * @param {number} lon Longitud en EPSG:4326.
+     * @param {number} lat Latitud en EPSG:4326.
+     * @returns {Promise<Object|null>} { valores, pixel, ancho, alto, epsg }, o
+     *   null si el punto cae fuera de la imagen.
+     */
+    async leerBandas(lon, lat) {
+      const principal = await this._imagenPrincipal();
+      if (!principal) return null;
+
+      const claves = principal.getGeoKeys() || {};
+      const epsg = this._epsgDe(claves);
+
+      // El punto de la API llega en lon/lat (EPSG:4326). Para las proyecciones
+      // habituales la API ya tiene el SRC; se espera por si devuelve promesa.
+      let mundo = null;
+      if (String(epsg).toUpperCase() === 'EPSG:4326') {
+        mundo = [lon, lat];
+      } else {
+        const IDEE = api();
+        if (IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function') {
+          try {
+            mundo = await IDEE.utils.reproject([lon, lat], 'EPSG:4326', epsg);
+          } catch (e) {
+            mundo = null;
+          }
+        }
+      }
+      if (!mundo || mundo.length < 2) {
+        throw new Error('No se pudo reproyectar el punto a ' + epsg);
+      }
+
+      const pixel = this._pixelDesdeMundo(principal, Number(mundo[0]), Number(mundo[1]));
+      if (!pixel) return null;
+
+      const muestras = principal.getSamplesPerPixel();
+      if (!muestras || muestras < 1) return null;
+      const samples = [];
+      for (let i = 0; i < muestras; i += 1) samples.push(i);
+
+      const datos = await principal.readRasters({
+        window: [pixel.x, pixel.y, pixel.x + 1, pixel.y + 1],
+        samples: samples,
+        interleave: false,
+      });
+
+      const valores = [];
+      for (let i = 0; i < datos.length; i += 1) {
+        valores.push({ banda: i + 1, valor: datos[i] ? datos[i][0] : null });
+      }
+
+      return {
+        valores: valores,
+        pixel: { x: pixel.x, y: pixel.y },
+        ancho: principal.getWidth(),
+        alto: principal.getHeight(),
+        epsg: epsg,
+      };
     }
 
     /**

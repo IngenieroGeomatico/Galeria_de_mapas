@@ -11,14 +11,31 @@
      - En capas WMS se pide GetFeatureInfo al servicio. Si el servicio
        declara salida JSON y HTML en sus capacidades, el popup ofrece las dos
        y se puede cambiar de una a otra sin volver a pinchar.
-     - En capas vectoriales (GeoJSON, Vector, KML, WFS, OGC API Features y
-       MVT) se leen los features que caen bajo el clic, tanto en 2D como en
-       3D cuando la implementación los dibuja.
+     - En capas vectoriales (GeoJSON, Vector, KML, WFS, OGC API Features,
+       MVT, MBTiles vectorial, MapLibre, GenericVector y WKT) se leen los
+       features que caen bajo el clic, tanto en 2D como en 3D cuando la
+       implementación los dibuja.
+     - En capas GeoTIFF se leen los valores reales de sus bandas en el punto,
+       en 2D (imágenes del origen de OpenLayers) y en 3D (LectorGeoTIFF de
+       ext/geotiffLayer).
      - Con varias capas se abre una pestaña por capa y, dentro de cada una,
        se listan TODOS los features del punto (no solo el primero).
-     - La salida JSON y los features vectoriales se pintan con plantillas
-       configurables. El plugin trae tres (ficha, tabla y json) y admite
-       plantillas propias por constructor o con registrarPlantilla().
+     - La salida JSON, los features vectoriales y las bandas del ráster se
+       pintan con plantillas configurables. El plugin trae tres (ficha, tabla
+       y json) y admite plantillas propias por constructor o con
+       registrarPlantilla().
+
+   EXTRACT:
+   Mientras el plugin está añadido al mapa, las capas vectoriales llevan
+   `extract` a false si la herramienta está desactivada y a true si está
+   activa. Así la API no abre su popup de features cuando el plugin está
+   apagado. Las capas que se añadan después se sincronizan con los eventos
+   ADDED_LAYER/ADDED_LAYERGROUP, y destroy() devuelve el valor original.
+
+   CURSOR:
+   Con la herramienta activa, la vista o el canvas de Cesium llevan la clase
+   `g-information-cursor`, que pinta una cruz de precisión con una insignia
+   "i" (SVG) y deja `help` como respaldo.
 
    SIN PANEL:
    El plugin no tiene panel: solo un botón de 40x40 en la barra. Se reutiliza
@@ -117,6 +134,43 @@
     if (Array.isArray(valor)) return valor;
     if (valor === null || valor === undefined || valor === '') return [];
     return [valor];
+  }
+
+  /**
+   * Normaliza el valor de una banda. geotiff.js puede devolver BigInt en los
+   * ficheros de 64 bits y ni `JSON.stringify` ni `Intl.NumberFormat` lo
+   * aceptan; se pasa a número si cabe y, si no, a texto.
+   */
+  function valorRaster(valor) {
+    if (typeof valor === 'bigint') {
+      var numero = Number(valor);
+      return isFinite(numero) ? numero : String(valor);
+    }
+    return valor;
+  }
+
+  /**
+   * Lee un campo del directorio de una imagen de geotiff.js. Las imágenes
+   * abiertas con `fromUrl`/`fromBlob` pueden tener el `fileDirectory` perezoso:
+   * los campos resueltos viven en `actualizedFields` como pares [etiqueta,
+   * valor], no como propiedades. Sin esto se perdería la rotación del GeoTIFF.
+   */
+  function campoImagen(imagen, nombre, etiqueta) {
+    var fd = imagen && imagen.fileDirectory;
+    if (!fd) return null;
+    if (fd[nombre] !== undefined) return fd[nombre];
+    var campos = fd.actualizedFields;
+    if (campos && typeof campos.get === 'function') {
+      var valor = campos.get(etiqueta);
+      if (valor !== undefined) return valor;
+    }
+    if (Array.isArray(campos)) {
+      for (var i = 0; i < campos.length; i += 1) {
+        var par = campos[i];
+        if (par && par[0] === etiqueta) return par[1];
+      }
+    }
+    return null;
   }
 
   /**
@@ -299,6 +353,8 @@
       this._cursorTarget = null;
       this._cursorPrevio = '';
       this._capsCache = {};
+      this._extractPrevios = new Map();
+      this._lectoresGeoTIFF = {};
       this._generacion = 0;
       this._tabActivaPendiente = null;
       this._popupsPrevios = [];
@@ -346,7 +402,9 @@
             '<p>En los servicios WMS se usa la operación GetFeatureInfo y se ' +
             'puede alternar entre la salida HTML y JSON si el servicio ofrece ' +
             'las dos. En las capas vectoriales se listan todos los elementos ' +
-            'del punto y se pueden cambiar las plantillas de presentación.</p>' +
+            'del punto y en los GeoTIFF se muestran los valores de sus bandas. ' +
+            'En todos los casos se pueden cambiar las plantillas de ' +
+            'presentación.</p>' +
             '</div>';
           if (IDEE && IDEE.utils && esFuncion(IDEE.utils.stringToHtml)) {
             try {
@@ -454,6 +512,7 @@
 
     addTo(map) {
       this._map = map;
+      this._desadjuntarEventosCapas();
       var IDEE = api();
       if (!IDEE || !IDEE.ui || !IDEE.Control) {
         console.error(this.name + ': no se encontró el objeto global de la API (IDEE/M).');
@@ -508,8 +567,13 @@
       this._panel = panel;
       this._control = control;
 
+      // Las capas que ya estaban en el mapa se sincronizan ahora; las que se
+      // añadan después las recoge el evento ADDED_LAYER.
+      this._adjuntarEventosCapas();
       if (this._activo) {
         this._activar(false);
+      } else {
+        this._sincronizarExtract(false);
       }
     }
 
@@ -518,6 +582,8 @@
       this._activo = false;
       this._actualizarBoton();
       this._desadjuntarEventos();
+      this._desadjuntarEventosCapas();
+      this._restaurarExtract();
       this._restaurarCursor();
       this._cerrarPopup();
 
@@ -571,6 +637,9 @@
       this._restaurarCursor();
       this._activo = true;
       this._actualizarBoton();
+      // Con la herramienta activa la API puede extraer los features de las
+      // capas vectoriales; el popup propio las lee igualmente.
+      this._sincronizarExtract(true);
       if (avisarControl !== false && this._control) {
         try { this._control.activate(); } catch (e) { /* sin control */ }
       }
@@ -581,6 +650,9 @@
     _desactivar(avisarControl) {
       this._activo = false;
       this._actualizarBoton();
+      // Al desactivar, la API no debe abrir sus popups de features: todas las
+      // capas vectoriales se quedan con extract=false.
+      this._sincronizarExtract(false);
       if (avisarControl !== false && this._control) {
         try { this._control.deactivate(); } catch (e) { /* sin control */ }
       }
@@ -600,19 +672,28 @@
         target = esFuncion(impl.getViewport) ? impl.getViewport()
           : (esFuncion(impl.getTargetElement) ? impl.getTargetElement() : null);
       }
-      if (!target || !target.style) return;
+      if (!target) return;
       this._cursorTarget = target;
-      this._cursorPrevio = target.style.cursor || '';
-      target.style.cursor = 'crosshair';
+      this._cursorPrevio = target.style ? (target.style.cursor || '') : '';
+      // La clase pinta una cruz de precisión con una insignia "i" y deja
+      // `help` como respaldo si el navegador no puede cargar el SVG.
+      if (target.classList && esFuncion(target.classList.add)) {
+        target.classList.add('g-information-cursor');
+      } else if (target.style) {
+        target.style.cursor = 'help';
+      }
     }
 
     _restaurarCursor() {
-      if (!this._cursorTarget || !this._cursorTarget.style) {
-        this._cursorTarget = null;
+      if (!this._cursorTarget) {
         this._cursorPrevio = '';
         return;
       }
-      this._cursorTarget.style.cursor = this._cursorPrevio || '';
+      var target = this._cursorTarget;
+      if (target.classList && esFuncion(target.classList.remove)) {
+        target.classList.remove('g-information-cursor');
+      }
+      if (target.style) target.style.cursor = this._cursorPrevio || '';
       this._cursorTarget = null;
       this._cursorPrevio = '';
     }
@@ -771,6 +852,158 @@
     }
 
     // ===================================================================
+    //  extract de las capas vectoriales
+    // ===================================================================
+    //
+    // `extract` es la propiedad con la que la API decide si una capa
+    // vectorial participa en su extractor de features y, por tanto, si abre
+    // su propio popup al pinchar. El plugin la pone a false mientras está
+    // desactivado para que el clic no abra nada, y a true mientras está
+    // activo para que la API siga extrayendo igual que antes. El popup
+    // propio del plugin no depende de esta propiedad: lee los features por
+    // su cuenta.
+
+    /** Engancha el alta de capas para sincronizar las que lleguen después. */
+    _adjuntarEventosCapas() {
+      var IDEE = api();
+      if (!this._map || !IDEE || !IDEE.evt || !esFuncion(this._map.on)) return;
+      this._desadjuntarEventosCapas();
+      var self = this;
+      var manejador = function () {
+        if (!self._map) return;
+        // El alta puede dispararse varias veces seguidas al añadir un grupo;
+        // se agrupa en un solo tick.
+        clearTimeout(self._handlers.extractTimer);
+        self._handlers.extractTimer = setTimeout(function () {
+          if (self._map) self._sincronizarExtract(self._activo);
+        }, 0);
+      };
+      this._handlers.extract = manejador;
+      this._handlers.extractKeys = [];
+      [IDEE.evt.ADDED_LAYER, IDEE.evt.ADDED_LAYERGROUP].forEach(function (evento) {
+        if (!evento) return;
+        try {
+          var clave = self._map.on(evento, manejador);
+          if (clave) self._handlers.extractKeys.push(clave);
+        } catch (e) { /* el mapa no expone eventos */ }
+      });
+    }
+
+    _desadjuntarEventosCapas() {
+      var claves = this._handlers.extractKeys || [];
+      if (this._map && esFuncion(this._map.un)) {
+        var map = this._map;
+        claves.forEach(function (clave) {
+          try { map.un(clave); } catch (e) { /* ya estaba fuera */ }
+        });
+      }
+      this._handlers.extractKeys = [];
+      this._handlers.extract = null;
+      if (this._handlers.extractTimer) {
+        clearTimeout(this._handlers.extractTimer);
+        this._handlers.extractTimer = null;
+      }
+    }
+
+    /** Recorre capas y grupos anidados. */
+    _recorrerCapas(callback) {
+      var visitar = function (lista) {
+        (lista || []).forEach(function (capa) {
+          if (!capa) return;
+          if (esFuncion(capa.getLayers)) {
+            var hijas = null;
+            try { hijas = capa.getLayers(); } catch (e) { hijas = null; }
+            if (hijas && hijas.length) {
+              visitar(hijas);
+              return;
+            }
+          }
+          callback(capa);
+        });
+      };
+      try {
+        visitar(this._map && this._map.getLayers ? this._map.getLayers() : []);
+      } catch (e) { /* sin capas */ }
+    }
+
+    /** ¿Es una capa vectorial, es decir, tiene sentido tocarle `extract`? */
+    _esCapaVectorial(capa) {
+      if (!capa) return false;
+      if (this._esGeoTIFF(capa)) return false;
+
+      var tipo = String(capa.type || '').toUpperCase();
+      if (tipo === 'GEOJSON' || tipo === 'VECTOR' || tipo === 'KML'
+        || tipo === 'WFS' || tipo === 'OGCAPIFEATURES' || tipo === 'MVT'
+        || tipo === 'MBTILESVECTOR' || tipo === 'MAPLIBRE'
+        || tipo === 'GENERICVECTOR' || tipo === 'WKT') {
+        return true;
+      }
+
+      // Las capas raster y los tiles 3D no son vectoriales aunque alguna
+      // fachada herede métodos de features vacíos.
+      if (tipo === 'WMS' || tipo === 'WMTS' || tipo === 'TMS' || tipo === 'XYZ'
+        || tipo === 'OSM' || tipo === 'GEOTIFF' || tipo === 'MBTILES'
+        || tipo === 'GENERICRASTER' || tipo === 'TILES3D' || tipo === 'TERRAIN') {
+        return false;
+      }
+
+      // En 3D algunas fachadas no exponen `type`. Se usa el contrato de
+      // features como última señal, siempre que no sea un GeoTIFF.
+      if (esFuncion(capa.getFeatures) && esFuncion(capa.getFeatureById)) return true;
+      var impl = null;
+      try { impl = capa.getImpl ? capa.getImpl() : null; } catch (e) { impl = null; }
+      return !!(impl && esFuncion(impl.getFeatures) && esFuncion(impl.getFeatureById)
+        && !(impl.lector && impl.render));
+    }
+
+    _leerExtract(capa) {
+      try {
+        if (capa.extract !== undefined) return capa.extract;
+      } catch (e) { /* getter roto */ }
+      try {
+        var impl = capa.getImpl ? capa.getImpl() : null;
+        if (impl && impl.extract !== undefined) return impl.extract;
+      } catch (e) { /* sin implementación */ }
+      return true;
+    }
+
+    _escribirExtract(capa, valor) {
+      var aplicado = !!valor;
+      try { capa.extract = aplicado; } catch (e) { /* setter roto */ }
+      try {
+        var impl = capa.getImpl ? capa.getImpl() : null;
+        if (impl) impl.extract = aplicado;
+      } catch (e) { /* sin implementación */ }
+    }
+
+    /**
+     * Pone `extract` al valor indicado en todas las capas vectoriales y
+     * guarda el valor original para devolverlo en destroy().
+     * @param {boolean} valor
+     */
+    _sincronizarExtract(valor) {
+      if (!this._map) return;
+      var self = this;
+      var aplicado = !!valor;
+      this._recorrerCapas(function (capa) {
+        if (!self._esCapaVectorial(capa)) return;
+        if (!self._extractPrevios.has(capa)) {
+          self._extractPrevios.set(capa, self._leerExtract(capa));
+        }
+        self._escribirExtract(capa, aplicado);
+      });
+    }
+
+    /** Devuelve a cada capa el `extract` que tenía antes de entrar el plugin. */
+    _restaurarExtract() {
+      var self = this;
+      this._extractPrevios.forEach(function (valor, capa) {
+        self._escribirExtract(capa, valor);
+      });
+      this._extractPrevios.clear();
+    }
+
+    // ===================================================================
     //  Reproyección y escala
     // ===================================================================
 
@@ -793,6 +1026,27 @@
     _reproyectar3857(coordenadas, desde) {
       if (desde === 'EPSG:3857') return [coordenadas[0], coordenadas[1]];
       return this._reproyectar(coordenadas, desde, 'EPSG:3857');
+    }
+
+    /**
+     * Igual que `_reproyectar`, pero espera la respuesta. `reproject` puede
+     * devolver un array o una promesa según el SRC; el GeoTIFF necesita la
+     * versión asíncrona para no depender de que el catálogo ya esté cargado.
+     */
+    async _reproyectarAsync(coordenadas, desde, hasta) {
+      var IDEE = api();
+      if (!IDEE || !IDEE.utils || !esFuncion(IDEE.utils.reproject)) return null;
+      try {
+        var salida = await IDEE.utils.reproject(coordenadas, desde, hasta);
+        if (!salida) return null;
+        if (Array.isArray(salida)) return salida;
+        if (typeof salida === 'object' && salida.x !== undefined && salida.y !== undefined) {
+          return [salida.x, salida.y];
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
     }
 
     /**
@@ -941,6 +1195,9 @@
       if (tipo === 'vector') {
         return this._consultarVector(capa, punto, pixel, cartesiano, mpp, generacion);
       }
+      if (tipo === 'raster') {
+        return this._consultarRaster(capa, punto, pixel, cartesiano, mpp, generacion);
+      }
       return Promise.resolve({ omitida: true });
     }
 
@@ -1028,7 +1285,334 @@
       return resultado;
     }
 
-    /** Capas visibles y de un tipo que sabemos consultar (WMS o vectorial). */
+    // ===================================================================
+    //  Ráster: valores de las bandas de un GeoTIFF
+    // ===================================================================
+
+    /**
+     * ¿La capa es un GeoTIFF? En 2D el tipo es 'GeoTIFF'; en 3D la fachada
+     * de ext/geotiffLayer puede no exponer `type`, pero sí
+     * `getImplGeoTIFF()` y una implementación con `lector` y `render`.
+     */
+    _esGeoTIFF(capa) {
+      if (!capa) return false;
+      var tipo = String(capa.type || '').toUpperCase();
+      if (tipo === 'GEOTIFF') return true;
+      if (esFuncion(capa.getImplGeoTIFF)) return true;
+      var impl = null;
+      try { impl = capa.getImpl ? capa.getImpl() : null; } catch (e) { impl = null; }
+      return !!(impl && impl.lector && impl.render);
+    }
+
+    /**
+     * Lee las bandas de un GeoTIFF en el punto y las presenta con la misma
+     * maquinaria que los features vectoriales: un elemento con una propiedad
+     * por banda. Así funcionan las plantillas ficha, tabla y json sin añadir
+     * una plantilla nueva.
+     */
+    async _consultarRaster(capa, punto, pixel, cartesiano, mpp, generacion) {
+      var impl = null;
+      try { impl = capa.getImpl ? capa.getImpl() : null; } catch (e) { impl = null; }
+
+      var datos = null;
+      try {
+        datos = await this._leerBandasConTimeout(capa, impl, punto);
+      } catch (e) {
+        return this._resultadoError(capa, e, punto, mpp, generacion);
+      }
+      if (!datos || !datos.valores || !datos.valores.length) {
+        return { omitida: true, motivo: 'El punto está fuera de la imagen.' };
+      }
+
+      var propiedades = {};
+      var campos = [];
+      datos.valores.forEach(function (banda) {
+        var clave = 'Banda ' + banda.banda;
+        var valor = valorRaster(banda.valor);
+        propiedades[clave] = valor;
+        campos.push({
+          clave: clave,
+          etiqueta: clave,
+          valor: valor,
+          texto: aTexto(valor),
+        });
+      });
+
+      var elemento = {
+        id: null,
+        titulo: 'Valores de las bandas',
+        propiedades: propiedades,
+        campos: campos,
+        // La ficha de un ráster no necesita la línea "Geometría: Point": el
+        // punto ya es el clic. La geometría sí queda en `crudo` para la
+        // plantilla JSON.
+        geometria: null,
+        crudo: {
+          type: 'Feature',
+          properties: Object.assign({}, propiedades, {
+            SRC: datos.epsg || null,
+            pixel: datos.pixel ? (datos.pixel.x + ', ' + datos.pixel.y) : null,
+            tamano: (datos.ancho && datos.alto) ? (datos.ancho + ' x ' + datos.alto) : null,
+          }),
+          geometry: { type: 'Point', coordinates: [punto.lon, punto.lat] },
+        },
+        fuente: 'raster',
+        capa: {
+          name: capa.name,
+          legend: capa.legend,
+          type: capa.type,
+          idLayer: capa.idLayer,
+        },
+      };
+
+      return {
+        uid: '',
+        tipo: 'raster',
+        capa: capa,
+        clave: this._claveCapa(capa),
+        formatos: [{ id: 'bandas', etiqueta: 'Bandas' }],
+        formatoActual: 'bandas',
+        porFormato: {
+          bandas: { estado: 'ok', tipo: 'json', features: [elemento] },
+        },
+        error: null,
+        caps: null,
+        punto: {
+          x: punto.x,
+          y: punto.y,
+          lon: punto.lon,
+          lat: punto.lat,
+        },
+        mpp: mpp || 1,
+        generacion: generacion,
+      };
+    }
+
+    /** Limita la espera de la lectura para que no bloquee el popup. */
+    _leerBandasConTimeout(capa, impl, punto) {
+      var self = this;
+      return new Promise(function (resolve, reject) {
+        var terminado = false;
+        var temporizador = setTimeout(function () {
+          if (terminado) return;
+          terminado = true;
+          reject(new Error('La lectura de las bandas tardó demasiado.'));
+        }, 20000);
+
+        Promise.resolve(self._leerBandasGeoTIFF(capa, impl, punto)).then(function (datos) {
+          if (terminado) return;
+          terminado = true;
+          clearTimeout(temporizador);
+          resolve(datos);
+        }, function (error) {
+          if (terminado) return;
+          terminado = true;
+          clearTimeout(temporizador);
+          reject(error);
+        });
+      });
+    }
+
+    /**
+     * Elige la vía de lectura según la implementación:
+     *   2D -> las imágenes que ya tiene abiertas el origen GeoTIFF de OL.
+     *   3D -> el LectorGeoTIFF de ext/geotiffLayer que usa la capa.
+     *   Respaldo -> un LectorGeoTIFF nuevo con la URL/blob de la capa.
+     */
+    async _leerBandasGeoTIFF(capa, impl, punto) {
+      var info2D = this._imagenGeoTIFF2D(impl);
+      if (info2D) {
+        return await this._leerBandasEnImagen2D(info2D, impl, punto);
+      }
+
+      if (impl && impl.lector && esFuncion(impl.lector.leerBandas)) {
+        return await impl.lector.leerBandas(punto.lon, punto.lat);
+      }
+
+      var Lector = global.LectorGeoTIFF;
+      var url = impl && (impl.url || (impl.lector && impl.lector.url));
+      var blob = impl && (impl.blob || (impl.lector && impl.lector.blob));
+      if (esFuncion(Lector) && (url || blob)) {
+        if (!this._lectoresGeoTIFF) this._lectoresGeoTIFF = {};
+        var clave = this._claveCapa(capa);
+        var lector = this._lectoresGeoTIFF[clave];
+        if (!lector) {
+          lector = new Lector({ url: url || null, blob: blob || null });
+          this._lectoresGeoTIFF[clave] = lector;
+        }
+        return await lector.leerBandas(punto.lon, punto.lat);
+      }
+
+      throw new Error('No hay un lector de bandas disponible para esta capa.');
+    }
+
+    /**
+     * La imagen de resolución completa del origen GeoTIFF de OpenLayers. En
+     * `sourceImagery_` conviven las overviews (sin georreferenciación) y la
+     * imagen principal (con ModelTransformation), así que se elige la que
+     * tiene transformación y más lado.
+     */
+    _imagenGeoTIFF2D(impl) {
+      try {
+        var olLayer = impl && impl.olLayer;
+        var src = olLayer && esFuncion(olLayer.getSource) ? olLayer.getSource() : null;
+        if (!src || !src.sourceImagery_) return null;
+
+        var grupos = src.sourceImagery_;
+        var principal = null;
+        var ladoPrincipal = -1;
+        for (var g = 0; g < grupos.length; g += 1) {
+          var lista = grupos[g] || [];
+          for (var i = 0; i < lista.length; i += 1) {
+            var imagen = lista[i];
+            if (!imagen) continue;
+            var transformacion = campoImagen(imagen, 'ModelTransformation', 34264);
+            var escalaGeo = campoImagen(imagen, 'ModelPixelScale', 33550);
+            var tiepoint = campoImagen(imagen, 'ModelTiepoint', 33922);
+            var tieneGeo = !!(transformacion || (escalaGeo && tiepoint));
+            if (!tieneGeo) continue;
+            var lado = 0;
+            try { lado = Math.max(imagen.getWidth(), imagen.getHeight()); } catch (e) { lado = 0; }
+            if (lado > ladoPrincipal) {
+              ladoPrincipal = lado;
+              principal = imagen;
+            }
+          }
+        }
+        if (!principal) return null;
+
+        var epsg = null;
+        try {
+          if (src.getProjection && src.getProjection()) {
+            epsg = src.getProjection().getCode ? src.getProjection().getCode() : null;
+          }
+        } catch (e) { epsg = null; }
+        if (!epsg) epsg = this._epsgDeImagen(principal);
+        return { imagen: principal, epsg: epsg };
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /** Las claves GeoTIFF de una imagen a un código EPSG. */
+    _epsgDeImagen(imagen) {
+      try {
+        var claves = imagen.getGeoKeys ? imagen.getGeoKeys() : null;
+        if (claves && claves.ProjectedCSTypeGeoKey) {
+          return 'EPSG:' + claves.ProjectedCSTypeGeoKey;
+        }
+        if (claves && claves.GeographicTypeGeoKey) {
+          return 'EPSG:' + claves.GeographicTypeGeoKey;
+        }
+      } catch (e) { /* sin claves */ }
+      return null;
+    }
+
+    /**
+     * Punto del mundo (en el SRC del fichero) a píxel de la imagen. Misma
+     * lógica que LectorGeoTIFF._pixelDesdeMundo, pero aquí se usa la imagen
+     * que ya tiene abierta OpenLayers en 2D.
+     */
+    _pixelEnImagen(imagen, x, y) {
+      var ancho = 0;
+      var alto = 0;
+      try {
+        ancho = imagen.getWidth();
+        alto = imagen.getHeight();
+      } catch (e) {
+        return null;
+      }
+
+      var px = null;
+      var py = null;
+      var m = campoImagen(imagen, 'ModelTransformation', 34264);
+      if (m && (m.length >= 8 || m[0] !== undefined)) {
+        var val = function (i) { return typeof m[i] === 'number' ? m[i] : Number(m[String(i)]); };
+        var a = val(0), b = val(1), c = val(3);
+        var d = val(4), e = val(5), f = val(7);
+        var det = a * e - b * d;
+        if (!det) return null;
+        px = (e * (x - c) - b * (y - f)) / det;
+        py = (-d * (x - c) + a * (y - f)) / det;
+      } else {
+        var escala = campoImagen(imagen, 'ModelPixelScale', 33550);
+        var tie = campoImagen(imagen, 'ModelTiepoint', 33922);
+        if (escala && tie && escala[0] && escala[1]) {
+          px = tie[0] + (x - tie[3]) / escala[0];
+          py = tie[1] + (tie[4] - y) / escala[1];
+        } else if (esFuncion(imagen.getOrigin) && esFuncion(imagen.getResolution)) {
+          try {
+            var origen = imagen.getOrigin();
+            var resolucion = imagen.getResolution();
+            px = (x - origen[0]) / resolucion[0];
+            py = (y - origen[1]) / resolucion[1];
+          } catch (e) {
+            return null;
+          }
+        } else {
+          return null;
+        }
+      }
+
+      if (!isFinite(px) || !isFinite(py)) return null;
+      var ix = Math.floor(px);
+      var iy = Math.floor(py);
+      if (ix < 0 || iy < 0 || ix >= ancho || iy >= alto) return null;
+      return { x: ix, y: iy, ancho: ancho, alto: alto };
+    }
+
+    async _leerBandasEnImagen2D(info, impl, punto) {
+      var imagen = info.imagen;
+      var epsg = info.epsg || this._epsgDeImagen(imagen);
+      if (!epsg) throw new Error('La capa GeoTIFF no declara su SRC.');
+
+      var mundo = await this._reproyectarAsync([punto.lon, punto.lat], 'EPSG:4326', epsg);
+      if (!mundo) throw new Error('No se pudo reproyectar el punto a ' + epsg);
+
+      var pixel = this._pixelEnImagen(imagen, Number(mundo[0]), Number(mundo[1]));
+      if (!pixel) return null;
+
+      var total = 0;
+      try { total = imagen.getSamplesPerPixel(); } catch (e) { total = 0; }
+      if (!total) throw new Error('La imagen no declara bandas.');
+
+      // `bands_` es la selección 1-based que pidió el visualizador; si está
+      // vacía se leen todas las muestras de la imagen.
+      var seleccion = [];
+      if (impl && Array.isArray(impl.bands_) && impl.bands_.length) {
+        impl.bands_.forEach(function (banda) {
+          var indice = Number(banda) - 1;
+          if (isFinite(indice) && indice >= 0 && indice < total) seleccion.push(indice);
+        });
+      }
+      if (!seleccion.length) {
+        for (var i = 0; i < total; i += 1) seleccion.push(i);
+      }
+
+      var datos = await imagen.readRasters({
+        window: [pixel.x, pixel.y, pixel.x + 1, pixel.y + 1],
+        samples: seleccion,
+        interleave: false,
+      });
+
+      var valores = [];
+      for (var j = 0; j < datos.length; j += 1) {
+        valores.push({
+          banda: seleccion[j] + 1,
+          valor: datos[j] ? datos[j][0] : null,
+        });
+      }
+
+      return {
+        valores: valores,
+        pixel: { x: pixel.x, y: pixel.y },
+        ancho: pixel.ancho,
+        alto: pixel.alto,
+        epsg: epsg,
+      };
+    }
+
+    /** Capas visibles y de un tipo que sabemos consultar (WMS, vectorial o ráster). */
     _capasConsultables() {
       var salida = [];
       var self = this;
@@ -1046,8 +1630,11 @@
           if (!self._esVisible(capa)) return;
           var tipo = String(capa.type || '').toUpperCase();
           if (tipo === 'WMS') salida.push({ capa: capa, tipo: 'wms' });
+          else if (self._esGeoTIFF(capa)) salida.push({ capa: capa, tipo: 'raster' });
           else if (tipo === 'GEOJSON' || tipo === 'VECTOR' || tipo === 'KML'
-            || tipo === 'WFS' || tipo === 'OGCAPIFEATURES' || tipo === 'MVT') {
+            || tipo === 'WFS' || tipo === 'OGCAPIFEATURES' || tipo === 'MVT'
+            || tipo === 'MBTILESVECTOR' || tipo === 'MAPLIBRE'
+            || tipo === 'GENERICVECTOR' || tipo === 'WKT') {
             salida.push({ capa: capa, tipo: 'vector' });
           }
         });

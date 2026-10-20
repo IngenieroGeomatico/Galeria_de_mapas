@@ -5,18 +5,22 @@ Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. N
 ## Características
 
 - **Botón circular**: 40x40, sin panel, con `color1` (fondo), `color2` (borde) y `color3` (icono).
+- **Cursor de consulta**: una cruz de precisión con insignia «i» (`img/iconos/cursor-informacion.svg`) y `help` como respaldo nativo.
 - **WMS**: pide `GetCapabilities` y usa `GetFeatureInfo`. Si el servicio declara JSON y HTML, el popup permite alternar entre los dos sin volver a pinchar. Si no declara ninguno de los dos, se usan texto o XML como respaldo.
 - **Capas vectoriales**: lee los features que caen bajo el clic en 2D y, cuando la implementación los dibuja, también en 3D.
-- **Varias capas y varios elementos**: una pestaña por capa y todos los features del punto dentro de la pestaña.
+- **GeoTIFF**: lee los valores reales de las bandas en el punto. En 2D usa las imágenes que ya tiene abiertas el origen `GeoTIFF` de OpenLayers; en 3D usa el `LectorGeoTIFF` de `ext/geotiffLayer`. El valor se presenta como un elemento con una propiedad por banda y funciona con las plantillas `ficha`, `tabla` y `json`.
+- **Varias capas y varios elementos**: una pestaña por capa y todos los features (o las bandas) del punto dentro de la pestaña.
 - **Plantillas configurables**: `ficha`, `tabla` y `json` de serie; se pueden añadir o sustituir por constructor o con `registrarPlantilla()`.
+- **`extract` sincronizado**: mientras el plugin está añadido al mapa, las capas vectoriales llevan `extract=false` si la herramienta está desactivada y `extract=true` si está activa. Las capas añadidas después se sincronizan con `ADDED_LAYER`/`ADDED_LAYERGROUP`; `destroy()` restaura el valor original.
 - **Estado 2D/3D**: implementa `getState()`/`setState(state, map)` para conservar la activación, las preferencias por capa y el popup abierto al cambiar de implementación.
 
 ## Archivos
 
 | Archivo | Descripción |
 |---|---|
-| `information.js` | Clase `miPlugin_information`: botón, consulta WMS/vectorial, popup, plantillas y contrato de estado. |
-| `information.css` | Botón de 40x40, pestañas del popup, fichas, tablas y salida JSON/HTML. |
+| `information.js` | Clase `miPlugin_information`: botón, consulta WMS/vectorial/GeoTIFF, popup, plantillas, `extract` y contrato de estado. |
+| `information.css` | Botón de 40x40, cursor de consulta, pestañas del popup, fichas, tablas y salida JSON/HTML. |
+| `../../img/iconos/cursor-informacion.svg` | Cursor de cruz con insignia «i». Los colores son fijos porque el navegador lo pinta como imagen de cursor. |
 
 ## Integración
 
@@ -68,10 +72,12 @@ Una plantilla es un objeto `{ id, nombre, descripcion, render(elemento, contexto
 - `campos`: array de `{ clave, etiqueta, valor, texto }` ya filtrado por `camposOcultos` y `mostrarVacios`.
 - `titulo`: nombre legible del elemento.
 - `id`: identificador del feature, si lo tiene.
-- `geometria`: `{ tipo, coordenadas }` o `{ tipo }` cuando la implementación 3D no expone las coordenadas.
+- `geometria`: `{ tipo, coordenadas }` o `{ tipo }` cuando la implementación 3D no expone las coordenadas; en los GeoTIFF es `null` y el punto queda solo en `crudo`.
 - `crudo`: feature GeoJSON original, si está disponible.
-- `fuente`: `'wms'` o `'vector'`.
+- `fuente`: `'wms'`, `'vector'` o `'raster'`.
 - `capa`: `{ name, legend, type, idLayer }`.
+
+En los GeoTIFF, `propiedades` y `campos` contienen una entrada por banda (`Banda 1`, `Banda 2`, …) con el valor real leído en el píxel. `crudo` es un `Feature` sintético con esas propiedades, el `SRC`, el píxel y el tamaño de la imagen.
 
 `contexto` ofrece:
 
@@ -113,9 +119,23 @@ info.registrarPlantilla({
 ## Capas consultables
 
 - `WMS` mediante `GetFeatureInfo`.
-- `GeoJSON`, `Vector`, `KML`, `WFS`, `OGCAPIFeatures` y `MVT` como capas vectoriales.
+- `GeoTIFF` leyendo las bandas del fichero en el píxel del clic. La lectura usa la transformación afín completa (`ModelTransformation`), no solo el origen y la resolución, para no desviar el píxel en los GeoTIFF rotados.
+- `GeoJSON`, `Vector`, `KML`, `WFS`, `OGCAPIFeatures`, `MVT`, `MBTilesVector`, `MapLibre`, `GenericVector` y `WKT` como capas vectoriales.
 
 En 3D la consulta vectorial depende de que la implementación dibuje la capa y de que sus entidades estén en la posición correcta. `MVT`, por ejemplo, no se dibuja en Cesium en esta versión de la API y el popup mostrará que no hay información. La ficha `mapas/tiposDeCapas/capas/vector` declara sus geometrías en EPSG:3857; Cesium las interpreta como grados, así que en 3D la capa no está en Madrid y la consulta no encuentra esos elementos. Es una limitación de esa ficha/API, no del plugin.
+
+Los servicios de teselas (`TMS`, `WMTS`, `XYZ`, `OSM`) y los ráster que solo publican una imagen renderizada no exponen los valores de sus bandas: el plugin no inventa un valor a partir del color de pantalla. Si el servicio es WMS, la vía es `GetFeatureInfo`, que ya está cubierta.
+
+### `extract` y popups de la API
+
+La API abre su propio popup cuando pincha una capa vectorial con `extract=true`. El plugin sincroniza esa propiedad para que el comportamiento sea el esperado:
+
+- plugin **desactivado** → `extract=false` en todas las capas vectoriales; el clic no abre nada.
+- plugin **activado** → `extract=true`; la API sigue extrayendo y el plugin retira el popup de la API para dejar el suyo.
+- capas añadidas después → se sincronizan con `ADDED_LAYER` y `ADDED_LAYERGROUP`.
+- `destroy()` → devuelve a cada capa el `extract` que tenía antes de entrar el plugin.
+
+La consulta propia del plugin no usa `extract`: lee los features por su cuenta, así que sigue funcionando con `extract=false`.
 
 ## Estado 2D/3D
 
@@ -139,4 +159,4 @@ En 3D la consulta vectorial depende de que la implementación dibuje la capa y d
 
 - El servicio WMS debe permitir CORS para que el navegador pueda leer `GetCapabilities` y `GetFeatureInfo`.
 - Si no se pueden leer las capacidades, el plugin prueba JSON y HTML, que son las salidas más habituales.
-- La API abre su propio popup al pinchar capas vectoriales. El plugin retira los popups nuevos de ese clic y conserva el suyo.
+- La API abre su propio popup al pinchar capas vectoriales con `extract=true`. El plugin sincroniza `extract` (false con la herramienta apagada) y, cuando está activo, retira los popups nuevos de ese clic y conserva el suyo.
