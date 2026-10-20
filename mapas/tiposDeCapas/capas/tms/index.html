@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <title>TMS | Tipos de capa</title>
-  <meta name="description" content="Capa TMS de la API-IDEE: teselas con la fila contada desde abajo, en 2D y en 3D.">
+  <meta name="description" content="Capas TMS de la API-IDEE: teselas con la fila contada desde abajo y los cuatro mapas base del IGN, en 2D y en 3D.">
 
   <link rel="icon" href="data:,">
 
@@ -57,7 +57,7 @@
     <div class="barra__texto">
       <h1 class="barra__titulo">TMS <span class="barra__clase">IDEE.layer.TMS</span></h1>
       <p class="barra__desc">
-        Teselas con la fila contada desde abajo: el {-y} de la URL es la diferencia con XYZ, que la cuenta desde arriba.
+        Teselas con la fila contada desde abajo: el {-y} de la URL es la diferencia con XYZ, que la cuenta desde arriba. El servicio TMS del IGN ofrece cuatro mapas base: <code>IGNBaseGris</code>, <code>IGNBaseOrto</code>, <code>IGNBaseSimplificado</code> e <code>IGNBaseTodo</code>. Aquí se añaden como capas superpuestas para poder encenderlas desde el árbol de capas.
       </p>
     </div>
   </header>
@@ -68,16 +68,35 @@
   <template id="codigo">
     <h3>IDEE.layer.TMS</h3>
     <p>
-      La plantilla de la URL lleva <code>{z}</code>, <code>{x}</code> y <code>{-y}</code>. El signo menos es lo que le dice a la capa que la fila se numera desde el sur.
+      La plantilla de la URL lleva <code>{z}</code>, <code>{x}</code> y <code>{-y}</code>. El signo menos es lo que le dice a la capa que la fila se numera desde el sur. Los cuatro mapas base del IGN se añaden como capas superpuestas; solo <code>IGNBaseTodo</code> queda visible al arrancar. El <code>name</code> lleva sufijo <code>_capa</code> para que no colisione con la capa base del selector común: en 3D, si una capa base y una superpuesta comparten <code>name</code>, al cambiar de base la superpuesta desaparece.
     </p>
-    <pre class="codigo"><code>const capa = new IDEE.layer.TMS({
-  url: 'https://tms-pnoa-ma.idee.es/1.0.0/pnoa-ma/{z}/{x}/{-y}.jpeg',
-  name: 'PNOA_MA',
-  legend: 'Ortofoto PNOA (TMS)',
-  tileGridMaxZoom: 19,
-}, {});
+    <pre class="codigo"><code>const TMS_BASE_URL = 'https://tms-ign-base.idee.es/1.0.0/';
 
-mapajs.addLayers(capa);</code></pre>
+const CAPAS_TMS = [
+  { name: 'IGNBaseGris_capa', legend: 'IGNBaseGris', visible: false },
+  { name: 'IGNBaseOrto_capa', legend: 'IGNBaseOrto', visible: false },
+  { name: 'IGNBaseSimplificado_capa', legend: 'IGNBaseSimplificado', visible: false },
+  { name: 'IGNBaseTodo_capa', legend: 'IGNBaseTodo', visible: true },
+];
+
+CAPAS_TMS.forEach(function (capa) {
+  const esPng = (capa.name === 'IGNBaseOrto_capa' || capa.name === 'IGNBaseSimplificado_capa');
+  const tms = new IDEE.layer.TMS({
+    url: TMS_BASE_URL + capa.legend + '/{z}/{x}/{-y}.' + (esPng ? 'png' : 'jpeg'),
+    name: capa.name,
+    legend: capa.legend,
+    isBase: false,
+    tileGridMaxZoom: 17,
+    visible: capa.visible,
+  }, {
+    displayInLayerSwitcher: true,
+    crossOrigin: 'anonymous',
+  });
+  tms.setVisible(capa.visible);
+  mapajs.addLayers(tms);
+});
+
+anadirPluginsTipos(mapajs, mapa);</code></pre>
   </template>
 
   <script src="../../js/comun.js"></script>
