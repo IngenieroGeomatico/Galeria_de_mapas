@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>3D Tiles | Tipos de capa</title>
+  <meta name="description" content="Capa Tiles3D de la API-IDEE: mallas 3D servidas por teselas, con su huella dibujada en 2D.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Arbol de capas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">3D Tiles <span class="barra__clase">IDEE.layer.Tiles3D</span></h1>
+      <p class="barra__desc">
+        Mallas 3D servidas por teselas con nivel de detalle: el formato que pinta Cesium. En 2D la
+        API no las dibuja, así que aquí se enseña la huella que declara el propio tileset.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.Tiles3D</h3>
+    <p>
+      Los 3D Tiles son un estándar OGC para servir geometría 3D por teselas: cada nodo del árbol
+      trae su nivel de detalle y el cliente pide solo lo que ve. La capa se declara con la URL del
+      <code>tileset.json</code>.
+    </p>
+    <p>
+      En 3D la API crea el <code>Cesium3DTileset</code> y lo pinta sobre el globo. En 2D no hay
+      implementación —OpenLayers no dibuja 3D Tiles—, así que la página lee la región del
+      <code>boundingVolume</code> del tileset y dibuja su huella con una capa <code>Vector</code>:
+      al menos se ve dónde está y qué extensión ocupa.
+    </p>
+    <pre class="codigo"><code>// 3D: la capa real
+const capa = new IDEE.layer.Tiles3D({
+  url: 'https://s3.eu-west-2.wasabisys.com/ems-sgct-photomaillage/' +
+    'ODACIT/EMS_PM2022/tileset.json',
+  name: 'OdaCit',
+  legend: 'Od@CiT Estrasburgo (3D Tiles)',
+}, {});
+
+mapajs.addLayers(capa);</code></pre>
+    <pre class="codigo"><code>// 2D: la huella de su boundingVolume
+const grados = (rad) => (rad * 180) / Math.PI;
+const [w, s, e, n] = tileset.root.boundingVolume.region.map(grados);
+const [x1, y1] = await IDEE.utils.reproject([w, s], 'EPSG:4326', 'EPSG:3857');
+const [x2, y2] = await IDEE.utils.reproject([e, n], 'EPSG:4326', 'EPSG:3857');
+// ...y con esas esquinas se crea el poligono de una capa Vector</code></pre>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>
