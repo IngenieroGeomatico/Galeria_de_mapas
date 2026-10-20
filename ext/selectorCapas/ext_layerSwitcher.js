@@ -1599,6 +1599,16 @@ class miPlugin_layerSwitcher {
       const n = intento || 0;
       const ext = _extensionUtil(capa);
       if (ext) { hecho(ext); return; }
+      // Un WMS no lleva la extension en el cliente: hay que preguntarsela al
+      // servicio (capacidades y, si el bbox que declara no sirve, lo que pinta
+      // de verdad). Se hace una sola vez por capa; la respuesta queda cacheada.
+      if (n === 0 && _tieneWMS(capa)) {
+        _extensionWMS(capa, function (extWms) {
+          if (extWms) { hecho(extWms); return; }
+          _conExtension(capa, hecho, 1);
+        });
+        return;
+      }
       const maxIntentos = _capaCargando(capa) ? 22 : n;
       if (n >= maxIntentos) { hecho(null); return; }
       setTimeout(function () { _conExtension(capa, hecho, n + 1); }, (n < 4) ? 600 : 900);
@@ -1634,13 +1644,21 @@ class miPlugin_layerSwitcher {
      * @returns {boolean}
      */
     function _esMundoEntero(ext) {
-      // EPSG:3857, el semieje mayor del mundo.
-      const MUNDO_3857 = 20037508.34;
-      if (Math.abs(ext[0]) >= MUNDO_3857 && Math.abs(ext[2]) >= MUNDO_3857 &&
-          Math.abs(ext[1]) >= MUNDO_3857 && Math.abs(ext[3]) >= MUNDO_3857) return true;
-      // En grados, como devuelve Cesium.
-      if (ext[0] <= -180 && ext[2] >= 180 && ext[1] <= -90 && ext[3] >= 90) return true;
-      return false;
+      // EPSG:3857. OJO: la y del mundo no llega a ±20037508,34, se queda en la
+      // latitud máxima de Web Mercator (±19971868,88), que es lo que devuelve
+      // la API. Con el semieje mayor en las dos componentes el mundo de la API
+      // no se detectaba y el zoom se iba al planeta entero.
+      const MUNDO_X = 20037508.34;
+      const MUNDO_Y = 19971868.88;
+      if (Math.abs(ext[0]) >= MUNDO_X * 0.999 && Math.abs(ext[2]) >= MUNDO_X * 0.999 &&
+          Math.abs(ext[1]) >= MUNDO_Y * 0.999 && Math.abs(ext[3]) >= MUNDO_Y * 0.999) return true;
+      // En grados, como devuelve Cesium. OJO: el test solo vale si la caja
+      // entera cabe en lon/lat; si no, una caja en 3857 que cruza el meridiano
+      // (España sin ir más lejos) se tomaría por el mundo entero. Medido con la
+      // caja real de las estaciones sísmicas: [-7,0 M, -9,4 M, 0,5 M, 5,5 M].
+      const enGrados = ext[0] >= -180 && ext[2] <= 180 && ext[1] >= -90 && ext[3] <= 90;
+      return enGrados && ext[0] <= -179.9 && ext[2] >= 179.9 &&
+        ext[1] <= -89.9 && ext[3] >= 89.9;
     }
 
     /**
@@ -1687,6 +1705,434 @@ class miPlugin_layerSwitcher {
       if (!Array.isArray(ext) || ext.length < 4) return false;
       const n = ext.slice(0, 4).map(Number);
       return n.every(isFinite) && n[0] < n[2] && n[1] < n[3] && !_esMundoEntero(n);
+    }
+
+    // ── Extensión de una capa WMS ─────────────────────────────────────
+    // Un WMS no trae la extensión en el cliente: el bbox viaja en las
+    // capacidades del servicio. La API ya lo intenta y lo deja en
+    // `getMaxExtent(false)`, pero hay servicios que declaran el mundo entero
+    // en todas sus capas (medido: el WMS de volcanología del IGN) y entonces
+    // ese dato no sirve para encuadrar nada.
+    //
+    // De dónde sale la extensión, por orden:
+    //   1. `getMaxExtent(false)`, que es el bbox que la API leyó del servicio.
+    //   2. Las capacidades, leídas aquí: BoundingBox en EPSG:3857 o, si no,
+    //      EX_GeographicBoundingBox reproyectado.
+    //   3. Lo que la capa pinta de verdad: un GetMap transparente del mundo,
+    //      se leen en un canvas los píxeles opacos y se encuadra su caja. Es
+    //      lo único que funciona cuando el servicio miente en el bbox. Si a
+    //      escala mundial no pinta (hay capas con reglas de escala), se repite
+    //      la medición sobre la vista actual.
+    //
+    // Las capacidades se cachean por URL y la sonda por capa, así que el
+    // trabajo se hace una vez aunque se pulse el botón varias veces.
+
+    const _cacheCapacidadesWMS = new Map();
+    const _cacheSondaWMS = new Map();
+
+    /**
+     * ¿La capa, o alguna de sus hijas, es un WMS?
+     * @param {Object} capa
+     * @returns {boolean}
+     */
+    function _tieneWMS(capa) {
+      let encontrado = false;
+      const visitar = function (c) {
+        if (encontrado || !c) return;
+        if (_esCapaWMS(c)) { encontrado = true; return; }
+        let hijas = [];
+        try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+      };
+      visitar(capa);
+      return encontrado;
+    }
+
+    /**
+     * ¿Es una capa WMS de la API? Se comprueba por instancia y, como reserva,
+     * por las señales que solo tiene un WMS (url, name y getCapabilities).
+     * @param {Object} c
+     * @returns {boolean}
+     */
+    function _esCapaWMS(c) {
+      try {
+        if (window.IDEE && IDEE.layer && IDEE.layer.WMS && c instanceof IDEE.layer.WMS) return true;
+      } catch (e) { /* ignorar */ }
+      return Boolean(c && typeof c.url === 'string' && typeof c.name === 'string' &&
+        typeof c.getCapabilities === 'function');
+    }
+
+    /**
+     * Extensión de una capa WMS (o de un grupo con WMS dentro), en EPSG:3857.
+     * @param {Object} capa
+     * @param {Function} hecho Recibe la extensión o null.
+     */
+    function _extensionWMS(capa, hecho) {
+      const pendientes = [];
+      const visitar = function (c) {
+        if (_esCapaWMS(c)) {
+          let propio = null;
+          try { propio = c.getMaxExtent(false); } catch (e) { propio = null; }
+          pendientes.push(_esExtension(propio) ? Promise.resolve(propio.slice(0, 4).map(Number)) : _bboxDeCapaWMS(c));
+          return;
+        }
+        let hijas = [];
+        try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+      };
+      visitar(capa);
+      if (!pendientes.length) { hecho(null); return; }
+
+      Promise.all(pendientes).then(function (lista) {
+        const validas = lista.filter(_esExtension);
+        hecho(validas.length ? _unionExtensiones(validas) : null);
+      }).catch(function () { hecho(null); });
+    }
+
+    /**
+     * Extensión de una capa WMS: capacidades primero y, si el bbox no vale,
+     * lo que la capa pinta.
+     * @param {Object} capa
+     * @returns {Promise<Array<number>|null>}
+     */
+    function _bboxDeCapaWMS(capa) {
+      return _bboxCapacidadesWMS(capa.url).then(function (porCapa) {
+        const bb = porCapa ? porCapa[capa.name] : null;
+        if (_esExtension(bb)) return bb;
+        return _bboxSondaWMS(capa.url, capa.name);
+      }).catch(function () { return null; });
+    }
+
+    /**
+     * BBox de cada capa del servicio según sus capacidades.
+     * @param {string} url URL del servicio.
+     * @returns {Promise<Object|null>} { nombreCapa: [x0, y0, x1, y1] }
+     */
+    function _bboxCapacidadesWMS(url) {
+      if (!_cacheCapacidadesWMS.has(url)) {
+        _cacheCapacidadesWMS.set(url, _pedirCapacidadesWMS(url).catch(function () { return null; }));
+      }
+      return _cacheCapacidadesWMS.get(url);
+    }
+
+    /**
+     * Pide y parsea el GetCapabilities del servicio.
+     * @param {string} url
+     * @returns {Promise<Object>}
+     */
+    function _pedirCapacidadesWMS(url) {
+      const destino = _urlWMS(url, {
+        service: 'WMS',
+        request: 'GetCapabilities',
+        version: '1.3.0',
+      });
+      return fetch(destino, { credentials: 'omit' })
+        .then(function (respuesta) { return respuesta.text(); })
+        .then(function (texto) {
+          const doc = new DOMParser().parseFromString(texto, 'text/xml');
+          const capas = doc.getElementsByTagNameNS('*', 'Layer');
+          const salida = {};
+          for (let i = 0; i < capas.length; i++) {
+            const nombre = _textoHijoWMS(capas[i], 'Name');
+            if (!nombre) continue;
+            salida[nombre] = _bboxDeNodoWMS(capas[i]);
+          }
+          return salida;
+        });
+    }
+
+    /**
+     * Texto del primer hijo directo con ese nombre local.
+     * @param {Node} nodo
+     * @param {string} nombreLocal
+     * @returns {string}
+     */
+    function _textoHijoWMS(nodo, nombreLocal) {
+      const hijo = _hijoDirectoWMS(nodo, nombreLocal);
+      return hijo ? String(hijo.textContent || '').trim() : '';
+    }
+
+    /**
+     * Primer hijo directo con ese nombre local (no baja a nietos).
+     * @param {Node} nodo
+     * @param {string} nombreLocal
+     * @returns {Node|null}
+     */
+    function _hijoDirectoWMS(nodo, nombreLocal) {
+      const hijos = (nodo && nodo.childNodes) ? nodo.childNodes : [];
+      for (let i = 0; i < hijos.length; i++) {
+        const h = hijos[i];
+        if (h.nodeType === 1 && (h.localName || h.nodeName) === nombreLocal) return h;
+      }
+      return null;
+    }
+
+    /**
+     * BBox de un nodo Layer de las capacidades, en EPSG:3857.
+     * @param {Node} nodo
+     * @returns {Array<number>|null}
+     */
+    function _bboxDeNodoWMS(nodo) {
+      // BoundingBox en 3857 (o 900913, su alias). Es el dato directo.
+      const cajas = (nodo && nodo.childNodes) ? nodo.childNodes : [];
+      for (let i = 0; i < cajas.length; i++) {
+        const h = cajas[i];
+        if (h.nodeType !== 1 || (h.localName || h.nodeName) !== 'BoundingBox') continue;
+        const crs = (h.getAttribute('CRS') || h.getAttribute('SRS') || '').toUpperCase();
+        if (crs === 'EPSG:3857' || crs === 'EPSG:900913') {
+          const bb = ['minx', 'miny', 'maxx', 'maxy'].map(function (a) { return Number(h.getAttribute(a)); });
+          if (_esExtension(bb)) return bb;
+        }
+      }
+      // Si no, la caja geográfica (lon/lat) que todo WMS 1.3.0 declara.
+      const geo = _hijoDirectoWMS(nodo, 'EX_GeographicBoundingBox');
+      if (geo) {
+        const oeste = Number(_textoHijoWMS(geo, 'westBoundLongitude'));
+        const este = Number(_textoHijoWMS(geo, 'eastBoundLongitude'));
+        const sur = Number(_textoHijoWMS(geo, 'southBoundLatitude'));
+        const norte = Number(_textoHijoWMS(geo, 'northBoundLatitude'));
+        const a = _lonLatA3857(oeste, sur);
+        const b = _lonLatA3857(este, norte);
+        const bb = [a[0], a[1], b[0], b[1]];
+        if (_esExtension(bb)) return bb;
+      }
+      return null;
+    }
+
+    /**
+     * Pasa lon/lat (EPSG:4326) a EPSG:3857 sin depender de la API.
+     * @param {number} lon
+     * @param {number} lat
+     * @returns {Array<number>} [x, y]
+     */
+    function _lonLatA3857(lon, lat) {
+      const R = 6378137;
+      const x = (lon * Math.PI * R) / 180;
+      const y = Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) * R;
+      return [x, y];
+    }
+
+    /**
+     * Extensión real de una capa WMS midiendo lo que pinta. Cacheada por capa.
+     * @param {string} url
+     * @param {string} nombre
+     * @returns {Promise<Array<number>|null>}
+     */
+    function _bboxSondaWMS(url, nombre) {
+      const clave = url + '|' + nombre;
+      if (!_cacheSondaWMS.has(clave)) {
+        _cacheSondaWMS.set(clave, _medirPintadoWMS(url, nombre).catch(function () { return null; }));
+      }
+      return _cacheSondaWMS.get(clave);
+    }
+
+    /**
+     * Mide la caja de lo pintado. Primero a escala mundial; si la capa no pinta
+     * ahí (muchos servicios las esconden por escala, y este es uno de ellos),
+     * se repite sobre la vista actual, que es la escala a la que se está viendo.
+     * @param {string} url
+     * @param {string} nombre
+     * @returns {Promise<Array<number>|null>}
+     */
+    function _medirPintadoWMS(url, nombre) {
+      const MUNDO = 20037508.34;
+      const PX_MUNDO = (2 * MUNDO) / 512;
+      return _cajaPintadaWMS(url, nombre, [-MUNDO, -MUNDO, MUNDO, MUNDO], 512).then(function (caja) {
+        // Un píxel suelto no es una extensión: el servicio no está pintando la
+        // capa a esta escala, solo una marca o un símbolo arrastrado.
+        const despreciable = caja &&
+          (caja[2] - caja[0]) <= 2 * PX_MUNDO && (caja[3] - caja[1]) <= 2 * PX_MUNDO;
+        if (caja && !despreciable) return _refinarWMS(url, nombre, caja);
+        const vista = _bboxVistaWMS();
+        if (!vista) return caja ? _refinarWMS(url, nombre, caja) : null;
+        return _cajaPintadaWMS(url, nombre, vista, 512).then(function (cajaVista) {
+          if (cajaVista) return cajaVista;
+          return caja ? _refinarWMS(url, nombre, caja) : null;
+        });
+      });
+    }
+
+    /**
+     * Repite dos veces la medición sobre la caja encontrada, con un margen,
+     * para pasar de la precisión de la imagen mundial a la del dato.
+     * @param {string} url
+     * @param {string} nombre
+     * @param {Array<number>} caja
+     * @returns {Promise<Array<number>>}
+     */
+    function _refinarWMS(url, nombre, caja) {
+      let actual = caja;
+      const refinar = function (pasadas) {
+        if (pasadas <= 0) return Promise.resolve(actual);
+        const mx = (actual[2] - actual[0]) * 0.08;
+        const my = (actual[3] - actual[1]) * 0.08;
+        const zona = [actual[0] - mx, actual[1] - my, actual[2] + mx, actual[3] + my];
+        return _cajaPintadaWMS(url, nombre, zona, 512).then(function (siguiente) {
+          if (siguiente) actual = siguiente;
+          return refinar(pasadas - 1);
+        });
+      };
+      return refinar(2);
+    }
+
+    /**
+     * BBox de la vista actual en EPSG:3857, para las capas que solo pintan a
+     * escala de trabajo. En 3D se toma de la cámara, porque `getBbox()` ahí
+     * devuelve el mundo entero.
+     * @returns {Array<number>|null}
+     */
+    function _bboxVistaWMS() {
+      // En Cesium `getBbox()` devuelve el mundo entero, así que la vista se
+      // toma de la cámara: el rectángulo que está mirando. Y de paso sirve
+      // para no pedir un bbox con latitud ±90, que en 3857 se va a infinito.
+      const impl = (map && typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
+      const escena = (impl && impl.scene) ? impl.scene : null;
+      const camara = (escena && escena.camera) ? escena.camera : null;
+      if (camara && typeof camara.computeViewRectangle === 'function' && window.Cesium) {
+        try {
+          const r = camara.computeViewRectangle(escena.globe ? escena.globe.ellipsoid : undefined);
+          if (r && window.Cesium.Math) {
+            const C = window.Cesium;
+            const caja = _gradosACaja3857(
+              C.Math.toDegrees(r.west), C.Math.toDegrees(r.south),
+              C.Math.toDegrees(r.east), C.Math.toDegrees(r.north)
+            );
+            if (caja) return caja;
+          }
+        } catch (e) { /* se intenta getBbox */ }
+      }
+
+      let bb = null;
+      try { bb = map.getBbox(); } catch (e) { return null; }
+      let n = null;
+      if (Array.isArray(bb)) {
+        n = bb.slice(0, 4).map(Number);
+      } else if (bb && bb.x && bb.y) {
+        // La API devuelve {x: {min, max}, y: {min, max}}.
+        n = [Number(bb.x.min), Number(bb.y.min), Number(bb.x.max), Number(bb.y.max)];
+      }
+      if (!n || !n.every(isFinite) || n[0] >= n[2] || n[1] >= n[3]) return null;
+      if (n[0] >= -180 && n[2] <= 180 && n[1] >= -90 && n[3] <= 90) {
+        // Si la "vista" es el mundo entero no sirve para acotar una capa.
+        if (_esMundoEntero(n)) return null;
+        return _gradosACaja3857(n[0], n[1], n[2], n[3]);
+      }
+      return n;
+    }
+
+    /**
+     * Caja lon/lat (grados) a EPSG:3857, recortando la latitud al límite de
+     * Web Mercator para que no salga infinito.
+     * @param {number} oeste
+     * @param {number} sur
+     * @param {number} este
+     * @param {number} norte
+     * @returns {Array<number>|null}
+     */
+    function _gradosACaja3857(oeste, sur, este, norte) {
+      const latMax = 85.05112878;
+      const s = Math.max(-latMax, Math.min(latMax, sur));
+      const n = Math.max(-latMax, Math.min(latMax, norte));
+      if (![oeste, s, este, n].every(isFinite) || oeste >= este || s >= n) return null;
+      const a = _lonLatA3857(oeste, s);
+      const b = _lonLatA3857(este, n);
+      return [a[0], a[1], b[0], b[1]];
+    }
+
+    /**
+     * Caja de los píxeles opacos de un GetMap.
+     * @param {string} url
+     * @param {string} nombre
+     * @param {Array<number>} bbox BBox pedido, en EPSG:3857.
+     * @param {number} lado Ancho y alto de la imagen.
+     * @returns {Promise<Array<number>|null>}
+     */
+    function _cajaPintadaWMS(url, nombre, bbox, lado) {
+      return new Promise(function (resolver) {
+        if (typeof Image === 'undefined' || typeof document === 'undefined') { resolver(null); return; }
+        const destino = _urlWMS(url, {
+          service: 'WMS',
+          version: '1.3.0',
+          request: 'GetMap',
+          layers: nombre,
+          styles: '',
+          crs: 'EPSG:3857',
+          bbox: bbox.map(function (v) { return v.toFixed(2); }).join(','),
+          width: lado,
+          height: lado,
+          format: 'image/png',
+          transparent: 'true',
+        });
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function () {
+          try {
+            const lienzo = document.createElement('canvas');
+            lienzo.width = img.naturalWidth || lado;
+            lienzo.height = img.naturalHeight || lado;
+            const ctx = lienzo.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const datos = ctx.getImageData(0, 0, lienzo.width, lienzo.height).data;
+            let x0 = lienzo.width, y0 = lienzo.height, x1 = -1, y1 = -1;
+            for (let y = 0; y < lienzo.height; y++) {
+              for (let x = 0; x < lienzo.width; x++) {
+                if (datos[(y * lienzo.width + x) * 4 + 3] > 8) {
+                  if (x < x0) x0 = x;
+                  if (x > x1) x1 = x;
+                  if (y < y0) y0 = y;
+                  if (y > y1) y1 = y;
+                }
+              }
+            }
+            if (x1 < 0 || y1 < 0) { resolver(null); return; }
+            const ancho = (bbox[2] - bbox[0]) / lienzo.width;
+            const alto = (bbox[3] - bbox[1]) / lienzo.height;
+            const caja = [
+              bbox[0] + x0 * ancho,
+              bbox[3] - (y1 + 1) * alto,
+              bbox[0] + (x1 + 1) * ancho,
+              bbox[3] - y0 * alto,
+            ];
+            resolver(_esExtension(caja) ? caja : null);
+          } catch (e) {
+            // Canvas contaminado (servicio sin CORS): no se puede medir.
+            resolver(null);
+          }
+        };
+        img.onerror = function () { resolver(null); };
+        img.src = destino;
+      });
+    }
+
+    /**
+     * Añade parámetros a una URL de servicio sin romper los que ya lleve.
+     * @param {string} base
+     * @param {Object} parametros
+     * @returns {string}
+     */
+    function _urlWMS(base, parametros) {
+      const trozos = [];
+      Object.keys(parametros).forEach(function (clave) {
+        trozos.push(encodeURIComponent(clave) + '=' + encodeURIComponent(parametros[clave]));
+      });
+      const url = String(base || '');
+      let separador = '?';
+      if (url.indexOf('?') !== -1) separador = /[?&]$/.test(url) ? '' : '&';
+      return url + separador + trozos.join('&');
+    }
+
+    /**
+     * Une varias extensiones en una.
+     * @param {Array<Array<number>>} lista
+     * @returns {Array<number>}
+     */
+    function _unionExtensiones(lista) {
+      return lista.reduce(function (acc, e) {
+        return [
+          Math.min(acc[0], e[0]), Math.min(acc[1], e[1]),
+          Math.max(acc[2], e[2]), Math.max(acc[3], e[3]),
+        ];
+      }, [Infinity, Infinity, -Infinity, -Infinity]);
     }
 
     /**
