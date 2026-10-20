@@ -8,12 +8,13 @@
 
 /* Botón colapsado: fondo = color1 y texto/icono = color3 del esquema (las
    variables las escribe el plugin en línea, ver _aplicarColores; los valores de
-   reserva son los del esquema por defecto). El !important es el habitual: la
-   hoja de la API gana a estas reglas y no se puede leer con cssRules. */
+   reserva son los del esquema por defecto). El !important es necesario porque
+   la hoja de la API fija el fondo de todos los botones plegados con otro
+   !important (#71a7d3): sin él, los colores del constructor no se ven. */
 .m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn {
-  background-color: var(--g-plugin-bg-color, orangered);
-  color: var(--g-plugin-icon-color, #fff);
-  border-color: var(--g-plugin-border-color, #ffffff);
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #fff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
 }
 
 .m-areas > div.m-area > div.m-panel.m-panel-modal.collapsed > button.m-panel-btn:disabled {
