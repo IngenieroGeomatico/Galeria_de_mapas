@@ -58,7 +58,8 @@
       <h1 class="barra__titulo">WMS <span class="barra__clase">IDEE.layer.WMS</span></h1>
       <p class="barra__desc">
         Un servicio OGC que devuelve el mapa ya dibujado como imagen. Aquí, las
-        18 capas del WMS de vigilancia volcánica del IGN.
+        18 capas del WMS de vigilancia volcánica del IGN. Al arrancar solo está
+        visible la de erupciones; las demás se encienden desde el árbol de capas.
       </p>
     </div>
   </header>
@@ -73,28 +74,30 @@
       cargan las 18 capas del WMS de vigilancia volcánica del IGN: una capa de la
       API por cada capa del servicio, con <code>transparent: true</code> para
       poder superponerlas y <code>tiled: true</code> para pedirlas por teselas.
+      Solo la de erupciones queda visible al arrancar; las demás se encienden
+      desde el árbol de capas.
     </p>
     <pre class="codigo"><code>const URL_VOLCANOLOGIA = 'https://wms-volcanologia.ign.es/volcanologia?';
 
 const CAPAS_VOLCANOLOGIA = [
-  { name: 'sis', legend: 'Red de Vigilancia Volcánica' },
-  { name: 'gps', legend: 'Control de deformaciones' },
-  { name: 'displacement-asc', legend: 'InSAR' },
-  { name: 'phase-asc', legend: 'Fase en órbita ascendente' },
-  { name: 'coh-asc', legend: 'Coherencia en órbita ascendente' },
-  { name: 'displacement-des', legend: 'Desplazamiento en órbita descendente' },
-  { name: 'phase-des', legend: 'Fase en órbita descendente' },
-  { name: 'coh-des', legend: 'Coherencia en órbita descendente' },
-  { name: 'eto', legend: 'Estaciones totales' },
-  { name: 'inc', legend: 'Inclinómetros' },
-  { name: 'gqme', legend: 'Geoquímica' },
-  { name: 'gqmp', legend: 'Puntos de muestreo' },
-  { name: 'gra', legend: 'Gravimetría' },
-  { name: 'rega', legend: 'Red Española de Gravimetría Absoluta REGA' },
-  { name: 'mag', legend: 'Geomagnetismo' },
-  { name: 'erupciones', legend: 'Geología - Erupciones' },
-  { name: 'wcmv', legend: 'Imágenes en tiempo real' },
-  { name: 'wcmt', legend: 'Cámara térmica (infrarrojo)' },
+  { name: 'sis', legend: 'Red de Vigilancia Volcánica', visible: false },
+  { name: 'gps', legend: 'Control de deformaciones', visible: false },
+  { name: 'displacement-asc', legend: 'InSAR', visible: false },
+  { name: 'phase-asc', legend: 'Fase en órbita ascendente', visible: false },
+  { name: 'coh-asc', legend: 'Coherencia en órbita ascendente', visible: false },
+  { name: 'displacement-des', legend: 'Desplazamiento en órbita descendente', visible: false },
+  { name: 'phase-des', legend: 'Fase en órbita descendente', visible: false },
+  { name: 'coh-des', legend: 'Coherencia en órbita descendente', visible: false },
+  { name: 'eto', legend: 'Estaciones totales', visible: false },
+  { name: 'inc', legend: 'Inclinómetros', visible: false },
+  { name: 'gqme', legend: 'Geoquímica', visible: false },
+  { name: 'gqmp', legend: 'Puntos de muestreo', visible: false },
+  { name: 'gra', legend: 'Gravimetría', visible: false },
+  { name: 'rega', legend: 'Red Española de Gravimetría Absoluta REGA', visible: false },
+  { name: 'mag', legend: 'Geomagnetismo', visible: false },
+  { name: 'erupciones', legend: 'Geología - Erupciones', visible: true },
+  { name: 'wcmv', legend: 'Imágenes en tiempo real', visible: false },
+  { name: 'wcmt', legend: 'Cámara térmica (infrarrojo)', visible: false },
 ];
 
 CAPAS_VOLCANOLOGIA.forEach((capa) => {
@@ -104,7 +107,9 @@ CAPAS_VOLCANOLOGIA.forEach((capa) => {
     legend: capa.legend,
     transparent: true,
     tiled: true,
-  }, {}));
+  }, {
+    visibility: capa.visible,
+  }));
 });</code></pre>
   </template>
 

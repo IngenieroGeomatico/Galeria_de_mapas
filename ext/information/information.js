@@ -816,18 +816,74 @@
     }
 
     /**
-     * Crea un popup de la API con dos ajustes para 3D:
+     * Centra en OpenLayers el punto consultado con una transición suave. Se
+     * usa `view.animate` en lugar de `setCenter` para que el mapa vuele al
+     * punto en lugar de saltar; se cancela cualquier animación anterior para
+     * que un clic seguido no encadene destinos ni dé tirones.
+     */
+    _centrarPuntoOL(punto) {
+      this._vuelo2D = false;
+      if (this._esCesium() || !punto) return;
+      var impl = this._getImpl();
+      var view = impl && esFuncion(impl.getView) ? impl.getView() : null;
+      if (!view || !esFuncion(view.animate)) return;
+
+      var centro = null;
+      try {
+        var proyeccion = (view.getProjection && view.getProjection().getCode)
+          ? view.getProjection().getCode()
+          : 'EPSG:3857';
+        if (proyeccion === 'EPSG:4326' || proyeccion === 'CRS:84') {
+          centro = [punto.lon, punto.lat];
+        } else if (proyeccion === 'EPSG:3857') {
+          centro = [punto.x, punto.y];
+        } else {
+          var xy = this._reproyectar([punto.x, punto.y], 'EPSG:3857', proyeccion);
+          centro = (xy && xy.length === 2) ? [xy[0], xy[1]] : [punto.x, punto.y];
+        }
+      } catch (e) {
+        centro = [punto.x, punto.y];
+      }
+      if (!centro) return;
+
+      try {
+        if (esFuncion(view.cancelAnimations)) view.cancelAnimations();
+        // Transición suave: 700 ms con easing cuadrático de entrada/salida,
+        // para que el mapa acelere y frene con delicadeza en vez de saltar.
+        view.animate({
+          center: centro,
+          duration: 700,
+          easing: function (t) {
+            return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+          },
+        });
+        this._vuelo2D = true;
+      } catch (e) {
+        /* si la vista aún no está lista se mantiene la vista actual */
+      }
+    }
+
+    /**
+     * Crea un popup de la API. El auto-pan se deja desactivado y solo se
+     * activa como respaldo si no hay vuelo en 2D; en 3D siempre desactivado:
      * - panMapIfOutOfView desactivado: en Cesium `panIntoView` usa
      *   `camera.flyTo` y, con la vista inclinada, descoloca la cámara y el
      *   propio popup.
      * - setStatus_ sustituido: la implementación de la API llama a
      *   `centerByStatus` al cambiar de estado en móvil, lo que también
      *   recentra el mapa. Aquí solo se cambia el tamaño del panel.
+     *
+     * @param {Object} [opcionesPopup] Opciones extra para `IDEE.Popup`.
+     * @returns {Object|null} Popup de la API.
      */
-    _crearPopup() {
+    _crearPopup(opcionesPopup) {
       var IDEE = api();
       if (!IDEE || !IDEE.Popup) return null;
-      var opciones = {};
+      var opciones = Object.assign({}, opcionesPopup || {});
+      // El auto-pan se activa a propósito solo al final, en _panPopupFinal.
+      // Durante addTab y addPopup la API llama a show() y, si estuviera
+      // activo, cada pestaña movería el mapa.
+      if (opciones.panMapIfOutOfView === undefined) opciones.panMapIfOutOfView = false;
       if (this._esCesium()) opciones.panMapIfOutOfView = false;
       var popup = null;
       try {
@@ -840,8 +896,73 @@
         popup.setStatus_ = function (estado) {
           if (estado) self._ponerEstadoPopup(popup, estado);
         };
+        // La implementación de la API vuelve a llamar a show() al cambiar de
+        // pestaña, y show() dispara un nuevo panIntoView. Al abrir el popup
+        // de resultados se activa la primera pestaña, lo que producía un
+        // segundo desplazamiento con otra altura. Aquí se cambia el contenido
+        // sin volver a mostrar ni mover el mapa.
+        popup.switchTab = function (indice) {
+          var i = Number(indice);
+          if (!isFinite(i) || i < 0 || !this.tabs_ || this.tabs_.length <= i) return;
+          var tab = this.tabs_[i];
+          this.setContent_(tab.content);
+          this.addEventTabs(tab, this.getContent());
+        };
       }
       return popup;
+    }
+
+    /**
+     * Activa el auto-pan del popup definitivo, solo como respaldo cuando no
+     * hay vuelo en 2D. Se llama desde `_panPopupFinal`, después de `addPopup`
+     * y de `_expandirPopup`.
+     */
+    _habilitarPanPopup(popup) {
+      if (!popup || this._esCesium()) return;
+      try {
+        var impl = esFuncion(popup.getImpl) ? popup.getImpl() : null;
+        if (impl) impl.panMapIfOutOfView = true;
+      } catch (e) { /* sin implementación */ }
+    }
+
+    /**
+     * Muestra el popup definitivo. Se llama después de `addPopup` y de
+     * `_expandirPopup`, con el panel ya en su tamaño final. Si el mapa ya
+     * voló al punto en 2D, el popup queda en el centro y no se activa el
+     * auto-pan; así el desplazamiento es único y suave.
+     */
+    _panPopupFinal(popup) {
+      if (!popup) return;
+      // El ancho definitivo lo pone la clase del plugin (440 px). Se aplica
+      // antes del show para que el cálculo de auto-pan use ese ancho y no el
+      // estrecho de la API; el selector de capas se añade después.
+      try {
+        var root = document.getElementById(popup.getId());
+        if (root) {
+          root.classList.add('g-information-popup', 'g-information-tabs-ocultas');
+        }
+      } catch (e) { /* sin DOM todavía */ }
+      // Si el mapa ya voló al punto en 2D, el popup queda en el centro y no
+      // hace falta el auto-pan; así el desplazamiento es único y suave.
+      if (!this._vuelo2D) this._habilitarPanPopup(popup);
+      try { popup.show(this._coordPopup); } catch (e) { /* sin mapa */ }
+    }
+
+    /**
+     * Añade el popup al mapa sin el vuelo automático de la API
+     * (`MOVE_MAP_EXTRACT`). Ese vuelo dura un segundo y se suma al auto-pan
+     * del popup; desactivarlo deja un único desplazamiento controlado por
+     * `_panPopupFinal`.
+     */
+    _addPopupSinVuelo(popup, coord) {
+      var IDEE = api();
+      var previo = IDEE && IDEE.config ? IDEE.config.MOVE_MAP_EXTRACT : undefined;
+      try {
+        if (IDEE && IDEE.config) IDEE.config.MOVE_MAP_EXTRACT = false;
+        this._map.addPopup(popup, coord, false);
+      } finally {
+        if (IDEE && IDEE.config) IDEE.config.MOVE_MAP_EXTRACT = previo;
+      }
     }
 
     _adjuntarEventos() {
@@ -931,13 +1052,16 @@
         var lonlat = self._reproyectar([xy[0], xy[1]], 'EPSG:3857', 'EPSG:4326');
         if (!lonlat) return;
 
-        self._consultarEnPunto({
+        var punto2D = {
           x: xy[0],
           y: xy[1],
           lon: lonlat[0],
           lat: lonlat[1],
           altura: 0,
-        }, [coord[0], coord[1]], evt.pixel || null, null);
+        };
+        // El mapa 2D vuela al punto clicado con una transición suave.
+        self._centrarPuntoOL(punto2D);
+        self._consultarEnPunto(punto2D, [coord[0], coord[1]], evt.pixel || null, null);
       };
       impl.addEventListener('singleclick', manejador);
       this._handlers.ol = manejador;
@@ -1332,6 +1456,9 @@
       if (tipo === 'wms') {
         return this._consultarWMS(capa, punto, pixel, cartesiano, mpp, generacion);
       }
+      if (tipo === 'wmts') {
+        return this._consultarWMTS(capa, punto, pixel, cartesiano, mpp, generacion);
+      }
       if (tipo === 'vector') {
         return this._consultarVector(capa, punto, pixel, cartesiano, mpp, generacion);
       }
@@ -1447,6 +1574,286 @@
       resultado.error = this._mensajeError(ultimoError);
       resultado.formatoActual = candidatos.length ? candidatos[0].id : null;
       return resultado;
+    }
+
+    // ===================================================================
+    //  WMTS: GetFeatureInfo y respaldo de color
+    // ===================================================================
+
+    /**
+     * Consulta una capa WMTS superpuesta. Muchos WMTS son ráster y no
+     * implementan GetFeatureInfo, aunque la operación aparezca en sus
+     * capacidades. En ese caso se devuelve el color del píxel como respaldo,
+     * que siempre se puede leer de la tesela, y se avisa en la ficha.
+     */
+    async _consultarWMTS(capa, punto, pixel, cartesiano, mpp, generacion) {
+      var clave = this._claveCapa(capa);
+      // En WMTS se ofrecen solo JSON y HTML, los mismos formatos que en WMS.
+      // No se reutiliza _formatosDisponibles porque, cuando hay HTML, descarta
+      // texto y GML; en WMTS basta con estos dos.
+      var formatos = [
+        { id: 'json', etiqueta: 'JSON', infoFormat: 'application/json' },
+        { id: 'html', etiqueta: 'HTML', infoFormat: 'text/html' },
+      ];
+      var resultado = {
+        uid: '',
+        tipo: 'wmts',
+        capa: capa,
+        clave: clave,
+        formatos: formatos,
+        formatoActual: null,
+        porFormato: {},
+        error: null,
+        caps: null,
+        punto: {
+          x: punto.x,
+          y: punto.y,
+          lon: punto.lon,
+          lat: punto.lat,
+        },
+        mpp: mpp || 1,
+        generacion: generacion,
+      };
+
+      this._wmtsSinInfo = this._wmtsSinInfo || {};
+      var consultable = true;
+      if (esFuncion(capa.isQueryable)) {
+        try { consultable = capa.isQueryable() !== false; } catch (e) { consultable = true; }
+      }
+
+      if (consultable && !this._wmtsSinInfo[clave]) {
+        var preferido = this._formatoPreferido(clave, formatos);
+        var candidatos = [];
+        var formatoPreferido = formatos.find(function (f) { return f.id === preferido; });
+        if (formatoPreferido) candidatos.push(formatoPreferido);
+        formatos.forEach(function (formato) {
+          if (candidatos.indexOf(formato) === -1) candidatos.push(formato);
+        });
+
+        for (var i = 0; i < candidatos.length; i += 1) {
+          var formato = candidatos[i];
+          try {
+            var datos = await this._pedirFeatureInfoWMTS(capa, resultado.punto, formato);
+            resultado.porFormato[formato.id] = Object.assign({ estado: 'ok' }, datos);
+            resultado.formatoActual = formato.id;
+            if (this._resultadoTieneContenido(resultado)) {
+              if (formato.id !== preferido) {
+                var pref = this._preferencias[clave] || {};
+                this._preferencias[clave] = {
+                  formato: formato.id,
+                  plantilla: pref.plantilla || null,
+                };
+              }
+              return resultado;
+            }
+          } catch (e) {
+            resultado.porFormato[formato.id] = {
+              estado: 'error',
+              error: this._mensajeError(e),
+            };
+          }
+        }
+
+        // Se recuerda que este WMTS no ha dado información válida para no
+        // repetir las mismas peticiones fallidas en cada clic.
+        this._wmtsSinInfo[clave] = true;
+      }
+
+      // Respaldo: el WMTS se pinta sobre el mapa, así que se puede leer el
+      // color de su tesela en el punto igual que en una capa base.
+      var color = await this._consultarBase(capa, punto, pixel, cartesiano, mpp, generacion);
+      if (color && !color.omitida) {
+        color.tipo = 'wmts';
+        color.clave = clave;
+        color.fuente = 'wmts';
+        color.caps = null;
+        this._anadirAvisoWMTS(color);
+        return color;
+      }
+
+      // Sin GetFeatureInfo y con el píxel transparente no hay nada que
+      // enseñar: mejor omitir la pestaña que mostrar la traza del servicio.
+      return {
+        omitida: true,
+        motivo: (color && color.motivo) || 'El WMTS no devuelve información en este punto.',
+      };
+    }
+
+    /** Añade a la ficha de color la explicación del respaldo WMTS. */
+    _anadirAvisoWMTS(resultado) {
+      var estado = resultado && resultado.porFormato && resultado.porFormato[resultado.formatoActual];
+      var elemento = estado && estado.features && estado.features[0];
+      if (!elemento) return;
+      var aviso = 'El servicio WMTS no devuelve GetFeatureInfo para esta capa; se muestra el color del píxel.';
+      elemento.propiedades = Object.assign({}, elemento.propiedades, { Aviso: aviso });
+      elemento.campos = (elemento.campos || []).concat([
+        { clave: 'Aviso', etiqueta: 'Aviso', valor: aviso, texto: aviso },
+      ]);
+      if (elemento.crudo && elemento.crudo.properties) {
+        elemento.crudo.properties.Aviso = aviso;
+      }
+      resultado.aviso = aviso;
+    }
+
+    /** Zoom entero que se usa como nivel de la matriz WMTS. */
+    _zoomWMTS(capa) {
+      var zoom = 0;
+      try { zoom = this._map && this._map.getZoom(); } catch (e) { zoom = 0; }
+      if (!isFinite(zoom)) zoom = 0;
+      zoom = Math.round(zoom);
+      try {
+        // La API expone `minZoom`/`maxZoom` como propiedades y `getMinZoom`/
+        // `getMaxZoom` como métodos; se admiten ambos por si cambia.
+        var minimo = isFinite(capa.minZoom)
+          ? capa.minZoom
+          : (esFuncion(capa.getMinZoom) ? capa.getMinZoom() : null);
+        var maximo = isFinite(capa.maxZoom)
+          ? capa.maxZoom
+          : (esFuncion(capa.getMaxZoom) ? capa.getMaxZoom() : null);
+        if (isFinite(minimo)) zoom = Math.max(minimo, zoom);
+        if (isFinite(maximo)) zoom = Math.min(maximo, zoom);
+      } catch (e) { /* sin límites */ }
+      return Math.max(0, zoom);
+    }
+
+    /**
+     * Construye la URL de GetFeatureInfo de una capa WMTS. En 2D se delega
+     * en la API, que conoce la matriz de teselas de OpenLayers. En 3D se
+     * calculan la columna y la fila con el `tilingScheme` de Cesium y se
+     * pasan a la implementación WMTS de la API.
+     */
+    _urlFeatureInfoWMTS(capa, punto, formato, zoomForzado) {
+      if (!capa || !esFuncion(capa.getFeatureInfoUrl)) {
+        throw new Error('La capa WMTS no permite GetFeatureInfo.');
+      }
+      var zoom = isFinite(zoomForzado) ? Math.round(zoomForzado) : this._zoomWMTS(capa);
+      var url = null;
+
+      if (this._esCesium()) {
+        var impl = null;
+        try { impl = capa.getImpl ? capa.getImpl() : null; } catch (e) { impl = null; }
+        var imageryLayer = impl && (impl.cesiumLayer || impl.imageryLayer || impl.layer);
+        var provider = imageryLayer && imageryLayer.imageryProvider;
+        var scheme = provider && provider.tilingScheme;
+        var Cesium = global.Cesium;
+        if (!scheme || !Cesium || !Cesium.Cartographic || !Cesium.Cartesian2
+          || !esFuncion(scheme.positionToTileXY)) {
+          throw new Error('La capa WMTS aún no está lista en 3D.');
+        }
+        var cartografica = Cesium.Cartographic.fromDegrees(punto.lon, punto.lat);
+        var xy = scheme.positionToTileXY(cartografica, zoom, new Cesium.Cartesian2());
+        if (!xy) throw new Error('No se pudo calcular la tesela WMTS.');
+        // La API 3D espera grados si la matriz es geográfica y radianes si
+        // es Web Mercator (GoogleMapsCompatible). Con grados en Mercator
+        // calcula I/J fuera de la tesela y el servicio responde 400.
+        var esGeografica = !!(Cesium.GeographicTilingScheme
+          && scheme instanceof Cesium.GeographicTilingScheme);
+        var coordApi = esGeografica
+          ? [punto.lon, punto.lat]
+          : [Cesium.Math.toRadians(punto.lon), Cesium.Math.toRadians(punto.lat)];
+        try {
+          url = capa.getFeatureInfoUrl(
+            [xy.x, xy.y],
+            zoom,
+            formato.infoFormat,
+            coordApi
+          );
+        } catch (e) {
+          var error3D = new Error('No se pudo construir la consulta WMTS.');
+          error3D.tileMatrixNoSoportada = true;
+          throw error3D;
+        }
+      } else {
+        // La API 2D espera [x, y], no {x, y}; con un objeto devuelve NaN en
+        // TILEROW/TILECOL y el servicio rechaza la petición.
+        try {
+          url = capa.getFeatureInfoUrl([punto.x, punto.y], zoom, formato.infoFormat);
+        } catch (e) {
+          var error2D = new Error('No se pudo construir la consulta WMTS.');
+          error2D.tileMatrixNoSoportada = true;
+          throw error2D;
+        }
+      }
+
+      if (!url) {
+        var errorUrl = new Error('No se pudo construir la consulta WMTS.');
+        errorUrl.tileMatrixNoSoportada = true;
+        throw errorUrl;
+      }
+      return url;
+    }
+
+    /**
+     * Pide y normaliza un GetFeatureInfo WMTS igual que el de WMS.
+     *
+     * Algunos servicios anuncian matrices de teselas en GetCapabilities que
+     * luego no aceptan en GetFeatureInfo (por ejemplo, el WMTS de potencial
+     * solar responde `Unknown TILEMATRIX` por encima del nivel 17). En ese
+     * caso se baja un nivel y se reintenta; el valor sigue siendo válido y
+     * evita que el clic acabe siempre en el color de la tesela.
+     */
+    async _pedirFeatureInfoWMTS(capa, punto, formato, zoomInicial) {
+      var zoom = isFinite(zoomInicial) ? Math.round(zoomInicial) : this._zoomWMTS(capa);
+      var ultimoError = null;
+      for (var intento = 0; intento < 8 && zoom >= 0; intento += 1) {
+        try {
+          var url = this._urlFeatureInfoWMTS(capa, punto, formato, zoom);
+          var respuesta;
+          var texto;
+          try {
+            respuesta = await fetch(url, { cache: 'no-store' });
+            texto = await respuesta.text();
+          } catch (e) {
+            throw new Error('No se pudo conectar con el servicio WMTS.');
+          }
+
+          var matrizNoSoportada = /Unknown TILEMATRIX|locator="TILEMATRIX"/i.test(texto);
+          if (!respuesta.ok) {
+            var errorHttp = new Error('HTTP ' + respuesta.status);
+            errorHttp.tileMatrixNoSoportada = matrizNoSoportada;
+            throw errorHttp;
+          }
+          if (this._esExcepcionOGC(texto)) {
+            var errorOgc = new Error(this._mensajeExcepcion(texto));
+            errorOgc.tileMatrixNoSoportada = matrizNoSoportada;
+            throw errorOgc;
+          }
+
+          if (formato.id === 'json') {
+            var json;
+            try {
+              json = JSON.parse(texto);
+            } catch (e) {
+              throw new Error('El servicio no devolvió un JSON válido.');
+            }
+            return {
+              tipo: 'json',
+              json: json,
+              features: this._featuresDeJson(json, capa, 'wmts'),
+              texto: texto,
+            };
+          }
+          if (formato.id === 'html') {
+            return {
+              tipo: 'html',
+              html: this._limpiarHtml(texto),
+              texto: texto,
+            };
+          }
+          return {
+            tipo: 'texto',
+            texto: texto,
+          };
+        } catch (e) {
+          ultimoError = e;
+          if (e && e.tileMatrixNoSoportada && zoom > 0) {
+            zoom -= 1;
+            continue;
+          }
+          throw e;
+        }
+      }
+      throw ultimoError || new Error('No se pudo consultar el WMTS.');
     }
 
     // ===================================================================
@@ -2593,7 +3000,7 @@
       return '#' + hex(r) + hex(g) + hex(b);
     }
 
-    /** Capas visibles y de un tipo que sabemos consultar (base, WMS, vectorial o ráster). */
+    /** Capas visibles y de un tipo que sabemos consultar (base, WMS, WMTS, vectorial o ráster). */
     _capasConsultables() {
       var salida = [];
       var self = this;
@@ -2622,6 +3029,8 @@
           var tipo = String(capa.type || '').toUpperCase();
           if (tipo === 'WMS') {
             salida.push({ capa: capa, tipo: 'wms', orden: contador++ });
+          } else if (tipo === 'WMTS') {
+            salida.push({ capa: capa, tipo: 'wmts', orden: contador++ });
           } else if (self._esGeoTIFF(capa)) {
             salida.push({ capa: capa, tipo: 'raster', orden: contador++ });
           } else if (tipo === 'GEOJSON' || tipo === 'VECTOR' || tipo === 'KML'
@@ -3154,7 +3563,7 @@
       return 'El servicio devolvió una excepción OGC.';
     }
 
-    _featuresDeJson(json, capa) {
+    _featuresDeJson(json, capa, fuente) {
       var lista = [];
       if (json && json.type === 'FeatureCollection' && Array.isArray(json.features)) {
         lista = json.features;
@@ -3172,11 +3581,11 @@
 
       var self = this;
       return lista.map(function (feature) {
-        return self._normalizarFeatureJson(feature, capa);
+        return self._normalizarFeatureJson(feature, capa, fuente);
       }).filter(Boolean);
     }
 
-    _normalizarFeatureJson(feature, capa) {
+    _normalizarFeatureJson(feature, capa, fuente) {
       if (!feature || typeof feature !== 'object') return null;
       var props = feature.properties || feature.attributes || null;
       if (!props) {
@@ -3199,7 +3608,7 @@
         geometria: geometria ? { tipo: geometria.type || null, coordenadas: geometria.coordinates || null } : null,
         id: id,
         crudo: feature,
-        fuente: 'wms',
+        fuente: fuente || 'wms',
       }, capa);
     }
 
@@ -4153,7 +4562,11 @@
       this._cerrarPopup();
 
       var self = this;
-      var popup = this._crearPopup();
+      // El popup de carga es pequeño y se sustituye por el de resultados en
+      // cuanto llega la respuesta. Si este primero moviera el mapa, el
+      // segundo auto-pan llegaría con otro tamaño y daría un salto brusco.
+      // Por eso el único desplazamiento lo hace el popup definitivo.
+      var popup = this._crearPopup({ panMapIfOutOfView: false });
       if (!popup) return;
       var hideOriginal = popup.hide.bind(popup);
       popup.hide = function (evt) {
@@ -4172,7 +4585,7 @@
       this._popup = popup;
       this._popupAbierto = true;
       try {
-        this._map.addPopup(popup, coord, false);
+        this._addPopupSinVuelo(popup, coord);
       } catch (e) {
         this._popup = null;
         this._popupAbierto = false;
@@ -4205,13 +4618,14 @@
       this._popup = popup;
       this._popupAbierto = true;
       try {
-        this._map.addPopup(popup, this._coordPopup, false);
+        this._addPopupSinVuelo(popup, this._coordPopup);
       } catch (e) {
         this._popup = null;
         this._popupAbierto = false;
         return;
       }
       this._expandirPopup(popup);
+      this._panPopupFinal(popup);
       this._marcarPopup(popup);
     }
 
@@ -4241,13 +4655,14 @@
       this._popup = popup;
       this._popupAbierto = true;
       try {
-        this._map.addPopup(popup, this._coordPopup, false);
+        this._addPopupSinVuelo(popup, this._coordPopup);
       } catch (e) {
         this._popup = null;
         this._popupAbierto = false;
         return;
       }
       this._expandirPopup(popup);
+      this._panPopupFinal(popup);
       this._marcarPopup(popup, resultados);
 
       var indice = 0;
@@ -4575,7 +4990,16 @@
       var caps = resultado.caps;
       var mpp = resultado.mpp;
 
-      this._pedirFeatureInfo(resultado.capa, punto, formato, caps, mpp)
+      // En WMTS hay que usar su propio GetFeatureInfo (y su reintento de
+      // nivel); con el de WMS se construye una URL equivocada y el servicio
+      // responde 400.
+      var esWMTS = resultado.tipo === 'wmts'
+        || (resultado.capa && resultado.capa.type === 'WMTS');
+      var peticion = esWMTS
+        ? this._pedirFeatureInfoWMTS(resultado.capa, punto, formato)
+        : this._pedirFeatureInfo(resultado.capa, punto, formato, caps, mpp);
+
+      peticion
         .then(function (datos) {
           if (generacion !== self._generacion || self._resultados.indexOf(resultado) === -1) return;
           resultado.porFormato[formatoId] = Object.assign({ estado: 'ok' }, datos);

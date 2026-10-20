@@ -7,6 +7,7 @@ Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. N
 - **Botón circular**: 40x40, sin panel, con `color1` (fondo), `color2` (borde) y `color3` (icono). El icono es el SVG `img/iconos/icono-informacion.svg` (cursor con insignia de información, pack «Modern UI Icons» de SVG Repo), en línea para que herede `color3` por `currentColor`.
 - **Cursor de consulta**: una cruz de precisión con insignia «i» (`img/iconos/cursor-informacion.svg`) y `help` como respaldo nativo.
 - **WMS**: pide `GetCapabilities` y usa `GetFeatureInfo`. Si el servicio declara JSON y HTML, el popup permite alternar entre los dos sin volver a pinchar. Si no declara ninguno de los dos, se usan texto o XML como respaldo.
+- **WMTS superpuesto**: intenta `GetFeatureInfo` con los mismos formatos que WMS, JSON y HTML, usando la URL de la API. En 2D la API conoce la matriz de teselas; en 3D la columna y la fila se calculan con el `tilingScheme` de Cesium y las coordenadas se pasan en radianes cuando la matriz es Web Mercator. Si el servicio anuncia una matriz que luego rechaza en `GetFeatureInfo` (`Unknown TILEMATRIX`), se reintenta con un nivel inferior. Si aun así no devuelve información, se muestra el color RGB(A) de la tesela y un aviso, para que el clic siga siendo útil en WMTS que no implementan la operación.
 - **Bandas en WMS ráster**: si la respuesta de `GetFeatureInfo` es ráster (no trae features con geometría), se añade la pestaña `Bandas`. Muestra los canales **RGBA de la imagen renderizada** en el píxel pulsado, no el valor numérico de `GetFeatureInfo`. Para ello pide un `GetMap` de 3×3 píxeles centrado en el clic, con el mismo `BBOX` y resolución que la consulta, y lee el píxel central del PNG. La petición es perezosa: se lanza al activar la pestaña, no en el clic inicial de todas las capas. En capas WMS vectoriales no aparece, porque el píxel es el símbolo y no una banda.
 - **Capas vectoriales**: lee los features que caen bajo el clic en 2D y, cuando la implementación los dibuja, también en 3D.
 - **GeoTIFF**: lee los valores reales de las bandas en el punto. En 2D usa las imágenes que ya tiene abiertas el origen `GeoTIFF` de OpenLayers; en 3D usa el `LectorGeoTIFF` de `ext/geotiffLayer`. El valor se presenta como un objeto geográfico con una propiedad por banda y funciona con las plantillas `ficha`, `tabla` y `json`.
@@ -20,12 +21,13 @@ Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. N
 - **Popup con scroll único**: en escritorio el cuerpo del popup se ajusta al contenido y solo aparece una barra cuando se supera `min(70vh, 620px)`. El contenido interior ya no tiene scroll propio, así que varios objetos geográficos no quedan cortados entre dos barras anidadas.
 - **Panel inferior en móvil**: a menos de 768 px el popup ocupa todo el ancho y se ancla abajo, con tres alturas (plegado, medio y completo) y un tirador arrastrable.
 - **Centrado suave en 3D**: al consultar en Cesium el punto pasa al centro con un vuelo de 1,2 s que conserva rumbo, inclinación, giro y altura de la cámara.
+- **Vuelo al punto en 2D**: al consultar, el mapa OpenLayers se anima con `view.animate` hasta dejar el punto en el centro. El popup de carga no mueve el mapa y el popup definitivo no vuelve a auto-panear, así el desplazamiento es único y suave. También se desactiva el vuelo automático `MOVE_MAP_EXTRACT` de la API y el `show()` que la API hace al cambiar de pestaña.
 
 ## Archivos
 
 | Archivo | Descripción |
 |---|---|
-| `information.js` | Clase `miPlugin_information`: botón, consulta WMS/vectorial/GeoTIFF, canales RGBA de la imagen WMS, popup, plantillas, `extract` y contrato de estado. |
+| `information.js` | Clase `miPlugin_information`: botón, consulta WMS/WMTS/vectorial/GeoTIFF, canales RGBA de la imagen WMS, popup, plantillas, `extract` y contrato de estado. |
 | `information.css` | Botón de 40x40, cursor de consulta, selector de capa del popup, fichas, tablas y salida JSON/HTML. |
 | `../../img/iconos/icono-informacion.svg` | Icono del botón: cursor con insignia de información. Se copia en línea en el DOM para que tome `color3` por `currentColor`. |
 | `../../img/iconos/cursor-informacion.svg` | Cursor de cruz con insignia «i». Los colores son fijos porque el navegador lo pinta como imagen de cursor. |
@@ -82,7 +84,7 @@ El objeto geográfico (`elemento`) contiene:
 - `id`: identificador del feature, si lo tiene.
 - `geometria`: `{ tipo, coordenadas }` o `{ tipo }` cuando la implementación 3D no expone las coordenadas; en los GeoTIFF es `null` y el punto queda solo en `crudo`.
 - `crudo`: feature GeoJSON original, si está disponible.
-- `fuente`: `'wms'`, `'vector'` o `'raster'`.
+- `fuente`: `'wms'`, `'wmts'`, `'vector'` o `'raster'`.
 - `capa`: `{ name, legend, type, idLayer }`.
 
 En los GeoTIFF, `propiedades` y `campos` contienen una entrada por banda (`Banda 1`, `Banda 2`, …) con el valor real leído en el píxel. `crudo` es un `Feature` sintético con esas propiedades, el `SRC`, el píxel y el tamaño de la imagen.
@@ -129,6 +131,7 @@ info.registrarPlantilla({
 ## Capas consultables
 
 - `WMS` mediante `GetFeatureInfo`. Si la respuesta es ráster, se añade la pestaña `Bandas` con los canales RGBA de la imagen WMS; si trae features vectoriales, se muestran sus atributos y no se ofrece `Bandas`.
+- `WMTS` superpuesto mediante `GetFeatureInfo`, con reintento en un nivel inferior si el servicio rechaza la matriz de teselas y respaldo al color de la tesela si no devuelve información. En la ficha de respaldo se añade un campo `Aviso` para no confundir el color con un atributo del servicio.
 - La **capa base** (TMS, WMTS, XYZ, OSM, MBTiles ráster o un grupo como Híbrido) leyendo el color RGB(A) del píxel. Si el color tiene alfa 0 o la tesela no se puede leer, no se añade la capa al popup.
 - `GeoTIFF` leyendo las bandas del fichero en el píxel del clic. La lectura usa la transformación afín completa (`ModelTransformation`), no solo el origen y la resolución, para no desviar el píxel en los GeoTIFF rotados.
 - `GeoJSON`, `Vector`, `KML`, `WFS`, `OGCAPIFeatures`, `MVT`, `MBTilesVector`, `MapLibre`, `GenericVector` y `WKT` como capas vectoriales.
@@ -180,4 +183,5 @@ La consulta propia del plugin no usa `extract`: lee los features por su cuenta, 
 
 - El servicio WMS debe permitir CORS para que el navegador pueda leer `GetCapabilities`, `GetFeatureInfo` y la imagen `GetMap` de la pestaña `Bandas` (se lee con `<img crossorigin="anonymous">` y canvas).
 - Si no se pueden leer las capacidades, el plugin prueba JSON y HTML, que son las salidas más habituales.
+- Un WMTS puede anunciar `GetFeatureInfo` y `InfoFormat` en sus capacidades y, aun así, responder `OperationNotSupported` o una excepción de GeoServer. En ese caso el plugin no muestra la traza: usa el color de la tesela como respaldo y recuerda el fallo para no repetir las peticiones en cada clic.
 - La API abre su propio popup al pinchar capas vectoriales con `extract=true`. El plugin sincroniza `extract` (false con la herramienta apagada) y, cuando está activo, retira los popups nuevos de ese clic y conserva el suyo.
