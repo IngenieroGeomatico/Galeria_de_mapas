@@ -29,12 +29,9 @@ function mapa() {
     center: es3D ? CENTRO_4326 : CENTRO_3857,
   });
 
-  // El tileset es de Estrasburgo y el fondo por defecto de la API solo cubre
-  // Espana: se pone OSM, que es mundial, para ver la ciudad debajo.
-  mapajs.addLayers(new IDEE.layer.OSM({
-    name: 'OSM',
-    legend: 'OpenStreetMap',
-  }, {}));
+  // Nota: el tileset es de Estrasburgo y el fondo por defecto de la API solo
+  // cubre Espana, asi que fuera de aqui no hay cartografia debajo. Queda
+  // pendiente elegir un servicio mundial para este visualizador.
 
   if (es3D) {
     mapajs.addLayers(new IDEE.layer.Tiles3D({

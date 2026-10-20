@@ -54,8 +54,8 @@
     <div class="barra__texto">
       <h1 class="barra__titulo">WMS <span class="barra__clase">IDEE.layer.WMS</span></h1>
       <p class="barra__desc">
-        Un servicio OGC que devuelve el mapa ya dibujado como imagen. La API pide
-        una imagen por cada encuadre y la coloca en su sitio.
+        Un servicio OGC que devuelve el mapa ya dibujado como imagen. Aquí, las
+        18 capas del WMS de vigilancia volcánica del IGN.
       </p>
     </div>
   </header>
@@ -66,18 +66,43 @@
   <template id="codigo">
     <h3>IDEE.layer.WMS</h3>
     <p>
-      Un WMS se declara con la URL del servicio y el nombre de la capa que ofrece.
-      Con <code>tiled: false</code> se pide una sola imagen por vista, en lugar de
-      teselas de 256 px.
+      Un WMS se declara con la URL del servicio y el nombre de la capa. Aquí se
+      cargan las 18 capas del WMS de vigilancia volcánica del IGN: una capa de la
+      API por cada capa del servicio, con <code>transparent: true</code> para
+      poder superponerlas y <code>tiled: true</code> para pedirlas por teselas.
     </p>
-    <pre class="codigo"><code>const capa = new IDEE.layer.WMS({
-  url: 'https://www.ign.es/wms-inspire/unidades-administrativas?',
-  name: 'AU.AdministrativeUnit',
-  legend: 'Unidades administrativas',
-  tiled: false,
-}, {});
+    <pre class="codigo"><code>const URL_VOLCANOLOGIA = 'https://wms-volcanologia.ign.es/volcanologia?';
 
-mapajs.addLayers(capa);</code></pre>
+const CAPAS_VOLCANOLOGIA = [
+  { name: 'sis', legend: 'Red de Vigilancia Volcánica' },
+  { name: 'gps', legend: 'Control de deformaciones' },
+  { name: 'displacement-asc', legend: 'InSAR' },
+  { name: 'phase-asc', legend: 'Fase en órbita ascendente' },
+  { name: 'coh-asc', legend: 'Coherencia en órbita ascendente' },
+  { name: 'displacement-des', legend: 'Desplazamiento en órbita descendente' },
+  { name: 'phase-des', legend: 'Fase en órbita descendente' },
+  { name: 'coh-des', legend: 'Coherencia en órbita descendente' },
+  { name: 'eto', legend: 'Estaciones totales' },
+  { name: 'inc', legend: 'Inclinómetros' },
+  { name: 'gqme', legend: 'Geoquímica' },
+  { name: 'gqmp', legend: 'Puntos de muestreo' },
+  { name: 'gra', legend: 'Gravimetría' },
+  { name: 'rega', legend: 'Red Española de Gravimetría Absoluta REGA' },
+  { name: 'mag', legend: 'Geomagnetismo' },
+  { name: 'erupciones', legend: 'Geología - Erupciones' },
+  { name: 'wcmv', legend: 'Imágenes en tiempo real' },
+  { name: 'wcmt', legend: 'Cámara térmica (infrarrojo)' },
+];
+
+CAPAS_VOLCANOLOGIA.forEach((capa) => {
+  mapajs.addLayers(new IDEE.layer.WMS({
+    url: URL_VOLCANOLOGIA,
+    name: capa.name,
+    legend: capa.legend,
+    transparent: true,
+    tiled: true,
+  }, {}));
+});</code></pre>
   </template>
 
   <script src="../../js/comun.js"></script>
