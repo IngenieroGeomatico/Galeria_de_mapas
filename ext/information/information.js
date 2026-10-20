@@ -748,6 +748,102 @@
       return !!(impl && impl.scene && impl.scene.camera && global.Cesium);
     }
 
+    /**
+     * Centra en Cesium el punto consultado con una transición y sin cambiar
+     * la orientación de la cámara. Se conservan heading, pitch, roll y la
+     * altura actual, y se vuela a la posición que deja el punto en el centro
+     * de la pantalla. No se usa `lookAt` porque deja la cámara atada a un
+     * marco temporal que después interfiere con otros movimientos.
+     */
+    _centrarPuntoCesium(punto) {
+      if (!this._esCesium() || !punto) return;
+      var Cesium = global.Cesium;
+      var impl = this._getImpl();
+      var camara = impl && impl.scene && impl.scene.camera;
+      if (!Cesium || !camara || !Cesium.Cartesian3 || !Cesium.Math || !Cesium.Transforms) return;
+
+      var lon = Number(punto.lon);
+      var lat = Number(punto.lat);
+      if (!isFinite(lon) || !isFinite(lat)) return;
+
+      try {
+        var altura = camara.positionCartographic && camara.positionCartographic.height;
+        var heading = camara.heading;
+        var pitch = camara.pitch;
+        var roll = camara.roll;
+        var alturaObjetivo = Number(punto.altura) || 0;
+        if (!isFinite(altura) || altura <= 0) return;
+        if (!isFinite(heading) || !isFinite(pitch) || !isFinite(roll)) return;
+        // Si la cámara mira al horizonte o hacia arriba no hay una distancia
+        // vertical estable para conservar la altura; se deja la vista igual.
+        if (pitch >= -0.001) return;
+
+        var desnivel = altura - alturaObjetivo;
+        if (!isFinite(desnivel) || desnivel <= 0) return;
+        var rango = desnivel / -Math.sin(pitch);
+        if (!isFinite(rango) || rango <= 0) return;
+
+        var cosPitch = Math.cos(pitch);
+        var objetivo = Cesium.Cartesian3.fromDegrees(lon, lat, alturaObjetivo);
+        var marco = Cesium.Transforms.eastNorthUpToFixedFrame(objetivo);
+        var desplazamiento = new Cesium.Cartesian3(
+          -rango * cosPitch * Math.sin(heading),
+          -rango * cosPitch * Math.cos(heading),
+          -rango * Math.sin(pitch)
+        );
+        var posicion = Cesium.Matrix4.multiplyByPoint(
+          marco,
+          desplazamiento,
+          new Cesium.Cartesian3()
+        );
+
+        // Si hay un vuelo en curso (por ejemplo, otro clic seguido), se
+        // cancela para no encadenar destinos y dar tirones.
+        if (esFuncion(camara.cancelFlight)) camara.cancelFlight();
+        camara.flyTo({
+          destination: posicion,
+          orientation: {
+            heading: heading,
+            pitch: pitch,
+            roll: roll,
+          },
+          duration: 1.2,
+          easingFunction: Cesium.EasingFunction && Cesium.EasingFunction.QUADRATIC_IN_OUT,
+        });
+      } catch (e) {
+        /* si la cámara aún no está lista se mantiene la vista actual */
+      }
+    }
+
+    /**
+     * Crea un popup de la API con dos ajustes para 3D:
+     * - panMapIfOutOfView desactivado: en Cesium `panIntoView` usa
+     *   `camera.flyTo` y, con la vista inclinada, descoloca la cámara y el
+     *   propio popup.
+     * - setStatus_ sustituido: la implementación de la API llama a
+     *   `centerByStatus` al cambiar de estado en móvil, lo que también
+     *   recentra el mapa. Aquí solo se cambia el tamaño del panel.
+     */
+    _crearPopup() {
+      var IDEE = api();
+      if (!IDEE || !IDEE.Popup) return null;
+      var opciones = {};
+      if (this._esCesium()) opciones.panMapIfOutOfView = false;
+      var popup = null;
+      try {
+        popup = new IDEE.Popup(opciones);
+      } catch (e) {
+        popup = new IDEE.Popup();
+      }
+      if (popup) {
+        var self = this;
+        popup.setStatus_ = function (estado) {
+          if (estado) self._ponerEstadoPopup(popup, estado);
+        };
+      }
+      return popup;
+    }
+
     _adjuntarEventos() {
       var impl = this._getImpl();
       if (!impl) return;
@@ -783,13 +879,25 @@
             var xy = self._reproyectar3857([lon, lat], 'EPSG:4326');
             if (!xy) return;
 
-            self._consultarEnPunto({
+            var punto = {
               x: xy[0],
               y: xy[1],
               lon: lon,
               lat: lat,
               altura: altura,
-            }, [lon, lat, altura], posicion, cartesiano);
+            };
+            // El píxel se toma de la vista actual, antes de arrancar el
+            // vuelo. La consulta vectorial lo usa en el mismo frame; el
+            // popup queda anclado al punto y viaja con la cámara hasta el
+            // centro.
+            var pixelConsulta = self._pixelDesdePunto(punto) || posicion;
+            self._centrarPuntoCesium(punto);
+            self._consultarEnPunto(
+              punto,
+              [lon, lat, altura],
+              pixelConsulta,
+              cartesiano
+            );
           }, global.Cesium.ScreenSpaceEventType.LEFT_CLICK);
           this._handlers.cesium = handler;
           this._adjuntarCapturaPopups(scene.canvas);
@@ -1956,9 +2064,30 @@
         });
       } catch (e) { /* sin capas */ }
 
+      var self = this;
+
+      // Red de seguridad: en Cesium algunas capas de fondo pierden el flag
+      // `isBase` al reconstruirse y `getBaseLayers()` puede volver vacío. Si
+      // no hay ninguna candidata, se toma como base la primera capa ráster
+      // visible (la de más abajo), que es el fondo que se está viendo. Así un
+      // clic sobre el mapa base sigue devolviendo su color aunque la API no
+      // exponga el flag.
+      if (!candidatas.length) {
+        try {
+          var todas = this._map.getLayers ? this._map.getLayers() : [];
+          for (var i = 0; i < todas.length; i += 1) {
+            var posible = todas[i];
+            if (!posible || !self._esVisible(posible)) continue;
+            if (self._esRasterBase(posible)) {
+              anadir(posible);
+              break;
+            }
+          }
+        } catch (e) { /* sin capas de respaldo */ }
+      }
+
       // Hijas de los grupos base: si el grupo es la capa base, sus hijas no
       // se consultan por separado.
-      var self = this;
       var descendientes = [];
       var marcar = function (capa) {
         var hijas = self._hijasCapa(capa);
@@ -2290,13 +2419,55 @@
       }
       if (!cartografica) return null;
 
-      var nivel = 15;
+      // Se prueban varios niveles, del más detallado al más general. En los
+      // bordes de cobertura (o si el servicio aún no tiene la tesela de máximo
+      // nivel) la imagen puede ser transparente aunque el mapa esté viéndose
+      // con una tesela de nivel inferior. Sin este respaldo el clic sobre el
+      // mapa base respondía «No hay información».
+      var niveles = this._nivelesBase3D(provider);
+      var transparencia = null;
+      for (var k = 0; k < niveles.length; k += 1) {
+        var color = await this._colorNivelBase3D(
+          provider,
+          scheme,
+          cartografica,
+          niveles[k],
+          imageryLayer
+        );
+        if (color && color.a > 0) return color;
+        if (color && !transparencia) transparencia = color;
+      }
+      return transparencia;
+    }
+
+    /** Niveles de tesela que se prueban al leer el color de una capa base 3D. */
+    _nivelesBase3D(provider) {
+      var maximo = 17;
+      var minimo = 0;
       try {
-        var maximo = provider.maximumLevel;
-        if (typeof maximo === 'number' && isFinite(maximo)) {
-          nivel = Math.max(0, Math.min(Math.floor(maximo), 17));
+        if (typeof provider.maximumLevel === 'number' && isFinite(provider.maximumLevel)) {
+          maximo = Math.max(0, Math.floor(provider.maximumLevel));
         }
-      } catch (e) { /* sin máximo */ }
+        if (typeof provider.minimumLevel === 'number' && isFinite(provider.minimumLevel)) {
+          minimo = Math.max(0, Math.floor(provider.minimumLevel));
+        }
+      } catch (e) { /* sin niveles */ }
+
+      var alto = Math.min(maximo, 17);
+      var candidatos = [alto, alto - 1, alto - 2, 15, 12, 10];
+      var salida = [];
+      candidatos.forEach(function (nivel) {
+        if (!isFinite(nivel)) return;
+        nivel = Math.floor(nivel);
+        if (nivel < minimo || nivel > maximo) return;
+        if (salida.indexOf(nivel) === -1) salida.push(nivel);
+      });
+      return salida;
+    }
+
+    async _colorNivelBase3D(provider, scheme, cartografica, nivel, imageryLayer) {
+      var Cesium = global.Cesium;
+      if (!Cesium || !Cesium.Cartesian2) return null;
 
       var xy = null;
       try {
@@ -2325,12 +2496,7 @@
       var v = (rectangulo.north - nativo.y) / (rectangulo.north - rectangulo.south);
       if (!isFinite(u) || !isFinite(v)) return null;
 
-      var imagen = null;
-      try {
-        imagen = await provider.requestImage(xy.x, xy.y, nivel);
-      } catch (e) {
-        imagen = null;
-      }
+      var imagen = await this._requestImage3D(provider, xy.x, xy.y, nivel);
       if (!imagen) return null;
 
       var color = this._pixelDeImagen(imagen, u, v);
@@ -2343,6 +2509,33 @@
         }
       } catch (e) { /* sin alfa */ }
       return color;
+    }
+
+    /** Pide una tesela a Cesium con tope de espera: una petición colgada no
+     * puede dejar el popup cargando indefinidamente. */
+    _requestImage3D(provider, x, y, nivel, tiempoMaximo) {
+      return new Promise(function (resolve) {
+        var terminado = false;
+        var espera = (isFinite(tiempoMaximo) && tiempoMaximo > 0) ? tiempoMaximo : 5000;
+        var temporizador = setTimeout(function () {
+          if (terminado) return;
+          terminado = true;
+          resolve(null);
+        }, espera);
+        var fin = function (imagen) {
+          if (terminado) return;
+          terminado = true;
+          clearTimeout(temporizador);
+          resolve(imagen || null);
+        };
+        try {
+          Promise.resolve(provider.requestImage(x, y, nivel)).then(fin).catch(function () {
+            fin(null);
+          });
+        } catch (e) {
+          fin(null);
+        }
+      });
     }
 
     _pixelDeImagen(imagen, u, v) {
@@ -3634,7 +3827,7 @@
 
       // El header del popup de la API escucha clics para plegarlo. El
       // selector no debe propagar los suyos.
-      ['click', 'mousedown', 'pointerdown', 'touchstart'].forEach(function (tipo) {
+      ['click', 'mousedown', 'mouseup', 'pointerdown', 'touchstart', 'touchend'].forEach(function (tipo) {
         contenedor.addEventListener(tipo, function (evt) {
           evt.stopPropagation();
         });
@@ -3646,6 +3839,167 @@
       header.insertBefore(contenedor, header.firstChild);
     }
 
+    /**
+     * Cambia el estado visual del popup usando las mismas clases que la API.
+     * No se llama a setStatus_ porque en móvil recentra el mapa y aquí solo
+     * se quiere redimensionar el panel inferior.
+     */
+    _ponerEstadoPopup(popup, estado) {
+      if (!popup || !estado) return;
+      try {
+        var elemento = popup.element_;
+        if (!elemento) return;
+        elemento.classList.remove('m-collapsed', 'm-default', 'm-full');
+        elemento.classList.add(estado);
+        elemento.style.top = '';
+        elemento.style.height = '';
+        elemento.classList.remove('m-no-animation');
+        popup.status_ = estado;
+      } catch (e) { /* popup ya cerrado */ }
+    }
+
+    /**
+     * Añade el tirador superior del panel inferior móvil. Arrastrándolo se
+     * cambia la altura de forma continua y, al soltar, se ajusta a una de las
+     * tres posiciones de la API (plegado, medio o completo). Un toque sin
+     * arrastre también va pasando de una posición a la siguiente.
+     */
+    _instalarTiradorPopup(root, popup) {
+      if (!root || !popup) return;
+      if (root.querySelector('.g-information-sheet-handle')) return;
+      var content = root.querySelector('.m-content');
+      if (!content) return;
+
+      var self = this;
+      var handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = 'g-information-sheet-handle';
+      handle.title = 'Arrastra para cambiar la altura del panel';
+      handle.setAttribute('aria-label', 'Cambiar la altura del panel');
+      content.insertBefore(handle, content.firstChild);
+
+      var inicioY = 0;
+      var altoInicio = 0;
+      var estadoInicio = '';
+      var arrastrando = false;
+      var pointerId = null;
+
+      var estadoActual = function () {
+        if (root.classList.contains('m-full')) return 'm-full';
+        if (root.classList.contains('m-collapsed')) return 'm-collapsed';
+        return 'm-default';
+      };
+
+      var limpiarArrastre = function () {
+        arrastrando = false;
+        root.classList.remove('g-information-sheet-arrastrando');
+        root.style.height = '';
+        try {
+          if (pointerId !== null && handle.hasPointerCapture && handle.hasPointerCapture(pointerId)) {
+            handle.releasePointerCapture(pointerId);
+          }
+        } catch (e) { /* sin captura de puntero */ }
+        pointerId = null;
+      };
+
+      var terminar = function (evt, cancelado) {
+        if (!arrastrando) return;
+        var altoFinal = root.getBoundingClientRect().height;
+        var delta = (evt && typeof evt.clientY === 'number') ? (evt.clientY - inicioY) : 0;
+        var estadoDestino = estadoInicio;
+        if (!cancelado) {
+          if (Math.abs(delta) < 8) {
+            // Toque sin arrastre: plegado -> medio -> completo -> medio.
+            if (estadoInicio === 'm-collapsed') estadoDestino = 'm-default';
+            else if (estadoInicio === 'm-default') estadoDestino = 'm-full';
+            else estadoDestino = 'm-default';
+          } else {
+            var altoMin = 64;
+            var altoMedio = Math.round(window.innerHeight * 0.6);
+            var altoMax = Math.round(window.innerHeight * 0.92);
+            var dMin = Math.abs(altoFinal - altoMin);
+            var dMedio = Math.abs(altoFinal - altoMedio);
+            var dMax = Math.abs(altoFinal - altoMax);
+            if (dMin <= dMedio && dMin <= dMax) estadoDestino = 'm-collapsed';
+            else if (dMax <= dMedio) estadoDestino = 'm-full';
+            else estadoDestino = 'm-default';
+          }
+        }
+        limpiarArrastre();
+        self._ponerEstadoPopup(popup, estadoDestino);
+      };
+
+      handle.addEventListener('pointerdown', function (evt) {
+        if (evt.button !== undefined && evt.button !== 0) return;
+        arrastrando = true;
+        inicioY = evt.clientY;
+        altoInicio = root.getBoundingClientRect().height;
+        estadoInicio = estadoActual();
+        // Si está plegado, se muestra el cuerpo para que el panel crezca con
+        // contenido mientras se arrastra hacia arriba.
+        if (estadoInicio === 'm-collapsed') {
+          root.classList.remove('m-collapsed');
+          root.classList.add('m-default');
+          root.style.height = altoInicio + 'px';
+        }
+        root.classList.add('g-information-sheet-arrastrando');
+        try {
+          handle.setPointerCapture(evt.pointerId);
+          pointerId = evt.pointerId;
+        } catch (e) { /* sin captura de puntero */ }
+        evt.preventDefault();
+        evt.stopPropagation();
+      });
+
+      handle.addEventListener('pointermove', function (evt) {
+        if (!arrastrando) return;
+        var altoMin = 64;
+        var altoMax = Math.round(window.innerHeight * 0.92);
+        var alto = altoInicio + (inicioY - evt.clientY);
+        alto = Math.max(altoMin, Math.min(altoMax, alto));
+        root.style.height = alto + 'px';
+        evt.preventDefault();
+        evt.stopPropagation();
+      });
+
+      handle.addEventListener('pointerup', function (evt) {
+        terminar(evt, false);
+        evt.preventDefault();
+        evt.stopPropagation();
+      });
+
+      handle.addEventListener('pointercancel', function (evt) {
+        terminar(evt, true);
+        evt.preventDefault();
+        evt.stopPropagation();
+      });
+
+      handle.addEventListener('click', function (evt) {
+        evt.preventDefault();
+        evt.stopPropagation();
+      });
+
+      handle.addEventListener('keydown', function (evt) {
+        var actual = estadoActual();
+        if (evt.key === 'Enter' || evt.key === ' ') {
+          evt.preventDefault();
+          evt.stopPropagation();
+          self._ponerEstadoPopup(
+            popup,
+            actual === 'm-collapsed' ? 'm-default' : actual === 'm-default' ? 'm-full' : 'm-default'
+          );
+        } else if (evt.key === 'ArrowUp') {
+          evt.preventDefault();
+          evt.stopPropagation();
+          self._ponerEstadoPopup(popup, actual === 'm-collapsed' ? 'm-default' : 'm-full');
+        } else if (evt.key === 'ArrowDown') {
+          evt.preventDefault();
+          evt.stopPropagation();
+          self._ponerEstadoPopup(popup, actual === 'm-full' ? 'm-default' : 'm-collapsed');
+        }
+      });
+    }
+
     _marcarPopup(popup, resultados) {
       if (!popup) return;
       var self = this;
@@ -3654,6 +4008,7 @@
           var root = document.getElementById(popup.getId());
           if (!root) return;
           root.classList.add('g-information-popup');
+          self._instalarTiradorPopup(root, popup);
 
           var tabs = root.querySelectorAll('.m-tab');
           // El DOM del popup puede tardar un instante en montar las
@@ -3708,6 +4063,7 @@
      */
     _expandirPopup(popup) {
       if (!popup) return;
+      var self = this;
       try {
         var elemento = popup.element_;
         // El popup vive dentro de .ol-overlaycontainer-stopevent, que la API
@@ -3719,19 +4075,22 @@
         if (contenedor) contenedor.classList.add('g-information-overlays');
       } catch (e) { /* sin contenedor de overlays */ }
 
+      var aplicar = function () {
+        self._ponerEstadoPopup(popup, 'm-default');
+      };
+
+      // En móvil el popup nace plegado: se deja pintar ese estado y se pasa a
+      // medio en el siguiente ciclo para que la hoja suba con transición.
+      var esMovil = false;
       try {
-        if (typeof popup.setStatus_ === 'function') {
-          popup.setStatus_('m-default');
-          return;
-        }
-      } catch (e2) { /* se intenta con las clases */ }
-      try {
-        var elemento2 = popup.element_;
-        if (!elemento2) return;
-        elemento2.classList.remove('m-collapsed', 'm-full');
-        elemento2.classList.add('m-default');
-        popup.status_ = 'm-default';
-      } catch (e3) { /* popup ya cerrado */ }
+        esMovil = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+      } catch (e2) { /* sin matchMedia */ }
+
+      if (esMovil) {
+        setTimeout(aplicar, 30);
+      } else {
+        aplicar();
+      }
     }
 
     _cerrarPopup() {
@@ -3794,7 +4153,8 @@
       this._cerrarPopup();
 
       var self = this;
-      var popup = new IDEE.Popup();
+      var popup = this._crearPopup();
+      if (!popup) return;
       var hideOriginal = popup.hide.bind(popup);
       popup.hide = function (evt) {
         self._popupAbierto = false;
@@ -3828,7 +4188,8 @@
       this._cerrarPopup();
 
       var self = this;
-      var popup = new IDEE.Popup();
+      var popup = this._crearPopup();
+      if (!popup) return;
       var hideOriginal = popup.hide.bind(popup);
       popup.hide = function (evt) {
         self._popupAbierto = false;
@@ -3860,7 +4221,8 @@
       this._cerrarPopup();
 
       var self = this;
-      var popup = new IDEE.Popup();
+      var popup = this._crearPopup();
+      if (!popup) return;
       var hideOriginal = popup.hide.bind(popup);
       popup.hide = function (evt) {
         self._popupAbierto = false;

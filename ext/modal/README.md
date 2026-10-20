@@ -83,6 +83,12 @@ El plugin implementa el contrato `getState()`/`setState(state, map)`:
 
 Al restaurar, `setState` rehidrata el colapso del panel y reabre el popup si estaba abierto.
 
+## 📱 Responsive
+
+- **Escritorio**: el modal sigue centrado en pantalla, con ancho de `460px` y scroll en `#popup-box`.
+- **Móvil** (`max-width: 768px`): el modal se convierte en un panel inferior de ancho completo (`100vw`), máximo `92dvh`, con las esquinas superiores redondeadas, tirador visual y scroll interno en `#popup-box`. El botón de cierre queda fijo arriba a la derecha y el contenido respeta `env(safe-area-inset-bottom)`.
+- Los enlaces e imágenes del contenido se ajustan al ancho del panel (`overflow-wrap: anywhere` y `max-width: 100%`) para que no abran scroll horizontal.
+
 ## 🧩 Métodos públicos
 
 | Método | Descripción |

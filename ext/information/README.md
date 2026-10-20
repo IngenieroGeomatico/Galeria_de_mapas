@@ -10,13 +10,16 @@ Plugin local para API-IDEE/API-CNIG que consulta qué hay en el punto clicado. N
 - **Bandas en WMS ráster**: si la respuesta de `GetFeatureInfo` es ráster (no trae features con geometría), se añade la pestaña `Bandas`. Muestra los canales **RGBA de la imagen renderizada** en el píxel pulsado, no el valor numérico de `GetFeatureInfo`. Para ello pide un `GetMap` de 3×3 píxeles centrado en el clic, con el mismo `BBOX` y resolución que la consulta, y lee el píxel central del PNG. La petición es perezosa: se lanza al activar la pestaña, no en el clic inicial de todas las capas. En capas WMS vectoriales no aparece, porque el píxel es el símbolo y no una banda.
 - **Capas vectoriales**: lee los features que caen bajo el clic en 2D y, cuando la implementación los dibuja, también en 3D.
 - **GeoTIFF**: lee los valores reales de las bandas en el punto. En 2D usa las imágenes que ya tiene abiertas el origen `GeoTIFF` de OpenLayers; en 3D usa el `LectorGeoTIFF` de `ext/geotiffLayer`. El valor se presenta como un objeto geográfico con una propiedad por banda y funciona con las plantillas `ficha`, `tabla` y `json`.
-- **Capa base**: lee el color RGB(A) del píxel de la capa base (TMS, WMTS, XYZ, OSM o el grupo Híbrido). En 2D usa la tesela que pinta OpenLayers; en 3D el `imageryProvider` de Cesium. En los grupos se componen las hijas visibles de abajo arriba.
+- **Capa base**: lee el color RGB(A) del píxel de la capa base (TMS, WMTS, XYZ, OSM o el grupo Híbrido). En 2D usa la tesela que pinta OpenLayers; en 3D el `imageryProvider` de Cesium. En los grupos se componen las hijas visibles de abajo arriba. Si en 3D la API pierde el flag `isBase` y `getBaseLayers()` queda vacío, se toma como fondo la primera capa ráster visible de `getLayers()`, para que un clic sobre el mapa base siga devolviendo su color.
 - **Sin información, sin capa en el popup**: se omite la capa si no devuelve features, si `GetFeatureInfo` responde vacío, si el GeoTIFF da un píxel transparente o todo nodata, o si la capa base es transparente en ese punto.
 - **Orden de capas**: de mayor a menor z-index, para que la primera sea la capa que se ve arriba. La capa base se considera siempre el fondo y queda al final.
 - **Varias capas y varios objetos geográficos**: todas las capas aparecen en el selector de la cabecera y todos los features (o los canales RGBA de la imagen WMS) del punto se listan dentro de la capa elegida.
 - **Plantillas configurables**: `ficha`, `tabla` y `json` de serie; se pueden añadir o sustituir por constructor o con `registrarPlantilla()`.
 - **`extract` sincronizado**: mientras el plugin está añadido al mapa, las capas vectoriales llevan `extract=false` si la herramienta está desactivada y `extract=true` si está activa. Las capas añadidas después se sincronizan con `ADDED_LAYER`/`ADDED_LAYERGROUP`; `destroy()` restaura el valor original.
 - **Estado 2D/3D**: implementa `getState()`/`setState(state, map)` para conservar la activación, las preferencias por capa y el popup abierto al cambiar de implementación.
+- **Popup con scroll único**: en escritorio el cuerpo del popup se ajusta al contenido y solo aparece una barra cuando se supera `min(70vh, 620px)`. El contenido interior ya no tiene scroll propio, así que varios objetos geográficos no quedan cortados entre dos barras anidadas.
+- **Panel inferior en móvil**: a menos de 768 px el popup ocupa todo el ancho y se ancla abajo, con tres alturas (plegado, medio y completo) y un tirador arrastrable.
+- **Centrado suave en 3D**: al consultar en Cesium el punto pasa al centro con un vuelo de 1,2 s que conserva rumbo, inclinación, giro y altura de la cámara.
 
 ## Archivos
 
@@ -134,7 +137,17 @@ En 3D la consulta vectorial depende de que la implementación dibuje la capa y d
 
 Los servicios de teselas (`TMS`, `WMTS`, `XYZ`, `OSM`) no permiten pedir una imagen concreta de una capa en un punto, así que no ofrecen la pestaña `Bandas`. En WMS sí: la pestaña lee los canales RGBA de la imagen que el servicio renderiza en el píxel pulsado, no el color compuesto de la pantalla. El valor numérico de origen, si el servicio lo publica, sigue en `GetFeatureInfo` (JSON/HTML). La lectura de la imagen necesita CORS en el `GetMap`, igual que `GetFeatureInfo`.
 
-### `extract` y popups de la API
+## Popup, scroll y móvil
+
+- **Escritorio**: `.g-information-popup .m-body` es el único contenedor con scroll. Su altura se adapta al contenido y solo se limita cuando supera `min(70vh, 620px)`. `.g-information-cuerpo` no tiene `max-height` ni `overflow`, para evitar dos barras anidadas y que el último objeto quede fuera de la zona visible.
+- **Móvil** (`max-width: 768px`): el popup es un panel inferior fijo de ancho completo. Las alturas son `60dvh` (medio), `92dvh` (completo) y `64px` (plegado). El tirador superior permite arrastrar entre estados y el cuerpo hace el scroll con `overscroll-behavior: contain`; la cabecera y el selector quedan fuera del scroll.
+- La API fija `height: 48vh` y `max-height: 50vh` al cuerpo del popup y llama a `centerByStatus()` al cambiar de estado en móvil. El plugin neutraliza esas dos reglas y sustituye `setStatus_` por un cambio directo de clases para no recentrar el mapa al plegar o desplegar.
+
+## Centrado suave en 3D
+
+Al consultar en Cesium, el punto clicado pasa al centro de la vista con `camera.flyTo` de 1,2 s. Se conservan `heading`, `pitch`, `roll` y la altura de la cámara, y el píxel de la consulta se calcula antes de arrancar el vuelo para que el `pick` vectorial siga siendo válido. El popup se crea con `panMapIfOutOfView: false`, de modo que la API no encadena otro `flyTo`/`panIntoView` que descolocaría la vista inclinada.
+
+## `extract` y popups de la API
 
 La API abre su propio popup cuando pincha una capa vectorial con `extract=true`. El plugin sincroniza esa propiedad para que el comportamiento sea el esperado:
 
