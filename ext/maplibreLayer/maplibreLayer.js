@@ -43,34 +43,95 @@
  * equivalente es un overlay: el mismo div absoluto, colgado del contenedor del
  * widget de Cesium (encima del canvas del globo y por debajo de la interfaz de
  * la API) y con `pointer-events: none` para que Cesium siga recibiendo el ratón.
- * La vista se sincroniza en `scene.postRender`.
+ * La vista se sincroniza en `scene.preRender` (antes de que Cesium pinte el
+ * frame), no en `postRender`: medido con un vuelo de cámara, la posición de la
+ * cámara ya es la definitiva en `preRender`, así que el overlay se actualiza un
+ * frame antes.
  *
  * Las cuentas no son las de OL (`viewState` no existe aquí) y están medidas:
  *
  *   - CENTRO: intersección del rayo del centro de pantalla con el terreno
  *     (`scene.globe.pick`, con el elipsoide como reserva). En la capa se usa su
  *     longitud/latitud.
- *   - ZOOM: se mide la escala en el centro: se lanzan dos rayos separados `k`
- *     píxeles en horizontal y se calcula el metro/píxel con la distancia
- *     geodésica entre los dos puntos del terreno. Con `78271.51696399994`
+ *   - ZOOM: con el campo de vista vertical del frustum de Cesium y la distancia
+ *     al centro se obtiene el metro/píxel en el centro:
+ *     mpp = 2 · d · tan(fovy / 2) / alto. Es exacto para una cámara perspectiva
+ *     y no depende del terreno que toque un rayo lateral (medido: a 50° de
+ *     inclinación coincidía con el método anterior y evitaba el salto de escala
+ *     que daba el rayo derecho a 70°). Con `78271.51696399994`
  *     (circunferencia / 512) sale el zoom de MapLibre:
  *     zoom = log2(78271.51696399994 · cos(lat) / mpp).
- *   - RUMBO: acimut geodésico del centro al punto que está `k` px más arriba en
- *     pantalla, que es justo lo que MapLibre llama `bearing` ("qué dirección
- *     queda arriba"). Medido en un giro de 40°: 39,9°.
- *   - INCLINACIÓN: `90 + pitch` de Cesium (nadir -90° = 0 en MapLibre).
+ *   - RUMBO: la dirección de la parte de arriba de la pantalla es el vector
+ *     `camera.up` proyectado sobre el plano tangente del centro; su acimut es
+ *     el `bearing` de MapLibre. Incluye el alabeo (`roll`) y no necesita un
+ *     tercer rayo. Si la proyección es degenerada se usa `camera.heading`.
+ *   - INCLINACIÓN: `90 + pitch` de Cesium (nadir -90° = 0 en MapLibre), con el
+ *     límite `maxPitch` de MapLibre (85 por defecto en esta implementación).
+ *   - CAMPO DE VISTA: se iguala el `fovy` de MapLibre al del frustum de Cesium
+ *     (`setVerticalFieldOfView`). Medido a 50° de inclinación: el error máximo
+ *     baja de 10 px a 4,8 px; a 80° (pitch 80) baja de 127 px a 31 px.
  *
- * CUÁNTO CUADRA (medido comparando `map.project()` con
- * `Cesium.SceneTransforms.worldToWindowCoordinates()` de los mismos puntos):
- * 0-1 px en vista vertical, 0-2 px girando 40° y 0-1 px con 52° de inclinación,
- * en puntos de hasta 7 km del centro. Al medir hay que tener en cuenta la
- * ALTURA: los puntos de comparación van sobre el MDT (`globe.getHeight`) y no a
- * altura 0, porque el terreno de Madrid está a ~650 m y esa paralaje sale como
- * un 3,4 % de error de escala si se compara contra el elipsoide.
+ * CUÁNTO CUADRA (medido comparando `map.project()` con el punto de terreno bajo
+ * cada píxel, `scene.globe.pick`): 0-1 px en vista vertical y 0-5 px con 50° de
+ * inclinación, en puntos de hasta 7 km del centro. A inclinaciones muy altas
+ * (pitch de MapLibre > 60°) el overlay plano ya no puede reproducir la
+ * curvatura del globo: a 70° el error vertical en los bordes llega a ~100 px.
+ * Al medir hay que tener en cuenta la ALTURA: los puntos de comparación van
+ * sobre el MDT (`globe.getHeight`) y no a altura 0, porque el terreno de Madrid
+ * está a ~650 m y esa paralaje sale como un 3,4 % de error de escala si se
+ * compara contra el elipsoide.
  *
- * Lo que no hace: no drapea el MDT (el overlay es un mapa plano, pintado por
- * encima del terreno) y no atiende clics (`interactive: false`, igual que en
- * OL); como el div no captura el ratón, Cesium sigue recibiendo todo.
+ * DRAPE SOBRE EL MDT
+ *
+ * El overlay plano no conoce el relieve: se pinta también sobre el cielo y las
+ * lomas no lo tapan. Por eso, cuando la escena lo permite, se monta además un
+ * `PostProcessStage` que pinta el canvas de MapLibre **sobre el terreno visible**
+ * (ver `crearDrape_` y `SHADER_DRAPE`). Para cada píxel:
+ *
+ *   1. Lee la profundidad del globo y reconstruye la posición ECEF del terreno.
+ *      La textura entra por un uniform propio (`u_globeDepth`) y no por el
+ *      automático `czm_globeDepthTexture`: medido, `uniformState.globeDepthTexture`
+ *      NO existe durante los primeros ~12 frames (la escena aún no ha hecho la
+ *      copia de profundidad) y el sampler automático sin enlazar tumbaba el
+ *      render entero ("Rendering has stopped"). Con uniform propio se devuelve
+ *      una textura de 1×1 a cero hasta que hay profundidad, y el shader se limita
+ *      a no pintar nada esos frames. Además, el `depthTexture` que documenta
+ *      Cesium no sirve aquí: en esta build no está enlazado y devuelve 1.0.
+ *   2. Pasa del ECEF a mercator **sin funciones trascendentes**: Web Mercator es
+ *      conforme, así que en el entorno del centro de la vista basta con medir el
+ *      desplazamiento en este y norte (producto escalar con los ejes de la base
+ *      geodésica del centro) y escalarlo. Las referencias (origen, ejes y paso de
+ *      metro a mercator) las calcula `referenciaDrape_` en JavaScript, en doble
+ *      precisión, y entran por uniforms.
+ *      Medido: con la fórmula exacta en el shader (`atan`/`tan`/`log` y 3
+ *      iteraciones de Bowring) los drivers se desvían ~1e-6 en mercator —unos
+ *      40 m— y el drape se va de sitio: el píxel central de una vista cenital caía
+ *      39 m al este y 63 m al norte de su vertical. Con la linealización el UV del
+ *      centro sale (0,502, 0,502) y las esquinas (0,1)/(1,0), y el error a 10 km
+ *      del centro es de unos 6 m.
+ *   3. La proyecta con la MISMA matriz que usa MapLibre para pintar
+ *      (`map.transform.mercatorMatrix`), de donde sale la UV del canvas.
+ *
+ * Con eso el contenido cae en su coordenada (no en su píxel): el cielo y lo que
+ * tapa una loma desaparecen solos, y a 70° de inclinación ya no hay error de
+ * curvatura porque la posición en pantalla la pone el terreno de Cesium. Medido:
+ * la matriz reproduce `map.project` con 0 px de error (0°, 60° y 75° con rumbo),
+ * y la posición reconstruida coincide con `globe.pick` (32.052 m frente a
+ * 32.052 m; latitud geodésica 40,42491° frente a 40,42462°). El canvas se sube
+ * a una textura de Cesium por frame: 0,29 ms de media a 1280x649.
+ *
+ * Se apaga con `vendorOptions.mapLibreOptions.drape: false` o cuando la escena no
+ * lo permite (WebGL1 sin `depthTexture`, sin `PostProcessStage`...); en ese caso
+ * se queda el overlay plano de siempre. También se apaga en caliente cuando la
+ * vista no es representable en 2D (`drapeUtilizable_`): zoom por encima del
+ * `maxZoom` de MapLibre (a pie de calle el canvas se queda corto) o inclinación
+ * de MapLibre por encima de `MAX_INCLINACION_DRAPE` (casi horizonte, donde la
+ * proyección 2D estira el contenido). Mientras no hay profundidad de globo real
+ * el div sigue visible, así que el cambio de una representación a otra no deja
+ * hueco.
+ *
+ * Lo que no hace: no atiende clics (`interactive: false`, igual que en OL); como
+ * el div no captura el ratón, Cesium sigue recibiendo todo.
  *
  * La librería no viene en la build de Cesium (medido: allí solo queda el
  * nombre de la clase `maplibregl-canvas` en el helper de impresión), así que se
@@ -136,32 +197,98 @@
   // 40075016.685578488 / 512. Es la misma constante que usa MapLibre.
   const METROS_POR_PIXEL_ZOOM_0 = 78271.51696399994;
 
-  // Separación (px) de los dos rayos con los que se mide escala y rumbo. Si se
-  // acerca al borde se reduce, para que los tres rayos caigan dentro.
+  // Separación (px) de los dos rayos al elipsoide con los que se mide la escala
+  // cuando el frustum de Cesium no expone un campo de vista vertical.
   const PIXELES_MEDIDA = 100;
 
   // Tolerancias para no llamar a `jumpTo` si la cámara no se ha movido.
   const EPS_POSICION = 1e-3;     // metros
   const EPS_ANGULO = 1e-6;       // radianes
+  const EPS_FOV = 0.01;          // grados
+  const EPS_GRADOS = 0.01;       // grados (rumbo e inclinación)
 
-  /**
-   * Acimut (radianes) del punto 1 al punto 2. Se calcula a mano porque
-   * `EllipsoidGeodesic.initialBearing` no está expuesto en la build de Cesium
-   * (medido: devuelve `undefined`).
-   * @param {number} lon1 Longitud en grados.
-   * @param {number} lat1 Latitud en grados.
-   * @param {number} lon2 Longitud en grados.
-   * @param {number} lat2 Latitud en grados.
-   * @returns {number} Acimut en radianes.
-   */
-  function acimut(lon1, lat1, lon2, lat2) {
-    const f1 = lat1 * Math.PI / 180;
-    const f2 = lat2 * Math.PI / 180;
-    const dl = (lon2 - lon1) * Math.PI / 180;
-    const y = Math.sin(dl) * Math.cos(f2);
-    const x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
-    return Math.atan2(y, x);
-  }
+  // Tope de MapLibre: por encima de 85° su proyección deja de ser utilizable.
+  // Cesium puede inclinarse más, pero el overlay plano no.
+  const MAX_PITCH_MAPLIBRE = 85;
+
+  // Frames que se reintenta el centro de la vista cuando `globe.pick` todavía
+  // no devuelve terreno (justo después de un salto de cámara las teselas aún
+  // están cargando). Medido: sin reintento la vista se queda congelada en el
+  // zoom anterior para siempre, porque la cámara ya no vuelve a cambiar.
+  const REINTENTOS_SUELO = 90;
+
+  // Por encima de esta inclinación (grados de MapLibre, 0 = vertical) el drape
+  // deja de ser fiable: la proyección 2D no puede seguir la perspectiva del
+  // globo y el contenido sale estirado. Medido: a 78° se ve una mancha.
+  const MAX_INCLINACION_DRAPE = 76;
+
+  /* ------------------------------------------------------------------ *
+   * Shader del drape
+   *
+   * Toma la profundidad del globo, reconstruye el punto de terreno de cada
+   * píxel y muestrea el canvas de MapLibre por la coordenada de ese punto.
+   * Las tres piezas están medidas contra la build real (ver cabecera).
+   * ------------------------------------------------------------------ */
+
+  const SHADER_DRAPE = [
+    'uniform sampler2D colorTexture;',
+    'uniform sampler2D u_overlay;',
+    'uniform sampler2D u_globeDepth;',
+    'uniform mat4 u_mapMatrix;',
+    'uniform float u_opacity;',
+    // Referencia de proyección del centro de la vista, calculada en CPU en
+    // doble precisión: origen ECEF, ejes este/norte y escalas a mercator.
+    'uniform vec3 u_origen;',
+    'uniform vec3 u_este;',
+    'uniform vec3 u_norte;',
+    'uniform vec2 u_mercCentro;',
+    'uniform vec2 u_escala;',
+    'in vec2 v_textureCoordinates;',
+    '',
+    'void main() {',
+    '  vec4 color = texture(colorTexture, v_textureCoordinates);',
+    '',
+    '  // 1. Punto de terreno bajo este píxel. La profundidad del globo solo existe',
+    '  // donde hay terreno: el cielo y el fondo se dejan como estaban.',
+    '  vec2 uvPantalla = gl_FragCoord.xy / czm_viewport.zw;',
+    '  float profundidad = czm_unpackDepth(texture(u_globeDepth, uvPantalla));',
+    '  if (profundidad <= 0.0 || profundidad >= 1.0) {',
+    '    out_FragColor = color;',
+    '    return;',
+    '  }',
+    '  vec4 ojo = czm_windowToEyeCoordinates(gl_FragCoord.xy, profundidad);',
+    '  vec4 mundo = czm_inverseView * vec4(ojo.xyz / ojo.w, 1.0);',
+    '',
+    '  // 2. Mercator SIN funciones trascendentes. La proyección es conforme, así',
+    '  // que en el entorno del centro basta con desplazar en este/norte y escalar.',
+    '  // Medido: calcularlo aquí con atan/tan/log (aunque sea la fórmula exacta) se',
+    '  // desvía ~1e-6 en mercator (unos 40 m) por la precisión de los drivers, y el',
+    '  // drape se va de sitio. Las referencias vienen de `referenciaDrape_`, que las',
+    '  // calcula en JavaScript con doble precisión.',
+    '  vec3 delta = mundo.xyz - u_origen;',
+    '  vec2 merc = u_mercCentro + vec2(dot(delta, u_este) * u_escala.x,',
+    '                                 dot(delta, u_norte) * u_escala.y);',
+    '',
+    '  // 3. Mercator normalizado -> clip con la matriz de MapLibre -> UV del canvas.',
+    '  vec4 clip = u_mapMatrix * vec4(merc, 0.0, 1.0);',
+    '  if (clip.w <= 0.0) {',
+    '    out_FragColor = color;',
+    '    return;',
+    '  }',
+    // Medido: Cesium sube el canvas SIN voltear la Y (el texel v=0 es la fila
+    // inferior del canvas), así que esta UV es ya la de la textura y no se toca.
+    '  vec2 uv = clip.xy / clip.w * 0.5 + 0.5;',
+    '  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {',
+    '    out_FragColor = color;',
+    '    return;',
+    '  }',
+    '',
+    '  // El canvas de MapLibre llega con el alfa premultiplicado.',
+    '  vec4 capa = texture(u_overlay, uv);',
+    '  float alfa = capa.a * u_opacity;',
+    '  out_FragColor = vec4(capa.rgb * alfa + color.rgb * (1.0 - alfa), color.a);',
+    '}'
+  ].join('\n');
 
   /* ------------------------------------------------------------------ *
    * La implementación
@@ -200,8 +327,20 @@
         this.overlay_ = null;
         this.mapLibre_ = null;
         this.viewer_ = null;
-        this.escuchaPostRender_ = null;
+        this.escuchaRender_ = null;
         this.camaraPrevia_ = null;
+        this.fovyPrevio_ = null;
+        this.ultimaVista_ = null;
+        this.sinSuelo_ = false;
+        this.sueloEsTerreno_ = false;
+        this.reintentosSuelo_ = 0;
+
+        // Drape sobre el MDT (ver `crearDrape_`).
+        this.drape_ = null;
+        this.drapeSucia_ = true;
+        this.drapeError_ = false;
+        this.drapeListo_ = false;
+        this.temporizadorDrape_ = null;
       }
 
       // ── Ciclo de vida ────────────────────────────────────────────────────
@@ -214,9 +353,14 @@
       }
 
       destroy() {
-        if (this.escuchaPostRender_) {
-          try { this.escuchaPostRender_(); } catch (e) { /* defensivo */ }
-          this.escuchaPostRender_ = null;
+        if (this.escuchaRender_) {
+          try { this.escuchaRender_(); } catch (e) { /* defensivo */ }
+          this.escuchaRender_ = null;
+        }
+        this.destruirDrape_();
+        if (this.temporizadorDrape_) {
+          clearTimeout(this.temporizadorDrape_);
+          this.temporizadorDrape_ = null;
         }
         if (this.mapLibre_) {
           try { this.mapLibre_.remove(); } catch (e) { /* defensivo */ }
@@ -228,6 +372,13 @@
         this.overlay_ = null;
         this.viewer_ = null;
         this.camaraPrevia_ = null;
+        this.fovyPrevio_ = null;
+        this.ultimaVista_ = null;
+        this.sinSuelo_ = false;
+        this.sueloEsTerreno_ = false;
+        this.reintentosSuelo_ = 0;
+        this.drapeSucia_ = true;
+        this.drapeError_ = false;
         this.map = null;
       }
 
@@ -268,15 +419,27 @@
 
         this.mapLibre_ = new window.maplibregl.Map(this.opcionesMapaLibre_(estilo));
         this.mapLibre_.on('style.load', () => this.aplicarFondo_());
+        // Cada vez que MapLibre vuelve a pintar hay que resubir su canvas a la
+        // textura del drape (la primera vez y en cada frame de movimiento).
+        this.mapLibre_.on('render', () => { this.drapeSucia_ = true; });
 
-        // Sincronización con la cámara. `postRender` se dispara en cada frame
-        // (medido: `requestRenderMode` está desactivado en la API), pero el
-        // trabajo pesado solo se hace cuando la cámara ha cambiado.
-        this.escuchaPostRender_ = viewer.scene.postRender.addEventListener(() => this.sincronizar_());
+        // Sincronización con la cámara. `preRender` se dispara en cada frame,
+        // antes de que Cesium pinte, y la cámara ya está actualizada (medido:
+        // mismo position/heading/pitch en preRender y postRender). El trabajo
+        // pesado solo se hace cuando la cámara ha cambiado. El drape va después
+        // para que use la vista ya sincronizada de este frame.
+        this.escuchaRender_ = viewer.scene.preRender.addEventListener(() => {
+          this.sincronizar_();
+          this.actualizarDrape_();
+        });
 
-        this.sincronizar_(true);
+        // El stage se añade FUERA del render: medido, añadirlo en `preRender`
+        // deja el frame a medio montar y revienta en `_setUniforms` (el sampler
+        // automático del globo todavía no está enlazado).
+        this.programarDrape_();
+
         this.setOpacity(this.opacity_);
-        this.setVisible(this.visibility);
+        this.setVisible(this.visibility === undefined ? true : this.visibility);
       }
 
       /**
@@ -296,14 +459,33 @@
        * @returns {Object}
        */
       opcionesMapaLibre_(estilo) {
-        const vendor = (this.vendorOptions_ && this.vendorOptions_.mapLibreOptions) || {};
-        return Object.assign({}, vendor, {
+        const vendor = Object.assign({}, (this.vendorOptions_ && this.vendorOptions_.mapLibreOptions) || {});
+        // `drape` es una opción nuestra, no de MapLibre.
+        delete vendor.drape;
+        const opciones = Object.assign({}, vendor, {
           container: this.overlay_,
           style: estilo,
           interactive: false,
           attributionControl: false,
           trackResize: false
         });
+        // El overlay tiene que poder inclinarse todo lo que Cesium. MapLibre
+        // se queda en 60° por defecto y ahí se pierden las inclinaciones
+        // fuertes; 85 es su máximo.
+        if (opciones.maxPitch === undefined) opciones.maxPitch = MAX_PITCH_MAPLIBRE;
+        if (opciones.minPitch === undefined) opciones.minPitch = 0;
+        // Para subir el canvas a una textura de Cesium hace falta que el buffer
+        // no se descarte al terminar el frame. MapLibre 5 lo expone en
+        // `canvasContextAttributes` (medido: se fusiona con sus valores por
+        // defecto; la clave antigua de nivel superior ya no se usa).
+        if (this.drapeHabilitado_()) {
+          opciones.canvasContextAttributes = Object.assign(
+            {},
+            vendor.canvasContextAttributes,
+            { preserveDrawingBuffer: true }
+          );
+        }
+        return opciones;
       }
 
       // ── Sincronización con la cámara de Cesium ───────────────────────────
@@ -316,6 +498,7 @@
         const map = this.mapLibre_;
         const viewer = this.viewer_;
         if (!map || !viewer) return;
+        if (this.visibility === false) return;
 
         const lienzo = viewer.canvas;
         const ancho = lienzo.clientWidth;
@@ -330,20 +513,67 @@
         }
 
         const camara = viewer.camera;
+
+        // El campo de vista de Cesium cambia al redimensionar (su frustum es
+        // horizontal). MapLibre usa un FOV vertical propio; si no se igualan,
+        // el overlay se separa del terreno al inclinar. Medido a 50°: el error
+        // máximo pasa de 10 px a 4,8 px.
+        const fovy = this.campoVistaVertical_(camara);
+        const fovyCambio = fovy !== null
+          && (this.fovyPrevio_ === null || Math.abs(fovy - this.fovyPrevio_) > EPS_FOV);
+        if (fovyCambio) {
+          try {
+            if (typeof map.setVerticalFieldOfView === 'function') {
+              map.setVerticalFieldOfView(fovy);
+            }
+          } catch (e) { /* MapLibre se queda con su FOV */ }
+          this.fovyPrevio_ = fovy;
+        }
+
         const posicion = camara.position;
         const previa = this.camaraPrevia_;
-        if (!forzar && previa
-          && Math.abs(posicion.x - previa.x) < EPS_POSICION
-          && Math.abs(posicion.y - previa.y) < EPS_POSICION
-          && Math.abs(posicion.z - previa.z) < EPS_POSICION
-          && Math.abs(camara.heading - previa.heading) < EPS_ANGULO
-          && Math.abs(camara.pitch - previa.pitch) < EPS_ANGULO) {
-          return;
-        }
-        this.camaraPrevia_ = { x: posicion.x, y: posicion.y, z: posicion.z, heading: camara.heading, pitch: camara.pitch };
+        const cambiaCamara = !previa || fovyCambio
+          || Math.abs(posicion.x - previa.x) >= EPS_POSICION
+          || Math.abs(posicion.y - previa.y) >= EPS_POSICION
+          || Math.abs(posicion.z - previa.z) >= EPS_POSICION
+          || Math.abs(camara.heading - previa.heading) >= EPS_ANGULO
+          || Math.abs(camara.pitch - previa.pitch) >= EPS_ANGULO
+          || Math.abs(camara.roll - previa.roll) >= EPS_ANGULO;
+
+        // Si la última sincronización no encontró suelo se reintenta unos
+        // frames aunque la cámara ya no se mueva: el terreno puede estar
+        // cargando y, sin esto, el overlay se queda con el zoom anterior.
+        const pendienteSuelo = this.sinSuelo_ === true
+          && (this.reintentosSuelo_ || 0) < REINTENTOS_SUELO;
+        if (!forzar && !cambiaCamara && !pendienteSuelo) return;
+
+        this.camaraPrevia_ = {
+          x: posicion.x,
+          y: posicion.y,
+          z: posicion.z,
+          heading: camara.heading,
+          pitch: camara.pitch,
+          roll: camara.roll
+        };
+        this.reintentosSuelo_ = cambiaCamara ? 0 : (this.reintentosSuelo_ || 0) + 1;
 
         const vista = this.vistaDesdeCamara_(viewer, ancho, alto);
-        if (!vista) return;
+        if (!this.sinSuelo_) this.reintentosSuelo_ = 0;
+        if (!vista
+          || !Number.isFinite(vista.lon)
+          || !Number.isFinite(vista.lat)
+          || !Number.isFinite(vista.zoom)) return;
+
+        const ultima = this.ultimaVista_;
+        if (!forzar && ultima
+          && Math.abs(vista.lon - ultima.lon) < 1e-9
+          && Math.abs(vista.lat - ultima.lat) < 1e-9
+          && Math.abs(vista.zoom - ultima.zoom) < 1e-4
+          && Math.abs(vista.rumbo - ultima.rumbo) < EPS_GRADOS
+          && Math.abs(vista.inclinacion - ultima.inclinacion) < EPS_GRADOS) {
+          return;
+        }
+        this.ultimaVista_ = vista;
 
         map.jumpTo({
           center: [vista.lon, vista.lat],
@@ -351,6 +581,369 @@
           bearing: vista.rumbo,
           pitch: vista.inclinacion
         });
+      }
+
+      // ── Drape sobre el MDT ───────────────────────────────────────────────
+
+      /**
+       * ¿Se drapea el overlay sobre el terreno? Se apaga con
+       * `vendorOptions.mapLibreOptions.drape: false`.
+       * @returns {boolean}
+       */
+      drapeHabilitado_() {
+        const vendor = (this.vendorOptions_ && this.vendorOptions_.mapLibreOptions) || {};
+        return vendor.drape !== false;
+      }
+
+      /**
+       * Monta el drape: una textura con el canvas de MapLibre y un
+       * `PostProcessStage` que la pinta sobre el terreno visible.
+       *
+       * Se hace en el primer frame con tamaño, no al crear el mapa. Si la escena
+       * no lo permite (WebGL1 sin `depthTexture`, sin `PostProcessStage`, sin
+       * `Matrix4`...) se marca el error y se queda el overlay plano de siempre.
+       *
+       * @returns {boolean} `true` si el drape queda montado.
+       */
+      crearDrape_() {
+        if (this.drape_) return true;
+        if (!this.drapeHabilitado_() || this.drapeError_) return false;
+
+        const Cesium = window.Cesium;
+        const escena = this.viewer_ && this.viewer_.scene;
+        if (!Cesium || !Cesium.PostProcessStage || !Cesium.Texture || !Cesium.Matrix4
+          || !escena || !escena.postProcessStages || !escena.context
+          || !escena.context.depthTexture || !this.mapLibre_) {
+          this.drapeError_ = true;
+          return false;
+        }
+
+        const lienzo = this.mapLibre_.getCanvas();
+        const ancho = lienzo && lienzo.width;
+        const alto = lienzo && lienzo.height;
+        if (!ancho || !alto) return false;   // aún sin tamaño: se reintenta
+
+        try {
+          const textura = this.crearTexturaDrape_(escena, ancho, alto);
+          const nula = this.crearTexturaNulaDrape_(escena);
+          const matriz = new Cesium.Matrix4();
+          // Referencia de proyección (ver `referenciaDrape_`): se reutilizan los
+          // objetos y se reescriben en cada frame, así Cesium sube siempre el
+          // valor vigente sin crear basura.
+          const ref = {
+            origen: new Cesium.Cartesian3(),
+            este: new Cesium.Cartesian3(),
+            norte: new Cesium.Cartesian3(),
+            mercCentro: new Cesium.Cartesian2(),
+            escala: new Cesium.Cartesian2()
+          };
+          const capa = this;
+          const stage = escena.postProcessStages.add(new Cesium.PostProcessStage({
+            name: 'maplibreDrape',
+            fragmentShader: SHADER_DRAPE,
+            uniforms: {
+              u_overlay: () => (capa.drape_ && capa.drape_.textura) || nula,
+              // La copia de profundidad del globo no existe en los primeros
+              // frames: se devuelve la textura nula y el shader no pinta.
+              u_globeDepth: () => {
+                const profundidad = escena.context.uniformState.globeDepthTexture;
+                if (profundidad) capa.drapeListo_ = true;
+                return profundidad || nula;
+              },
+              u_mapMatrix: () => matriz,
+              u_opacity: () => capa.opacidad_(),
+              u_origen: () => ref.origen,
+              u_este: () => ref.este,
+              u_norte: () => ref.norte,
+              u_mercCentro: () => ref.mercCentro,
+              u_escala: () => ref.escala
+            }
+          }));
+
+          this.drape_ = {
+            textura: textura,
+            nula: nula,
+            matriz: matriz,
+            ref: ref,
+            stage: stage,
+            ancho: ancho,
+            alto: alto
+          };
+          this.drapeSucia_ = true;
+          return true;
+        } catch (e) {
+          this.drapeError_ = true;
+          this.drape_ = null;
+          if (this.overlay_) this.overlay_.style.visibility = '';
+          console.warn('maplibreLayer: no se pudo montar el drape sobre el MDT', e);
+          return false;
+        }
+      }
+
+      /**
+       * Textura de Cesium del tamaño del canvas de MapLibre.
+       * @param {Object} escena La escena de Cesium.
+       * @param {number} ancho Ancho en píxeles del drawing buffer.
+       * @param {number} alto Alto en píxeles del drawing buffer.
+       * @returns {Object} `Cesium.Texture`.
+       */
+      crearTexturaDrape_(escena, ancho, alto) {
+        const Cesium = window.Cesium;
+        const opciones = {
+          context: escena.context,
+          width: ancho,
+          height: alto,
+          pixelFormat: Cesium.PixelFormat.RGBA,
+          pixelDatatype: Cesium.PixelDatatype.UNSIGNED_BYTE
+        };
+        if (Cesium.Sampler && Cesium.TextureMinificationFilter && Cesium.TextureMagnificationFilter) {
+          opciones.sampler = new Cesium.Sampler({
+            minificationFilter: Cesium.TextureMinificationFilter.LINEAR,
+            magnificationFilter: Cesium.TextureMagnificationFilter.LINEAR
+          });
+        }
+        return new Cesium.Texture(opciones);
+      }
+
+      /**
+       * Textura 1×1 a cero para el uniform de profundidad mientras la escena no
+       * ha hecho la copia de profundidad del globo (los primeros frames). El
+       * shader la lee como 0 y no pinta nada, que es lo correcto.
+       * @param {Object} escena La escena de Cesium.
+       * @returns {Object} `Cesium.Texture`.
+       */
+      crearTexturaNulaDrape_(escena) {
+        const Cesium = window.Cesium;
+        const opciones = {
+          context: escena.context,
+          width: 1,
+          height: 1,
+          pixelFormat: Cesium.PixelFormat.RGBA,
+          pixelDatatype: Cesium.PixelDatatype.UNSIGNED_BYTE
+        };
+        try {
+          return new Cesium.Texture(Object.assign({}, opciones, {
+            source: { width: 1, height: 1, arrayBufferView: new Uint8Array(4) }
+          }));
+        } catch (e) {
+          return new Cesium.Texture(opciones);
+        }
+      }
+
+      /**
+       * Quita el stage y la textura del drape y devuelve el div a la vista.
+       */
+      destruirDrape_() {
+        const drape = this.drape_;
+        this.drape_ = null;
+        this.drapeListo_ = false;
+        if (drape) {
+          try {
+            if (drape.stage && this.viewer_ && this.viewer_.scene) {
+              this.viewer_.scene.postProcessStages.remove(drape.stage);
+            }
+          } catch (e) { /* defensivo */ }
+          try {
+            if (drape.textura) drape.textura.destroy();
+          } catch (e) { /* defensivo */ }
+          try {
+            if (drape.nula) drape.nula.destroy();
+          } catch (e) { /* defensivo */ }
+        }
+        if (this.overlay_) this.overlay_.style.visibility = '';
+      }
+
+      /**
+       * Opacidad normalizada a [0, 1] (la base de Cesium la pasa a veces como
+       * cadena, y al principio puede no estar definida).
+       * @returns {number}
+       */
+      opacidad_() {
+        const valor = typeof this.opacity_ === 'string' ? Number(this.opacity_) : this.opacity_;
+        if (!Number.isFinite(valor)) return 1;
+        return Math.max(0, Math.min(1, valor));
+      }
+
+      /**
+       * Intenta montar el drape fuera del render (con reintentos mientras el
+       * canvas de MapLibre no tenga tamaño).
+       */
+      programarDrape_() {
+        const intentar = (intentos) => {
+          this.temporizadorDrape_ = null;
+          if (this.drape_ || this.drapeError_ || !this.overlay_) return;
+          if (this.crearDrape_()) return;
+          if (intentos < 60 && this.overlay_) {
+            this.temporizadorDrape_ = setTimeout(() => intentar(intentos + 1), 100);
+          }
+        };
+        if (this.temporizadorDrape_) clearTimeout(this.temporizadorDrape_);
+        this.temporizadorDrape_ = setTimeout(() => intentar(0), 0);
+      }
+
+      /**
+       * Mantiene el drape al día: tamaño de la textura, matriz de MapLibre y
+       * subida del canvas cuando MapLibre ha vuelto a pintar.
+       */
+      actualizarDrape_() {
+        const drape = this.drape_;
+        if (!drape) return;
+        // El drape solo vale si el canvas de MapLibre puede cubrir la escala
+        // que pide la cámara. Cuando el zoom necesario pasa del máximo de
+        // MapLibre (vistas a pie de calle) la correspondencia se rompe y es
+        // mejor dejar el overlay plano, que al menos se ve coherente.
+        const utilizable = this.drapeUtilizable_();
+        drape.stage.enabled = this.visibility !== false && utilizable;
+        if (!utilizable && this.overlay_ && this.overlay_.style.visibility === 'hidden') {
+          this.overlay_.style.visibility = '';
+        }
+        if (!drape.stage.enabled) return;
+
+        // El div se oculta solo cuando el drape ya ha pintado con profundidad
+        // real; antes (primeros frames) aún no hay copia de profundidad y el
+        // drape no pinta, así que se deja el overlay plano a la vista.
+        if (this.drapeListo_ && this.overlay_ && this.overlay_.style.visibility !== 'hidden') {
+          this.overlay_.style.visibility = 'hidden';
+        }
+
+        const map = this.mapLibre_;
+        if (!map) return;
+        const lienzo = map.getCanvas();
+        if (!lienzo || !lienzo.width || !lienzo.height) return;
+
+        // Ventana redimensionada: la textura tiene que seguir al canvas.
+        if (lienzo.width !== drape.ancho || lienzo.height !== drape.alto) {
+          try {
+            drape.textura.destroy();
+          } catch (e) { /* defensivo */ }
+          try {
+            drape.textura = this.crearTexturaDrape_(this.viewer_.scene, lienzo.width, lienzo.height);
+            drape.ancho = lienzo.width;
+            drape.alto = lienzo.height;
+            this.drapeSucia_ = true;
+          } catch (e) {
+            this.drapeError_ = true;
+            this.destruirDrape_();
+            return;
+          }
+        }
+
+        // Matriz de MapLibre (mercator normalizado -> clip). Es la que usa para
+        // pintar, así que la correspondencia es exacta.
+        const transform = map.transform;
+        const matriz = transform && transform.mercatorMatrix;
+        if (matriz && matriz.length >= 16) this.copiarMatrizDrape_(matriz, drape.matriz);
+        this.referenciaDrape_(drape);
+
+        if (this.drapeSucia_) {
+          try {
+            drape.textura.copyFrom({ source: lienzo });
+            this.drapeSucia_ = false;
+          } catch (e) { /* se reintenta en el siguiente frame */ }
+        }
+      }
+
+      /**
+       * Calcula el paso de ECEF a mercator en el entorno del centro de la vista.
+       *
+       * El shader no puede hacerlo: con `atan`/`tan`/`log` (la fórmula exacta)
+       * los drivers se desvían ~1e-6 en mercator, que son unos 40 m en el
+       * terreno, y el drape se va de sitio (medido: el píxel central caía 39 m
+       * al este y 63 m al norte de su sitio). Como Web Mercator es conforme,
+       * alrededor del centro vale la linealización: metros al este y al norte,
+       * multiplicados por el paso de mercator en ese punto:
+       *
+       *   mercX = mercX₀ + este  / (2π·N·cos φ)
+       *   mercY = mercY₀ − norte / (2π·M·cos φ)
+       *
+       * con `N` y `M` los radios de curvatura del elipsoide (el este recorre un
+       * paralelo y el norte un meridiano). El error es de segundo orden: unos
+       * 6 m a 10 km del centro y centímetros en las vistas normales.
+       *
+       * Todo se calcula en JavaScript, en doble precisión, y se reescribe en los
+       * objetos de `drape.ref`, que son los que leen los uniforms.
+       * @param {Object} drape Estado del drape.
+       */
+      referenciaDrape_(drape) {
+        const vista = this.ultimaVista_;
+        if (!drape || !drape.ref || !vista
+          || !Number.isFinite(vista.lon) || !Number.isFinite(vista.lat)) {
+          return;
+        }
+        const RAD = Math.PI / 180;
+        const lon = vista.lon * RAD;
+        const lat = vista.lat * RAD;
+        const senLat = Math.sin(lat);
+        const cosLat = Math.cos(lat);
+        const senLon = Math.sin(lon);
+        const cosLon = Math.cos(lon);
+
+        // Radios de curvatura (WGS84) y altura del elipsoide en el centro.
+        const A = 6378137;
+        const E2 = 0.00669437999014;
+        const w = 1 - E2 * senLat * senLat;
+        const raiz = Math.sqrt(w);
+        const N = A / raiz;                        // radio del primer vertical
+        const M = A * (1 - E2) / (w * raiz);       // radio meridiano
+
+        const ref = drape.ref;
+        ref.origen.x = N * cosLat * cosLon;
+        ref.origen.y = N * cosLat * senLon;
+        ref.origen.z = N * (1 - E2) * senLat;
+        // Base este/norte (geodésica) del centro, en ECEF.
+        ref.este.x = -senLon;
+        ref.este.y = cosLon;
+        ref.este.z = 0;
+        ref.norte.x = -senLat * cosLon;
+        ref.norte.y = -senLat * senLon;
+        ref.norte.z = cosLat;
+        // Mercator del centro y paso de metros de terreno a mercator.
+        ref.mercCentro.x = (lon + Math.PI) / (2 * Math.PI);
+        ref.mercCentro.y = 0.5 - Math.log(Math.tan(Math.PI / 4 + lat / 2)) / (2 * Math.PI);
+        ref.escala.x = 1 / (2 * Math.PI * N * cosLat);
+        ref.escala.y = -1 / (2 * Math.PI * M * cosLat);
+      }
+
+      /**
+       * Indica si el drape es utilizable con la vista actual.
+       *
+       * - Si el zoom que pide la cámara pasa del máximo de MapLibre, el canvas
+       *   se queda corto y la correspondencia se rompe (vistas a pie de calle).
+       * - Casi al horizonte la proyección 2D de MapLibre no puede seguir la
+       *   perspectiva del globo y el contenido se estira en exceso.
+       *
+       * En ambos casos se deja el overlay plano, que se ve coherente.
+       * @returns {boolean}
+       */
+      drapeUtilizable_() {
+        const map = this.mapLibre_;
+        const ultima = this.ultimaVista_;
+        if (!map || !ultima) return true;
+        const maxZoom = typeof map.getMaxZoom === 'function' ? map.getMaxZoom() : null;
+        if (Number.isFinite(maxZoom) && Number.isFinite(ultima.zoom)
+          && ultima.zoom > maxZoom + 0.01) {
+          return false;
+        }
+        if (Number.isFinite(ultima.inclinacion) && ultima.inclinacion > MAX_INCLINACION_DRAPE) {
+          return false;
+        }
+        return true;
+      }
+
+      /**
+       * Copia la matriz de MapLibre (column-major) a la de Cesium.
+       * @param {Float64Array} origen Matriz de 16 valores de `map.transform`.
+       * @param {Object} destino `Cesium.Matrix4` del uniform.
+       */
+      copiarMatrizDrape_(origen, destino) {
+        const Matrix4 = window.Cesium.Matrix4;
+        try {
+          if (typeof Matrix4.fromColumnMajorArray === 'function') {
+            Matrix4.fromColumnMajorArray(origen, destino);
+          } else {
+            Matrix4.fromArray(origen, 0, destino);
+          }
+        } catch (e) { /* se queda la matriz del frame anterior */ }
       }
 
       /**
@@ -366,33 +959,189 @@
 
         const escena = viewer.scene;
         const camara = viewer.camera;
-        const k = Math.max(20, Math.min(PIXELES_MEDIDA, Math.floor(Math.min(ancho, alto) / 4)));
-
         const centro = this.puntoSuelo_(escena, camara, ancho / 2, alto / 2);
-        const derecha = this.puntoSuelo_(escena, camara, ancho / 2 + k, alto / 2);
-        const arriba = this.puntoSuelo_(escena, camara, ancho / 2, alto / 2 - k);
-        if (!centro || !derecha || !arriba) return null;
+        // Se anota si el rayo central dio terreno de verdad: `sincronizar_`
+        // reintenta mientras siga sin haberlo (ver `REINTENTOS_SUELO`). El
+        // corte con el elipsoide no cuenta: sin teselas cae demasiado lejos.
+        this.sinSuelo_ = !centro || this.sueloEsTerreno_ === false;
 
-        const c0 = Cesium.Cartographic.fromCartesian(centro);
-        const c1 = Cesium.Cartographic.fromCartesian(derecha);
-        const c2 = Cesium.Cartographic.fromCartesian(arriba);
+        let lon = null;
+        let lat = null;
+        let zoom = null;
+        if (centro) {
+          const c0 = Cesium.Cartographic.fromCartesian(centro);
+          lon = Cesium.Math.toDegrees(c0.longitude);
+          lat = Cesium.Math.toDegrees(c0.latitude);
+          zoom = this.zoomDesdeEscala_(escena, camara, centro, ancho, alto);
+        }
 
-        const lon = Cesium.Math.toDegrees(c0.longitude);
-        const lat = Cesium.Math.toDegrees(c0.latitude);
+        // Mirando al horizonte o al cielo el rayo central puede no tocar el
+        // globo. En vez de congelar el overlay se conserva el último centro
+        // válido y se siguen actualizando rumbo e inclinación.
+        const ultima = this.ultimaVista_;
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+          if (ultima && Number.isFinite(ultima.lon) && Number.isFinite(ultima.lat)) {
+            lon = ultima.lon;
+            lat = ultima.lat;
+          } else {
+            const posicion = camara.positionCartographic
+              || Cesium.Cartographic.fromCartesian(camara.position);
+            lon = Cesium.Math.toDegrees(posicion.longitude);
+            lat = Cesium.Math.toDegrees(posicion.latitude);
+          }
+        }
+        if (!Number.isFinite(zoom)) {
+          zoom = ultima && Number.isFinite(ultima.zoom) ? ultima.zoom : 2;
+        }
 
-        const distancia = new Cesium.EllipsoidGeodesic(c0, c1).surfaceDistance;
-        if (!(distancia > 0)) return null;
-        const metrosPorPixel = distancia / k;
-
-        const inclinacion = Cesium.Math.toDegrees(camara.pitch) + 90;
+        const pitchCes = Cesium.Math.toDegrees(camara.pitch);
+        const inclinacion = Number.isFinite(pitchCes)
+          ? Math.max(0, Math.min(this.maxPitch_(), pitchCes + 90))
+          : 0;
 
         return {
           lon: lon,
           lat: lat,
-          zoom: Math.log2(METROS_POR_PIXEL_ZOOM_0 * Math.cos(lat * Math.PI / 180) / metrosPorPixel),
-          rumbo: Cesium.Math.toDegrees(acimut(lon, lat, Cesium.Math.toDegrees(c2.longitude), Cesium.Math.toDegrees(c2.latitude))),
-          inclinacion: Math.max(0, Math.min(85, inclinacion))
+          zoom: zoom,
+          rumbo: this.rumboDesdeCamara_(camara, centro, escena.globe.ellipsoid),
+          inclinacion: inclinacion
         };
+      }
+
+      /**
+       * Zoom de MapLibre a partir de la escala en el centro de la pantalla.
+       * Se usa el campo de vista vertical del frustum de Cesium; si no está
+       * disponible, se mide con dos rayos al elipsoide.
+       * @param {Object} escena La escena de Cesium.
+       * @param {Object} camara La cámara de Cesium.
+       * @param {Object} centro Punto (terreno o elipsoide) bajo el centro.
+       * @param {number} ancho Ancho del canvas en píxeles CSS.
+       * @param {number} alto Alto del canvas en píxeles CSS.
+       * @returns {number|null} Zoom de MapLibre o null.
+       */
+      zoomDesdeEscala_(escena, camara, centro, ancho, alto) {
+        const Cesium = window.Cesium;
+        if (!Cesium) return null;
+
+        const fovy = this.campoVistaVerticalRad_(camara);
+        let metrosPorPixel = null;
+
+        if (fovy > 0) {
+          const distancia = Cesium.Cartesian3.distance(camara.position, centro);
+          if (distancia > 0) {
+            metrosPorPixel = 2 * distancia * Math.tan(fovy / 2) / alto;
+          }
+        }
+
+        if (!(metrosPorPixel > 0)) {
+          const k = Math.max(20, Math.min(PIXELES_MEDIDA, Math.floor(Math.min(ancho, alto) / 4)));
+          const derecha = this.puntoElipsoide_(escena, camara, ancho / 2 + k, alto / 2);
+          if (derecha) {
+            const c0 = Cesium.Cartographic.fromCartesian(centro);
+            const c1 = Cesium.Cartographic.fromCartesian(derecha);
+            const distancia = new Cesium.EllipsoidGeodesic(c0, c1).surfaceDistance;
+            if (distancia > 0) metrosPorPixel = distancia / k;
+          }
+        }
+
+        if (!(metrosPorPixel > 0)) return null;
+        const c0 = Cesium.Cartographic.fromCartesian(centro);
+        const lat = Cesium.Math.toDegrees(c0.latitude);
+        return Math.log2(
+          METROS_POR_PIXEL_ZOOM_0 * Math.cos(lat * Math.PI / 180) / metrosPorPixel
+        );
+      }
+
+      /**
+       * Campo de vista vertical del frustum de Cesium, en radianes.
+       * @param {Object} camara La cámara de Cesium.
+       * @returns {number|null}
+       */
+      campoVistaVerticalRad_(camara) {
+        const frustum = camara && camara.frustum;
+        if (!frustum) return null;
+        let fovy = frustum.fovy;
+        if (!(fovy > 0) && frustum.fov > 0 && frustum.aspectRatio > 0) {
+          fovy = 2 * Math.atan(Math.tan(frustum.fov / 2) / frustum.aspectRatio);
+        }
+        return fovy > 0 ? fovy : null;
+      }
+
+      /**
+       * Campo de vista vertical en grados (el que espera MapLibre).
+       * @param {Object} camara La cámara de Cesium.
+       * @returns {number|null}
+       */
+      campoVistaVertical_(camara) {
+        const Cesium = window.Cesium;
+        const fovy = this.campoVistaVerticalRad_(camara);
+        return fovy > 0 && Cesium ? Cesium.Math.toDegrees(fovy) : null;
+      }
+
+      /**
+       * Rumbo (bearing) a partir de la dirección de la parte superior de la
+       * pantalla (`camera.up`) proyectada sobre el plano tangente del centro.
+       * Incluye el alabeo y no depende de que un rayo auxiliar toque tierra.
+       * @param {Object} camara La cámara de Cesium.
+       * @param {Object|null} centro Punto bajo el centro de la pantalla.
+       * @param {Object} elipsoide Elipsoide del globo.
+       * @returns {number} Grados entre 0 y 360.
+       */
+      rumboDesdeCamara_(camara, centro, elipsoide) {
+        const Cesium = window.Cesium;
+        const heading = Cesium.Math.toDegrees(camara.heading);
+        if (!centro) return this.normalizarRumbo_(heading);
+
+        const normal = elipsoide.geodeticSurfaceNormal(centro);
+        const arriba = camara.up;
+        const proyeccion = Cesium.Cartesian3.subtract(
+          arriba,
+          Cesium.Cartesian3.multiplyByScalar(
+            normal,
+            Cesium.Cartesian3.dot(arriba, normal),
+            new Cesium.Cartesian3()
+          ),
+          new Cesium.Cartesian3()
+        );
+        if (!(Cesium.Cartesian3.magnitude(proyeccion) > 1e-12)) {
+          return this.normalizarRumbo_(heading);
+        }
+
+        const c0 = Cesium.Cartographic.fromCartesian(centro);
+        const lon = c0.longitude;
+        const lat = c0.latitude;
+        const este = new Cesium.Cartesian3(-Math.sin(lon), Math.cos(lon), 0);
+        const norte = new Cesium.Cartesian3(
+          -Math.sin(lat) * Math.cos(lon),
+          -Math.sin(lat) * Math.sin(lon),
+          Math.cos(lat)
+        );
+        const angulo = Math.atan2(
+          Cesium.Cartesian3.dot(proyeccion, este),
+          Cesium.Cartesian3.dot(proyeccion, norte)
+        );
+        return this.normalizarRumbo_(Cesium.Math.toDegrees(angulo));
+      }
+
+      /**
+       * @param {number} grados Rumbo en grados.
+       * @returns {number} Rumbo normalizado a [0, 360).
+       */
+      normalizarRumbo_(grados) {
+        if (!Number.isFinite(grados)) return 0;
+        const rumbo = grados % 360;
+        return rumbo < 0 ? rumbo + 360 : rumbo;
+      }
+
+      /**
+       * Tope de inclinación de MapLibre (85 por defecto, o el que fije la capa).
+       * @returns {number}
+       */
+      maxPitch_() {
+        const max = this.mapLibre_ && typeof this.mapLibre_.getMaxPitch === 'function'
+          ? this.mapLibre_.getMaxPitch()
+          : MAX_PITCH_MAPLIBRE;
+        return Math.max(0, Math.min(MAX_PITCH_MAPLIBRE, max));
       }
 
       /**
@@ -412,21 +1161,115 @@
         } catch (e) {
           punto = null;
         }
-        if (!punto) {
-          try {
-            punto = camara.pickEllipsoid(ventana, escena.globe.ellipsoid);
-          } catch (e) {
-            punto = null;
-          }
+        if (this.puntoVisible_(camara, punto) && this.terrenoEnRango_(camara, punto)) {
+          this.sueloEsTerreno_ = true;
+          return punto;
         }
-        return punto;
+        // Sin teselas del terreno el rayo solo corta el elipsoide, que a poca
+        // altura y con inclinación cae mucho más lejos que el suelo real. Se
+        // usa como respaldo, pero se anota para reintentar cuando el terreno
+        // esté cargado (si no, el zoom se queda congelado en ese valor).
+        this.sueloEsTerreno_ = false;
+        try {
+          punto = camara.pickEllipsoid(ventana, escena.globe.ellipsoid);
+        } catch (e) {
+          punto = null;
+        }
+        return this.puntoVisible_(camara, punto) ? punto : null;
+      }
+
+      /**
+       * Descarta lecturas de terreno más lejanas que el corte con el elipsoide:
+       * mirando al suelo el rayo no puede ir más allá, así que un punto más
+       * lejano es una lectura mala (la cara opuesta, o el elipsoide cuando aún
+       * no hay teselas) y dejaba el zoom congelado en un valor absurdo. Se mide
+       * con el pitch de la cámara porque `puntoSuelo_` solo se usa en el centro
+       * de la pantalla, donde el rayo va en la dirección de la vista.
+       * @param {Object} camara La cámara de Cesium.
+       * @param {Object} punto `Cesium.Cartesian3` candidato.
+       * @returns {boolean}
+       */
+      terrenoEnRango_(camara, punto) {
+        if (!punto) return false;
+        const altura = camara.positionCartographic
+          ? camara.positionCartographic.height
+          : 0;
+        const seno = Math.abs(Math.sin(camara.pitch || 0));
+        if (!(altura > 0) || seno < 1e-4) return true;
+        const distancia = window.Cesium.Cartesian3.distance(camara.position, punto);
+        return distancia <= (altura / seno) * 1.15 + 1000;
+      }
+
+      /**
+       * Descarta intersecciones que no sirven para centrar el overlay: detrás
+       * de la cámara o en la cara opuesta del elipsoide (cuando el rayo pasa
+       * por encima del horizonte, `pickEllipsoid` puede devolver un punto a
+       * miles de kilómetros).
+       * @param {Object} camara La cámara de Cesium.
+       * @param {Object|null} punto `Cesium.Cartesian3` candidato.
+       * @returns {boolean}
+       */
+      puntoVisible_(camara, punto) {
+        if (!punto) return false;
+        const Cesium = window.Cesium;
+        const posicion = camara.position;
+        const dx = punto.x - posicion.x;
+        const dy = punto.y - posicion.y;
+        const dz = punto.z - posicion.z;
+        const distancia = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (!(distancia > 0)) return false;
+
+        const delante = dx * camara.direction.x
+          + dy * camara.direction.y
+          + dz * camara.direction.z;
+        if (delante <= 0) return false;
+
+        const altura = camara.positionCartographic
+          ? camara.positionCartographic.height
+          : 0;
+        const horizonte = Math.sqrt(
+          Math.max(0, 2 * 6378137 * Math.max(0, altura) + altura * altura)
+        );
+        return distancia <= Math.max(100000, horizonte * 2 + 50000);
+      }
+
+      /**
+       * Punto del elipsoide bajo un píxel (sin consultar el terreno). Se usa
+       * como reserva para medir la escala cuando el frustum no da el FOV.
+       * @param {Object} escena La escena de Cesium.
+       * @param {Object} camara La cámara de Cesium.
+       * @param {number} x Píxel horizontal.
+       * @param {number} y Píxel vertical.
+       * @returns {Object|null} `Cesium.Cartesian3` o null si el rayo no toca.
+       */
+      puntoElipsoide_(escena, camara, x, y) {
+        const Cesium = window.Cesium;
+        const elipsoide = escena.globe && escena.globe.ellipsoid
+          ? escena.globe.ellipsoid
+          : Cesium.Ellipsoid.WGS84;
+        try {
+          const punto = camara.pickEllipsoid(new Cesium.Cartesian2(x, y), elipsoide);
+          return this.puntoVisible_(camara, punto) ? punto : null;
+        } catch (e) {
+          return null;
+        }
       }
 
       // ── Visibilidad, opacidad y orden ────────────────────────────────────
 
       setVisible(visible) {
+        const estaba = this.visibility;
         this.visibility = visible;
         if (this.overlay_) this.overlay_.style.display = visible ? 'block' : 'none';
+        // Con drape, el div está oculto con `visibility` (para no pintar dos
+        // veces) y quien manda es el stage.
+        if (this.drape_ && this.drape_.stage) this.drape_.stage.enabled = visible !== false;
+        // Al volver a mostrarla hay que ponerse al día: mientras estaba oculta
+        // no se ha llamado a `jumpTo`.
+        if (visible && !estaba) {
+          this.drapeSucia_ = true;
+          this.sincronizar_(true);
+        }
       }
 
       isVisible() {
@@ -436,6 +1279,8 @@
       setOpacity(opacidad) {
         const valor = typeof opacidad === 'string' ? Number(opacidad) : opacidad;
         this.opacity_ = valor;
+        // El drape lee la opacidad del uniform en cada frame (`opacidad_`); el
+        // canvas se sigue ajustando para el modo plano.
         if (this.mapLibre_) this.mapLibre_.getCanvas().style.opacity = String(valor);
       }
 
@@ -728,6 +1573,51 @@
   }
 
   /**
+   * ¿Casa una capa MapLibre con el filtro que recibe `getUnknowLayers_`?
+   *
+   * El impl de Cesium devuelve TODAS las capas de tipo desconocido aunque se le
+   * pase un filtro, y de ahí cuelga un efecto colateral medido: al cambiar de
+   * capa base, `facade.removeLayers(base)` hace `getLayers(base)` y ese listado
+   * incluye las MapLibre; la base se lleva por delante la capa de la página.
+   * Aquí se replica el filtro de la API (capa, objeto con name/type/legend,
+   * idLayer o cadena) para poder descartar las que no casen.
+   *
+   * @param {Object} capa Capa MapLibre.
+   * @param {*} filtro Filtro recibido por `getUnknowLayers_`.
+   * @returns {boolean}
+   */
+  function capaCoincideFiltro(capa, filtro) {
+    if (filtro === undefined || filtro === null) return true;
+    if (Array.isArray(filtro)) {
+      if (!filtro.length) return true;
+      return filtro.some((f) => capaCoincideFiltro(capa, f));
+    }
+    if (typeof filtro === 'string') {
+      return capa.name === filtro || capa.idLayer === filtro || capa.legend === filtro;
+    }
+    if (typeof filtro !== 'object') return true;
+    if (filtro === capa) return true;
+    if (filtro.idLayer && capa.idLayer === filtro.idLayer) return true;
+
+    let tieneCriterio = false;
+    if (filtro.name) {
+      tieneCriterio = true;
+      if (capa.name !== filtro.name) return false;
+    }
+    if (filtro.type) {
+      tieneCriterio = true;
+      if (capa.type !== filtro.type) return false;
+    }
+    if (filtro.legend) {
+      tieneCriterio = true;
+      if (capa.legend !== filtro.legend) return false;
+    }
+    if (tieneCriterio) return true;
+    // Solo venía idLayer y no ha casado antes: no es esta capa.
+    return !filtro.idLayer;
+  }
+
+  /**
    * Parchea la implementación del mapa para que sepa qué hacer con una capa
    * `MapLibre`.
    *
@@ -800,18 +1690,16 @@
 
     proto.getUnknowLayers_ = function (filtro) {
       const lista = getUnknowLayersOriginal.call(this, filtro) || [];
+      // El impl devuelve todas las de tipo desconocido aunque se le pase un
+      // filtro. Se descartan las MapLibre que no casen para que getLayers() y
+      // removeLayers() por otra capa no se las lleven por delante.
+      const resultado = lista.filter((capa) => !esCapaMapLibre(capa) || capaCoincideFiltro(capa, filtro));
       (this.layers_ || []).forEach((capa) => {
-        if (!esCapaMapLibre(capa) || lista.indexOf(capa) !== -1) return;
-        if (filtro !== undefined && filtro !== null) {
-          // El filtro de este getter es un objeto con nombre/tipo (o una capa).
-          const nombre = (filtro && filtro.name) || null;
-          const tipo = (filtro && filtro.type) || null;
-          if (nombre && capa.name !== nombre) return;
-          if (tipo && capa.type !== tipo) return;
-        }
-        lista.push(capa);
+        if (!esCapaMapLibre(capa) || resultado.indexOf(capa) !== -1) return;
+        if (!capaCoincideFiltro(capa, filtro)) return;
+        resultado.push(capa);
       });
-      return lista;
+      return resultado;
     };
 
     proto.__maplibreLayerParche = true;
