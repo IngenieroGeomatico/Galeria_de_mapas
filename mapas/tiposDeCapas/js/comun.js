@@ -40,27 +40,75 @@ if (SVGCarga) {
  *
  * `imgPreview` es una URL relativa al DOCUMENTO (la resuelve el <img> del
  * panel), por eso sube dos niveles hasta la carpeta img/ de tiposDeCapas.
- * `layers` usa la sintaxis QUICK* de la API: cada entrada del catalogo
- * `IDEE.config.quicklayers` se construye con su clase real (TMS, WMTS o grupo).
+ *
+ * Las capas base se crean como instancias (no con QUICK*) y su `name` lleva el
+ * prefijo `__base_`: en la build de Cesium, `getTMS` filtra por `type`, `url`
+ * y `name`, asi que si una base y una superpuesta comparten servicio y `name`,
+ * al cambiar de base la superpuesta desaparece. El prefijo los mantiene
+ * separados.
  */
+const TMS_IGN_BASE_URL = 'https://tms-ign-base.idee.es/1.0.0/';
+const TMS_PNOA_URL = 'https://tms-pnoa-ma.idee.es/1.0.0/pnoa-ma/{z}/{x}/{-y}.jpeg';
+
+function capaTmsBase(nombre, legenda, maxZoom, isBase) {
+  const esPng = (nombre === 'IGNBaseOrto' || nombre === 'IGNBaseSimplificado');
+  return new IDEE.layer.TMS({
+    url: TMS_IGN_BASE_URL + nombre + '/{z}/{x}/{-y}.' + (esPng ? 'png' : 'jpeg'),
+    name: '__base_' + nombre,
+    legend: legenda,
+    isBase: isBase,
+    tileGridMaxZoom: maxZoom,
+  }, {
+    crossOrigin: 'anonymous',
+    displayInLayerSwitcher: false,
+  });
+}
+
 const CAPAS_BASE_TIPOS = [
   {
     id: 'mapa',
     title: 'Callejero',
     imgPreview: '../../img/IGNBase.jpg',
-    layers: ['QUICK*Base_IGNBaseTodo_TMS'],
+    layers: [capaTmsBase('IGNBaseTodo', 'IGNBaseTodo', 17, true)],
   },
   {
     id: 'imagen',
     title: 'Imagen',
     imgPreview: '../../img/imagen.jpg',
-    layers: ['QUICK*BASE_PNOA_MA_TMS'],
+    layers: [new IDEE.layer.TMS({
+      url: TMS_PNOA_URL,
+      name: '__base_PNOA_MA',
+      legend: 'PNOA_MA',
+      isBase: true,
+      tileGridMaxZoom: 19,
+    }, {
+      crossOrigin: 'anonymous',
+      displayInLayerSwitcher: false,
+    })],
   },
   {
     id: 'hibrido',
     title: 'Hibrido',
     imgPreview: '../../img/hibrido.jpg',
-    layers: ['QUICK*BASE_HIBRIDO_LayerGroup'],
+    layers: [new IDEE.layer.LayerGroup({
+      name: '__base_Hibrido',
+      legend: 'Híbrido',
+      isBase: true,
+      layers: [
+        new IDEE.layer.TMS({
+          url: TMS_PNOA_URL,
+          name: '__base_PNOA_MA',
+          legend: 'PNOA_MA',
+          tileGridMaxZoom: 19,
+        }, {
+          crossOrigin: 'anonymous',
+          displayInLayerSwitcher: false,
+        }),
+        capaTmsBase('IGNBaseOrto', 'IGNBaseOrto', 17, false),
+      ],
+    }, {
+      displayInLayerSwitcher: false,
+    })],
   },
 ];
 

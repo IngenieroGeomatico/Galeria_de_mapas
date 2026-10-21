@@ -8,15 +8,13 @@
 
 const TMS_BASE_URL = 'https://tms-ign-base.idee.es/1.0.0/';
 
-// `name` es el identificador interno de la capa; `legend` es el texto del
-// arbol. El `name` lleva sufijo `_capa` para que no colisione con la capa
-// base del selector comun (IGNBaseTodo): en 3D, si una capa base y una
-// superpuesta comparten `name`, al cambiar de base la superpuesta desaparece.
+// `name` es el identificador de la capa; `legend` es el texto del arbol;
+// `visible` dice si se enciende al cargar la pagina.
 const CAPAS_TMS = [
-  { name: 'IGNBaseGris_capa', legend: 'IGNBaseGris', visible: false },
-  { name: 'IGNBaseOrto_capa', legend: 'IGNBaseOrto', visible: false },
-  { name: 'IGNBaseSimplificado_capa', legend: 'IGNBaseSimplificado', visible: false },
-  { name: 'IGNBaseTodo_capa', legend: 'IGNBaseTodo', visible: true },
+  { name: 'IGNBaseGris', legend: 'IGNBaseGris', visible: false },
+  { name: 'IGNBaseOrto', legend: 'IGNBaseOrto', visible: false },
+  { name: 'IGNBaseSimplificado', legend: 'IGNBaseSimplificado', visible: false },
+  { name: 'IGNBaseTodo', legend: 'IGNBaseTodo', visible: true },
 ];
 
 function mapa() {
@@ -31,9 +29,9 @@ function mapa() {
   });
 
   CAPAS_TMS.forEach(function (capa) {
-    const esPng = (capa.name === 'IGNBaseOrto_capa' || capa.name === 'IGNBaseSimplificado_capa');
+    const esPng = (capa.name === 'IGNBaseOrto' || capa.name === 'IGNBaseSimplificado');
     const tms = new IDEE.layer.TMS({
-      url: TMS_BASE_URL + capa.legend + '/{z}/{x}/{-y}.' + (esPng ? 'png' : 'jpeg'),
+      url: TMS_BASE_URL + capa.name + '/{z}/{x}/{-y}.' + (esPng ? 'png' : 'jpeg'),
       name: capa.name,
       legend: capa.legend,
       // Capa superpuesta: se enciende y apaga desde el arbol de capas.
