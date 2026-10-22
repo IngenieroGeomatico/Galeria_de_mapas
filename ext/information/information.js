@@ -4133,6 +4133,10 @@
         if (self._camposOcultos[clave]) return;
         if (clave === 'geometry' || clave === 'bbox' || clave === '__proto__') return;
         
+        // --- PARCHE ---
+        if (clave === 'Vector Tile Feature') return;
+        // --------------
+
         var valor = props[clave];
         if (!self._mostrarVacios && (valor === null || valor === undefined || valor === '')) return;
         campos.push({
