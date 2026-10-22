@@ -1666,11 +1666,16 @@
        * @param {Array<string>} [soloCapas] Opcional: nombres de capas permitidas.
        * @returns {Array}
        */
-            getFeatures(soloCapas) {
+            /**
+       * Entidades pintadas ahora mismo. Filtra las capas internas de MapLibre
+       * para no devolver ruido, a menos que se indique explícitamente que se quieren.
+       * @param {Array<string>} [soloCapas] Opcional: nombres de capas permitidas (sourceLayer).
+       * @param {boolean} [incluirInternas=false] Opcional: si true, no filtra las internas.
+       * @returns {Array}
+       */
+      getFeatures(soloCapas, incluirInternas = false) {
         if (!this.mapLibre_) return [];
         try {
-          // Si MapLibre queryRenderedFeatures se llama sin argumentos, devuelve todo
-          // lo que hay en pantalla (en todas las capas visibles).
           const features = this.mapLibre_.queryRenderedFeatures();
           return features.filter((f) => {
             const layer = f.layer;
@@ -1679,8 +1684,10 @@
             const sourceLayer = layer.source_layer || f.sourceLayer;
             const layerId = layer.id;
             
-            // Capas internas que siempre descartamos para limpiar la info
-            if (layerId === 'background' || layerId === 'background-fade' || layerId.includes('hillshade') || layerId.includes('contour')) return false;
+            // Si no se pide incluir internas, descartamos capas de sistema
+            if (!incluirInternas) {
+              if (layerId === 'background' || layerId === 'background-fade' || layerId.includes('hillshade') || layerId.includes('contour')) return false;
+            }
             
             // Si el usuario especifica un filtro (soloCapas es un Array), lo aplicamos
             if (soloCapas && Array.isArray(soloCapas)) {
