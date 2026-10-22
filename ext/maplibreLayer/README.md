@@ -2,7 +2,7 @@
 
 > Da soporte 3D a `IDEE.layer.MapLibre`, que en el bundle de Cesium está declarada pero sin implementación.
 
-Parche de arranque sin interfaz: sustituye `IDEE.layer.MapLibre` por una fachada propia que hereda de la **misma** clase base que la del bundle y le pasa una implementación que sí pinta. En 3D esa implementación monta un `maplibregl.Map` en un div absoluto sobre el canvas del globo y lo deja sincronizado con la cámara en `scene.preRender` (antes de que Cesium pinte el frame), y proyecta ese canvas sobre la superficie del terreno con un `PostProcessStage` (drape). En 2D no se toca nada: ahí la capa la implementa la propia API.
+Parche de arranque sin interfaz: sustituye `IDEE.layer.MapLibre` por una fachada propia que hereda de la **misma** clase base que la del bundle y le pasa una implementación que sí pinta. En 3D esa implementación monta un `maplibregl.Map` en un div absoluto sobre el canvas del globo y lo deja sincronizado con la cámara en `scene.preRender` (antes de que Cesium pinte el frame), y proyecta ese canvas sobre la superficie del terreno con un `PostProcessStage` (drape). En 2D la capa la implementa la propia API, pero el plugin **le añade la reproyección**: MapLibre solo pinta Web Mercator y, con el mapa en otro SRS, el canvas se repinta en un canvas propio reproyectado a la vista (ver «2D en otra proyección»).
 
 ## ✨ Características
 
@@ -32,6 +32,11 @@ Parche de arranque sin interfaz: sustituye `IDEE.layer.MapLibre` por una fachada
 - **Sin coste cuando no hace falta**: una sola intersección con el terreno por frame (el centro); la escala sale del `fovy` y el rumbo de `camera.up`, sin rayos laterales. El resto de frames se sale con una comparación de posición/rumbo/inclinación/alabeo. Medido en un vuelo: ~2,4 ms de media por frame (máx. 8,5 ms) incluyendo el `jumpTo`.
 - **No se congela mirando al horizonte**: si el rayo central no toca el globo se conserva el último centro válido y se siguen actualizando rumbo e inclinación; las intersecciones de la cara opuesta del elipsoide se descartan (`puntoVisible_`). Al saltar de vista el terreno puede tardar en cargar y `globe.pick` devolver todavía el elipsoide (un punto válido pero mucho más lejos, con lo que el zoom se quedaba clavado en el valor anterior): mientras eso pase, `sincronizar_` reintenta hasta 90 frames (`REINTENTOS_SUELO`), sin esperar a que la cámara se mueva. Medido: salto a 1,4 km/-38°, zoom 16,082 calculado 16,099 tras converger.
 - **`disableBackgroundColor` como en 2D**: pone la capa `background` del estilo en `transparent` (true) o `#f2f2f2` (false). Si el estilo no tiene capa de fondo no se hace nada; medido: el estilo de BTN Completa no la tiene (0 de 337), y en 2D eso le revienta a la implementación de OpenLayers, que hace `.find(...).id` sin comprobar el resultado.
+- **Reproyección en 2D** (`pintarReproyectado`, solo si el SRS de la vista no es Web Mercator): MapLibre GL JS solo pinta mercator y la capa de la librería (`@geoblocks/ol-maplibre-layer`) entrega su canvas como elemento de capa, así que OL lo compone tal cual. Medido en Madrid con `setProjection('EPSG:25830')`: el canvas se quedaba a zoom 3,13 con el centro en −9,98 / 59,50, en mitad del Atlántico. Ahora, en cada frame: (1) MapLibre se lleva a la vista mercator que **cubre** lo que se ve (centro y zoom del rectángulo mercator de las cuatro esquinas de la pantalla, sin rumbo ni inclinación) y se pinta en el acto con `redraw()`; (2) ese canvas se repinta en un canvas propio troceado en 6×6, cada trozo con la transformación afín que lleva su esquina de pantalla al píxel correspondiente de MapLibre; (3) el canvas propio es el que se devuelve a OL, que lo compone como cualquier otro elemento de capa. El contenedor de MapLibre se cuelga oculto del nuestro (`visibility: hidden`) para que MapLibre siga midiendo su canvas y para que no se vea mercator sin reproyectar por los huecos.
+  - **Error de la rejilla** medido contra `toLonLat` + `map.project` en 324 puntos interiores (9 por trozo): 0,053 px de media y 0,103 px el peor a zoom 11,4; 0,459 / 0,928 con 500 m/px (zoom 8,3); 0,033 / 0,064 con la vista girada 0,35 rad. Mercator, UTM y las geográficas son proyecciones suaves y dentro de un trozo la transformación es casi afín; por eso 6×6 basta.
+  - **Alineación contra el mismo mapa en mercator**: capturas a la misma resolución de suelo y el mismo centro (Madrid, zoom 11) y correlación de la diferencia: desplazamiento óptimo **(0, 0) px** en el centro y ±1 px en las mitades superior e inferior; diferencia media 22/255, casi toda de la colocación de etiquetas (el zoom de MapLibre difiere en la milésima).
+  - **Coste por frame** (`renderSync`, medido): 1,26 ms con la vista quieta en UTM (solo el `drawImage` de los 36 trozos; las afines se guardan por vista), 2,39 ms con la vista girada y 8,46 ms en mercator, donde la librería repinta MapLibre en cada frame. Al mover la vista se suma ese repintado, el mismo que ya hace la librería en mercator.
+  - **Geográficas y rotación**: probado con el mapa en grados (0,000686°/px, el mismo suelo que 76,437 m/px en mercator) y con `view.setRotation(0,35)`: centro y escala de MapLibre correctos y el contenido girado con el mapa, sin tocar el `bearing` de MapLibre (la rotación la mete la rejilla).
 
 ## 📁 Archivos
 
@@ -49,7 +54,15 @@ No se añade como plugin: es un parche de arranque y lo carga `cambioImpl` en `E
 { ruta: 'maplibreLayer/maplibreLayer.js' }
 ```
 
-La instalación es idempotente: se intenta al cargar el script, cada 10 ms mientras la build de Cesium no exista y al terminar de ejecutarse el `<script>` de la build (el cambio 2D/3D la reemplaza y `window.IDEE` es un objeto nuevo). En 2D no se toca nada (`IDEE.impl.cesium` tiene que existir).
+La instalación es idempotente: se intenta al cargar el script, cada 10 ms mientras la build de Cesium no exista y al terminar de ejecutarse el `<script>` de la build (el cambio 2D/3D la reemplaza y `window.IDEE` es un objeto nuevo). En 3D hace falta que exista `IDEE.impl.cesium`.
+
+En 2D el script tiene que estar cargado **antes** de que se cree la capa, porque lo que se engancha es `IDEE.impl.layer.MapLibre.prototype.addTo` (para envolver el renderer y devolver el canvas reproyectado). En el visualizador de MapLibre se carga con el resto de `ext/`:
+
+```html
+<script src="../../../../ext/maplibreLayer/maplibreLayer.js"></script>
+```
+
+Si el script llegara más tarde, el intervalo de arranque también prepara las capas `MapLibre` que ya estén en `window.mapajs` (la página puede haberse montado antes). Tras un ciclo 2D→3D→2D el prototipo de la build nueva se vuelve a parchear solo: medido, `__maplibreReproyeccion2D` queda en el prototipo nuevo y el renderer de la capa, envuelto.
 
 ## ⚙️ Parámetros de la capa
 
@@ -121,3 +134,8 @@ Desde la consola: `window.maplibreLayer.fachada()` devuelve la fachada instalada
 - **Una capa = un `maplibregl.Map`**, con su propia descarga y decodificación de teselas. Dos capas MapLibre son dos mapas de MapLibre; en 2D pasa lo mismo.
 - **El overlay tapa visualmente lo que Cesium dibuje encima del terreno** (entidades, rásters) allí donde el estilo pinte. Al ser transparente por defecto solo se nota con estilos con fondo opaco.
 - **El orden lo da el DOM**: la capa añadida después queda encima. `setZIndex` se guarda pero no se usa, porque el overlay no vive en `imageryLayers`.
+- **En 2D la capa se pinta con un canvas de más**: la reproyección necesita su propio canvas (1280×649 en las pruebas, ~3,3 MB) y se repinta en cada frame, porque las teselas que va cargando MapLibre tienen que entrar por ahí. Con la vista quieta no se vuelve a pedir nada a MapLibre: solo se repintan los trozos con las afines ya calculadas.
+- **Fuera de mercator se pierde algo de resolución, no posición**: el encuadre de MapLibre es el rectángulo mercator que cubre la pantalla y manda el lado que más aprieta. En Madrid con 25830 el zoom de MapLibre queda en 9,97 frente al 11,39 de OL —son pirámides distintas: 512 px frente a 256 y metros de mercator frente a metros de UTM—, y aun así las capturas contra el mismo mapa en mercator dan (0, 0) px de desplazamiento en el centro y ±1 px en los bordes.
+- **Si el rectángulo mercator se sale del mundo** (vista que pasa de ±85° de latitud o del `minZoom` de MapLibre) el encuadre se recorta: los trozos que no se pueden mapear se quedan sin pintar (transparentes) en vez de romper el frame, y el resto de la capa se sigue viendo.
+- **`setProjection` de la API no conserva el centro**: medido, `mapajs.setProjection('EPSG:25830')` deja la vista en `105571, 6616798` con zoom 4,13. No es de esta capa, le pasa a todo el mapa; `ext/mapInfo` lo compensa en `_cambiarProyeccion` y quien llame al método a pelo tiene que reponer centro y resolución igual que allí. La reproyección de la capa no depende de eso: sigue al SRS de la vista.
+- **La extracción de atributos no cambia**: la capa de la librería convierte el clic a lon/lat con `toLonLat` y pregunta a MapLibre por `map.project(...)`, que es independiente del encuadre; como el encuadre siempre cubre la pantalla, el punto cae dentro del canvas.

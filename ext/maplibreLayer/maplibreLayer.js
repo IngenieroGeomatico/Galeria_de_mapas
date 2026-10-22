@@ -37,6 +37,39 @@
  *     `transparent` (true) o en `#f2f2f2` (false).
  *
  *
+ * Y CON EL MAPA EN OTRA PROYECCIÓN
+ *
+ * MapLibre solo pinta Web Mercator, y la capa de la librería entrega su canvas
+ * para que OL lo componga tal cual (el elemento que devuelve `renderFrame`
+ * acaba en el div `.ol-layers`). Al cambiar el SRS del mapa
+ * (`map.setProjection`) el centro se convierte con `toLonLat`, pero ni la
+ * escala ni la forma son las de la vista, así que el contenido se queda en
+ * mercator. Medido en Madrid con `setProjection('EPSG:25830')`: el canvas se
+ * quedaba a zoom 3,13 con el centro en -9,98 / 59,50, en mitad del Atlántico.
+ *
+ * Aquí se reproyecta de verdad (ver `pintarReproyectado`). En cada frame, y
+ * solo fuera de mercator:
+ *
+ *   1. Se lleva MapLibre a la vista mercator que CUBRE lo que se ve (centro y
+ *      zoom del rectángulo mercator de las cuatro esquinas de la pantalla),
+ *      sin rumbo ni inclinación, y se pinta en el acto (`redraw`, el mismo
+ *      truco que en Cesium).
+ *   2. El canvas de MapLibre se vuelve a pintar en un canvas propio troceado
+ *      en una rejilla de 6×6, cada trozo con la transformación afín que lleva
+ *      su esquina de pantalla al píxel correspondiente de MapLibre. Mercator,
+ *      UTM y las geográficas son proyecciones suaves: dentro de un trozo la
+ *      transformación es casi afín y el error se queda por debajo del píxel
+ *      (ver `TROZOS_REPROYECCION`).
+ *   3. Ese canvas es el que se devuelve a OL, que lo compone como cualquier
+ *      otro elemento de capa. El contenedor de MapLibre se cuelga oculto del
+ *      nuestro: así tiene tamaño —MapLibre mide su canvas con el contenedor— y
+ *      no se ve mercator sin reproyectar por los huecos.
+ *
+ * Las transformaciones de la rejilla se guardan y solo se recalculan cuando
+ * cambia la vista: si lo único que pasa es que llegan teselas nuevas, se
+ * repinta con las mismas.
+ *
+ *
  * LO MISMO, EN CESIUM
  *
  * Cesium no tiene un "renderer de capa" al que devolver un DOM, así que el
@@ -1970,9 +2003,609 @@
     proto.__maplibreLayerParche = true;
   }
 
+  /* ------------------------------------------------------------------ *
+   * 2D: el mapa en una proyección que no es Web Mercator
+   *
+   * La capa de la API entrega el canvas de MapLibre como elemento y OL lo
+   * compone tal cual, así que fuera de mercator hay que repintarlo. Ver el
+   * apartado «Y CON EL MAPA EN OTRA PROYECCIÓN» de la cabecera.
+   * ------------------------------------------------------------------ */
+
+  // Trozos por lado de la rejilla con la que se reproyecta. Mercator, UTM y las
+  // geográficas son proyecciones suaves, así que dentro de un trozo la
+  // transformación es casi afín: con 6×6 el error de la aproximación se queda
+  // por debajo del píxel incluso con el globo entero en pantalla (ver README).
+  const TROZOS_REPROYECCION = 6;
+
+  // Códigos de Web Mercator, la única proyección que pinta MapLibre. Los alias
+  // son la misma proyección y se aceptan para no reproyectar de más.
+  const CODIGOS_MERCATOR = ['EPSG:3857', 'EPSG:900913', 'EPSG:102100', 'EPSG:3785'];
+
+  const RADIANES = Math.PI / 180;
+  const RADIO_ESFERA_MERCATOR = 6378137;
+  const MUNDO_MERCATOR = 2 * Math.PI * RADIO_ESFERA_MERCATOR;
+
   /**
-   * Devuelve la API solo si la implementación activa es Cesium. En 2D no se
-   * toca nada: allí la capa la implementa OpenLayers y funciona.
+   * ¿La proyección de la vista es Web Mercator? Es la única que MapLibre pinta
+   * tal cual; con cualquier otra hay que reproyectar.
+   * @param {Object} proyeccion Proyección de OL (`ol.proj.Projection`).
+   * @returns {boolean}
+   */
+  function esProyeccionMercator(proyeccion) {
+    let codigo = '';
+    try {
+      codigo = (proyeccion && typeof proyeccion.getCode === 'function')
+        ? proyeccion.getCode()
+        : ((proyeccion && proyeccion.code) || '');
+    } catch (e) {
+      codigo = '';
+    }
+    return CODIGOS_MERCATOR.indexOf(String(codigo).toUpperCase()) !== -1;
+  }
+
+  /**
+   * Aplica una matriz de `ol/transform` (las de `frameState`) a un punto.
+   * @param {Array<number>} transform Matriz de 6 valores.
+   * @param {number} x Coordenada X.
+   * @param {number} y Coordenada Y.
+   * @returns {Array<number>} Punto transformado.
+   */
+  function transformarPunto(transform, x, y) {
+    return [
+      transform[0] * x + transform[2] * y + transform[4],
+      transform[1] * x + transform[3] * y + transform[5]
+    ];
+  }
+
+  /**
+   * Longitud y latitud de una coordenada en la proyección de la vista.
+   *
+   * Se usa la transformación de OpenLayers (la misma que usa la capa de la
+   * librería con `toLonLat`) y, si no está expuesta, la de la API. Devuelve
+   * `null` si no se puede transformar.
+   * @param {Array<number>} coordenada Coordenada en la proyección de la vista.
+   * @param {Object} proyeccion Proyección de OL.
+   * @returns {Array<number>|null} `[longitud, latitud]` en grados.
+   */
+  function lonLatDeCoordenada(coordenada, proyeccion) {
+    try {
+      const ol = window.ol;
+      if (ol && ol.proj && typeof ol.proj.toLonLat === 'function') {
+        const lonlat = ol.proj.toLonLat(coordenada, proyeccion);
+        if (lonlat && isFinite(lonlat[0]) && isFinite(lonlat[1])) return lonlat;
+      }
+      const IDEE = window.IDEE || window.M;
+      const codigo = proyeccion && ((proyeccion.getCode && proyeccion.getCode()) || proyeccion.code);
+      if (IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function' && codigo) {
+        const lonlat = IDEE.utils.reproject(
+          [coordenada[0], coordenada[1]], String(codigo), 'EPSG:4326',
+        );
+        if (lonlat && isFinite(lonlat[0]) && isFinite(lonlat[1])) return lonlat;
+      }
+    } catch (e) {
+      /* sin transformación no se reproyecta: se queda el canvas de MapLibre */
+    }
+    return null;
+  }
+
+  /**
+   * Longitud y latitud a Web Mercator (metros), la proyección de MapLibre.
+   * @param {number} lon Longitud en grados.
+   * @param {number} lat Latitud en grados.
+   * @returns {Array<number>} `[x, y]` en metros.
+   */
+  function mercatorDeLonLat(lon, lat) {
+    const fi = Math.max(-MAX_LAT_MERCATOR, Math.min(MAX_LAT_MERCATOR, lat)) * RADIANES;
+    return [
+      RADIO_ESFERA_MERCATOR * lon * RADIANES,
+      RADIO_ESFERA_MERCATOR * Math.log(Math.tan(Math.PI / 4 + fi / 2))
+    ];
+  }
+
+  /**
+   * Web Mercator (metros) a longitud y latitud.
+   * @param {number} x X en metros.
+   * @param {number} y Y en metros.
+   * @returns {Array<number>} `[longitud, latitud]` en grados.
+   */
+  function lonLatDeMercator(x, y) {
+    return [
+      (x / RADIO_ESFERA_MERCATOR) / RADIANES,
+      (2 * Math.atan(Math.exp(y / RADIO_ESFERA_MERCATOR)) - Math.PI / 2) / RADIANES
+    ];
+  }
+
+  /**
+   * Desenvuelve una longitud para que quede a menos de media vuelta de otra.
+   * Sin esto, una vista a caballo del antimeridiano daría un rectángulo mercator
+   * de 360° y MapLibre se iría al zoom 0.
+   * @param {number} lon Longitud en grados.
+   * @param {number} referencia Longitud de referencia en grados.
+   * @returns {number} Longitud equivalente, desenvuelta.
+   */
+  function desenvolverLongitud(lon, referencia) {
+    return lon + 360 * Math.round((referencia - lon) / 360);
+  }
+
+  /**
+   * Contenedor que se le da a OL con la capa ya reproyectada.
+   *
+   * Es un div como el de MapLibre (`position: absolute`, 100%×100%), porque OL
+   * compone los elementos de capa en el div `.ol-layers` y reutiliza el
+   * contenedor de la capa anterior cuando la clase coincide: devolver un canvas
+   * pelado haría que otra capa de imagen pintara encima.
+   * @param {Object} renderer Renderer de la capa MapLibre.
+   * @returns {HTMLElement} Contenedor con el canvas de la reproyección.
+   */
+  function cajaReproyectada(renderer) {
+    if (renderer.__maplibreCaja) return renderer.__maplibreCaja;
+
+    const caja = document.createElement('div');
+    caja.className = 'g-maplibreLayer-reproyectado';
+    caja.style.position = 'absolute';
+    caja.style.width = '100%';
+    caja.style.height = '100%';
+    // El mapa tiene que seguir recibiendo el ratón.
+    caja.style.pointerEvents = 'none';
+
+    const lienzo = document.createElement('canvas');
+    lienzo.className = 'g-maplibreLayer-reproyectado-canvas';
+    lienzo.style.position = 'absolute';
+    lienzo.style.left = '0';
+    lienzo.style.top = '0';
+    caja.appendChild(lienzo);
+
+    renderer.__maplibreCaja = caja;
+    return caja;
+  }
+
+  /**
+   * Vista de MapLibre (en mercator) que cubre lo que se ve, y los datos para
+   * pasar de mercator a píxeles del canvas de MapLibre.
+   *
+   * El encuadre se pide «cubriendo»: el zoom es el del lado de pantalla que más
+   * aprieta, para que el rectángulo mercator de las esquinas quepa entero y no
+   * falte contenido en ninguna. Si el centro o el zoom los recorta MapLibre
+   * (`minZoom`/`maxZoom`, latitud límite), se leen de vuelta y se usan esos.
+   *
+   * @param {Object} renderer Renderer de la capa.
+   * @param {Object} mapLibre Mapa de MapLibre de la capa.
+   * @param {Object} frameState Estado del frame de OL.
+   * @returns {Object|null} Encuadre, o `null` si no se puede calcular.
+   */
+  function encuadrarMapLibre(renderer, mapLibre, frameState) {
+    const ancho = frameState.size[0];
+    const alto = frameState.size[1];
+    const transform = frameState.pixelToCoordinateTransform;
+    const proyeccion = frameState.viewState.projection;
+    if (!transform || !ancho || !alto) return null;
+
+    const centro = lonLatDeCoordenada(transformarPunto(transform, ancho / 2, alto / 2), proyeccion);
+    if (!centro) return null;
+
+    let xmin = Infinity;
+    let xmax = -Infinity;
+    let ymin = Infinity;
+    let ymax = -Infinity;
+    const esquinas = [[0, 0], [ancho, 0], [0, alto], [ancho, alto]];
+    for (let i = 0; i < esquinas.length; i++) {
+      const lonlat = lonLatDeCoordenada(
+        transformarPunto(transform, esquinas[i][0], esquinas[i][1]), proyeccion,
+      );
+      if (!lonlat) return null;
+      const merc = mercatorDeLonLat(desenvolverLongitud(lonlat[0], centro[0]), lonlat[1]);
+      if (!isFinite(merc[0]) || !isFinite(merc[1])) return null;
+      if (merc[0] < xmin) xmin = merc[0];
+      if (merc[0] > xmax) xmax = merc[0];
+      if (merc[1] < ymin) ymin = merc[1];
+      if (merc[1] > ymax) ymax = merc[1];
+    }
+
+    const anchoMercator = xmax - xmin;
+    const altoMercator = ymax - ymin;
+    if (!(anchoMercator > 0) || !(altoMercator > 0)) return null;
+
+    // Píxeles por metro que se pueden gastar en cada eje; el que menos deja es
+    // el que manda para que el rectángulo entre entero.
+    const zoom = Math.log2(METROS_POR_PIXEL_ZOOM_0
+      * Math.min(ancho / anchoMercator, alto / altoMercator));
+    const centroMercator = [(xmin + xmax) / 2, (ymin + ymax) / 2];
+    const centroLonLat = lonLatDeMercator(centroMercator[0], centroMercator[1]);
+    if (!isFinite(zoom) || !isFinite(centroLonLat[0]) || !isFinite(centroLonLat[1])) return null;
+
+    const clave = [zoom, centroLonLat[0], centroLonLat[1], ancho, alto].join('|');
+    if (renderer.__maplibreEncuadre !== clave) {
+      renderer.__maplibreEncuadre = clave;
+      // Sin rumbo ni inclinación: la rotación de la vista la mete la rejilla al
+      // reproyectar, y así MapLibre no rota ni recorta nada.
+      mapLibre.jumpTo({ center: centroLonLat, zoom, bearing: 0, pitch: 0 });
+      // MapLibre repinta en su propio `requestAnimationFrame`, que llega
+      // después de este frame de OL: sin forzarlo se compondría el canvas del
+      // frame anterior (el mismo problema que en Cesium, ver `pintarMapaLibre_`).
+      try {
+        if (typeof mapLibre.redraw === 'function') mapLibre.redraw();
+        else if (typeof mapLibre._render === 'function') mapLibre._render(performance.now());
+      } catch (e) {
+        /* se queda el repintado asíncrono */
+      }
+    }
+
+    // La vista REAL: MapLibre recorta el zoom a su `minZoom`/`maxZoom` y la
+    // latitud a ±85°.
+    let centroReal = null;
+    let zoomReal = null;
+    try {
+      centroReal = mapLibre.getCenter();
+      zoomReal = mapLibre.getZoom();
+    } catch (e) {
+      return null;
+    }
+    if (!centroReal || !isFinite(zoomReal)) return null;
+    const mercatorReal = mercatorDeLonLat(centroReal.lng, centroReal.lat);
+    if (!isFinite(mercatorReal[0]) || !isFinite(mercatorReal[1])) return null;
+
+    // El centro puede venir envuelto a [-180, 180] y las esquinas no: se lleva
+    // al mismo «mundo» que el rectángulo.
+    const cx = mercatorReal[0]
+      + MUNDO_MERCATOR * Math.round((centroMercator[0] - mercatorReal[0]) / MUNDO_MERCATOR);
+    const cy = mercatorReal[1];
+    const centroUsado = lonLatDeMercator(cx, cy);
+
+    const lienzo = mapLibre.getCanvas();
+    const anchoCss = (lienzo && lienzo.clientWidth) || ancho;
+    const altoCss = (lienzo && lienzo.clientHeight) || alto;
+    if (!anchoCss || !altoCss || !lienzo.width || !lienzo.height) return null;
+
+    return {
+      cx,
+      cy,
+      // Metros de terreno por píxel de MapLibre (teselas de 512 px).
+      mpp: METROS_POR_PIXEL_ZOOM_0 / Math.pow(2, zoomReal),
+      anchoCss,
+      altoCss,
+      // Píxeles de canvas por píxel CSS (el `devicePixelRatio` de MapLibre,
+      // que no tiene por qué ser el de OL).
+      fx: lienzo.width / anchoCss,
+      fy: lienzo.height / altoCss,
+      lonRef: centroUsado[0],
+      clave
+    };
+  }
+
+  /**
+   * Píxel de pantalla (CSS) a píxel del canvas de MapLibre.
+   * @param {Object} frameState Estado del frame de OL.
+   * @param {number} px X en píxeles CSS de pantalla.
+   * @param {number} py Y en píxeles CSS de pantalla.
+   * @param {Object} encuadre Encuadre devuelto por `encuadrarMapLibre`.
+   * @returns {Array<number>|null} `[x, y]` en píxeles del canvas de MapLibre.
+   */
+  function pixelFuente(frameState, px, py, encuadre) {
+    const lonlat = lonLatDeCoordenada(
+      transformarPunto(frameState.pixelToCoordinateTransform, px, py),
+      frameState.viewState.projection,
+    );
+    if (!lonlat) return null;
+    const merc = mercatorDeLonLat(desenvolverLongitud(lonlat[0], encuadre.lonRef), lonlat[1]);
+    if (!isFinite(merc[0]) || !isFinite(merc[1])) return null;
+    return [
+      ((merc[0] - encuadre.cx) / encuadre.mpp + encuadre.anchoCss / 2) * encuadre.fx,
+      ((encuadre.cy - merc[1]) / encuadre.mpp + encuadre.altoCss / 2) * encuadre.fy
+    ];
+  }
+
+  /**
+   * Transformación afín que lleva los tres puntos origen `a`, `b`, `c` a los
+   * destino `ad`, `bd`, `cd` (en ese orden y sin colinealidad).
+   *
+   * Va como matriz de `CanvasRenderingContext2D.transform`:
+   * `[a, b, c, d, e, f]` con `(x, y) -> (a·x + c·y + e, b·x + d·y + f)`.
+   * @param {Array<number>} a Origen 1.
+   * @param {Array<number>} b Origen 2.
+   * @param {Array<number>} c Origen 3.
+   * @param {Array<number>} ad Destino 1.
+   * @param {Array<number>} bd Destino 2.
+   * @param {Array<number>} cd Destino 3.
+   * @returns {Array<number>|null} Matriz de 6 valores, o `null` si degenera.
+   */
+  function afinEntre(a, b, c, ad, bd, cd) {
+    const u0 = b[0] - a[0];
+    const u1 = b[1] - a[1];
+    const v0 = c[0] - a[0];
+    const v1 = c[1] - a[1];
+    const det = u0 * v1 - v0 * u1;
+    if (!isFinite(det) || Math.abs(det) < 1e-9) return null;
+
+    const p0 = bd[0] - ad[0];
+    const p1 = bd[1] - ad[1];
+    const q0 = cd[0] - ad[0];
+    const q1 = cd[1] - ad[1];
+
+    const a00 = (p0 * v1 - q0 * u1) / det;
+    const a01 = (q0 * u0 - p0 * v0) / det;
+    const a10 = (p1 * v1 - q1 * u1) / det;
+    const a11 = (q1 * u0 - p1 * v0) / det;
+    if (!isFinite(a00) || !isFinite(a01) || !isFinite(a10) || !isFinite(a11)) return null;
+
+    return [
+      a00,
+      a10,
+      a01,
+      a11,
+      ad[0] - (a00 * a[0] + a01 * a[1]),
+      ad[1] - (a10 * a[0] + a11 * a[1])
+    ];
+  }
+
+  /**
+   * Rejilla de trozos con su transformación afín (canvas de MapLibre → canvas
+   * propio, en píxeles de dispositivo).
+   *
+   * Se guarda por vista: mientras no se mueva el mapa, las transformaciones son
+   * las mismas y solo hay que volver a pintar (las teselas nuevas de MapLibre
+   * entran solas en el siguiente `drawImage`).
+   * @param {Object} renderer Renderer de la capa.
+   * @param {Object} frameState Estado del frame de OL.
+   * @param {Object} encuadre Encuadre devuelto por `encuadrarMapLibre`.
+   * @returns {Array<Object>} Trozos con `x`, `y`, `ancho`, `alto` y `afin`.
+   */
+  function rejillaReproyeccion(renderer, frameState, encuadre) {
+    const vista = frameState.viewState;
+    const clave = [
+      vista.center[0], vista.center[1], vista.resolution, vista.rotation,
+      frameState.size[0], frameState.size[1], frameState.pixelRatio, encuadre.clave
+    ].join('|');
+    const previa = renderer.__maplibreRejilla;
+    if (previa && previa.clave === clave) return previa.trozos;
+
+    const pr = frameState.pixelRatio || 1;
+    const ancho = frameState.size[0];
+    const alto = frameState.size[1];
+    const trozos = [];
+    for (let iy = 0; iy < TROZOS_REPROYECCION; iy++) {
+      for (let ix = 0; ix < TROZOS_REPROYECCION; ix++) {
+        const x0 = (ix * ancho) / TROZOS_REPROYECCION;
+        const x1 = ((ix + 1) * ancho) / TROZOS_REPROYECCION;
+        const y0 = (iy * alto) / TROZOS_REPROYECCION;
+        const y1 = ((iy + 1) * alto) / TROZOS_REPROYECCION;
+        const a = pixelFuente(frameState, x0, y0, encuadre);
+        const b = pixelFuente(frameState, x1, y0, encuadre);
+        const c = pixelFuente(frameState, x0, y1, encuadre);
+        if (!a || !b || !c) continue;
+        const afin = afinEntre(a, b, c, [x0 * pr, y0 * pr], [x1 * pr, y0 * pr], [x0 * pr, y1 * pr]);
+        if (!afin) continue;
+        trozos.push({
+          x: x0 * pr,
+          y: y0 * pr,
+          ancho: (x1 - x0) * pr,
+          alto: (y1 - y0) * pr,
+          afin
+        });
+      }
+    }
+
+    renderer.__maplibreRejilla = { clave, trozos };
+    return trozos;
+  }
+
+  /**
+   * Pinta la capa reproyectada a la proyección de la vista.
+   *
+   * Hace lo que el renderer de la librería (`@geoblocks/ol-maplibre-layer`)
+   * menos el `jumpTo` y el `redraw`, que aquí llevan el encuadre mercator y el
+   * pintado único: el encuadre lo pone `encuadrarMapLibre` y el canvas se pinta
+   * una sola vez, ya reproyectado.
+   *
+   * @param {Object} renderer Renderer de la capa.
+   * @param {Object} impl Implementación de la capa (`IDEE.impl.layer.MapLibre`).
+   * @param {Object} frameState Estado del frame de OL.
+   * @returns {HTMLElement|null} Contenedor con el canvas reproyectado.
+   */
+  function pintarReproyectado(renderer, impl, frameState) {
+    const capa = impl && impl.olLayer;
+    const mapLibre = capa && capa.mapLibreMap;
+    if (!mapLibre || !frameState || !frameState.size || !frameState.viewState) return null;
+
+    const lienzoFuente = mapLibre.getCanvas();
+    if (!lienzoFuente) return null;
+
+    const caja = cajaReproyectada(renderer);
+
+    // El contenedor de MapLibre no se le da a OL en esta vía (se le da el
+    // nuestro), así que se cuelga oculto del nuestro: MapLibre mide su canvas
+    // con el contenedor y sin tamaño no pintaría nada.
+    const contenedor = mapLibre.getContainer();
+    if (contenedor && contenedor.parentNode !== caja) {
+      contenedor.style.visibility = 'hidden';
+      caja.appendChild(contenedor);
+    }
+
+    const pr = frameState.pixelRatio || 1;
+    if (!lienzoFuente.width
+      || lienzoFuente.width !== Math.floor(frameState.size[0] * pr)
+      || lienzoFuente.height !== Math.floor(frameState.size[1] * pr)) {
+      try {
+        mapLibre.resize();
+      } catch (e) {
+        /* si no se puede, se pinta con el tamaño que haya */
+      }
+    }
+
+    const encuadre = encuadrarMapLibre(renderer, mapLibre, frameState);
+    if (!encuadre) return null;
+
+    const anchoPx = Math.max(1, Math.round(frameState.size[0] * pr));
+    const altoPx = Math.max(1, Math.round(frameState.size[1] * pr));
+    const lienzo = caja.firstElementChild;
+    if (lienzo.width !== anchoPx || lienzo.height !== altoPx) {
+      lienzo.width = anchoPx;
+      lienzo.height = altoPx;
+    }
+    lienzo.style.width = frameState.size[0] + 'px';
+    lienzo.style.height = frameState.size[1] + 'px';
+
+    // OL compone el elemento con el estilo del contenedor (su opacidad y su
+    // posición); la de la capa se copia igual que hace la librería.
+    const opacidad = String(capa.getOpacity());
+    if (caja.style.opacity !== opacidad) caja.style.opacity = opacidad;
+
+    const contexto = lienzo.getContext('2d');
+    if (!contexto) return null;
+    contexto.setTransform(1, 0, 0, 1, 0, 0);
+    contexto.clearRect(0, 0, anchoPx, altoPx);
+    contexto.imageSmoothingEnabled = true;
+
+    const trozos = rejillaReproyeccion(renderer, frameState, encuadre);
+    for (let i = 0; i < trozos.length; i++) {
+      const trozo = trozos[i];
+      // El recorte va en píxeles de destino, con un píxel de más por lado para
+      // que el suavizado no deje costuras entre trozos.
+      contexto.save();
+      contexto.beginPath();
+      contexto.rect(trozo.x - 1, trozo.y - 1, trozo.ancho + 2, trozo.alto + 2);
+      contexto.clip();
+      contexto.transform(
+        trozo.afin[0], trozo.afin[1], trozo.afin[2], trozo.afin[3],
+        trozo.afin[4], trozo.afin[5],
+      );
+      contexto.drawImage(lienzoFuente, 0, 0);
+      contexto.restore();
+    }
+
+    return caja;
+  }
+
+  /**
+   * Avisa una sola vez por código de proyección de que la capa se está
+   * reproyectando (y de que vuelve a pintarse tal cual en mercator).
+   * @param {Object} impl Implementación de la capa.
+   * @param {Object|null} proyeccion Proyección de la vista.
+   */
+  function avisarReproyeccion(impl, proyeccion) {
+    const codigo = proyeccion
+      ? String((proyeccion.getCode && proyeccion.getCode()) || proyeccion.code || '')
+      : '';
+    if (impl.__maplibreAvisoProyeccion === codigo) return;
+    impl.__maplibreAvisoProyeccion = codigo;
+    const nombre = impl.name || impl.legend || '';
+    if (!codigo) {
+      console.info(`maplibreLayer: la vista vuelve a Web Mercator; la capa "${nombre}" se pinta tal cual.`);
+    } else {
+      console.info(`maplibreLayer: la capa "${nombre}" se reproyecta de Web Mercator a ${codigo} `
+        + 'del canvas de MapLibre (MapLibre solo pinta mercator).');
+    }
+  }
+
+  /**
+   * Envuelve el `renderFrame` del renderer de la capa para devolver el canvas
+   * reproyectado cuando la vista no está en mercator.
+   * @param {Object} renderer Renderer de la capa MapLibre.
+   * @param {Object} impl Implementación de la capa.
+   */
+  function envolverRenderer(renderer, impl) {
+    if (!renderer || renderer.__maplibreReproyeccion
+      || typeof renderer.renderFrame !== 'function') return;
+    const renderFrameOriginal = renderer.renderFrame;
+
+    renderer.renderFrame = function (frameState, target) {
+      const vista = frameState && frameState.viewState;
+      if (!vista) return renderFrameOriginal.call(this, frameState, target);
+
+      if (esProyeccionMercator(vista.projection)) {
+        // El contenedor de MapLibre pudo quedarse oculto de la vía anterior.
+        const contenedor = impl.olLayer && impl.olLayer.mapLibreMap
+          && impl.olLayer.mapLibreMap.getContainer();
+        if (contenedor) contenedor.style.visibility = '';
+        const elemento = renderFrameOriginal.call(this, frameState, target);
+        avisarReproyeccion(impl, null);
+        return elemento;
+      }
+
+      const reproyectado = pintarReproyectado(this, impl, frameState);
+      if (reproyectado) {
+        avisarReproyeccion(impl, vista.projection);
+        return reproyectado;
+      }
+      // Sin reproyección no se deja la capa sin pintar: se cae al canvas de
+      // siempre (que al menos se ve, aunque descoloque).
+      return renderFrameOriginal.call(this, frameState, target);
+    };
+
+    renderer.__maplibreReproyeccion = true;
+  }
+
+  /**
+   * Deja la capa lista para reproyectar: envuelve el renderer (y su
+   * constructor, por si OL lo vuelve a crear).
+   * @param {Object} impl Implementación de la capa.
+   */
+  function prepararReproyeccion(impl) {
+    const capa = impl && impl.olLayer;
+    if (!capa || capa.__maplibreReproyeccionPreparada) return;
+    capa.__maplibreReproyeccionPreparada = true;
+
+    const crear = capa.createRenderer;
+    if (typeof crear === 'function') {
+      capa.createRenderer = function () {
+        const renderer = crear.apply(this, arguments);
+        envolverRenderer(renderer, impl);
+        return renderer;
+      };
+    }
+
+    try {
+      envolverRenderer(capa.getRenderer && capa.getRenderer(), impl);
+    } catch (e) {
+      /* todavía sin renderer: lo envuelve `createRenderer` */
+    }
+  }
+
+  /**
+   * Parchea la implementación de OpenLayers para que la capa se reproyecte
+   * cuando el mapa no está en mercator.
+   * @param {Object} IDEE API.
+   * @returns {boolean} `true` si la implementación está lista.
+   */
+  function parchearMapLibreOL(IDEE) {
+    const Clase = IDEE && IDEE.impl && IDEE.impl.layer && IDEE.impl.layer.MapLibre;
+    if (typeof Clase !== 'function' || !Clase.prototype) return false;
+
+    const proto = Clase.prototype;
+    if (proto.__maplibreReproyeccion2D) return true;
+    proto.__maplibreReproyeccion2D = true;
+
+    const addToOriginal = proto.addTo;
+    proto.addTo = function () {
+      const resultado = addToOriginal.apply(this, arguments);
+      try {
+        prepararReproyeccion(this);
+      } catch (e) {
+        console.warn('maplibreLayer: no se pudo preparar la reproyección de la capa', e);
+      }
+      return resultado;
+    };
+
+    // Capas que ya estaban creadas cuando se cargó el plugin: el visualizador
+    // puede haberse montado antes (o ser el mismo mapa tras el cambio 2D/3D).
+    try {
+      const mapa = window.mapajs;
+      if (mapa && typeof mapa.getLayers === 'function') {
+        mapa.getLayers().forEach((capa) => {
+          if (capa && capa.type === 'MapLibre' && typeof capa.getImpl === 'function') {
+            prepararReproyeccion(capa.getImpl());
+          }
+        });
+      }
+    } catch (e) {
+      /* sin mapa todavía */
+    }
+
+    return true;
+  }
+
+  /**
+   * Devuelve la API solo si la implementación activa es Cesium. En 2D la capa
+   * la implementa OpenLayers (ver `parchearMapLibreOL`).
    * @returns {Object|null}
    */
   function apiCesium() {
@@ -1982,24 +2615,32 @@
   }
 
   function aplicarParche() {
-    const IDEE = apiCesium();
+    const IDEE = window.IDEE || window.M;
     if (!IDEE) return false;
-    if (typeof IDEE.layer.MapLibre !== 'function' || typeof IDEE.impl.layer.Vector !== 'function') return false;
+
+    // 2D: la capa de OpenLayers existe en la build de OpenLayers.
+    if (IDEE.impl && IDEE.impl.layer && IDEE.impl.layer.MapLibre) {
+      parchearMapLibreOL(IDEE);
+    }
+
+    const IDEE3D = apiCesium();
+    if (!IDEE3D) return false;
+    if (typeof IDEE3D.layer.MapLibre !== 'function' || typeof IDEE3D.impl.layer.Vector !== 'function') return false;
 
     // La implementación del mapa tiene que saber enrutar una capa `MapLibre`.
-    parchearMapaImpl(IDEE.impl.Map);
+    parchearMapaImpl(IDEE3D.impl.Map);
 
-    if (IDEE.layer.MapLibre !== fachadaInstalada) {
+    if (IDEE3D.layer.MapLibre !== fachadaInstalada) {
       try {
         // La fachada del bundle cuelga de una clase base que no está expuesta:
         // se toma de su prototipo. La implementación, igual, de la base de la
         // que cuelga `IDEE.impl.layer.Vector`.
-        const BaseFachada = Object.getPrototypeOf(IDEE.layer.MapLibre.prototype).constructor;
-        const BaseImpl = Object.getPrototypeOf(IDEE.impl.layer.Vector.prototype).constructor;
+        const BaseFachada = Object.getPrototypeOf(IDEE3D.layer.MapLibre.prototype).constructor;
+        const BaseImpl = Object.getPrototypeOf(IDEE3D.impl.layer.Vector.prototype).constructor;
 
         fachadaInstalada = crearFachada(BaseFachada, crearImplementacion(BaseImpl));
-        IDEE.layer.MapLibre = fachadaInstalada;
-        if (window.M && window.M.layer && window.M.layer !== IDEE.layer) {
+        IDEE3D.layer.MapLibre = fachadaInstalada;
+        if (window.M && window.M.layer && window.M.layer !== IDEE3D.layer) {
           window.M.layer.MapLibre = fachadaInstalada;
         }
       } catch (e) {
@@ -2008,7 +2649,7 @@
       }
     }
 
-    return IDEE.layer.MapLibre === fachadaInstalada;
+    return IDEE3D.layer.MapLibre === fachadaInstalada;
   }
 
   aplicarParche();
