@@ -4133,10 +4133,6 @@
         if (self._camposOcultos[clave]) return;
         if (clave === 'geometry' || clave === 'bbox' || clave === '__proto__') return;
         
-        // --- INICIO PARCHE: Ocultar 'layer' ---
-        if (clave === 'layer') return;
-        // --- FIN PARCHE ---
-
         var valor = props[clave];
         if (!self._mostrarVacios && (valor === null || valor === undefined || valor === '')) return;
         campos.push({

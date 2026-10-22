@@ -498,6 +498,16 @@ class miPlugin_baseLayer {
       }
       var selected = items.find(function (l) { return l.id === layerId; });
       if (!selected) return;
+
+      // Solución temporal: Si la capa a añadir es un grupo que ya contiene capas
+      // base, evitar añadirlo si ya están presentes en el mapa para no duplicar.
+      // En un futuro, el plugin debería gestionar el estado de visibilidad
+      // interno de los grupos en lugar de añadir/quitar capas.
+      var yaPresentes = selected.layers.filter(function (l) {
+        return map.getLayers().indexOf(l) !== -1;
+      });
+      if (yaPresentes.length === selected.layers.length) return;
+
       // Aviso a las extensiones de capas antes de añadir la base: el Híbrido de
       // 3D necesita rehacer las banderas de sus hijas (en Cesium la capa base va
       // al fondo y esas banderas se estropean al quitar el grupo). Mismo patrón
