@@ -21,6 +21,8 @@
      - En capas GeoTIFF se leen los valores reales de sus bandas en el punto,
        en 2D (imágenes del origen de OpenLayers) y en 3D (LectorGeoTIFF de
        ext/geotiffLayer).
+     - En capas ráster de teselas (TMS, XYZ, OSM, MBTiles ráster y capas
+       base) se lee el color RGB(A) del píxel bajo el clic.
      - Con varias capas se abre una vista por capa, con un selector en la
        cabecera para cambiar sin scroll horizontal. Dentro de cada vista se
        listan TODOS los features del punto (no solo el primero).
@@ -2443,14 +2445,11 @@
     // ===================================================================
 
     /**
-     * Capas base que se pueden leer como ráster (TMS, WMTS, XYZ, OSM,
-     * MBTiles raster o un grupo que contenga alguna de ellas). En 3D la API
-     * puede devolver en `getBaseLayers()` solo la hija base del grupo (por
-     * ejemplo `PNOA_MA` del Híbrido) mientras el grupo sigue en `getLayers()`
-     * con `isBase: true`; por eso se unen las dos fuentes.
-     *
-     * Si hay un grupo base, se prefiere el grupo y se descartan sus hijas para
-     * no repetir la misma información en dos pestañas.
+     * Capas base hojas que se pueden leer como ráster (TMS, WMTS, XYZ, OSM,
+     * MBTiles raster...). Si la capa base activa es un grupo (por ejemplo el
+     * Híbrido, compuesto por PNOA_MA e IGNBaseOrto), se extraen sus capas
+     * hijas visibles para mostrar la información de cada una de ellas por
+     * separado y no la del grupo contenedor.
      */
     _capasBase() {
       if (!this._map) return [];
@@ -2476,9 +2475,7 @@
       // Red de seguridad: en Cesium algunas capas de fondo pierden el flag
       // `isBase` al reconstruirse y `getBaseLayers()` puede volver vacío. Si
       // no hay ninguna candidata, se toma como base la primera capa ráster
-      // visible (la de más abajo), que es el fondo que se está viendo. Así un
-      // clic sobre el mapa base sigue devolviendo su color aunque la API no
-      // exponga el flag.
+      // visible (la de más abajo), que es el fondo que se está viendo.
       if (!candidatas.length) {
         try {
           var todas = this._map.getLayers ? this._map.getLayers() : [];
@@ -2493,26 +2490,22 @@
         } catch (e) { /* sin capas de respaldo */ }
       }
 
-      // Hijas de los grupos base: si el grupo es la capa base, sus hijas no
-      // se consultan por separado.
-      var descendientes = [];
-      var marcar = function (capa) {
+      // Si una candidata base es un grupo, se extraen sus hojas (capas finales),
+      // de forma que se consulte la información de cada capa hija y nunca del
+      // grupo contenedor.
+      var hojas = [];
+      var extraerHojas = function (capa) {
+        if (!capa || !self._esVisible(capa)) return;
         var hijas = self._hijasCapa(capa);
-        hijas.forEach(function (hija) {
-          if (!hija) return;
-          if (descendientes.indexOf(hija) === -1) {
-            descendientes.push(hija);
-            marcar(hija);
-          }
-        });
+        if (hijas && hijas.length) {
+          hijas.forEach(extraerHojas);
+        } else if (self._esRasterBase(capa) && hojas.indexOf(capa) === -1) {
+          hojas.push(capa);
+        }
       };
-      candidatas.forEach(marcar);
+      candidatas.forEach(extraerHojas);
 
-      return candidatas.filter(function (capa) {
-        if (descendientes.indexOf(capa) !== -1) return false;
-        if (!self._esVisible(capa)) return false;
-        return self._esRasterBase(capa);
-      });
+      return hojas;
     }
 
     _esCapaBase(capa) {
@@ -2624,6 +2617,12 @@
           properties: propiedades,
         },
         fuente: 'base',
+        capa: {
+          name: capa.name,
+          legend: capa.legend,
+          type: capa.type,
+          idLayer: capa.idLayer,
+        },
       };
 
       return {
@@ -3038,6 +3037,9 @@
             || tipo === 'MBTILESVECTOR' || tipo === 'MAPLIBRE'
             || tipo === 'GENERICVECTOR' || tipo === 'WKT') {
             salida.push({ capa: capa, tipo: 'vector', orden: contador++ });
+          } else if (tipo === 'TMS' || tipo === 'XYZ' || tipo === 'OSM'
+            || tipo === 'MBTILES' || tipo === 'GENERICRASTER' || tipo === 'RASTER') {
+            salida.push({ capa: capa, tipo: 'base', orden: contador++ });
           }
         });
       };
@@ -4100,6 +4102,11 @@
       }
       // Sin atributos ni forma no hay nada que contar.
       if (!Object.keys(props || {}).length && !tipo) return null;
+
+      // --- PARCHE: Eliminar campos internos de la geometría ---
+      if (props.geometry) delete props.geometry;
+      if (props.bbox) delete props.bbox;
+      // --------------------------------------------------------
 
       var crudo = {
         type: 'Feature',
