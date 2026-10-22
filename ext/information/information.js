@@ -910,6 +910,23 @@
           this.setContent_(tab.content);
           this.addEventTabs(tab, this.getContent());
         };
+        // La implementación de la API hace `querySelector(...).addEventListener`
+        // sin comprobar el resultado: si una pestaña no pinta un control (por
+        // ejemplo el selector de plantilla cuando la capa interna elegida no
+        // tiene objetos), lanza y deja sin listener a los demás controles. Aquí
+        // se ignoran los selectores que no existen en el contenido actual.
+        popup.addEventTabs = function (tab, contenedor) {
+          if (!tab || !tab.listeners || !contenedor) return;
+          tab.listeners.forEach(function (listener) {
+            if (!listener || !listener.selector) return;
+            var nodos = listener.all
+              ? contenedor.querySelectorAll(listener.selector)
+              : [contenedor.querySelector(listener.selector)];
+            nodos.forEach(function (nodo) {
+              if (nodo) nodo.addEventListener(listener.type, listener.callback);
+            });
+          });
+        };
       }
       return popup;
     }
@@ -3672,6 +3689,11 @@
 
       if (!features.length) return { omitida: true };
 
+      // En MapLibre un clic cae a la vez en varias capas internas del estilo
+      // (población, provincias, islas...). Se agrupan para que el popup ofrezca
+      // un selector y solo muestre los objetos de la capa elegida.
+      var capasInternas = this._capasInternasDe(features, capa);
+
       return {
         uid: '',
         tipo: 'vector',
@@ -3679,6 +3701,8 @@
         clave: this._claveCapa(capa),
         formatos: [],
         formatoActual: 'vector',
+        capasInternas: capasInternas,
+        capaInternaActual: capasInternas.length ? capasInternas[0].id : null,
         porFormato: {
           vector: {
             estado: 'ok',
@@ -3732,6 +3756,132 @@
       return salida;
     }
 
+    /**
+     * Los features que devuelve `forEachFeatureAtPixel` sobre una capa
+     * MapLibre son features de OpenLayers que envuelven el feature del MVT en
+     * la propiedad `vectorTileFeature`. Esa propiedad lleva la geometría
+     * entera serializada, ocupa media ficha y no le dice nada al visitante, así
+     * que no se muestra. En su lugar se expone `layer` con la capa interna
+     * (`source-layer` del estilo, p. ej. `btn0502s_ent_pob`), que es el dato
+     * que identifica la capa del MVT y el que usa el selector de capa interna
+     * del popup.
+     *
+     * @param {Object} props Propiedades del feature. Se modifican in situ para
+     *   que el JSON de la plantilla tampoco arrastre `vectorTileFeature`.
+     * @returns {boolean} `true` si el feature venía de una capa MapLibre.
+     */
+    _prepararPropiedadesMapLibre(props) {
+      if (!props || !props.vectorTileFeature) return false;
+      var vtf = props.vectorTileFeature;
+      delete props.vectorTileFeature;
+      var capaInterna = null;
+      try {
+        capaInterna = vtf.sourceLayer
+          || (vtf.layer && (vtf.layer['source-layer'] || vtf.layer.id))
+          || null;
+      } catch (e) {
+        capaInterna = null;
+      }
+      if (capaInterna) props.layer = String(capaInterna);
+      return true;
+    }
+
+    /**
+     * `source-layer`s de las capas del estilo de MapLibre que se están
+     * dibujando con el zoom actual. Es la lista que ofrece el selector: no se
+     * limita a las capas que han caído bajo el clic, porque entonces en la
+     * mayoría de los puntos solo habría una opción.
+     *
+     * @param {Object} capa Capa `MapLibre` de la API.
+     * @returns {Array<string>} Capas internas ordenadas alfabéticamente.
+     */
+    _capasInternasEstilo(capa) {
+      var mapaLibre = this._mapaLibreDeCapa(capa);
+      if (!mapaLibre) return [];
+
+      var estilo = null;
+      var zoom = null;
+      try {
+        estilo = esFuncion(mapaLibre.getStyle) ? mapaLibre.getStyle() : null;
+        zoom = esFuncion(mapaLibre.getZoom) ? mapaLibre.getZoom() : null;
+      } catch (e) {
+        return [];
+      }
+
+      var capas = (estilo && estilo.layers) || [];
+      var vistas = {};
+      var lista = [];
+      capas.forEach(function (capaEstilo) {
+        if (!capaEstilo || capaEstilo.type === 'background') return;
+        var id = capaEstilo['source-layer'];
+        if (!id) return;
+        if (capaEstilo.layout && capaEstilo.layout.visibility === 'none') return;
+        if (zoom !== null && isFinite(zoom)) {
+          if (capaEstilo.minzoom !== undefined && zoom < capaEstilo.minzoom) return;
+          if (capaEstilo.maxzoom !== undefined && zoom > capaEstilo.maxzoom) return;
+        }
+        id = String(id);
+        if (vistas[id]) return;
+        vistas[id] = true;
+        lista.push(id);
+      });
+      lista.sort(function (a, b) { return a.localeCompare(b); });
+      return lista;
+    }
+
+    /**
+     * Mapa de MapLibre de una capa `MapLibre`. En 2D la implementación de
+     * OpenLayers lo deja en `olLayer.mapLibreMap`; en 3D, el impl de Cesium lo
+     * guarda en `mapLibre_`.
+     *
+     * @param {Object} capa Capa `MapLibre` de la API.
+     * @returns {Object|null} Instancia de `maplibregl.Map`, si existe.
+     */
+    _mapaLibreDeCapa(capa) {
+      try {
+        var impl = capa && esFuncion(capa.getImpl) ? capa.getImpl() : null;
+        if (!impl) return null;
+        if (impl.olLayer && impl.olLayer.mapLibreMap) return impl.olLayer.mapLibreMap;
+        if (impl.mapLibre_) return impl.mapLibre_;
+      } catch (e) {
+        /* defensivo */
+      }
+      return null;
+    }
+
+    /**
+     * Agrupa los objetos del clic por capa interna de MapLibre
+     * (`propiedades.layer`) y añade las demás capas internas del estilo. Las
+     * que tienen objetos en el punto van primero (y con su recuento); después
+     * el resto por orden alfabético.
+     *
+     * @param {Array} features Elementos normalizados de la consulta.
+     * @param {Object} capa Capa `MapLibre` consultada.
+     * @returns {Array<{id: string, total: number}>} Capas internas disponibles.
+     */
+    _capasInternasDe(features, capa) {
+      var porCapa = {};
+      (features || []).forEach(function (elemento) {
+        if (!elemento || elemento.fuente !== 'maplibre' || !elemento.propiedades) return;
+        var id = elemento.propiedades.layer;
+        if (!id) return;
+        id = String(id);
+        if (!porCapa[id]) porCapa[id] = { id: id, total: 0 };
+        porCapa[id].total += 1;
+      });
+
+      this._capasInternasEstilo(capa).forEach(function (id) {
+        if (!porCapa[id]) porCapa[id] = { id: id, total: 0 };
+      });
+
+      var lista = Object.keys(porCapa).map(function (id) { return porCapa[id]; });
+      lista.sort(function (a, b) {
+        if (a.total !== b.total) return b.total - a.total;
+        return a.id.localeCompare(b.id);
+      });
+      return lista;
+    }
+
     _normalizarFeatureOL(feature, capa) {
       if (!feature) return null;
       var props = {};
@@ -3743,6 +3893,9 @@
       } catch (e) {
         props = {};
       }
+
+      // Capas MapLibre: fuera `vectorTileFeature`, dentro `layer`.
+      var esMapLibre = this._prepararPropiedadesMapLibre(props);
 
       var geometria = null;
       try {
@@ -3779,7 +3932,7 @@
         geometria: geometria,
         id: id,
         crudo: crudo,
-        fuente: 'vector',
+        fuente: esMapLibre ? 'maplibre' : 'vector',
       }, capa);
     }
 
@@ -4132,10 +4285,6 @@
       Object.keys(props).forEach(function (clave) {
         if (self._camposOcultos[clave]) return;
         if (clave === 'geometry' || clave === 'bbox' || clave === '__proto__') return;
-        
-        // --- PARCHE ---
-        if (clave === 'Vector Tile Feature') return;
-        // --------------
 
         var valor = props[clave];
         if (!self._mostrarVacios && (valor === null || valor === undefined || valor === '')) return;
@@ -4789,6 +4938,24 @@
       html += '<div class="g-information-titulo-capa">' +
         escaparHtml(this._tituloCapa(resultado.capa)) + '</div>';
 
+      // MapLibre: un clic cae en varias capas internas del estilo. Aquí se
+      // elige cuál de ellas se está consultando; el cuerpo muestra solo sus
+      // objetos. El clic ya trajo los de todas, así que no se vuelve a pedir.
+      if (resultado.capasInternas && resultado.capasInternas.length) {
+        html += '<label class="g-information-capa-interna">';
+        html += '<span class="g-information-etiqueta">Capa interna</span>';
+        html += '<select data-info-tab="' + escaparHtml(uid) + '" data-info-capa-interna' +
+          ' aria-label="Capa interna de MapLibre consultada">';
+        resultado.capasInternas.forEach(function (capaInterna) {
+          var activa = String(capaInterna.id) === String(resultado.capaInternaActual);
+          html += '<option value="' + escaparHtml(capaInterna.id) + '"' +
+            (activa ? ' selected' : '') + ' title="' + escaparHtml(capaInterna.id) + '">' +
+            escaparHtml(capaInterna.id) +
+            (capaInterna.total ? ' (' + capaInterna.total + ')' : '') + '</option>';
+        });
+        html += '</select></label>';
+      }
+
       if (formatos.length > 1) {
         html += '<div class="g-information-formatos" role="group" aria-label="Formato de la información">';
         html += '<span class="g-information-etiqueta">Formato</span>';
@@ -4821,8 +4988,25 @@
         html += '<pre class="g-information-pre">' + escaparHtml(estado.texto || '') + '</pre>';
       } else {
         var features = (estado && estado.features) ? estado.features : [];
+        // Solo los objetos de la capa interna elegida en el selector. Los
+        // elementos que no traen `layer` (capas no MapLibre) se dejan pasar.
+        if (resultado.capaInternaActual) {
+          features = features.filter(function (elemento) {
+            var capaInterna = elemento && elemento.propiedades
+              ? elemento.propiedades.layer : null;
+            if (!capaInterna) return true;
+            return String(capaInterna) === String(resultado.capaInternaActual);
+          });
+        }
+        // Las plantillas personalizadas reciben el total ya filtrado.
+        resultado.featuresVisibles = features;
         if (!features.length) {
-          html += '<p class="g-information-vacio">No hay información en este punto.</p>';
+          var sinObjetos = resultado.capaInternaActual
+            && estado && estado.features && estado.features.length;
+          html += '<p class="g-information-vacio">' + (sinObjetos
+            ? 'La capa ' + escaparHtml(resultado.capaInternaActual) +
+              ' no tiene objetos en este punto.'
+            : 'No hay información en este punto.') + '</p>';
         } else {
           if (plantillas.length > 1) {
             html += '<label class="g-information-plantilla">Plantilla ';
@@ -4881,7 +5065,34 @@
         });
       }
 
+      if (resultado.capasInternas && resultado.capasInternas.length) {
+        listeners.push({
+          selector: '[data-info-tab="' + uid + '"][data-info-capa-interna]',
+          type: 'change',
+          callback: function (evt) {
+            self._cambiarCapaInterna(resultado, evt.target.value);
+          },
+        });
+      }
+
       return listeners;
+    }
+
+    /**
+     * Cambia la capa interna de MapLibre que se está viendo. El clic ya trajo
+     * los objetos de todas las capas internas del punto, así que basta con
+     * filtrar: no se vuelve a consultar el mapa.
+     *
+     * @param {Object} resultado Resultado de la capa consultada.
+     * @param {string} id Identificador de la capa interna (`source-layer`).
+     */
+    _cambiarCapaInterna(resultado, id) {
+      var existe = (resultado.capasInternas || []).some(function (capaInterna) {
+        return String(capaInterna.id) === String(id);
+      });
+      if (!existe) return;
+      resultado.capaInternaActual = String(id);
+      this._actualizarTab(resultado);
     }
 
     _debeMostrarSelectorPlantilla(resultado) {
@@ -4914,7 +5125,8 @@
         formato: resultado.formatoActual,
         plantilla: plantilla,
         indice: indice,
-        total: (resultado.porFormato[resultado.formatoActual].features || []).length,
+        total: (resultado.featuresVisibles
+          || resultado.porFormato[resultado.formatoActual].features || []).length,
         escapar: escaparHtml,
         texto: aTexto,
         etiqueta: function (clave) {

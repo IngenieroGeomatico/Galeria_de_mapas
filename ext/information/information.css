@@ -275,6 +275,42 @@
   flex: 0 0 auto;
 }
 
+/* Capa interna de MapLibre. El clic agrupa los objetos por `source-layer`
+   del estilo y este selector elige cuál de esas capas se muestra. */
+.g-information-capa-interna {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.g-information-capa-interna select {
+  min-width: 0;
+  max-width: 240px;
+  height: 26px;
+  padding: 2px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1f2937;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.g-information-capa-interna select:hover {
+  border-color: var(--g-information-borde-activo, #71A7D3);
+}
+
+.g-information-capa-interna select:focus {
+  border-color: var(--g-information-borde-activo, #71A7D3);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(113, 167, 211, 0.18);
+}
+
 .g-information-etiqueta {
   margin-right: 2px;
   font-size: 0.72rem;
