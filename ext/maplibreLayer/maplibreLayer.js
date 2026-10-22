@@ -46,7 +46,11 @@
  * La vista se sincroniza en `scene.preRender` (antes de que Cesium pinte el
  * frame), no en `postRender`: medido con un vuelo de cámara, la posición de la
  * cámara ya es la definitiva en `preRender`, así que el overlay se actualiza un
- * frame antes.
+ * frame antes. Y se pinta **en el acto** (`map._render()`, ver
+ * `pintarMapaLibre_`): MapLibre repinta en su propio `requestAnimationFrame`,
+ * que llega después de este `preRender`, así que sin eso el canvas —y con él la
+ * textura del drape— va un frame por detrás (medido: 4,5 px de retraso con un
+ * desplazamiento de 4 px/frame).
  *
  * Las cuentas no son las de OL (`viewState` no existe aquí) y están medidas:
  *
@@ -102,17 +106,31 @@
  *      por uniforms en doble precisión, porque la traslación de esa matriz va en
  *      float32 sobre coordenadas de 6,4e6 m, se lleva ~0,5 m y deja el drape 2 px
  *      desplazado a zoom 18 (con el filtrado LINEAR, además difuminado).
- *   2. Pasa del ECEF a mercator **sin funciones trascendentes**: Web Mercator es
- *      conforme, así que en el entorno del centro de la vista basta con medir el
- *      desplazamiento en este y norte (producto escalar con los ejes de la base
- *      geodésica del centro) y escalarlo. Las referencias (origen, ejes y paso de
- *      metro a mercator) las calcula `referenciaDrape_` en JavaScript, en doble
- *      precisión, y entran por uniforms.
- *      Medido: con la fórmula exacta en el shader (`atan`/`tan`/`log` y 3
- *      iteraciones de Bowring) los drivers se desvían ~1e-6 en mercator —unos
- *      40 m— y el drape se va de sitio: el píxel central de una vista cenital caía
- *      39 m al este y 63 m al norte de su vertical. Con la linealización el error
- *      a 10 km del centro es de unos 6 m.
+ *   2. Pasa del ECEF a mercator por dos caminos, conmutados por zoom (ver
+ *      `ZOOM_DRAPE_EXACTO`):
+ *      - **Zoom alto (lo normal)**: **sin funciones trascendentes**. Web Mercator
+ *        es conforme, así que en el entorno del centro de la vista basta con medir
+ *        el desplazamiento en este y norte (producto escalar con los ejes de la
+ *        base geodésica del centro) y escalarlo. Las referencias (origen, ejes y
+ *        paso de metro a mercator) las calcula `referenciaDrape_` en JavaScript,
+ *        en doble precisión, y entran por uniforms. Medido: con la fórmula exacta
+ *        en el shader (`atan`/`tan`/`log` y 3 iteraciones de Bowring) los drivers
+ *        se desvían ~1e-6 en mercator —unos 40 m— y el drape se va de sitio: el
+ *        píxel central de una vista cenital caía 39 m al este y 63 m al norte de
+ *        su vertical. Con la linealización el error a 10 km del centro es ~6 m.
+ *      - **Zoom bajo (globo entero)**: la linealización deja de valer porque su
+ *        error crece con el cuadrado de la distancia. Medido con una rejilla de
+ *        pantalla contra `map.project`: 0 px a 900 m y 5 km, 7 px a 300 km, 43 px
+ *        a 1.500 km, 235 px a 5.000 km y 853 px a 20.000 km, con la UV saliéndose
+ *        del canvas (eso era el "recorte" al mirar el globo). Ahí se usa la
+ *        fórmula exacta sobre la mercator **absoluta** (`atan`/`log`), donde la
+ *        cuantización de float32 ya no importa porque las entradas de la matriz
+ *        también son pequeñas (a zoom 11 el ULP vale 0,03 px, frente a los 4 px de
+ *        zoom 18). La mercator X se lleva a la copia del mundo más cercana al
+ *        centro, que si no el antimeridiano se va a la copia de al lado.
+ *        El corte se pone en zoom 11, donde los dos caminos se equivocan ≤0,7 px
+ *        y el salto al conmutar es invisible (medido en el entorno: 60 km → 0 px,
+ *        40 km → 0,1 px, 30 km → 0,7 px, 15 km → 0,4 px).
  *   3. La proyecta con la MISMA matriz que usa MapLibre para pintar
  *      (`map.transform.mercatorMatrix`), de donde sale la UV del canvas. Pero la
  *      mercator que se le pasa es la **relativa al centro**: la absoluta (~0,4)
@@ -122,6 +140,20 @@
  *      clip del centro lo calcula `referenciaDrape_` en doble) la UV avanza
  *      exactamente un texel por píxel, el centro cae en (0,500, 0,500) y el
  *      resultado tiene la misma nitidez que el canvas original.
+ *
+ * COBERTURA DEL CANVAS
+ *
+ * El zoom de MapLibre sale de la escala en el centro, pero el canvas solo
+ * contiene `alto / (512 · 2^zoom)` de mercator en vertical. Al ver el globo
+ * entero la pantalla abarca más: medido a 20.000 km, la UV llegaba al canvas
+ * hasta lat 73° y el casquete polar se quedaba sin capa (un borde recto de unos
+ * 30 px). `zoomConCobertura_` baja el zoom lo justo para que el canvas cubra el
+ * mercator visible (las esquinas son las que más latitud piden) y nunca más de
+ * `MAX_NIVELES_COBERTURA`. La correspondencia no cambia —la UV sale de la matriz
+ * con la que MapLibre ha pintado—, solo se pierde resolución: 1,73 → 0,35 a
+ * 20.000 km, 1,73 → 0,73 a 10.000 km, 3,72 → 3,16 a 5.000 km, y nada por debajo
+ * de 2.000 km. Medido con la misma rejilla: de 6/68 puntos fuera a 20.000 km y
+ * 22/209 a 5.000 km, a **0** en todas las alturas, con error ≤0,1 px.
  *
  * Con eso el contenido cae en su coordenada (no en su píxel): el cielo y lo que
  * tapa una loma desaparecen solos, y a 70° de inclinación ya no hay error de
@@ -233,6 +265,22 @@
   // globo y el contenido sale estirado. Medido: a 78° se ve una mancha.
   const MAX_INCLINACION_DRAPE = 76;
 
+  // Zoom por debajo del cual el drape usa la mercator exacta en vez de la
+  // linealización local. La linealización es lineal en la longitud (exacta) y de
+  // primer orden en la latitud: su error crece con el cuadrado de la distancia.
+  // Medido (error máximo de la UV contra `map.project` en una rejilla de
+  // pantalla): 0 px a 900 m y 5 km, 7 px a 300 km, 43 px a 1.500 km, 235 px a
+  // 5.000 km y 853 px a 20.000 km —y a esas alturas la UV se sale del canvas, que
+  // es el recorte que se veía al mirar el globo entero—. El corte se pone en el
+  // zoom 11 (unos 50 km de altura con este frustum), donde los dos caminos se
+  // equivocan ≤0,2 px y el salto al conmutar es invisible.
+  const ZOOM_DRAPE_EXACTO = 11;
+
+  // Latitud límite de Web Mercator (la proyección no llega a los polos) y tope
+  // de niveles de zoom que se permite bajar al ajustar la cobertura.
+  const MAX_LAT_MERCATOR = 85;
+  const MAX_NIVELES_COBERTURA = 2;
+
   /* ------------------------------------------------------------------ *
    * Shader del drape
    *
@@ -266,6 +314,11 @@
     // JavaScript y en doble: la mercator normalizada (~0,4) tiene un ULP de
     // 3e-8 en float32 y, con los 2,3e8 de la matriz, ese último bit vale ~4 px.
     'uniform vec4 u_clipCentro;',
+    // Camino exacto (zoom bajo): centro de la vista en ECEF, mercator X del
+    // centro (para elegir la copia del mundo) y conmutador.
+    'uniform vec3 u_origen;',
+    'uniform float u_mercCentroX;',
+    'uniform float u_global;',
     'in vec2 v_textureCoordinates;',
     '',
     'void main() {',
@@ -286,21 +339,39 @@
     '  vec3 delta = u_derecha * relativo.x + u_arriba * relativo.y',
     '             + u_atras * relativo.z + u_desdeOrigen;',
     '',
-    '  // 2. Mercator SIN funciones trascendentes. La proyección es conforme, así',
-    '  // que en el entorno del centro basta con desplazar en este/norte y escalar.',
-    '  // Medido: calcularlo aquí con atan/tan/log (aunque sea la fórmula exacta) se',
-    '  // desvía ~1e-6 en mercator (unos 40 m) por la precisión de los drivers, y el',
-    '  // drape se va de sitio. Las referencias vienen de `referenciaDrape_`, que las',
-    '  // calcula en JavaScript con doble precisión.',
-    '  vec2 mercRel = vec2(dot(delta, u_este) * u_escala.x,',
-    '                      dot(delta, u_norte) * u_escala.y);',
-    '',
-    '  // 3. Mercator relativo al centro -> clip con la matriz de MapLibre -> UV del',
-    '  // canvas. El centro se resta en JavaScript y en doble (`u_clipCentro`):',
-    '  // quedarse con la mercator normalizada no vale, porque su ULP en float32',
-    '  // (3e-8 sobre ~0,4) multiplicado por los 2,3e8 de la matriz son ~4 px.',
-    '  // Medido: con la mercator absoluta el drape salía a bloques de 4x4.',
-    '  vec4 clip = u_mapMatrix * vec4(mercRel, 0.0, 0.0) + u_clipCentro;',
+    '  // 2. Mercator del punto, por dos caminos.',
+    '  //',
+    '  //  - Zoom alto (lo normal): SIN funciones trascendentes. La proyección es',
+    '  //    conforme, así que en el entorno del centro basta con desplazar en',
+    '  //    este/norte y escalar. Medido: calcularlo aquí con atan/tan/log (aunque',
+    '  //    sea la fórmula exacta) se desvía ~1e-6 en mercator (unos 40 m) por la',
+    '  //    precisión de los drivers, y el drape se va de sitio. Las referencias',
+    '  //    vienen de `referenciaDrape_`, calculadas en JavaScript con doble.',
+    '  //  - Zoom bajo (globo entero): fórmula exacta sobre la mercator ABSOLUTA.',
+    '  //    Ahí la linealización ya no vale (medido: 7 px a 300 km, 43 px a',
+    '  //    1.500 km, 853 px a 20.000 km, con la UV saliéndose del canvas), y la',
+    '  //    cuantización de la mercator normalizada en float32 deja de importar',
+    '  //    porque las entradas de la matriz también son pequeñas (a zoom 11 el ULP',
+    '  //    vale 0,03 px, frente a los 4 px de zoom 18).',
+    '  vec4 clip;',
+    '  if (u_global > 0.5) {',
+    '    vec3 p = delta + u_origen;',
+    '    float rho = sqrt(p.x * p.x + p.y * p.y);',
+    '    float tanPhi = p.z / ((1.0 - 0.00669437999014) * rho);',
+    '    float mercY = 0.5 - log(tanPhi + sqrt(tanPhi * tanPhi + 1.0)) / (2.0 * czm_pi);',
+    '    float mercX = (atan(p.y, p.x) + czm_pi) / (2.0 * czm_pi);',
+    '    // Copia del mundo más cercana al centro: sin esto, al cruzar el',
+    '    // antimeridiano el punto se va a la copia de al lado y no se pinta.',
+    '    mercX += floor(u_mercCentroX - mercX + 0.5);',
+    '    clip = u_mapMatrix * vec4(mercX, mercY, 0.0, 1.0);',
+    '  } else {',
+    '    vec2 mercRel = vec2(dot(delta, u_este) * u_escala.x,',
+    '                        dot(delta, u_norte) * u_escala.y);',
+    '    // El centro se resta en JavaScript y en doble (`u_clipCentro`): quedarse',
+    '    // con la mercator normalizada no vale, porque su ULP en float32',
+    '    // (3e-8 sobre ~0,4) multiplicado por los 2,3e8 de la matriz son ~4 px.',
+    '    clip = u_mapMatrix * vec4(mercRel, 0.0, 0.0) + u_clipCentro;',
+    '  }',
     '  if (clip.w <= 0.0) {',
     '    out_FragColor = color;',
     '    return;',
@@ -460,6 +531,7 @@
         // para que use la vista ya sincronizada de este frame.
         this.escuchaRender_ = viewer.scene.preRender.addEventListener(() => {
           this.sincronizar_();
+          this.pintarMapaLibre_();
           this.actualizarDrape_();
         });
 
@@ -540,6 +612,7 @@
         const lienzoLibre = map.getCanvas();
         if (lienzoLibre.clientWidth !== ancho || lienzoLibre.clientHeight !== alto) {
           map.resize();
+          this.pintarSincrono_ = true;
         }
 
         const camara = viewer.camera;
@@ -611,6 +684,30 @@
           bearing: vista.rumbo,
           pitch: vista.inclinacion
         });
+        this.pintarSincrono_ = true;
+      }
+
+      /**
+       * Fuerza a MapLibre a pintar en el acto, dentro del `preRender` de Cesium.
+       *
+       * MapLibre repinta en su propio `requestAnimationFrame`, que llega después
+       * de este `preRender`, así que sin forzarlo el canvas —y con él la textura
+       * del drape— va un frame por detrás de la cámara. Medido con la cámara
+       * desplazándose 4 px por frame: el contenido iba 4,5 px retrasado; con el
+       * pintado síncrono, 0. Se usa `redraw()` porque además **aborta** el
+       * repintado ya programado: con `_render()` a secas MapLibre pintaba dos
+       * veces por frame (medido 1,9 renders/frame) y el mapa bajaba de 19 a 14
+       * fps. Con `try/catch`: si falla queda el repintado asíncrono de siempre.
+       */
+      pintarMapaLibre_() {
+        if (!this.pintarSincrono_) return;
+        this.pintarSincrono_ = false;
+        const map = this.mapLibre_;
+        if (!map) return;
+        try {
+          if (typeof map.redraw === 'function') map.redraw();
+          else if (typeof map._render === 'function') map._render(performance.now());
+        } catch (e) { /* se queda el pintado asíncrono */ }
       }
 
       // ── Drape sobre el MDT ───────────────────────────────────────────────
@@ -670,7 +767,10 @@
             norte: new Cesium.Cartesian3(),
             mercCentro: new Cesium.Cartesian2(),
             escala: new Cesium.Cartesian2(),
-            clipCentro: new Cesium.Cartesian4()
+            clipCentro: new Cesium.Cartesian4(),
+            // Conmutador y mercator X del centro para el camino exacto.
+            mercCentroX: 0,
+            global: 0
           };
           const capa = this;
           const stage = escena.postProcessStages.add(new Cesium.PostProcessStage({
@@ -694,7 +794,10 @@
               u_este: () => ref.este,
               u_norte: () => ref.norte,
               u_escala: () => ref.escala,
-              u_clipCentro: () => ref.clipCentro
+              u_clipCentro: () => ref.clipCentro,
+              u_origen: () => ref.origen,
+              u_mercCentroX: () => ref.mercCentroX,
+              u_global: () => ref.global
             }
           }));
 
@@ -967,6 +1070,10 @@
         ref.escala.x = 1 / (2 * Math.PI * N * cosLat);
         ref.escala.y = -1 / (2 * Math.PI * M * cosLat);
 
+        // Conmutador del camino exacto del shader (ver `ZOOM_DRAPE_EXACTO`).
+        ref.mercCentroX = ref.mercCentro.x;
+        ref.global = Number.isFinite(vista.zoom) && vista.zoom < ZOOM_DRAPE_EXACTO ? 1 : 0;
+
         // Clip del centro: matriz de MapLibre por (mercCentro, 0, 1), en doble.
         // El shader le suma la parte lineal aplicada al mercator RELATIVO, así la
         // mercator absoluta (ULP de 3e-8 en float32) no llega a la GPU y el UV no
@@ -1024,6 +1131,86 @@
       }
 
       /**
+       * Baja el zoom de MapLibre cuando su canvas no llega a cubrir el mercator
+       * que abarca la pantalla.
+       *
+       * El zoom sale de la escala en el centro, que es lo que da nitidez, pero el
+       * canvas solo contiene `alto / (512 · 2^zoom)` de mercator en vertical: al
+       * ver el globo entero la pantalla abarca más y las latitudes altas se
+       * quedaban sin textura (medido a 20.000 km: el drape llegaba hasta lat 73° y
+       * el casquete polar se veía sin capa, que era el "recorte" del globo).
+       *
+       * Se baja el zoom lo justo y nunca más de `MAX_NIVELES_COBERTURA`. La
+       * correspondencia no cambia —la UV sale de la matriz de MapLibre, que es la
+       * que ha pintado el canvas—, solo se pierde resolución, y solo en las vistas
+       * en las que el canvas no llegaba.
+       * @param {Object} viewer El `Cesium.Viewer`.
+       * @param {number} zoom Zoom pedido por la escala del centro.
+       * @param {number} ancho Ancho del canvas en píxeles.
+       * @param {number} alto Alto del canvas en píxeles.
+       * @returns {number} Zoom corregido.
+       */
+      zoomConCobertura_(viewer, zoom, ancho, alto) {
+        if (!(zoom < ZOOM_DRAPE_EXACTO) || !(alto > 0)) return zoom;
+        const Cesium = window.Cesium;
+        const escena = viewer && viewer.scene;
+        const camara = viewer && viewer.camera;
+        const elipsoide = escena && escena.globe && escena.globe.ellipsoid;
+        if (!Cesium || !camara || !elipsoide || !Cesium.IntersectionTests) return zoom;
+
+        // Latitud del punto del elipsoide bajo un píxel del canvas. Sin corte
+        // (cielo o globo entero) devuelve null.
+        const latBorde = (px, py) => {
+          try {
+            const rayo = camara.getPickRay(new Cesium.Cartesian2(px, py));
+            const corte = rayo && Cesium.IntersectionTests.rayEllipsoid(rayo, elipsoide);
+            if (!corte) return null;
+            const t = corte.start > 0 ? corte.start : corte.stop;
+            if (!(t > 0)) return null;
+            const punto = Cesium.Ray.getPoint(rayo, t);
+            return Cesium.Math.toDegrees(Cesium.Cartographic.fromCartesian(punto).latitude);
+          } catch (e) {
+            return null;
+          }
+        };
+        // Las esquinas están más lejos del centro de la pantalla que los bordes,
+        // así que son las que piden más latitud; se miran también los centros de
+        // los bordes por si el horizonte está arriba.
+        const muestras = [
+          [0, 0], [ancho, 0], [0, alto], [ancho, alto],
+          [ancho / 2, 0], [ancho / 2, alto]
+        ];
+        let arriba = -90;
+        let abajo = 90;
+        let conGlobo = 0;
+        for (let i = 0; i < muestras.length; i++) {
+          const lat = latBorde(muestras[i][0], muestras[i][1]);
+          if (!Number.isFinite(lat)) continue;
+          conGlobo++;
+          if (lat > arriba) arriba = lat;
+          if (lat < abajo) abajo = lat;
+        }
+        // Algún borde es cielo: el limbo del globo está dentro de la pantalla, así
+        // que se pide el mundo entero (es cuando más se nota el recorte).
+        if (conGlobo < muestras.length) {
+          arriba = MAX_LAT_MERCATOR;
+          abajo = -MAX_LAT_MERCATOR;
+        }
+        if (!(arriba > abajo) || arriba === -90) return zoom;
+
+        // Mercator visible (fórmula exacta) y mercator que cubre el canvas al zoom
+        // pedido (píxeles por mundo = 512 · 2^zoom, la misma cuenta de MapLibre).
+        const RAD = Math.PI / 180;
+        const mercY = (lat) => 0.5 - Math.log(Math.tan(Math.PI / 4 + (lat * RAD) / 2)) / (2 * Math.PI);
+        const necesario = mercY(abajo) - mercY(arriba);
+        const cubierto = alto / (512 * Math.pow(2, zoom));
+        if (!(necesario > 0) || !(cubierto > 0) || necesario <= cubierto) return zoom;
+
+        const bajada = Math.min(Math.log2(necesario / cubierto), MAX_NIVELES_COBERTURA);
+        return zoom - bajada;
+      }
+
+      /**
        * Traduce la cámara de Cesium a los parámetros de `jumpTo`.
        * @param {Object} viewer El `Cesium.Viewer`.
        * @param {number} ancho Ancho del canvas en píxeles CSS.
@@ -1050,6 +1237,7 @@
           lon = Cesium.Math.toDegrees(c0.longitude);
           lat = Cesium.Math.toDegrees(c0.latitude);
           zoom = this.zoomDesdeEscala_(escena, camara, centro, ancho, alto);
+          zoom = this.zoomConCobertura_(viewer, zoom, ancho, alto);
         }
 
         // Mirando al horizonte o al cielo el rayo central puede no tocar el
