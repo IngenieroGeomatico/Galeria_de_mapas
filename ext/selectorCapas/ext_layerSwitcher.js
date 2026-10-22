@@ -1609,6 +1609,18 @@ class miPlugin_layerSwitcher {
         });
         return;
       }
+      // Una capa MapLibre (teselas vectoriales) tampoco lleva la extensión en
+      // el cliente: su estilo no suele declararla y `getMaxExtent()` devuelve
+      // el mundo (en 3D la API ni siquiera admite maxExtent). Se busca en el
+      // metadata.json del servicio y, si no, en el estilo y en las teselas que
+      // existen (ver _extensionMapLibre).
+      if (n === 0 && _tieneMapLibre(capa)) {
+        _extensionMapLibre(capa, function (extMl) {
+          if (extMl) { hecho(extMl); return; }
+          _conExtension(capa, hecho, 1);
+        });
+        return;
+      }
       const maxIntentos = _capaCargando(capa) ? 22 : n;
       if (n >= maxIntentos) { hecho(null); return; }
       setTimeout(function () { _conExtension(capa, hecho, n + 1); }, (n < 4) ? 600 : 900);
@@ -2225,6 +2237,370 @@ class miPlugin_layerSwitcher {
       try { return !impl.getBoundingBox(); } catch (e) { return false; }
     }
 
+    // ── Extensión de una capa MapLibre (teselas vectoriales) ────────────
+    // Un estilo MapLibre no lleva la cobertura en el cliente: `getMaxExtent()`
+    // devuelve el mundo entero y en 3D la API descarta `maxExtent` (lo avisa
+    // ext/maplibreLayer). Sin extensión el botón de zoom no hacía nada: solo
+    // dejaba un aviso en la consola (medido con la BTN).
+    //
+    // De dónde sale la extensión, por orden:
+    //   1. El `metadata.json` que los servicios de teselas publican junto a su
+    //      ruta de teselas: es un TileJSON con `bounds` (medido en
+    //      https://vt-btn.idee.es/1.0.0/btn/metadata.json). Las teselas de la
+    //      BTN cuelgan de .../btn/tile/{z}/{y}/{x}.pbf, así que el documento
+    //      está en la carpeta padre y esa se prueba primero.
+    //   2. El propio `style.json`: `bounds` de la fuente vectorial o del
+    //      estilo (los estilos que salen de un TileJSON los arrastran).
+    //   3. Si no hay ningún valor, se encuadra el MUNDO entero: el botón
+    //      siempre acaba moviendo la vista y no se inventa una extensión a ojo
+    //      (probarla pidiendo teselas exigía fijar un nivel de zoom, y ese
+    //      nivel no lo declara el estilo).
+    //
+    // El resultado se cachea por capa, así que el trabajo se hace una vez
+    // aunque se pulse el botón varias veces (igual que en el WMS).
+
+    const _cacheMetadataTeselas = new Map();
+    const _cacheExtensionMapLibre = new Map();
+
+    /**
+     * ¿La capa, o alguna de sus hijas, es MapLibre?
+     * @param {Object} capa
+     * @returns {boolean}
+     */
+    function _tieneMapLibre(capa) {
+      let encontrado = false;
+      const visitar = function (c) {
+        if (encontrado || !c) return;
+        if (_esCapaMapLibre(c)) { encontrado = true; return; }
+        let hijas = [];
+        try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+      };
+      visitar(capa);
+      return encontrado;
+    }
+
+    /**
+     * ¿Es una capa MapLibre con una instancia viva de MapLibre GL?
+     * @param {Object} c
+     * @returns {boolean}
+     */
+    function _esCapaMapLibre(c) {
+      const t = String((c && (c.type || c._type)) || '').toLowerCase();
+      if (t !== 'maplibre' && t !== 'mapbox') return false;
+      return !!getMapLibreMap(c);
+    }
+
+    /**
+     * Extensión de una capa MapLibre (o grupo con MapLibre dentro), en la
+     * proyección que tenga el mapa ahora mismo.
+     * @param {Object} capa
+     * @param {Function} hecho Recibe la extensión o null.
+     */
+    function _extensionMapLibre(capa, hecho) {
+      const capas = [];
+      const visitar = function (c) {
+        if (!c) return;
+        if (_esCapaMapLibre(c)) { capas.push(c); return; }
+        let hijas = [];
+        try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+      };
+      visitar(capa);
+      if (!capas.length) { hecho(null); return; }
+
+      Promise.all(capas.map(function (c) { return _extensionDeUnaMapLibre(c); }))
+        .then(function (lista) {
+          // Aquí no vale `_esExtension`: la última salida posible es el mundo
+          // entero, que esa prueba descarta por definición.
+          const validas = lista.filter(function (e) {
+            return Array.isArray(e) && e.length >= 4 && e.slice(0, 4).every(isFinite);
+          });
+          hecho(validas.length ? _unionExtensiones(validas) : null);
+        })
+        .catch(function () { hecho(null); });
+    }
+
+    /**
+     * Extensión de una sola capa MapLibre, en la proyección del mapa.
+     * @param {Object} capa
+     * @returns {Promise<Array<number>|null>}
+     */
+    async function _extensionDeUnaMapLibre(capa) {
+      if (!capa) return null;
+      const clave = String(capa.idLayer || '') + '|' + String(capa.legend || capa.name || '');
+      if (_cacheExtensionMapLibre.has(clave)) return _cacheExtensionMapLibre.get(clave);
+
+      const ml = getMapLibreMap(capa);
+      if (!ml) return null;
+      // El estilo de la BTN es enorme (>300 capas) y tarda en cargarse, pero
+      // para el zoom basta con que estén las fuentes: se espera poco.
+      const listo = await awaitMapLibreStyle(ml, 4000);
+      if (!listo) return null; // todavía sin estilo: se reintenta en otro clic
+
+      const partes = [];
+      let fuentes = [];
+      try {
+        const estilo = ml.getStyle();
+        // Los estilos que vienen de un TileJSON dejan los bounds en el propio
+        // estilo o en su metadata (no es la norma, pero está en el formato).
+        const enEstilo = _extensionDeBounds(
+          estilo && (estilo.bounds || (estilo.metadata && estilo.metadata.bounds))
+        );
+        if (enEstilo) partes.push(enEstilo);
+        fuentes = _fuentesVectorialesMapLibre(estilo);
+        for (const f of fuentes) {
+          const b = _extensionDeBounds(f.bounds);
+          if (b) partes.push(b);
+        }
+      } catch (e) { /* estilo a medio cargar */ }
+
+      // 1) metadata.json del servicio de teselas.
+      for (const f of fuentes) {
+        const b = await _boundsDeMetadataTeselas(f);
+        if (b) partes.push(b);
+      }
+
+      // 2) Sondeo de teselas, solo si no ha declarado nada.
+      if (!partes.length) {
+        for (const f of fuentes) {
+          const b = await _extensionPorTeselas(f);
+          if (b) { partes.push(b); break; }
+        }
+      }
+
+      const enGrados = partes.length ? _unionExtensiones(partes) : null;
+      const ext = enGrados ? _reproyectar(enGrados, 'EPSG:4326', _codigoDeLaProyeccion()) : null;
+      _cacheExtensionMapLibre.set(clave, ext);
+      return ext;
+    }
+
+    /**
+     * Fuentes vectoriales del estilo, con sus teselas y sus bounds.
+     * @param {Object} estilo style.json
+     * @returns {Array<Object>}
+     */
+    function _fuentesVectorialesMapLibre(estilo) {
+      const salida = [];
+      if (!estilo || !estilo.sources) return salida;
+      Object.keys(estilo.sources).forEach(function (id) {
+        const s = estilo.sources[id];
+        if (!s || String(s.type) !== 'vector') return;
+        salida.push({
+          id: id,
+          url: s.url || null,
+          tiles: Array.isArray(s.tiles) ? s.tiles.slice() : [],
+          bounds: s.bounds || (s.tileJSON && s.tileJSON.bounds) || null,
+        });
+      });
+      return salida;
+    }
+
+    /**
+     * Bounds en grados ([oeste, sur, este, norte]) a extensión utilizable.
+     * @param {*} bounds
+     * @returns {Array<number>|null} null si no vale o es el mundo entero.
+     */
+    function _extensionDeBounds(bounds) {
+      if (!Array.isArray(bounds) || bounds.length < 4) return null;
+      const n = bounds.slice(0, 4).map(Number);
+      if (!n.every(isFinite)) return null;
+      if (n[0] < -180 || n[2] > 180 || n[1] < -90 || n[3] > 90) return null;
+      return _esExtension(n) ? n : null;
+    }
+
+    /**
+     * Bases candidatas a partir de una plantilla de teselas,
+     * `https://host/1.0.0/btn/tile/{z}/{y}/{x}.pbf` → `.../btn/` y `.../btn/tile/`.
+     *
+     * Se prueba primero la carpeta PADRE: el TileJSON suele estar en la raíz
+     * del servicio y las teselas en una subcarpeta (medido en la BTN, que lo
+     * tiene en .../btn/metadata.json y las teselas en .../btn/tile/...). Así el
+     * caso normal se resuelve con una sola petición y sin errores de consola.
+     * @param {string} plantilla
+     * @returns {Array<string>}
+     */
+    function _basesDeTeselas(plantilla) {
+      const bases = [];
+      const limpia = String(plantilla || '').split('?')[0];
+      const corte = limpia.search(/\{[xyz-]/);
+      const antes = (corte > -1 ? limpia.slice(0, corte) : limpia).replace(/\/+$/, '');
+      const anade = function (u) {
+        const b = String(u || '').replace(/\/+$/, '');
+        if (!/^https?:\/\//i.test(b)) return;
+        if (bases.indexOf(b + '/') === -1) bases.push(b + '/');
+      };
+      anade(antes.slice(0, antes.lastIndexOf('/')));
+      anade(antes);
+      return bases;
+    }
+
+    /**
+     * Bounds del TileJSON que el servicio publica junto a las teselas.
+     * @param {Object} fuente {url, tiles}
+     * @returns {Promise<Array<number>|null>}
+     */
+    async function _boundsDeMetadataTeselas(fuente) {
+      if (!fuente) return null;
+      const urls = [];
+      if (fuente.url) urls.push(fuente.url);
+      (fuente.tiles || []).forEach(function (t) {
+        _basesDeTeselas(t).forEach(function (b) {
+          if (urls.indexOf(b + 'metadata.json') === -1) urls.push(b + 'metadata.json');
+        });
+      });
+
+      for (const u of urls) {
+        if (_cacheMetadataTeselas.has(u)) {
+          const cacheado = _cacheMetadataTeselas.get(u);
+          if (cacheado) return cacheado;
+          continue;
+        }
+        let ext = null;
+        try {
+          const cuerpo = await _pedirTexto(u);
+          const datos = _jsonDeVerdad(cuerpo);
+          ext = datos ? _extensionDeBounds(datos.bounds) : null;
+        } catch (e) { ext = null; }
+        _cacheMetadataTeselas.set(u, ext);
+        if (ext) return ext;
+      }
+      return null;
+    }
+
+    /**
+     * Cobertura de la fuente sondeando teselas: se parte de la tesela del
+     * centro actual y se amplía la caja mientras aparezcan teselas nuevas.
+     * Un borde entero sin teselas es el borde de los datos; si la caja llega
+     * al tope (la capa llena el mundo) no se inventa extensión.
+     * @param {Object} fuente {tiles}
+     * @returns {Promise<Array<number>|null>} bounds en grados.
+     */
+    async function _extensionPorTeselas(fuente) {
+      const plantillas = (fuente && fuente.tiles) || [];
+      if (!plantillas.length) return null;
+      const plantilla = plantillas[0];
+      if (!/\{z\}/.test(plantilla) || (!/\{x\}/.test(plantilla) && !/\{y\}/.test(plantilla))) return null;
+      const centro = _centroEnGrados();
+      if (!centro) return null;
+
+      const nivel = NIVEL_SONDEO_TESELAS;
+      const n = Math.pow(2, nivel);
+      const inicial = _teselaDe(centro[0], centro[1], nivel);
+      if (!inicial) return null;
+
+      const vistas = {};
+      let peticiones = 0;
+      const existe = async function (x, y) {
+        if (x < 0 || y < 0 || x >= n || y >= n) return false;
+        const clave = x + ',' + y;
+        if (vistas[clave] !== undefined) return vistas[clave];
+        if (peticiones >= MAX_PETICIONES_SONDEO) return false;
+        peticiones++;
+        let hay = false;
+        try {
+          const resp = await fetch(_urlDeTesela(plantilla, nivel, x, y));
+          if (resp && resp.ok) {
+            // Una tesela vacía llega como un PBF mínimo: se descarta.
+            try {
+              const buf = await resp.arrayBuffer();
+              hay = !!(buf && buf.byteLength > 2);
+            } catch (e) { hay = true; }
+          }
+        } catch (e) { hay = false; }
+        vistas[clave] = hay;
+        return hay;
+      };
+
+      if (!(await existe(inicial.x, inicial.y))) return null;
+      let minX = inicial.x, maxX = inicial.x, minY = inicial.y, maxY = inicial.y;
+
+      for (let vuelta = 0; vuelta < MAX_TESELAS_SONDEO; vuelta++) {
+        const x0 = minX - 1, x1 = maxX + 1, y0 = minY - 1, y1 = maxY + 1;
+        const borde = [];
+        for (let x = x0; x <= x1; x++) { borde.push([x, y0]); borde.push([x, y1]); }
+        for (let y = minY; y <= maxY; y++) { borde.push([x0, y]); borde.push([x1, y]); }
+
+        let alguno = false;
+        for (const p of borde) {
+          if (await existe(p[0], p[1])) {
+            alguno = true;
+            minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+            minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
+          }
+        }
+        if (!alguno) break;
+        if ((maxX - minX + 1) >= MAX_TESELAS_SONDEO ||
+            (maxY - minY + 1) >= MAX_TESELAS_SONDEO) break;
+      }
+
+      if ((maxX - minX + 1) >= MAX_TESELAS_SONDEO ||
+          (maxY - minY + 1) >= MAX_TESELAS_SONDEO) return null;
+
+      const nw = _gradosDeTesela(minX, minY, nivel);
+      const se = _gradosDeTesela(maxX + 1, maxY + 1, nivel);
+      return _extensionDeBounds([nw[0], se[1], se[0], nw[1]]);
+    }
+
+    /**
+     * Tesela (esquema XYZ/Web Mercator) que contiene un punto.
+     * @param {number} lon
+     * @param {number} lat
+     * @param {number} z
+     * @returns {{x:number, y:number}}
+     */
+    function _teselaDe(lon, lat, z) {
+      const n = Math.pow(2, z);
+      const la = Math.max(-85.05112878, Math.min(85.05112878, Number(lat))) * Math.PI / 180;
+      return {
+        x: Math.floor((Number(lon) + 180) / 360 * n),
+        y: Math.floor((1 - Math.log(Math.tan(la) + 1 / Math.cos(la)) / Math.PI) / 2 * n),
+      };
+    }
+
+    /**
+     * Esquina noroeste de una tesela, en grados.
+     * @param {number} x
+     * @param {number} y
+     * @param {number} z
+     * @returns {Array<number>} [lon, lat]
+     */
+    function _gradosDeTesela(x, y, z) {
+      const n = Math.pow(2, z);
+      return [
+        x / n * 360 - 180,
+        Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI,
+      ];
+    }
+
+    /**
+     * URL de una tesela a partir de la plantilla del estilo.
+     * @param {string} plantilla
+     * @param {number} z
+     * @param {number} x
+     * @param {number} y
+     * @returns {string}
+     */
+    function _urlDeTesela(plantilla, z, x, y) {
+      const n = Math.pow(2, z);
+      return String(plantilla)
+        .replace(/\{z\}/g, z)
+        .replace(/\{x\}/g, x)
+        .replace(/\{y\}/g, y)
+        .replace(/\{-y\}/g, n - 1 - y)
+        .replace(/\{s\}/g, 'a');
+    }
+
+    /** Centro del mapa en grados [lon, lat], para el sondeo de teselas. */
+    function _centroEnGrados() {
+      try {
+        const c = map.getCenter();
+        if (!c || !isFinite(c.x) || !isFinite(c.y)) return null;
+        const p = _reproyectar([c.x, c.y, c.x, c.y], _codigoDeLaProyeccion(), 'EPSG:4326');
+        return (p && isFinite(p[0]) && isFinite(p[1])) ? [p[0], p[1]] : null;
+      } catch (e) { return null; }
+    }
+
     /** Código de la proyección que tiene el mapa ahora mismo. */
     function _codigoDeLaProyeccion() {
       try {
@@ -2501,6 +2877,11 @@ class miPlugin_layerSwitcher {
     let sheetCtx = null;
     // Referencia al handler de clic en el mapa mientras la tabla esta abierta.
     let mapClickHandler = null;
+    // Contexto de la tabla MapLibre abierta. Sus features salen del viewport
+    // (querySourceFeatures), asi que la tabla se rehace cuando el mapa se mueve.
+    let mlTableCtx = null;
+    let sheetMoveCleanup = null;
+    let sheetMoveTimer = null;
 
     // Función para remarcar todas las filas de la tabla segun el índice activo.
     function highlightRow(idx) {
@@ -2511,6 +2892,8 @@ class miPlugin_layerSwitcher {
 
     let closeSheet = function () {
       unbindMapClick();
+      unbindSheetMove();
+      mlTableCtx = null;
       const old = document.getElementById(SHEET_OVERLAY_ID);
       if (old && old.parentElement) old.parentElement.removeChild(old);
       sheetCtx = null;
@@ -3042,6 +3425,55 @@ class miPlugin_layerSwitcher {
       mapClickHandler = null;
     }
 
+    // ── Refresco de la tabla MapLibre al mover el mapa ──────────────────
+    // Los features de una capa MapLibre se piden al viewport
+    // (querySourceFeatures), asi que la tabla se queda obsoleta en cuanto se
+    // desplaza o se hace zoom. Se rehace con un pequeño retardo para no
+    // repetir la consulta en cada evento del arrastre.
+    //
+    // Los eventos de la fachada (IDEE.evt.MOVE/CHANGE) no se disparan al mover
+    // (medido), asi que se escucha a la implementacion: `moveend` en el mapa de
+    // OpenLayers y `scene.camera.moveEnd` en Cesium.
+    function refreshMapLibreTable() {
+      const ctx = mlTableCtx;
+      if (!ctx || !ctx.body || !document.body.contains(ctx.body)) return;
+      if (!getMapLibreMap(ctx.layer)) return;
+      ctx.body.innerHTML = buildMapLibreFeaturesTable(ctx.layer, ctx.sourceId, ctx.sourceLayer);
+    }
+
+    function unbindSheetMove() {
+      if (sheetMoveTimer) { clearTimeout(sheetMoveTimer); sheetMoveTimer = null; }
+      if (!sheetMoveCleanup) return;
+      try { sheetMoveCleanup(); } catch (e) { /* ignorar */ }
+      sheetMoveCleanup = null;
+    }
+
+    function bindSheetMove() {
+      unbindSheetMove();
+      let impl = null;
+      try { impl = map.getMapImpl ? map.getMapImpl() : null; } catch (e) { impl = null; }
+      if (!impl) return;
+
+      const disparar = function () {
+        if (sheetMoveTimer) clearTimeout(sheetMoveTimer);
+        sheetMoveTimer = setTimeout(function () {
+          sheetMoveTimer = null;
+          refreshMapLibreTable();
+        }, 300);
+      };
+
+      try {
+        if (impl.scene && impl.scene.camera && impl.scene.camera.moveEnd) {
+          const camara = impl.scene.camera;
+          camara.moveEnd.addEventListener(disparar);
+          sheetMoveCleanup = function () { camara.moveEnd.removeEventListener(disparar); };
+        } else if (typeof impl.on === 'function') {
+          impl.on('moveend', disparar);
+          sheetMoveCleanup = function () { impl.un('moveend', disparar); };
+        }
+      } catch (e) { sheetMoveCleanup = null; }
+    }
+
     // Compara un feature del mapa (OL) con los features cacheados de la tabla.
     // 1) Por referencia (los objetos suelen ser los mismos). 2) Fallback:
     // concordancia de la geometria (extent) y del primer atributo no vacio.
@@ -3441,8 +3873,17 @@ class miPlugin_layerSwitcher {
     function getMapLibreMap(layer) {
       try {
         const impl = layer.getImpl ? layer.getImpl() : null;
-        const ol = impl && impl.olLayer;
+        if (!impl) return null;
+        // 2D: la implementacion de OpenLayers deja la instancia de MapLibre GL
+        // dentro del `olLayer` que pinta las teselas.
+        const ol = impl.olLayer;
         if (ol && ol.mapLibreMap) return ol.mapLibreMap;
+        // 3D: ext/maplibreLayer drapea su propio lienzo de MapLibre sobre el
+        // globo y lo guarda en `mapLibre_`. Sin esta rama la capa no se
+        // reconocia como MapLibre y la tabla caia en la rama vectorial
+        // (medido con la BTN: 500 filas con la columna "(sin atributos)").
+        // El estilo se lee igual en las dos implementaciones.
+        if (impl.mapLibre_ && typeof impl.mapLibre_.getStyle === 'function') return impl.mapLibre_;
       } catch (e) { /* no es MapLibre */ }
       return null;
     }
@@ -3545,7 +3986,13 @@ class miPlugin_layerSwitcher {
       const titleEl = panel.querySelector('.ls-sheet-title');
       if (headLeft && titleEl) headLeft.insertBefore(picker, titleEl);
 
-      const setBody = (sid, sl) => { body.innerHTML = buildMapLibreFeaturesTable(layer, sid, sl); };
+      // Guardar el contexto de la tabla para poder rehacerla al mover el mapa:
+      // los features de MapLibre salen del viewport y cambian con la vista.
+      const setBody = (sid, sl) => {
+        mlTableCtx = { layer: layer, sourceId: sid, sourceLayer: sl, body: body };
+        body.innerHTML = buildMapLibreFeaturesTable(layer, sid, sl);
+      };
+      bindSheetMove();
 
       getMapLibreSubStack(layer).then(function (stack) {
         if (!stack.length) {
