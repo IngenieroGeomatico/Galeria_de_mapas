@@ -97,6 +97,11 @@
  *      una textura de 1×1 a cero hasta que hay profundidad, y el shader se limita
  *      a no pintar nada esos frames. Además, el `depthTexture` que documenta
  *      Cesium no sirve aquí: en esta build no está enlazado y devuelve 1.0.
+ *      La reconstrucción **no** usa `czm_inverseView`: sus tres primeras
+ *      columnas (los ejes de la cámara en ECEF) y el vector cámara−origen entran
+ *      por uniforms en doble precisión, porque la traslación de esa matriz va en
+ *      float32 sobre coordenadas de 6,4e6 m, se lleva ~0,5 m y deja el drape 2 px
+ *      desplazado a zoom 18 (con el filtrado LINEAR, además difuminado).
  *   2. Pasa del ECEF a mercator **sin funciones trascendentes**: Web Mercator es
  *      conforme, así que en el entorno del centro de la vista basta con medir el
  *      desplazamiento en este y norte (producto escalar con los ejes de la base
@@ -106,11 +111,17 @@
  *      Medido: con la fórmula exacta en el shader (`atan`/`tan`/`log` y 3
  *      iteraciones de Bowring) los drivers se desvían ~1e-6 en mercator —unos
  *      40 m— y el drape se va de sitio: el píxel central de una vista cenital caía
- *      39 m al este y 63 m al norte de su vertical. Con la linealización el UV del
- *      centro sale (0,502, 0,502) y las esquinas (0,1)/(1,0), y el error a 10 km
- *      del centro es de unos 6 m.
+ *      39 m al este y 63 m al norte de su vertical. Con la linealización el error
+ *      a 10 km del centro es de unos 6 m.
  *   3. La proyecta con la MISMA matriz que usa MapLibre para pintar
- *      (`map.transform.mercatorMatrix`), de donde sale la UV del canvas.
+ *      (`map.transform.mercatorMatrix`), de donde sale la UV del canvas. Pero la
+ *      mercator que se le pasa es la **relativa al centro**: la absoluta (~0,4)
+ *      tiene un ULP de 3e-8 en float32 y, multiplicada por los 2,3e8 de esa
+ *      matriz, ese último bit vale ~4 px. Medido: con la mercator absoluta el
+ *      drape salía a bloques de 4×4 px en una vista cenital; con la relativa (el
+ *      clip del centro lo calcula `referenciaDrape_` en doble) la UV avanza
+ *      exactamente un texel por píxel, el centro cae en (0,500, 0,500) y el
+ *      resultado tiene la misma nitidez que el canvas original.
  *
  * Con eso el contenido cae en su coordenada (no en su píxel): el cielo y lo que
  * tapa una loma desaparecen solos, y a 70° de inclinación ya no hay error de
@@ -236,13 +247,25 @@
     'uniform sampler2D u_globeDepth;',
     'uniform mat4 u_mapMatrix;',
     'uniform float u_opacity;',
+    // Paso del ojo al mundo sin `czm_inverseView`: sus tres primeras columnas
+    // (los ejes de la cámara en ECEF) y el vector cámara - origen, todo en
+    // doble precisión desde JavaScript. Medido: la traslación de
+    // `czm_inverseView` es float32 sobre coordenadas de 6,4e6 m, se lleva
+    // ~0,5 m de error y deja el drape 2 px desplazado (y difuminado por el
+    // filtrado LINEAR) en una vista de zoom 18.
+    'uniform vec3 u_derecha;',
+    'uniform vec3 u_arriba;',
+    'uniform vec3 u_atras;',
+    'uniform vec3 u_desdeOrigen;',
     // Referencia de proyección del centro de la vista, calculada en CPU en
-    // doble precisión: origen ECEF, ejes este/norte y escalas a mercator.
-    'uniform vec3 u_origen;',
+    // doble precisión: ejes este/norte y escalas a mercator.
     'uniform vec3 u_este;',
     'uniform vec3 u_norte;',
-    'uniform vec2 u_mercCentro;',
     'uniform vec2 u_escala;',
+    // Clip del centro de la vista (matriz de MapLibre por su mercator), en
+    // JavaScript y en doble: la mercator normalizada (~0,4) tiene un ULP de
+    // 3e-8 en float32 y, con los 2,3e8 de la matriz, ese último bit vale ~4 px.
+    'uniform vec4 u_clipCentro;',
     'in vec2 v_textureCoordinates;',
     '',
     'void main() {',
@@ -257,7 +280,11 @@
     '    return;',
     '  }',
     '  vec4 ojo = czm_windowToEyeCoordinates(gl_FragCoord.xy, profundidad);',
-    '  vec4 mundo = czm_inverseView * vec4(ojo.xyz / ojo.w, 1.0);',
+    '  // Vector cámara -> terreno: los ejes del ojo son unitarios y el vector es',
+    '  // pequeño (~1e3 m), así que float32 aquí no pierde precisión utilizable.',
+    '  vec3 relativo = ojo.xyz / ojo.w;',
+    '  vec3 delta = u_derecha * relativo.x + u_arriba * relativo.y',
+    '             + u_atras * relativo.z + u_desdeOrigen;',
     '',
     '  // 2. Mercator SIN funciones trascendentes. La proyección es conforme, así',
     '  // que en el entorno del centro basta con desplazar en este/norte y escalar.',
@@ -265,12 +292,15 @@
     '  // desvía ~1e-6 en mercator (unos 40 m) por la precisión de los drivers, y el',
     '  // drape se va de sitio. Las referencias vienen de `referenciaDrape_`, que las',
     '  // calcula en JavaScript con doble precisión.',
-    '  vec3 delta = mundo.xyz - u_origen;',
-    '  vec2 merc = u_mercCentro + vec2(dot(delta, u_este) * u_escala.x,',
-    '                                 dot(delta, u_norte) * u_escala.y);',
+    '  vec2 mercRel = vec2(dot(delta, u_este) * u_escala.x,',
+    '                      dot(delta, u_norte) * u_escala.y);',
     '',
-    '  // 3. Mercator normalizado -> clip con la matriz de MapLibre -> UV del canvas.',
-    '  vec4 clip = u_mapMatrix * vec4(merc, 0.0, 1.0);',
+    '  // 3. Mercator relativo al centro -> clip con la matriz de MapLibre -> UV del',
+    '  // canvas. El centro se resta en JavaScript y en doble (`u_clipCentro`):',
+    '  // quedarse con la mercator normalizada no vale, porque su ULP en float32',
+    '  // (3e-8 sobre ~0,4) multiplicado por los 2,3e8 de la matriz son ~4 px.',
+    '  // Medido: con la mercator absoluta el drape salía a bloques de 4x4.',
+    '  vec4 clip = u_mapMatrix * vec4(mercRel, 0.0, 0.0) + u_clipCentro;',
     '  if (clip.w <= 0.0) {',
     '    out_FragColor = color;',
     '    return;',
@@ -632,10 +662,15 @@
           // valor vigente sin crear basura.
           const ref = {
             origen: new Cesium.Cartesian3(),
+            derecha: new Cesium.Cartesian3(),
+            arriba: new Cesium.Cartesian3(),
+            atras: new Cesium.Cartesian3(),
+            desdeOrigen: new Cesium.Cartesian3(),
             este: new Cesium.Cartesian3(),
             norte: new Cesium.Cartesian3(),
             mercCentro: new Cesium.Cartesian2(),
-            escala: new Cesium.Cartesian2()
+            escala: new Cesium.Cartesian2(),
+            clipCentro: new Cesium.Cartesian4()
           };
           const capa = this;
           const stage = escena.postProcessStages.add(new Cesium.PostProcessStage({
@@ -652,11 +687,14 @@
               },
               u_mapMatrix: () => matriz,
               u_opacity: () => capa.opacidad_(),
-              u_origen: () => ref.origen,
+              u_derecha: () => ref.derecha,
+              u_arriba: () => ref.arriba,
+              u_atras: () => ref.atras,
+              u_desdeOrigen: () => ref.desdeOrigen,
               u_este: () => ref.este,
               u_norte: () => ref.norte,
-              u_mercCentro: () => ref.mercCentro,
-              u_escala: () => ref.escala
+              u_escala: () => ref.escala,
+              u_clipCentro: () => ref.clipCentro
             }
           }));
 
@@ -833,7 +871,7 @@
         const transform = map.transform;
         const matriz = transform && transform.mercatorMatrix;
         if (matriz && matriz.length >= 16) this.copiarMatrizDrape_(matriz, drape.matriz);
-        this.referenciaDrape_(drape);
+        this.referenciaDrape_(drape, matriz);
 
         if (this.drapeSucia_) {
           try {
@@ -863,8 +901,10 @@
        * Todo se calcula en JavaScript, en doble precisión, y se reescribe en los
        * objetos de `drape.ref`, que son los que leen los uniforms.
        * @param {Object} drape Estado del drape.
+       * @param {Float64Array} [matriz] `mercatorMatrix` de MapLibre, para el clip
+       *   del centro.
        */
-      referenciaDrape_(drape) {
+      referenciaDrape_(drape, matriz) {
         const vista = this.ultimaVista_;
         if (!drape || !drape.ref || !vista
           || !Number.isFinite(vista.lon) || !Number.isFinite(vista.lat)) {
@@ -890,6 +930,30 @@
         ref.origen.x = N * cosLat * cosLon;
         ref.origen.y = N * cosLat * senLon;
         ref.origen.z = N * (1 - E2) * senLat;
+
+        // Ejes de la cámara en ECEF (columnas 0-2 de `inverseViewMatrix`, en
+        // doble precisión) y vector cámara - origen. El shader los usa en vez de
+        // la traslación de `czm_inverseView`, que va en float32 y arrastra
+        // ~0,5 m de error sobre coordenadas de 6,4e6 m: medido, eso dejaba el
+        // drape 2 px desplazado a zoom 18 y el filtrado LINEAR lo difuminaba.
+        const camara = this.viewer_ && this.viewer_.scene && this.viewer_.scene.camera;
+        const inv = camara && camara.inverseViewMatrix;
+        if (inv) {
+          ref.derecha.x = inv[0];
+          ref.derecha.y = inv[1];
+          ref.derecha.z = inv[2];
+          ref.arriba.x = inv[4];
+          ref.arriba.y = inv[5];
+          ref.arriba.z = inv[6];
+          ref.atras.x = inv[8];
+          ref.atras.y = inv[9];
+          ref.atras.z = inv[10];
+          const pos = camara.positionWC;
+          ref.desdeOrigen.x = pos.x - ref.origen.x;
+          ref.desdeOrigen.y = pos.y - ref.origen.y;
+          ref.desdeOrigen.z = pos.z - ref.origen.z;
+        }
+
         // Base este/norte (geodésica) del centro, en ECEF.
         ref.este.x = -senLon;
         ref.este.y = cosLon;
@@ -902,6 +966,19 @@
         ref.mercCentro.y = 0.5 - Math.log(Math.tan(Math.PI / 4 + lat / 2)) / (2 * Math.PI);
         ref.escala.x = 1 / (2 * Math.PI * N * cosLat);
         ref.escala.y = -1 / (2 * Math.PI * M * cosLat);
+
+        // Clip del centro: matriz de MapLibre por (mercCentro, 0, 1), en doble.
+        // El shader le suma la parte lineal aplicada al mercator RELATIVO, así la
+        // mercator absoluta (ULP de 3e-8 en float32) no llega a la GPU y el UV no
+        // se cuantiza a bloques de 4 px.
+        if (matriz && matriz.length >= 16) {
+          const cx = ref.mercCentro.x;
+          const cy = ref.mercCentro.y;
+          ref.clipCentro.x = matriz[0] * cx + matriz[4] * cy + matriz[12];
+          ref.clipCentro.y = matriz[1] * cx + matriz[5] * cy + matriz[13];
+          ref.clipCentro.z = matriz[2] * cx + matriz[6] * cy + matriz[14];
+          ref.clipCentro.w = matriz[3] * cx + matriz[7] * cy + matriz[15];
+        }
       }
 
       /**
