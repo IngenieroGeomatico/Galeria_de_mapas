@@ -1661,14 +1661,35 @@
       }
 
       /**
-       * Entidades pintadas ahora mismo. Son entidades de MapLibre, no de la API:
-       * la capa no tiene geometrías propias (no hay teselas decodificadas a
-       * mano), y `getGeometryType()` devuelve null.
+       * Entidades pintadas ahora mismo. Filtra las capas internas de MapLibre
+       * (como 'background', 'hillshade' o 'place_label') para no devolver ruido.
+       * @param {Array<string>} [soloCapas] Opcional: nombres de capas permitidas.
        * @returns {Array}
        */
-      getFeatures() {
+            getFeatures(soloCapas) {
         if (!this.mapLibre_) return [];
-        try { return this.mapLibre_.queryRenderedFeatures(); } catch (e) { return []; }
+        try {
+          // Si MapLibre queryRenderedFeatures se llama sin argumentos, devuelve todo
+          // lo que hay en pantalla (en todas las capas visibles).
+          const features = this.mapLibre_.queryRenderedFeatures();
+          return features.filter((f) => {
+            const layer = f.layer;
+            if (!layer) return false;
+            
+            const sourceLayer = layer.source_layer || f.sourceLayer;
+            const layerId = layer.id;
+            
+            // Capas internas que siempre descartamos para limpiar la info
+            if (layerId === 'background' || layerId === 'background-fade' || layerId.includes('hillshade') || layerId.includes('contour')) return false;
+            
+            // Si el usuario especifica un filtro (soloCapas es un Array), lo aplicamos
+            if (soloCapas && Array.isArray(soloCapas)) {
+               return soloCapas.includes(sourceLayer);
+            }
+            
+            return true;
+          });
+        } catch (e) { return []; }
       }
 
       getFeatureById(id) {
