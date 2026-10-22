@@ -3666,10 +3666,14 @@
 
     async _consultarVector(capa, punto, pixel, cartesiano, mpp, generacion) {
       var esCesium = this._esCesium();
+      var esCapaMapaLibre = String(capa && capa.type || '').toUpperCase() === 'MAPLIBRE';
       // Al restaurar el estado tras el cambio 2D/3D la escena de Cesium aún
       // puede estar colocándose: el drillPick devuelve vacío aunque el punto
-      // sea correcto. En ese caso se reintenta recalculando el píxel.
-      var intentos = (esCesium && this._reabriendo) ? 5 : 1;
+      // sea correcto. En ese caso se reintenta recalculando el píxel. En
+      // MapLibre además hay que esperar a que su lienzo tenga teselas pintadas,
+      // así que se le dan más intentos.
+      var intentos = 1;
+      if (esCesium && this._reabriendo) intentos = esCapaMapaLibre ? 10 : 5;
       var pixelIntento = pixel;
       var features = [];
 
@@ -3681,9 +3685,15 @@
         features = esCesium
           ? this._consultarVector3D(capa, pixelIntento, punto, mpp)
           : this._consultarVector2D(capa, pixelIntento);
+        if (!features.length) {
+          // Las capas MapLibre no tienen features de OpenLayers ni entidades
+          // de Cesium: se pregunta al propio mapa de MapLibre por el píxel del
+          // clic, que es lo único que funciona igual en 2D y en 3D.
+          features = this._consultarMapaLibre(capa, punto);
+        }
         if (features.length) break;
         if (i < intentos - 1) {
-          await new Promise(function (resolve) { setTimeout(resolve, 500); });
+          await new Promise(function (resolve) { setTimeout(resolve, 600); });
         }
       }
 
@@ -3880,6 +3890,109 @@
         return a.id.localeCompare(b.id);
       });
       return lista;
+    }
+
+    /**
+     * Consulta sobre una capa `MapLibre` preguntando al propio mapa de
+     * MapLibre por el píxel del clic. Es la única vía que funciona igual en 2D
+     * y en 3D: en 3D la capa es un lienzo drapeado sobre el globo, sin
+     * `dataSource` de Cesium, así que el `drillPick` no devuelve nada.
+     *
+     * @param {Object} capa Capa `MapLibre` de la API.
+     * @param {{lon:number,lat:number}} punto Coordenada del clic.
+     * @returns {Array} Elementos normalizados, vacío si no hay nada.
+     */
+    _consultarMapaLibre(capa, punto) {
+      var mapaLibre = this._mapaLibreDeCapa(capa);
+      if (!mapaLibre || !punto) return [];
+      if (!esFuncion(mapaLibre.project) || !esFuncion(mapaLibre.queryRenderedFeatures)) return [];
+
+      var pixel = null;
+      try {
+        pixel = mapaLibre.project([punto.lon, punto.lat]);
+      } catch (e) {
+        pixel = null;
+      }
+      if (!pixel || !isFinite(pixel.x) || !isFinite(pixel.y)) return [];
+
+      // Mismo radio de tolerancia que el `hitTolerance` de OpenLayers en 2D:
+      // así el popup de 2D y el de 3D devuelven los mismos objetos.
+      var tolerancia = 6;
+      var feats = [];
+      try {
+        feats = mapaLibre.queryRenderedFeatures([
+          pixel.x - tolerancia, pixel.y - tolerancia,
+          pixel.x + tolerancia, pixel.y + tolerancia,
+        ]) || [];
+      } catch (e) {
+        feats = [];
+      }
+
+      var salida = [];
+      var self = this;
+      feats.forEach(function (feature) {
+        var normalizado = self._normalizarFeatureMapLibre(feature, capa);
+        if (normalizado) salida.push(normalizado);
+      });
+      return salida;
+    }
+
+    /**
+     * Normaliza un feature de `queryRenderedFeatures` (MapLibre) a la misma
+     * estructura que los de OpenLayers y Cesium. La capa interna del MVT
+     * (`source-layer` del estilo) se expone como `layer`, igual que en 2D.
+     *
+     * @param {Object} feature Feature de MapLibre.
+     * @param {Object} capa Capa `MapLibre` de la API.
+     * @returns {Object|null} Elemento normalizado.
+     */
+    _normalizarFeatureMapLibre(feature, capa) {
+      if (!feature) return null;
+
+      var props = {};
+      try {
+        var origen = feature.properties || {};
+        Object.keys(origen).forEach(function (clave) {
+          props[clave] = origen[clave];
+        });
+      } catch (e) {
+        props = {};
+      }
+
+      var capaInterna = feature.sourceLayer
+        || (feature.layer && (feature.layer['source-layer'] || feature.layer.id))
+        || null;
+      if (capaInterna) props.layer = String(capaInterna);
+
+      var geometria = null;
+      try {
+        var geom = feature.geometry;
+        if (geom && geom.type) {
+          geometria = { tipo: geom.type, coordenadas: geom.coordinates || null };
+        }
+      } catch (e) {
+        geometria = null;
+      }
+
+      var id = (feature.id !== undefined && feature.id !== null) ? feature.id : null;
+      if (id === null && props.id !== undefined) id = props.id;
+      // Sin atributos ni geometría no hay nada que contar.
+      if (!Object.keys(props || {}).length && !geometria) return null;
+
+      var crudo = {
+        type: 'Feature',
+        id: id,
+        properties: props,
+        geometry: geometria ? { type: geometria.tipo, coordinates: geometria.coordenadas } : null,
+      };
+
+      return this._prepararElemento({
+        propiedades: props,
+        geometria: geometria,
+        id: id,
+        crudo: crudo,
+        fuente: 'maplibre',
+      }, capa);
     }
 
     _normalizarFeatureOL(feature, capa) {
