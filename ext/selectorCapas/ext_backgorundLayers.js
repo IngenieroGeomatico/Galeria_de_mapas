@@ -482,8 +482,32 @@ class miPlugin_baseLayer {
       }
     };
 
+    // ── ¿La base indicada ya esta puesta? ──────────────────────────────
+    // Solo se puede responder si el plugin trabaja con instancias (las fichas
+    // de `comun.js`): con cadenas `QUICK*` no hay objeto que comparar.
+    var baseYaPuesta = function (layerId) {
+      try {
+        var item = items.find(function (l) { return l.id === layerId; });
+        if (!item || !Array.isArray(item.layers) || !item.layers.length) return false;
+        var capas = map.getLayers();
+        return item.layers.every(function (l) {
+          return !!l && typeof l !== 'string' && capas.indexOf(l) !== -1;
+        });
+      } catch (e) {
+        return false;
+      }
+    };
+
     // ── Función de cambio de capa base ─────────────────────────────────
     var changeBase = function (layerId) {
+      // Idempotente: si la base pedida ya esta en el mapa, no se quita y se
+      // vuelve a poner. En Cesium ese ciclo deja restos de las hijas de un
+      // grupo (quitarlas no siempre las saca del visor) y al reanadirlas el
+      // orden se invierte: medido con el Hibrido, el nomenclator IGNBaseOrto
+      // acababa DEBAJO de la ortofoto y sus etiquetas no se veian. Lo provocaba
+      // `setState()` al restaurar la base tras el cambio 2D/3D, que repetia el
+      // `change` del radio sobre una base que `activate()` ya habia puesto.
+      if (self._activeLayerId === layerId && baseYaPuesta(layerId)) return;
       self._activeLayerId = layerId;
       // Quitar la capa base actual.
       var currentBase = map.getBaseLayers();

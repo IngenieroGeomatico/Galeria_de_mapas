@@ -36,7 +36,15 @@ if (SVGCarga) {
 }
 
 /**
- * Capas base que ofrece el selector comun.
+ * Capas base que ofrece el selector comun, creadas con el bundle de la API que
+ * este cargado en cada momento.
+ *
+ * Se construyen en cada mapa y no una sola vez al cargar la pagina: el cambio
+ * 2D/3D recarga el bundle de la API, y una instancia creada con el bundle de 2D
+ * conserva la fachada antigua. Al anadirla en 3D el mapa nuevo no la reconoce
+ * (medido: el Hibrido avisa "La implementacion usada no puede crear grupos de
+ * capas" y no se pinta nada). Con la fabrica, en 3D el grupo se crea con la
+ * clase funcional de ext/layergroup_cesium.
  *
  * `imgPreview` es una URL relativa al DOCUMENTO (la resuelve el <img> del
  * panel), por eso sube dos niveles hasta la carpeta img/ de tiposDeCapas.
@@ -50,67 +58,129 @@ if (SVGCarga) {
 const TMS_IGN_BASE_URL = 'https://tms-ign-base.idee.es/1.0.0/';
 const TMS_PNOA_URL = 'https://tms-pnoa-ma.idee.es/1.0.0/pnoa-ma/{z}/{x}/{-y}.jpeg';
 
+/**
+ * Deja la capa fuera del arbol de capas.
+ *
+ * El flag de las opciones (`{ displayInLayerSwitcher: false }`) lo respeta el
+ * bundle de 2D, pero el impl de LayerGroup de ext/layergroup_cesium lo fija a
+ * true en el constructor, asi que en 3D las capas base acababan en el arbol.
+ * La fachada tiene setter y lo propaga al impl: de ahi la asignacion.
+ *
+ * @param {Object} capa Capa de la API.
+ * @returns {Object} La misma capa.
+ */
+function fueraDelSelector(capa) {
+  capa.displayInLayerSwitcher = false;
+  return capa;
+}
+
 function capaTmsBase(nombre, legenda, maxZoom, isBase) {
   const esPng = (nombre === 'IGNBaseOrto' || nombre === 'IGNBaseSimplificado');
-  return new IDEE.layer.TMS({
+  const parametros = {
     url: TMS_IGN_BASE_URL + nombre + '/{z}/{x}/{-y}.' + (esPng ? 'png' : 'jpeg'),
     name: '__base_' + nombre,
     legend: legenda,
-    isBase: isBase,
     tileGridMaxZoom: maxZoom,
+  };
+  // `isBase` solo cuando la capa va suelta: las hijas del Hibrido no lo llevan
+  // (lo lleva el grupo, ver capaGrupoHibrido).
+  if (isBase !== undefined) parametros.isBase = isBase;
+  return fueraDelSelector(new IDEE.layer.TMS(parametros, {
+    crossOrigin: 'anonymous',
+    displayInLayerSwitcher: false,
+  }));
+}
+
+/**
+ * Grupo del Hibrido: la ortofoto PNOA_MA debajo y el nomenclator IGNBaseOrto
+ * encima.
+ *
+ * Las hijas se anaden con `addLayers()` y no con el parametro `layers` del
+ * constructor: la fachada de ext/layergroup_cesium no lee `layers`, asi que en
+ * 3D el grupo salia con 0 hijas y no pintaba nada (medido).
+ *
+ * Ninguna hija lleva `isBase`: la base es el grupo. El orden de las hijas lo
+ * decide el visor de Cesium al registrarlas, y al reanadir el grupo se
+ * invierte; por eso el `setMap` de mas abajo lo rehace.
+ *
+ * @returns {Object} Grupo listo para el selector de capas base.
+ */
+function capaGrupoHibrido() {
+  const grupo = new IDEE.layer.LayerGroup({
+    name: '__base_Hibrido',
+    legend: 'Híbrido',
+    isBase: true,
+  }, {
+    displayInLayerSwitcher: false,
+  });
+  const ortofoto = fueraDelSelector(new IDEE.layer.TMS({
+    url: TMS_PNOA_URL,
+    name: '__base_PNOA_MA',
+    legend: 'PNOA_MA',
+    tileGridMaxZoom: 19,
   }, {
     crossOrigin: 'anonymous',
     displayInLayerSwitcher: false,
-  });
+  }));
+  const nomenclator = capaTmsBase('IGNBaseOrto', 'IGNBaseOrto', 17);
+  grupo.addLayers([ortofoto, nomenclator]);
+
+  // En Cesium, al reanadir el grupo (cambio de base y vuelta al Hibrido) las
+  // hijas se insertan al reves: medido, el nomenclator quedaba en el indice 0
+  // marcado como base y la ortofoto encima, asi que las etiquetas no se veian.
+  // Se rehace el orden en cuanto el grupo se engancha al mapa, y otra vez con
+  // retraso porque el visor aplica el alta de las capas de forma asincrona.
+  const setMapGrupo = grupo.setMap.bind(grupo);
+  grupo.setMap = function (map) {
+    setMapGrupo(map);
+    if (!map) return;
+    const impl = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
+    if (!impl || !impl.scene || !impl.scene.camera) return;   // solo Cesium
+    [0, 400, 1500].forEach(function (espera) {
+      setTimeout(function () {
+        try {
+          if (nomenclator.getZIndex() < ortofoto.getZIndex()) {
+            nomenclator.setZIndex(ortofoto.getZIndex());
+          }
+        } catch (e) { /* la capa aun no esta en el visor */ }
+      }, espera);
+    });
+  };
+
+  return fueraDelSelector(grupo);
 }
 
-const CAPAS_BASE_TIPOS = [
-  {
-    id: 'mapa',
-    title: 'Callejero',
-    imgPreview: '../../img/IGNBase.jpg',
-    layers: [capaTmsBase('IGNBaseTodo', 'IGNBaseTodo', 17, true)],
-  },
-  {
-    id: 'imagen',
-    title: 'Imagen',
-    imgPreview: '../../img/imagen.jpg',
-    layers: [new IDEE.layer.TMS({
-      url: TMS_PNOA_URL,
-      name: '__base_PNOA_MA',
-      legend: 'PNOA_MA',
-      isBase: true,
-      tileGridMaxZoom: 19,
-    }, {
-      crossOrigin: 'anonymous',
-      displayInLayerSwitcher: false,
-    })],
-  },
-  {
-    id: 'hibrido',
-    title: 'Hibrido',
-    imgPreview: '../../img/hibrido.jpg',
-    layers: [new IDEE.layer.LayerGroup({
-      name: '__base_Hibrido',
-      legend: 'Híbrido',
-      isBase: true,
-      layers: [
-        new IDEE.layer.TMS({
-          url: TMS_PNOA_URL,
-          name: '__base_PNOA_MA',
-          legend: 'PNOA_MA',
-          tileGridMaxZoom: 19,
-        }, {
-          crossOrigin: 'anonymous',
-          displayInLayerSwitcher: false,
-        }),
-        capaTmsBase('IGNBaseOrto', 'IGNBaseOrto', 17, false),
-      ],
-    }, {
-      displayInLayerSwitcher: false,
-    })],
-  },
-];
+function crearCapasBaseTipos() {
+  return [
+    {
+      id: 'mapa',
+      title: 'Callejero',
+      imgPreview: '../../img/IGNBase.jpg',
+      layers: [capaTmsBase('IGNBaseTodo', 'IGNBaseTodo', 17, true)],
+    },
+    {
+      id: 'imagen',
+      title: 'Imagen',
+      imgPreview: '../../img/imagen.jpg',
+      layers: [fueraDelSelector(new IDEE.layer.TMS({
+        url: TMS_PNOA_URL,
+        name: '__base_PNOA_MA',
+        legend: 'PNOA_MA',
+        isBase: true,
+        tileGridMaxZoom: 19,
+      }, {
+        crossOrigin: 'anonymous',
+        displayInLayerSwitcher: false,
+      }))],
+    },
+    {
+      id: 'hibrido',
+      title: 'Hibrido',
+      imgPreview: '../../img/hibrido.jpg',
+      layers: [capaGrupoHibrido()],
+    },
+  ];
+}
 
 /**
  * Deja la API lista antes de crear el mapa.
@@ -151,7 +221,7 @@ function anadirPluginsTipos(map, recrear) {
   // Hibrido). Va antes que el arbol en la esquina TL (`order`), que es el
   // orden natural: primero el fondo, despues lo que se superpone.
   map.addPlugin(new IDEE.plugin.miPlugin_baseLayer({
-    layers: CAPAS_BASE_TIPOS,
+    layers: crearCapasBaseTipos(),
     rows: 1,
     title: 'Capas base',
     order: 0,
