@@ -206,6 +206,22 @@
  * el div sigue visible, así que el cambio de una representación a otra no deja
  * hueco.
  *
+ * En los modos planos de Cesium (COLUMBUS_VIEW, que es donde pone la escena el
+ * selector de S.C.R. al elegir EPSG:3857, y SCENE2D) el drape no vale: reconstruye
+ * la profundidad del globo en ECEF y ahí la escena se dibuja sobre el plano de
+ * `scene.mapProjection`. Medido al cambiar el S.C.R.: la escena queda en modo 1,
+ * el stage seguía activo sin pintar y el div estaba oculto, así que la capa
+ * desaparecía. En esos modos manda el overlay plano (`vistaDesdeCamaraPlana_`:
+ * centro = posición de la cámara, escala = altura y fovy, rumbo = heading) y se
+ * compensa la diferencia de proyección: el plano del `Viewer` es una plate carrée
+ * (`GeographicProjection`) y MapLibre pinta Mercator, así que el canvas se estira
+ * 1/cos φ en la dirección del este del mapa (`aplicarEscalaPlana_`; con la vista
+ * girada el eje no es la horizontal de pantalla). Sin eso, en Madrid la capa sale
+ * un 31 % más estrecha que la base de Cesium. Como ese estiramiento deforma el
+ * rectángulo del contenedor, en el plano también se agranda un 30 % alrededor
+ * del centro (`ajustarTamanoOverlay_`), para que siga cubriendo la pantalla
+ * cuando la vista está girada.
+ *
  * Lo que no hace: no atiende clics (`interactive: false`, igual que en OL); como
  * el div no captura el ratón, Cesium sigue recibiendo todo.
  *
@@ -308,6 +324,14 @@
   // zoom 11 (unos 50 km de altura con este frustum), donde los dos caminos se
   // equivocan ≤0,2 px y el salto al conmutar es invisible.
   const ZOOM_DRAPE_EXACTO = 11;
+
+  // Margen del contenedor de MapLibre en los modos planos. El estiramiento del
+  // plano es una matriz que no deja el rectángulo del contenedor sobre sí mismo:
+  // con la vista girada, la pantalla se sale por las esquinas y se ve la base de
+  // Cesium por debajo. Medido (1280x649): hace falta agrandar un 15 % a rumbo 30°
+  // con el factor de Madrid y un 31 % al llegar a 60° de latitud; 1,3 cubre el
+  // rango normal pagando 1,7 veces más píxeles de MapLibre solo en el plano.
+  const MARGEN_OVERLAY_PLANO = 1.3;
 
   // Latitud límite de Web Mercator (la proyección no llega a los polos) y tope
   // de niveles de zoom que se permite bajar al ajustar la cobertura.
@@ -475,6 +499,14 @@
         this.drapeError_ = false;
         this.drapeListo_ = false;
         this.temporizadorDrape_ = null;
+
+        // Estiramiento horizontal del overlay en los modos planos (ver
+        // `aplicarEscalaPlana_`). Siempre vale 1 en 3D.
+        this.escalaPlana_ = 1;
+        this.rumboPlano_ = 0;
+        // Tamaño del contenedor de MapLibre (en el plano va con margen).
+        this.anchoOverlay_ = 0;
+        this.altoOverlay_ = 0;
       }
 
       // ── Ciclo de vida ────────────────────────────────────────────────────
@@ -513,6 +545,10 @@
         this.reintentosSuelo_ = 0;
         this.drapeSucia_ = true;
         this.drapeError_ = false;
+        this.escalaPlana_ = 1;
+        this.rumboPlano_ = 0;
+        this.anchoOverlay_ = 0;
+        this.altoOverlay_ = 0;
         this.map = null;
       }
 
@@ -626,6 +662,38 @@
       // ── Sincronización con la cámara de Cesium ───────────────────────────
 
       /**
+       * Da al contenedor de MapLibre el tamaño de la escena o, en los modos
+       * planos, uno mayor.
+       *
+       * El estiramiento del plano (`aplicarEscalaPlana_`) es una matriz que no
+       * deja el rectángulo del contenedor sobre sí mismo: con la vista girada, la
+       * pantalla se sale por las esquinas y asoma la base de Cesium (medido a
+       * rumbo 30°: una cuña de ~47 px). Se agranda alrededor del centro, que
+       * sigue siendo el centro de la vista, y el paralelogramo cubre la pantalla.
+       *
+       * No cambia la escala: el zoom de MapLibre se mide contra el canvas de
+       * Cesium (`ancho`/`alto`), no contra este contenedor; solo se pinta más
+       * área de la que se ve.
+       * @param {number} ancho Ancho del canvas de Cesium en píxeles CSS.
+       * @param {number} alto Alto del canvas de Cesium en píxeles CSS.
+       * @param {boolean} plana Si la escena es un modo plano de Cesium.
+       */
+      ajustarTamanoOverlay_(ancho, alto, plana) {
+        const div = this.overlay_;
+        if (!div) return;
+        const factor = plana ? MARGEN_OVERLAY_PLANO : 1;
+        const w = Math.round(ancho * factor);
+        const h = Math.round(alto * factor);
+        if (w === this.anchoOverlay_ && h === this.altoOverlay_) return;
+        this.anchoOverlay_ = w;
+        this.altoOverlay_ = h;
+        div.style.width = w + 'px';
+        div.style.height = h + 'px';
+        div.style.left = Math.round((w - ancho) / -2) + 'px';
+        div.style.top = Math.round((h - alto) / -2) + 'px';
+      }
+
+      /**
        * Ajusta el mapa de MapLibre a la vista de Cesium.
        * @param {boolean} [forzar] Si es true no se comprueba si la cámara cambió.
        */
@@ -640,10 +708,17 @@
         const alto = lienzo.clientHeight;
         if (!ancho || !alto) return;
 
+        // En los modos planos, el contenedor se agranda para que el
+        // estiramiento siga cubriendo la pantalla con la vista girada.
+        const plana = this.vistaPlana_(viewer);
+        this.ajustarTamanoOverlay_(ancho, alto, plana);
+
         // MapLibre no gestiona su tamaño (`trackResize: false`), así que se le
-        // avisa cuando el canvas de Cesium cambia (redimensionar la ventana).
+        // avisa cuando cambia (redimensionar la ventana o el modo de escena).
         const lienzoLibre = map.getCanvas();
-        if (lienzoLibre.clientWidth !== ancho || lienzoLibre.clientHeight !== alto) {
+        const anchoOverlay = this.anchoOverlay_ || ancho;
+        const altoOverlay = this.altoOverlay_ || alto;
+        if (lienzoLibre.clientWidth !== anchoOverlay || lienzoLibre.clientHeight !== altoOverlay) {
           map.resize();
           this.pintarSincrono_ = true;
         }
@@ -693,12 +768,22 @@
         };
         this.reintentosSuelo_ = cambiaCamara ? 0 : (this.reintentosSuelo_ || 0) + 1;
 
-        const vista = this.vistaDesdeCamara_(viewer, ancho, alto);
-        if (!this.sinSuelo_) this.reintentosSuelo_ = 0;
+        // En los modos planos (COLUMBUS_VIEW / SCENE2D) la cámara no se traduce
+        // igual: no hay globo que cortar y el plano va en la proyección de la
+        // escena. Ver `vistaDesdeCamaraPlana_`.
+        const vista = plana
+          ? this.vistaDesdeCamaraPlana_(viewer, ancho, alto)
+          : this.vistaDesdeCamara_(viewer, ancho, alto);
+        if (!plana && !this.sinSuelo_) this.reintentosSuelo_ = 0;
         if (!vista
           || !Number.isFinite(vista.lon)
           || !Number.isFinite(vista.lat)
           || !Number.isFinite(vista.zoom)) return;
+
+        // El estiramiento horizontal se aplica antes del corte por «no ha
+        // cambiado»: al pasar de globo a plano el centro y el zoom pueden ser
+        // los mismos y aun así hay que cambiar la escala del div.
+        this.aplicarEscalaPlana_(vista, plana);
 
         const ultima = this.ultimaVista_;
         if (!forzar && ultima
@@ -718,6 +803,63 @@
           pitch: vista.inclinacion
         });
         this.pintarSincrono_ = true;
+      }
+
+      /**
+       * Ajusta la escala horizontal del overlay cuando la escena es plana.
+       *
+       * El plano de Cesium se dibuja con la proyección del `Viewer`: medido,
+       * `GeographicProjection`, que enseña los grados de longitud y de latitud
+       * con el mismo tamaño. MapLibre pinta Web Mercator, que a latitud φ estira
+       * la vertical 1/cos φ respecto de la horizontal; por eso, en el plano, el
+       * contenido de MapLibre sale `cos φ` más estrecho que la base de Cesium y
+       * las dos vistas no coinciden (medido en Madrid, 1/cos 40,42° = 1,31).
+       *
+       * El estiramiento va en la dirección del ESTE del mapa, no en la horizontal
+       * de la pantalla: con la vista girada (rumbo), la horizontal de pantalla ya
+       * no es el este y estirar en ella descuadra la capa. Medido a rumbo 30°: el
+       * ajuste por mínimos cuadrados de la escena real contra `map.project` da
+       * justo `R(-rumbo)·S(1/cos φ)·R(rumbo)` (residuo máximo 0,05 px), así que
+       * se aplica esa matriz con `transform` de CSS alrededor del centro, que es
+       * donde coinciden los dos centros de vista.
+       *
+       * En 3D no se toca: el drape muestrea por coordenada geográfica y ya
+       * coincide.
+       *
+       * Ojo: el estiramiento no es un capricho de estilo; sin él, cualquier capa
+       * de Cesium que quede debajo (o una capa MapLibre con transparencias) se ve
+       * desplazada en horizontal.
+       * @param {Object|null} vista Vista de MapLibre (`ultimaVista_` en ciernes).
+       * @param {boolean} plana Si la escena es un modo plano de Cesium.
+       */
+      aplicarEscalaPlana_(vista, plana) {
+        const div = this.overlay_;
+        if (!div) return;
+        let escala = 1;
+        let rumbo = 0;
+        if (plana && vista && Number.isFinite(vista.lat)) {
+          // Más allá de ±85° Web Mercator no existe y el factor se dispara.
+          const lat = Math.max(-MAX_LAT_MERCATOR, Math.min(MAX_LAT_MERCATOR, vista.lat));
+          const factor = 1 / Math.cos(lat * Math.PI / 180);
+          if (factor > 0 && Number.isFinite(factor)) escala = factor;
+          if (Number.isFinite(vista.rumbo)) rumbo = vista.rumbo;
+        }
+        if (Math.abs(escala - this.escalaPlana_) < 1e-6
+          && Math.abs(rumbo - this.rumboPlano_) < 1e-4) {
+          return;
+        }
+        this.escalaPlana_ = escala;
+        this.rumboPlano_ = escala === 1 ? 0 : rumbo;
+        if (!div.style.transformOrigin) div.style.transformOrigin = '50% 50%';
+        if (escala === 1) {
+          div.style.transform = '';
+          return;
+        }
+        // En CSS el ángulo positivo gira en el sentido de las agujas del reloj
+        // (y hacia abajo), y el este del mapa queda en -rumbo.
+        const r = Math.round(rumbo * 1e6) / 1e6;
+        div.style.transform = 'rotate(' + (-r) + 'deg) scaleX('
+          + escala.toFixed(6) + ') rotate(' + r + 'deg)';
       }
 
       /**
@@ -962,11 +1104,14 @@
       actualizarDrape_() {
         const drape = this.drape_;
         if (!drape) return;
-        // El drape solo vale si el canvas de MapLibre puede cubrir la escala
-        // que pide la cámara. Cuando el zoom necesario pasa del máximo de
-        // MapLibre (vistas a pie de calle) la correspondencia se rompe y es
-        // mejor dejar el overlay plano, que al menos se ve coherente.
-        const utilizable = this.drapeUtilizable_();
+        // En los modos planos el drape no vale: reconstruye la profundidad del
+        // globo en 3D y en el plano la cámara y el buffer van en otro espacio
+        // (medido: el stage se quedaba activo, no pintaba nada y el div estaba
+        // oculto, así que la capa desaparecía). Ahí manda el overlay plano, que
+        // es exactamente la vista del plano: sin inclinación y en 2D.
+        const plana = this.vistaPlana_(this.viewer_);
+        if (plana) this.drapeListo_ = false;
+        const utilizable = !plana && this.drapeUtilizable_();
         drape.stage.enabled = this.visibility !== false && utilizable;
         if (!utilizable && this.overlay_ && this.overlay_.style.visibility === 'hidden') {
           this.overlay_.style.visibility = '';
@@ -1241,6 +1386,86 @@
 
         const bajada = Math.min(Math.log2(necesario / cubierto), MAX_NIVELES_COBERTURA);
         return zoom - bajada;
+      }
+
+      /**
+       * ¿Está la escena en un modo plano de Cesium?
+       *
+       * El drape y la sincronización normales reconstruyen la profundidad del
+       * globo en ECEF. En COLUMBUS_VIEW y en SCENE2D la escena se dibuja sobre
+       * el plano de la proyección (`scene.mapProjection`), la cámara mira desde
+       * arriba y el globo no se consulta igual, así que hay que usar el camino
+       * plano. Medido al pasar a EPSG:3857: la escena queda en modo 1
+       * (COLUMBUS_VIEW) y el drape, con la profundidad del globo, no pinta nada,
+       * mientras que el div está oculto porque `drapeListo_` ya era true: la
+       * capa desaparecía y solo se veía la base de Cesium.
+       * @param {Object} viewer El `Cesium.Viewer`.
+       * @returns {boolean}
+       */
+      vistaPlana_(viewer) {
+        const Cesium = window.Cesium;
+        const escena = viewer && viewer.scene;
+        if (!Cesium || !escena || !Number.isFinite(escena.mode)) return false;
+        const modo3D = Cesium.SceneMode && Cesium.SceneMode.SCENE3D !== undefined
+          ? Cesium.SceneMode.SCENE3D
+          : 3;
+        return escena.mode !== modo3D;
+      }
+
+      /**
+       * Traduce la cámara a la vista de MapLibre en los modos planos de Cesium.
+       *
+       * En el plano la cámara mira perpendicular (pitch -90°) y su altura sobre
+       * el plano es la de la vista, así que el centro es su propia posición
+       * geográfica y la escala sale de la altura y del campo de vista vertical:
+       * lo que abarca la pantalla a esa altura es `2·h·tan(fovy/2)`.
+       *
+       * No hay `globe.pick` que consultar: en el plano el rayo central corta el
+       * plano en la vertical de la cámara, no hace falta.
+       * @param {Object} viewer El `Cesium.Viewer`.
+       * @param {number} ancho Ancho del canvas en píxeles CSS.
+       * @param {number} alto Alto del canvas en píxeles CSS.
+       * @returns {Object|null} `{lon, lat, zoom, rumbo, inclinacion}` o null.
+       */
+      vistaDesdeCamaraPlana_(viewer, ancho, alto) {
+        const Cesium = window.Cesium;
+        const camara = viewer && viewer.camera;
+        const cartografica = camara && camara.positionCartographic;
+        if (!Cesium || !cartografica) return null;
+
+        const lon = Cesium.Math.toDegrees(cartografica.longitude);
+        const lat = Cesium.Math.toDegrees(cartografica.latitude);
+        const fovy = this.campoVistaVerticalRad_(camara);
+
+        let zoom = null;
+        const altura = Math.abs(cartografica.height);
+        if (fovy > 0 && altura > 0 && alto > 0) {
+          const metrosPorPixel = 2 * altura * Math.tan(fovy / 2) / alto;
+          if (metrosPorPixel > 0) {
+            zoom = Math.log2(
+              METROS_POR_PIXEL_ZOOM_0 * Math.cos(lat * Math.PI / 180) / metrosPorPixel
+            );
+          }
+        }
+        if (!Number.isFinite(zoom)) {
+          const ultima = this.ultimaVista_;
+          zoom = ultima && Number.isFinite(ultima.zoom) ? ultima.zoom : 2;
+        }
+
+        // En el plano no hay terreno que esperar: el reintento de `sincronizar_`
+        // solo tiene sentido en 3D.
+        this.sinSuelo_ = false;
+        this.sueloEsTerreno_ = false;
+
+        return {
+          lon: lon,
+          lat: lat,
+          zoom: zoom,
+          // El `up` de la cámara en el plano es el norte y `heading` se mide
+          // igual que el bearing de MapLibre (horario desde el norte).
+          rumbo: this.normalizarRumbo_(Cesium.Math.toDegrees(camara.heading)),
+          inclinacion: 0
+        };
       }
 
       /**
@@ -1560,8 +1785,11 @@
         this.visibility = visible;
         if (this.overlay_) this.overlay_.style.display = visible ? 'block' : 'none';
         // Con drape, el div está oculto con `visibility` (para no pintar dos
-        // veces) y quien manda es el stage.
-        if (this.drape_ && this.drape_.stage) this.drape_.stage.enabled = visible !== false;
+        // veces) y quien manda es el stage. En los modos planos el stage se
+        // queda apagado aunque la capa se encienda (ver `actualizarDrape_`).
+        if (this.drape_ && this.drape_.stage) {
+          this.drape_.stage.enabled = visible !== false && !this.vistaPlana_(this.viewer_);
+        }
         // Al volver a mostrarla hay que ponerse al día: mientras estaba oculta
         // no se ha llamado a `jumpTo`.
         if (visible && !estaba) {
