@@ -20,6 +20,74 @@
                           final de la lista.
                       Gana sobre la selección guardada en localStorage.
    ===================================================================== */
+/* =====================================================================
+   Quitar una capa base sin arrastrar a las superpuestas
+   ---------------------------------------------------------------------
+   La build de Cesium de la API empareja las capas TMS por `type`, `url` y
+   `name` (`getTMS`) sin mirar el `idLayer`, así que `removeLayers(capaBase)`
+   se lleva también cualquier capa superpuesta que comparta servicio y nombre
+   con la base. Pasa con la capa base por defecto de la API (`IGNBaseTodo`,
+   del catálogo `Base_IGNBaseTodo_TMS`) y una TMS superpuesta de la página
+   que use ese mismo servicio: al pasar a otra base, la superpuesta
+   desaparece del mapa y del árbol de capas (medido en la ficha de TMS).
+   El `equals` de la capa sí compara `idLayer`, así que basta con cambiar el
+   nombre solo durante la llamada: el emparejamiento difuso alcanza
+   únicamente a la instancia que se quiere quitar y las demás quedan vivas.
+   ===================================================================== */
+function quitarCapaBase(mapRef, capa) {
+  if (!mapRef || !capa) return;
+  // Solo las TMS tienen ese emparejamiento difuso; el resto de tipos
+  // (WMTS, grupos, ...) se quita como siempre.
+  if (String(capa.type).toUpperCase() !== 'TMS') {
+    try { mapRef.removeLayers(capa); } catch (e) {}
+    return;
+  }
+  const nombre = capa.name;
+  const unico = '__quitar__' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  let renombrada = false;
+  try {
+    capa.name = unico;
+    renombrada = true;
+  } catch (e) {
+    renombrada = false;
+  }
+  try {
+    mapRef.removeLayers(capa);
+  } catch (e) {
+    // La capa puede haberse quitado ya (o el mapa puede estar a medio montar).
+  } finally {
+    if (renombrada) {
+      try { capa.name = nombre; } catch (e) {}
+    }
+  }
+}
+
+/* =====================================================================
+   Marcar las capas base con el prefijo `__base_`
+   ---------------------------------------------------------------------
+   Una capa base no puede compartir `name` con una superpuesta: la build de
+   Cesium empareja las TMS por `type` + `url` + `name` al quitarlas (ver
+   quitarCapaBase) y, si coinciden, la superpuesta se va con la base. Las
+   fichas de `comun.js` ya crean sus bases con `__base_`; aqui se completa el
+   resto (`IDEE.config.backgroundlayers` con instancias, o una ficha que se
+   olvide) para que el prefijo sea siempre el mismo y no se duplique.
+   El `legend` no se toca: es el texto que se muestra en la interfaz.
+   ===================================================================== */
+const PREFIJO_CAPA_BASE = '__base_';
+
+function marcarCapasBase(items) {
+  (items || []).forEach(function (item) {
+    if (!item || !Array.isArray(item.layers)) return;
+    item.layers.forEach(function (capa) {
+      // Las cadenas `QUICK*` las construye la API: no hay objeto que marcar.
+      if (!capa || typeof capa === 'string') return;
+      if (typeof capa.name !== 'string' || !capa.name) return;
+      if (capa.name.indexOf(PREFIJO_CAPA_BASE) === 0) return;
+      capa.name = PREFIJO_CAPA_BASE + capa.name;
+    });
+  });
+}
+
 class miPlugin_baseLayer {
   constructor(options = {}) {
     this.name = 'miPlugin_baseLayer';
@@ -298,7 +366,7 @@ class miPlugin_baseLayer {
       try {
         const currentBase = (typeof mapRef.getBaseLayers === 'function') ? mapRef.getBaseLayers() : null;
         if (currentBase && currentBase.length) {
-          currentBase.forEach(function (l) { try { mapRef.removeLayers(l); } catch (e) {} });
+          currentBase.forEach(function (l) { quitarCapaBase(mapRef, l); });
         }
         if (targetId !== '__none__') {
           const selected = this._items.find(function (l) { return l.id === targetId; });
@@ -350,6 +418,10 @@ class miPlugin_baseLayer {
         imgPreview: nbl.imgPreview || blankImg,
       });
     }
+
+    // Las bases van siempre con el prefijo `__base_` en el `name`: así no
+    // colisionan con una capa superpuesta del mismo servicio al quitarlas.
+    marcarCapasBase(items);
 
     // ── Panel IDEE ────────────────────────────────────────────────────
     // this._control se guarda para que destroy() pueda soltar el control del
@@ -475,11 +547,9 @@ class miPlugin_baseLayer {
       if (!anadidas.length) return;
       var lote = anadidas;
       anadidas = [];
-      try {
-        map.removeLayers(lote);
-      } catch (e) {
-        lote.forEach(function (l) { try { map.removeLayers(l); } catch (err) {} });
-      }
+      // Capa a capa: las TMS se quitan por instancia (ver quitarCapaBase),
+      // porque la build de Cesium las empareja por nombre y servicio.
+      lote.forEach(function (l) { quitarCapaBase(map, l); });
     };
 
     // ── ¿La base indicada ya esta puesta? ──────────────────────────────
@@ -512,7 +582,7 @@ class miPlugin_baseLayer {
       // Quitar la capa base actual.
       var currentBase = map.getBaseLayers();
       if (currentBase && currentBase.length) {
-        currentBase.forEach(function (l) { try { map.removeLayers(l); } catch (e) {} });
+        currentBase.forEach(function (l) { quitarCapaBase(map, l); });
       }
       // Y lo que trajo la selección anterior (grupos e hijas incluidas).
       quitarAnadidas();
