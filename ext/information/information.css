@@ -96,13 +96,20 @@
 .m-popup.g-information-popup {
   width: min(440px, 92vw);
   max-width: 92vw;
+  /* El popup va siempre por delante del mapa. En 3D el lienzo de Cesium (y el
+     de MapLibre cuando drapea una capa) se pinta con z-index propio dentro
+     del mismo contenedor, así que el popup no puede quedarse en `auto`. */
+  z-index: 1200;
 }
 
-/* El popup se monta dentro de .ol-overlaycontainer-stopevent, que la API
-   deja con z-index 0. La barra de coordenadas de ext/mapInfo usa z-index 850
-   y, sin elevar este contenedor mientras el popup está abierto, tapa el
-   final del cuerpo. La clase la pone y la quita el plugin. */
-.ol-overlaycontainer-stopevent.g-information-overlays {
+/* El contenedor de overlays del popup compite con el lienzo del mapa y con
+   los paneles: la barra de coordenadas de ext/mapInfo usa 850 y la API llega
+   a 1000, así que se eleva por encima de todo mientras el popup está
+   abierto. En 2D es .ol-overlaycontainer-stopevent (la API lo deja con
+   z-index 0); en 3D el impl de Cesium lo cuelga de un div sin clase del
+   contenedor del mapa, por eso la regla no depende de esa clase. La clase la
+   pone y la quita el plugin. */
+.g-information-overlays {
   z-index: 1200 !important;
 }
 

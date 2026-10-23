@@ -4739,6 +4739,44 @@
     }
 
     /**
+     * Contenedor de overlays que hay que elevar para que el popup quede por
+     * delante del mapa.
+     *
+     * El popup no se monta igual en las dos implementaciones: en 2D vive
+     * dentro de `.ol-overlaycontainer-stopevent`, que la API deja con
+     * z-index 0, y en 3D el impl de Cesium lo cuelga de un div sin clase
+     * dentro del contenedor del mapa. En los dos casos lo que se apila
+     * contra el lienzo del mapa es ese contenedor, no el propio popup.
+     *
+     * @param {HTMLElement} elemento Elemento del popup.
+     * @returns {HTMLElement|null} Contenedor a elevar, o null si no hay.
+     */
+    _contenedorDeOverlays(elemento) {
+      if (!elemento) return null;
+      // 2D: contenedor de overlays de OpenLayers, que la API deja en z-index 0.
+      // Se eleva ese y no .ol-viewport: subir el viewport pondría el mapa
+      // entero por delante de los paneles.
+      if (elemento.closest) {
+        var ol = elemento.closest('.ol-overlaycontainer-stopevent');
+        if (ol) return ol;
+      }
+      // 3D: el impl de Cesium cuelga el popup de un div sin clase del propio
+      // contenedor del mapa; ese es el que compite con el lienzo.
+      var raiz = null;
+      try {
+        raiz = (this._map && esFuncion(this._map.getContainer))
+          ? this._map.getContainer()
+          : null;
+      } catch (e) { raiz = null; }
+      if (!raiz) return null;
+      var nodo = elemento;
+      while (nodo.parentElement && nodo.parentElement !== raiz) {
+        nodo = nodo.parentElement;
+      }
+      return nodo.parentElement === raiz ? nodo : null;
+    }
+
+    /**
      * El popup de la API nace en estado `m-collapsed` (solo la cabecera) y
      * se despliega pulsando la fila de pestañas. El plugin oculta esa fila
      * para poner un selector, así que hay que abrirlo explícitamente: si no,
@@ -4749,12 +4787,11 @@
       var self = this;
       try {
         var elemento = popup.element_;
-        // El popup vive dentro de .ol-overlaycontainer-stopevent, que la API
-        // deja con z-index 0. La barra de coordenadas de ext/mapInfo usa 850,
-        // así que sin elevar este contenedor tapa el final del popup.
-        var contenedor = elemento && elemento.closest
-          ? elemento.closest('.ol-overlaycontainer-stopevent')
-          : null;
+        // El popup no se cuelga del mismo sitio en 2D que en 3D, así que se
+        // eleva el contenedor que cuelga directamente del mapa: es el que se
+        // apila contra el lienzo y el que hace que el popup quede por delante
+        // del mapa al inclinar la cámara.
+        var contenedor = self._contenedorDeOverlays(elemento);
         if (contenedor) contenedor.classList.add('g-information-overlays');
       } catch (e) { /* sin contenedor de overlays */ }
 
@@ -4785,10 +4822,10 @@
         }
       }
       try {
-        var contenedor = document.querySelector(
-          '.ol-overlaycontainer-stopevent.g-information-overlays'
-        );
-        if (contenedor) contenedor.classList.remove('g-information-overlays');
+        var contenedores = document.querySelectorAll('.g-information-overlays');
+        Array.prototype.forEach.call(contenedores, function (contenedor) {
+          contenedor.classList.remove('g-information-overlays');
+        });
       } catch (e) { /* sin contenedor de overlays */ }
       this._popup = null;
       this._popupAbierto = false;
