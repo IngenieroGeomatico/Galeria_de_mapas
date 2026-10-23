@@ -212,15 +212,15 @@
  * `scene.mapProjection`. Medido al cambiar el S.C.R.: la escena queda en modo 1,
  * el stage seguía activo sin pintar y el div estaba oculto, así que la capa
  * desaparecía. En esos modos manda el overlay plano (`vistaDesdeCamaraPlana_`:
- * centro = posición de la cámara, escala = altura y fovy, rumbo = heading) y se
- * compensa la diferencia de proyección: el plano del `Viewer` es una plate carrée
- * (`GeographicProjection`) y MapLibre pinta Mercator, así que el canvas se estira
- * 1/cos φ en la dirección del este del mapa (`aplicarEscalaPlana_`; con la vista
- * girada el eje no es la horizontal de pantalla). Sin eso, en Madrid la capa sale
- * un 31 % más estrecha que la base de Cesium. Como ese estiramiento deforma el
- * rectángulo del contenedor, en el plano también se agranda un 30 % alrededor
- * del centro (`ajustarTamanoOverlay_`), para que siga cubriendo la pantalla
- * cuando la vista está girada.
+ * centro = punto del plano bajo el centro de pantalla, escala = altura, fovy e
+ * inclinación, rumbo = heading) y se compensa la diferencia de proyección: el
+ * plano del `Viewer` es una plate carrée (`GeographicProjection`) y MapLibre
+ * pinta Mercator, así que el lienzo se recoloca con una homografía por frame
+ * (`aplicarTransformacionPlana_`). Sin eso, en Madrid la capa sale un 31 % más
+ * estrecha que la base de Cesium. Como la homografía lleva la pantalla a un
+ * cuadrilátero del lienzo, en el plano el contenedor se agranda un 30 %
+ * alrededor del centro (`ajustarTamanoOverlay_`), para que ese cuadrilátero
+ * quepa entero.
  *
  * Lo que no hace: no atiende clics (`interactive: false`, igual que en OL); como
  * el div no captura el ratón, Cesium sigue recibiendo todo.
@@ -302,6 +302,12 @@
   // Tope de MapLibre: por encima de 85° su proyección deja de ser utilizable.
   // Cesium puede inclinarse más, pero el overlay plano no.
   const MAX_PITCH_MAPLIBRE = 85;
+
+  // Inclinación mínima (radianes) que se supone a la cámara plana. `pitch` mide
+  // el ángulo con el horizonte, así que cerca de 0 el rayo central sale casi
+  // paralelo al plano y su corte se va al infinito (y `sin β` a cero): se acota
+  // en 5°, que es justo el máximo de MapLibre (85° desde la vertical).
+  const MIN_BETA_PLANO = 5 * Math.PI / 180;
 
   // Frames que se reintenta el centro de la vista cuando `globe.pick` todavía
   // no devuelve terreno (justo después de un salto de cámara las teselas aún
@@ -500,10 +506,9 @@
         this.drapeListo_ = false;
         this.temporizadorDrape_ = null;
 
-        // Estiramiento horizontal del overlay en los modos planos (ver
-        // `aplicarEscalaPlana_`). Siempre vale 1 en 3D.
-        this.escalaPlana_ = 1;
-        this.rumboPlano_ = 0;
+        // Transformación del overlay en los modos planos (ver
+        // `aplicarTransformacionPlana_`). Vacía en 3D.
+        this.matrizPlana_ = '';
         // Tamaño del contenedor de MapLibre (en el plano va con margen).
         this.anchoOverlay_ = 0;
         this.altoOverlay_ = 0;
@@ -545,8 +550,7 @@
         this.reintentosSuelo_ = 0;
         this.drapeSucia_ = true;
         this.drapeError_ = false;
-        this.escalaPlana_ = 1;
-        this.rumboPlano_ = 0;
+        this.matrizPlana_ = '';
         this.anchoOverlay_ = 0;
         this.altoOverlay_ = 0;
         this.map = null;
@@ -665,11 +669,12 @@
        * Da al contenedor de MapLibre el tamaño de la escena o, en los modos
        * planos, uno mayor.
        *
-       * El estiramiento del plano (`aplicarEscalaPlana_`) es una matriz que no
-       * deja el rectángulo del contenedor sobre sí mismo: con la vista girada, la
-       * pantalla se sale por las esquinas y asoma la base de Cesium (medido a
-       * rumbo 30°: una cuña de ~47 px). Se agranda alrededor del centro, que
-       * sigue siendo el centro de la vista, y el paralelogramo cubre la pantalla.
+       * La homografía del plano (`aplicarTransformacionPlana_`) lleva el
+       * lienzo a la pantalla y, al no ser una semejanza, la preimagen de la
+       * pantalla es un cuadrilátero del lienzo, no el rectángulo entero: con la
+       * vista girada se sale por las esquinas y asoma la base de Cesium (medido
+       * a rumbo 30°: una cuña de ~47 px). Se agranda alrededor del centro, que
+       * sigue siendo el centro de la vista, y el cuadrilátero queda dentro.
        *
        * No cambia la escala: el zoom de MapLibre se mide contra el canvas de
        * Cesium (`ancho`/`alto`), no contra este contenedor; solo se pinta más
@@ -709,9 +714,13 @@
         if (!ancho || !alto) return;
 
         // En los modos planos, el contenedor se agranda para que el
-        // estiramiento siga cubriendo la pantalla con la vista girada.
+        // cuadrilátero que ocupa la pantalla en el lienzo siga cabiendo.
         const plana = this.vistaPlana_(viewer);
+        const anchoPrevio = this.anchoOverlay_;
+        const altoPrevio = this.altoOverlay_;
         this.ajustarTamanoOverlay_(ancho, alto, plana);
+        const tamCambio = anchoPrevio !== this.anchoOverlay_
+          || altoPrevio !== this.altoOverlay_;
 
         // MapLibre no gestiona su tamaño (`trackResize: false`), así que se le
         // avisa cuando cambia (redimensionar la ventana o el modo de escena).
@@ -756,7 +765,7 @@
         // cargando y, sin esto, el overlay se queda con el zoom anterior.
         const pendienteSuelo = this.sinSuelo_ === true
           && (this.reintentosSuelo_ || 0) < REINTENTOS_SUELO;
-        if (!forzar && !cambiaCamara && !pendienteSuelo) return;
+        if (!forzar && !cambiaCamara && !pendienteSuelo && !tamCambio) return;
 
         this.camaraPrevia_ = {
           x: posicion.x,
@@ -780,13 +789,8 @@
           || !Number.isFinite(vista.lat)
           || !Number.isFinite(vista.zoom)) return;
 
-        // El estiramiento horizontal se aplica antes del corte por «no ha
-        // cambiado»: al pasar de globo a plano el centro y el zoom pueden ser
-        // los mismos y aun así hay que cambiar la escala del div.
-        this.aplicarEscalaPlana_(vista, plana);
-
         const ultima = this.ultimaVista_;
-        if (!forzar && ultima
+        if (!forzar && !tamCambio && ultima
           && Math.abs(vista.lon - ultima.lon) < 1e-9
           && Math.abs(vista.lat - ultima.lat) < 1e-9
           && Math.abs(vista.zoom - ultima.zoom) < 1e-4
@@ -802,11 +806,17 @@
           bearing: vista.rumbo,
           pitch: vista.inclinacion
         });
+        // La homografía se calcula DESPUÉS del salto: se apoya en `map.project`,
+        // que hasta aquí devolvía la vista anterior. Si se calcula antes, la
+        // transformación se queda un paso por detrás y la capa se ve despegada
+        // del plano (medido: 28 px a `pitch` -50° y 466 px al cambiar el rumbo).
+        this.aplicarTransformacionPlana_(plana, viewer, ancho, alto);
         this.pintarSincrono_ = true;
       }
 
       /**
-       * Ajusta la escala horizontal del overlay cuando la escena es plana.
+       * Aplica al overlay la transformación que lo lleva del lienzo de MapLibre
+       * a la pantalla de Cesium cuando la escena es plana.
        *
        * El plano de Cesium se dibuja con la proyección del `Viewer`: medido,
        * `GeographicProjection`, que enseña los grados de longitud y de latitud
@@ -815,51 +825,211 @@
        * contenido de MapLibre sale `cos φ` más estrecho que la base de Cesium y
        * las dos vistas no coinciden (medido en Madrid, 1/cos 40,42° = 1,31).
        *
-       * El estiramiento va en la dirección del ESTE del mapa, no en la horizontal
-       * de la pantalla: con la vista girada (rumbo), la horizontal de pantalla ya
-       * no es el este y estirar en ella descuadra la capa. Medido a rumbo 30°: el
-       * ajuste por mínimos cuadrados de la escena real contra `map.project` da
-       * justo `R(-rumbo)·S(1/cos φ)·R(rumbo)` (residuo máximo 0,05 px), así que
-       * se aplica esa matriz con `transform` de CSS alrededor del centro, que es
-       * donde coinciden los dos centros de vista.
+       * La relación entre las dos cartas NO es un simple estiramiento en cuanto
+       * la cámara se inclina (y la inclinación llega aquí: al pasar de globo a
+       * 3857 `mapInfo` conserva el `pitch`). Un `scaleX` en pantalla se queda
+       * corto arriba y largo abajo —±24 px en los bordes con `pitch` -50°,
+       * medido—, que es justo lo que se ve como si la capa «volara».
+       *
+       * Lo que sí encaja es una homografía (la relación entre las dos cartas,
+       * vistas en perspectiva, es proyectiva): se monta con cuatro puntos de la
+       * pantalla, cada uno con su geográfico del rayo de Cesium y su punto de
+       * `map.project`, y se aplica con `matrix3d`. Medido contra
+       * `getPickRay` + `map.project`: error máximo 0,2 px a plomo, 0,7 px a
+       * `pitch` -50° y rumbo 40°, y 0,2 px a -70°. A plomo la homografía sale,
+       * como es de esperar, el `rotate(-rumbo)·scaleX(1/cos φ)·rotate(rumbo)` de
+       * antes (`[1.3136, 0, -452.9; 0, 1, -97.3]` en Madrid con 1280x649).
        *
        * En 3D no se toca: el drape muestrea por coordenada geográfica y ya
        * coincide.
        *
-       * Ojo: el estiramiento no es un capricho de estilo; sin él, cualquier capa
-       * de Cesium que quede debajo (o una capa MapLibre con transparencias) se ve
-       * desplazada en horizontal.
-       * @param {Object|null} vista Vista de MapLibre (`ultimaVista_` en ciernes).
+       * Ojo: la transformación no es un capricho de estilo; sin ella, cualquier
+       * capa de Cesium que quede debajo (o una capa MapLibre con transparencias)
+       * se ve desplazada.
        * @param {boolean} plana Si la escena es un modo plano de Cesium.
+       * @param {Object} viewer El `Cesium.Viewer`.
+       * @param {number} ancho Ancho del canvas de Cesium en píxeles CSS.
+       * @param {number} alto Alto del canvas de Cesium en píxeles CSS.
        */
-      aplicarEscalaPlana_(vista, plana) {
+      aplicarTransformacionPlana_(plana, viewer, ancho, alto) {
         const div = this.overlay_;
         if (!div) return;
-        let escala = 1;
-        let rumbo = 0;
-        if (plana && vista && Number.isFinite(vista.lat)) {
-          // Más allá de ±85° Web Mercator no existe y el factor se dispara.
-          const lat = Math.max(-MAX_LAT_MERCATOR, Math.min(MAX_LAT_MERCATOR, vista.lat));
-          const factor = 1 / Math.cos(lat * Math.PI / 180);
-          if (factor > 0 && Number.isFinite(factor)) escala = factor;
-          if (Number.isFinite(vista.rumbo)) rumbo = vista.rumbo;
-        }
-        if (Math.abs(escala - this.escalaPlana_) < 1e-6
-          && Math.abs(rumbo - this.rumboPlano_) < 1e-4) {
-          return;
-        }
-        this.escalaPlana_ = escala;
-        this.rumboPlano_ = escala === 1 ? 0 : rumbo;
-        if (!div.style.transformOrigin) div.style.transformOrigin = '50% 50%';
-        if (escala === 1) {
+
+        const matriz = plana ? this.homografiaPlana_(viewer, ancho, alto) : null;
+        const clave = matriz ? matriz.map((v) => v.toFixed(9)).join(',') : '';
+        if (clave === this.matrizPlana_) return;
+        this.matrizPlana_ = clave;
+
+        // `matrix3d` se aplica en coordenadas del propio div, así que el origen
+        // de la transformación es su esquina.
+        div.style.transformOrigin = '0 0';
+        if (!matriz) {
           div.style.transform = '';
           return;
         }
-        // En CSS el ángulo positivo gira en el sentido de las agujas del reloj
-        // (y hacia abajo), y el este del mapa queda en -rumbo.
-        const r = Math.round(rumbo * 1e6) / 1e6;
-        div.style.transform = 'rotate(' + (-r) + 'deg) scaleX('
-          + escala.toFixed(6) + ') rotate(' + r + 'deg)';
+
+        // El div está desplazado `left`/`top` respecto de la esquina de la
+        // escena y la homografía lleva a coordenadas de pantalla: hay que
+        // restarle ese desplazamiento con el producto completo `T(-d)·H`. Ojo:
+        // la fila de la perspectiva (g, h, i) entra en los seis coeficientes, no
+        // solo en la traslación; dejarla fuera desvía la capa 14 px en el centro
+        // y 25 px en la esquina (medido a `pitch` -50°).
+        const izq = parseFloat(div.style.left) || 0;
+        const arr = parseFloat(div.style.top) || 0;
+        const g = matriz[6];
+        const h = matriz[7];
+        const i = matriz[8];
+        const a = matriz[0] - izq * g;
+        const b = matriz[1] - izq * h;
+        const c = matriz[2] - izq * i;
+        const d = matriz[3] - arr * g;
+        const e = matriz[4] - arr * h;
+        const f = matriz[5] - arr * i;
+        // `matrix3d` de CSS es por columnas; la fila (g, h, i) es la que hace la
+        // división de perspectiva.
+        div.style.transform = 'matrix3d(' + [
+          a, d, 0, g,
+          b, e, 0, h,
+          0, 0, 1, 0,
+          c, f, 0, i
+        ].join(',') + ')';
+      }
+
+      /**
+       * Homografía lienzo de MapLibre → pantalla de Cesium.
+       *
+       * Cada punto de la pantalla se lleva al plano de la escena por el rayo de
+       * la cámara y de ahí a geográficas con `scene.mapProjection.unproject` (en
+       * la escena plana el mundo va en (altura, x del plano, y del plano): el
+       * plano está en x = 0 y sus coordenadas son (y, z)). El mismo geográfico,
+       * pasado por `map.project`, da su punto en el lienzo.
+       *
+       * Con la cámara inclinada las esquinas de arriba pueden mirar por encima
+       * del horizonte y no cortar el plano; entonces se prueba un juego de
+       * puntos de la mitad de abajo, que también sirve: la homografía es la
+       * misma para todo el plano.
+       * @param {Object} viewer El `Cesium.Viewer`.
+       * @param {number} ancho Ancho del canvas de Cesium en píxeles CSS.
+       * @param {number} alto Alto del canvas de Cesium en píxeles CSS.
+       * @returns {number[]|null} Matriz 3x3 por filas, o null si no hay plano.
+       */
+      homografiaPlana_(viewer, ancho, alto) {
+        const Cesium = window.Cesium;
+        const map = this.mapLibre_;
+        const escena = viewer && viewer.scene;
+        const camara = viewer && viewer.camera;
+        if (!Cesium || !map || !escena || !camara || !(ancho > 0) || !(alto > 0)) {
+          return null;
+        }
+
+        const juegos = [
+          [[0, 0], [ancho, 0], [ancho, alto], [0, alto]],
+          [[ancho * 0.1, alto * 0.5], [ancho * 0.9, alto * 0.5],
+            [ancho * 0.9, alto * 0.95], [ancho * 0.1, alto * 0.95]]
+        ];
+        for (let k = 0; k < juegos.length; k++) {
+          const pantalla = juegos[k];
+          const lienzo = [];
+          let vale = true;
+          for (let j = 0; j < pantalla.length; j++) {
+            const x = pantalla[j][0];
+            const y = pantalla[j][1];
+            let punto = null;
+            try {
+              const rayo = camara.getPickRay(new Cesium.Cartesian2(x, y));
+              const t = rayo && Math.abs(rayo.direction.x) > 1e-9
+                ? -rayo.origin.x / rayo.direction.x
+                : 0;
+              if (t > 0) {
+                const p = Cesium.Ray.getPoint(rayo, t);
+                const carto = escena.mapProjection.unproject(
+                  new Cesium.Cartesian2(p.y, p.z)
+                );
+                if (carto
+                  && Number.isFinite(carto.longitude)
+                  && Number.isFinite(carto.latitude)) {
+                  punto = [
+                    Cesium.Math.toDegrees(carto.longitude),
+                    Cesium.Math.toDegrees(carto.latitude)
+                  ];
+                }
+              }
+            } catch (e) {
+              punto = null;
+            }
+            if (!punto) {
+              vale = false;
+              break;
+            }
+            const q = map.project(punto);
+            if (!q || !Number.isFinite(q.x) || !Number.isFinite(q.y)) {
+              vale = false;
+              break;
+            }
+            lienzo.push([q.x, q.y]);
+          }
+          if (!vale) continue;
+          const matriz = this.homografiaCuatroPuntos_(lienzo, pantalla);
+          if (matriz) return matriz;
+        }
+        return null;
+      }
+
+      /**
+       * Homografía exacta que lleva cuatro puntos a otros cuatro.
+       *
+       * Resuelve el sistema lineal de 8 incógnitas (el noveno coeficiente se
+       * fija a 1) por eliminación de Gauss con pivote parcial.
+       * @param {Array<Array<number>>} origen Cuatro puntos `[x, y]` de partida.
+       * @param {Array<Array<number>>} destino Cuatro puntos `[x, y]` de llegada.
+       * @returns {number[]|null} Matriz 3x3 por filas o null si degenera.
+       */
+      homografiaCuatroPuntos_(origen, destino) {
+        if (!origen || !destino || origen.length !== 4 || destino.length !== 4) {
+          return null;
+        }
+        const A = [];
+        const b = [];
+        for (let i = 0; i < 4; i++) {
+          const X = origen[i][0];
+          const Y = origen[i][1];
+          const x = destino[i][0];
+          const y = destino[i][1];
+          A.push([X, Y, 1, 0, 0, 0, -x * X, -x * Y]);
+          b.push(x);
+          A.push([0, 0, 0, X, Y, 1, -y * X, -y * Y]);
+          b.push(y);
+        }
+        const n = 8;
+        for (let i = 0; i < n; i++) {
+          let pivote = i;
+          for (let k = i + 1; k < n; k++) {
+            if (Math.abs(A[k][i]) > Math.abs(A[pivote][i])) pivote = k;
+          }
+          if (!(Math.abs(A[pivote][i]) > 1e-12)) return null;
+          if (pivote !== i) {
+            const fila = A[i];
+            A[i] = A[pivote];
+            A[pivote] = fila;
+            const valor = b[i];
+            b[i] = b[pivote];
+            b[pivote] = valor;
+          }
+          const divisor = A[i][i];
+          for (let j = i; j < n; j++) A[i][j] /= divisor;
+          b[i] /= divisor;
+          for (let k = 0; k < n; k++) {
+            if (k === i) continue;
+            const factor = A[k][i];
+            if (!factor) continue;
+            for (let j = i; j < n; j++) A[k][j] -= factor * A[i][j];
+            b[k] -= factor * b[i];
+          }
+        }
+        for (let i = 0; i < n; i++) {
+          if (!Number.isFinite(b[i])) return null;
+        }
+        return [b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], 1];
       }
 
       /**
@@ -1415,13 +1585,22 @@
       /**
        * Traduce la cámara a la vista de MapLibre en los modos planos de Cesium.
        *
-       * En el plano la cámara mira perpendicular (pitch -90°) y su altura sobre
-       * el plano es la de la vista, así que el centro es su propia posición
-       * geográfica y la escala sale de la altura y del campo de vista vertical:
-       * lo que abarca la pantalla a esa altura es `2·h·tan(fovy/2)`.
+       * El plano de Cesium se ve en perspectiva, como el de MapLibre: las dos
+       * son cámaras de pinhole sobre un plano, así que basta con llevar centro,
+       * rumbo, inclinación y escala. Y no siempre mira de arriba abajo: al pasar
+       * de globo a 3857 `mapInfo` conserva el rumbo **y la inclinación**, así que
+       * la escena plana puede quedar con `pitch` -50°.
        *
-       * No hay `globe.pick` que consultar: en el plano el rayo central corta el
-       * plano en la vertical de la cámara, no hace falta.
+       * - **Centro**: el punto del plano que cae bajo el centro de la pantalla.
+       *   Con la cámara inclinada no es su vertical (medido a -50°: 0,25° al
+       *   norte, 27 km); usar `positionCartographic` deja la capa volando.
+       * - **Inclinación**: Cesium mide el `pitch` desde el horizonte y MapLibre
+       *   desde la vertical, así que el de MapLibre es `90° − β` con `β = -pitch`.
+       * - **Escala**: la pantalla abarca `2·h·tan(fovy/2)` a la altura de la
+       *   cámara, pero el punto central está a `h/sin β` del ojo, así que la
+       *   huella crece `1/sin β` respecto de la vista a plomo.
+       *
+       * Sin inclinación todo se reduce al caso de siempre (`β = 90°`).
        * @param {Object} viewer El `Cesium.Viewer`.
        * @param {number} ancho Ancho del canvas en píxeles CSS.
        * @param {number} alto Alto del canvas en píxeles CSS.
@@ -1433,14 +1612,42 @@
         const cartografica = camara && camara.positionCartographic;
         if (!Cesium || !cartografica) return null;
 
-        const lon = Cesium.Math.toDegrees(cartografica.longitude);
-        const lat = Cesium.Math.toDegrees(cartografica.latitude);
+        // Ángulo entre el eje de la vista y el plano (90° = a plomo).
+        const beta = Math.max(MIN_BETA_PLANO, Math.min(Math.PI / 2, -camara.pitch));
+        const inclinacion = Math.min(
+          MAX_PITCH_MAPLIBRE,
+          Math.max(0, (Math.PI / 2 - beta) * 180 / Math.PI)
+        );
+
+        let lon = Cesium.Math.toDegrees(cartografica.longitude);
+        let lat = Cesium.Math.toDegrees(cartografica.latitude);
+        try {
+          const rayo = camara.getPickRay(new Cesium.Cartesian2(ancho / 2, alto / 2));
+          if (rayo && Math.abs(rayo.direction.x) > 1e-9) {
+            // En la escena plana el mundo va en (altura, x del plano, y del
+            // plano): el plano está en x = 0 y sus coordenadas son (y, z).
+            const t = -rayo.origin.x / rayo.direction.x;
+            if (t > 0) {
+              const punto = Cesium.Ray.getPoint(rayo, t);
+              const carto = viewer.scene.mapProjection.unproject(
+                new Cesium.Cartesian2(punto.y, punto.z)
+              );
+              if (carto
+                && Number.isFinite(carto.longitude)
+                && Number.isFinite(carto.latitude)) {
+                lon = Cesium.Math.toDegrees(carto.longitude);
+                lat = Cesium.Math.toDegrees(carto.latitude);
+              }
+            }
+          }
+        } catch (e) { /* si no hay corte, se queda la vertical de la cámara */ }
+
         const fovy = this.campoVistaVerticalRad_(camara);
 
         let zoom = null;
         const altura = Math.abs(cartografica.height);
         if (fovy > 0 && altura > 0 && alto > 0) {
-          const metrosPorPixel = 2 * altura * Math.tan(fovy / 2) / alto;
+          const metrosPorPixel = 2 * altura * Math.tan(fovy / 2) / (alto * Math.sin(beta));
           if (metrosPorPixel > 0) {
             zoom = Math.log2(
               METROS_POR_PIXEL_ZOOM_0 * Math.cos(lat * Math.PI / 180) / metrosPorPixel
@@ -1464,7 +1671,7 @@
           // El `up` de la cámara en el plano es el norte y `heading` se mide
           // igual que el bearing de MapLibre (horario desde el norte).
           rumbo: this.normalizarRumbo_(Cesium.Math.toDegrees(camara.heading)),
-          inclinacion: 0
+          inclinacion: inclinacion
         };
       }
 
