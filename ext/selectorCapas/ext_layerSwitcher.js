@@ -2995,15 +2995,39 @@ class miPlugin_layerSwitcher {
       }
 
       // 2) JSON asociado a un servicio de teselas.
+      //
+      // OJO CON LAS CAPAS MapLibre: el `url` de la capa es el style.json, que
+      // vive en otra ruta que los datos (medido en la BTN: el estilo está en
+      // .../files/styles/BTN_Completa.json y las teselas en
+      // .../1.0.0/btn/tile/{z}/{y}/{x}.pbf). Por eso, además de la carpeta del
+      // propio url, se miran las carpetas de sus fuentes de teselas: el
+      // TileJSON del servicio suele estar un nivel por encima de .../tile/
+      // (medido: https://vt-btn.idee.es/1.0.0/btn/metadata.json).
+      const candidatos = [];
+      const anade = function (u) { if (u && candidatos.indexOf(u) === -1) candidatos.push(u); };
+      const ml = getMapLibreMap(capa);
+      if (ml) {
+        let fuentes = [];
+        try { fuentes = _fuentesVectorialesMapLibre(ml.getStyle()); } catch (e) { fuentes = []; }
+        fuentes.forEach(function (f) {
+          if (f.url) anade(f.url);
+          (f.tiles || []).forEach(function (t) {
+            _basesDeTeselas(t).forEach(function (b) {
+              anade(b + 'metadata.json');
+              anade(b + 'tileset.json');
+            });
+          });
+        });
+      }
       const base = _baseDelServicio(url);
-      if (!base) {
+      if (base) { anade(base + 'tileset.json'); anade(base + 'metadata.json'); }
+
+      if (!candidatos.length) {
         contenedor.innerHTML = '<p class="ls-ficha-aviso">Esta capa no procede de un servicio publicado.</p>';
         return;
       }
-      const candidatos = ['tileset.json', 'metadata.json'];
       let encontrado = null;
-      for (const nombre of candidatos) {
-        const completa = base + nombre;
+      for (const completa of candidatos) {
         try {
           const cuerpo = await _pedirTexto(completa);
           const datos = _jsonDeVerdad(cuerpo);
