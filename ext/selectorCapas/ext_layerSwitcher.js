@@ -2355,24 +2355,38 @@ class miPlugin_layerSwitcher {
         }
       } catch (e) { /* estilo a medio cargar */ }
 
-      // 1) metadata.json del servicio de teselas.
+      // El metadata.json del servicio de teselas (TileJSON con bounds).
       for (const f of fuentes) {
         const b = await _boundsDeMetadataTeselas(f);
         if (b) partes.push(b);
       }
 
-      // 2) Sondeo de teselas, solo si no ha declarado nada.
-      if (!partes.length) {
-        for (const f of fuentes) {
-          const b = await _extensionPorTeselas(f);
-          if (b) { partes.push(b); break; }
-        }
+      // Sin ningún valor no se inventa una extensión: se encuadra el mundo
+      // entero, que es lo único que se puede encuadrar sin saber la cobertura,
+      // y así el botón siempre hace algo.
+      if (partes.length) {
+        const enGrados = _unionExtensiones(partes);
+        const ext = _reproyectar(enGrados, 'EPSG:4326', _codigoDeLaProyeccion());
+        if (ext) { _cacheExtensionMapLibre.set(clave, ext); return ext; }
       }
+      return _extensionMundo();
+    }
 
-      const enGrados = partes.length ? _unionExtensiones(partes) : null;
-      const ext = enGrados ? _reproyectar(enGrados, 'EPSG:4326', _codigoDeLaProyeccion()) : null;
-      _cacheExtensionMapLibre.set(clave, ext);
-      return ext;
+    /**
+     * Extensión del mundo entero en la proyección que tenga el mapa ahora
+     * mismo, que es la de la propia proyección del visor (no se fija a mano un
+     * rectángulo: en 2D son metros y en 3D grados).
+     * @returns {Array<number>|null}
+     */
+    function _extensionMundo() {
+      try {
+        const p = (map && typeof map.getProjection === 'function') ? map.getProjection() : null;
+        const e = (p && typeof p.getExtent === 'function') ? p.getExtent() : null;
+        if (Array.isArray(e) && e.length >= 4 && e.slice(0, 4).every(isFinite)) {
+          return e.slice(0, 4).map(Number);
+        }
+      } catch (e) { /* sin extensión de proyección */ }
+      return null;
     }
 
     /**
@@ -2466,139 +2480,6 @@ class miPlugin_layerSwitcher {
         if (ext) return ext;
       }
       return null;
-    }
-
-    /**
-     * Cobertura de la fuente sondeando teselas: se parte de la tesela del
-     * centro actual y se amplía la caja mientras aparezcan teselas nuevas.
-     * Un borde entero sin teselas es el borde de los datos; si la caja llega
-     * al tope (la capa llena el mundo) no se inventa extensión.
-     * @param {Object} fuente {tiles}
-     * @returns {Promise<Array<number>|null>} bounds en grados.
-     */
-    async function _extensionPorTeselas(fuente) {
-      const plantillas = (fuente && fuente.tiles) || [];
-      if (!plantillas.length) return null;
-      const plantilla = plantillas[0];
-      if (!/\{z\}/.test(plantilla) || (!/\{x\}/.test(plantilla) && !/\{y\}/.test(plantilla))) return null;
-      const centro = _centroEnGrados();
-      if (!centro) return null;
-
-      const nivel = NIVEL_SONDEO_TESELAS;
-      const n = Math.pow(2, nivel);
-      const inicial = _teselaDe(centro[0], centro[1], nivel);
-      if (!inicial) return null;
-
-      const vistas = {};
-      let peticiones = 0;
-      const existe = async function (x, y) {
-        if (x < 0 || y < 0 || x >= n || y >= n) return false;
-        const clave = x + ',' + y;
-        if (vistas[clave] !== undefined) return vistas[clave];
-        if (peticiones >= MAX_PETICIONES_SONDEO) return false;
-        peticiones++;
-        let hay = false;
-        try {
-          const resp = await fetch(_urlDeTesela(plantilla, nivel, x, y));
-          if (resp && resp.ok) {
-            // Una tesela vacía llega como un PBF mínimo: se descarta.
-            try {
-              const buf = await resp.arrayBuffer();
-              hay = !!(buf && buf.byteLength > 2);
-            } catch (e) { hay = true; }
-          }
-        } catch (e) { hay = false; }
-        vistas[clave] = hay;
-        return hay;
-      };
-
-      if (!(await existe(inicial.x, inicial.y))) return null;
-      let minX = inicial.x, maxX = inicial.x, minY = inicial.y, maxY = inicial.y;
-
-      for (let vuelta = 0; vuelta < MAX_TESELAS_SONDEO; vuelta++) {
-        const x0 = minX - 1, x1 = maxX + 1, y0 = minY - 1, y1 = maxY + 1;
-        const borde = [];
-        for (let x = x0; x <= x1; x++) { borde.push([x, y0]); borde.push([x, y1]); }
-        for (let y = minY; y <= maxY; y++) { borde.push([x0, y]); borde.push([x1, y]); }
-
-        let alguno = false;
-        for (const p of borde) {
-          if (await existe(p[0], p[1])) {
-            alguno = true;
-            minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
-            minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
-          }
-        }
-        if (!alguno) break;
-        if ((maxX - minX + 1) >= MAX_TESELAS_SONDEO ||
-            (maxY - minY + 1) >= MAX_TESELAS_SONDEO) break;
-      }
-
-      if ((maxX - minX + 1) >= MAX_TESELAS_SONDEO ||
-          (maxY - minY + 1) >= MAX_TESELAS_SONDEO) return null;
-
-      const nw = _gradosDeTesela(minX, minY, nivel);
-      const se = _gradosDeTesela(maxX + 1, maxY + 1, nivel);
-      return _extensionDeBounds([nw[0], se[1], se[0], nw[1]]);
-    }
-
-    /**
-     * Tesela (esquema XYZ/Web Mercator) que contiene un punto.
-     * @param {number} lon
-     * @param {number} lat
-     * @param {number} z
-     * @returns {{x:number, y:number}}
-     */
-    function _teselaDe(lon, lat, z) {
-      const n = Math.pow(2, z);
-      const la = Math.max(-85.05112878, Math.min(85.05112878, Number(lat))) * Math.PI / 180;
-      return {
-        x: Math.floor((Number(lon) + 180) / 360 * n),
-        y: Math.floor((1 - Math.log(Math.tan(la) + 1 / Math.cos(la)) / Math.PI) / 2 * n),
-      };
-    }
-
-    /**
-     * Esquina noroeste de una tesela, en grados.
-     * @param {number} x
-     * @param {number} y
-     * @param {number} z
-     * @returns {Array<number>} [lon, lat]
-     */
-    function _gradosDeTesela(x, y, z) {
-      const n = Math.pow(2, z);
-      return [
-        x / n * 360 - 180,
-        Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI,
-      ];
-    }
-
-    /**
-     * URL de una tesela a partir de la plantilla del estilo.
-     * @param {string} plantilla
-     * @param {number} z
-     * @param {number} x
-     * @param {number} y
-     * @returns {string}
-     */
-    function _urlDeTesela(plantilla, z, x, y) {
-      const n = Math.pow(2, z);
-      return String(plantilla)
-        .replace(/\{z\}/g, z)
-        .replace(/\{x\}/g, x)
-        .replace(/\{y\}/g, y)
-        .replace(/\{-y\}/g, n - 1 - y)
-        .replace(/\{s\}/g, 'a');
-    }
-
-    /** Centro del mapa en grados [lon, lat], para el sondeo de teselas. */
-    function _centroEnGrados() {
-      try {
-        const c = map.getCenter();
-        if (!c || !isFinite(c.x) || !isFinite(c.y)) return null;
-        const p = _reproyectar([c.x, c.y, c.x, c.y], _codigoDeLaProyeccion(), 'EPSG:4326');
-        return (p && isFinite(p[0]) && isFinite(p[1])) ? [p[0], p[1]] : null;
-      } catch (e) { return null; }
     }
 
     /** Código de la proyección que tiene el mapa ahora mismo. */
