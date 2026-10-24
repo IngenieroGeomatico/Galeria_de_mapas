@@ -2763,6 +2763,9 @@ class miPlugin_layerSwitcher {
     let mlTableCtx = null;
     let sheetMoveCleanup = null;
     let sheetMoveTimer = null;
+    // Segundo pase del refresco en MapLibre: `moveend` llega antes de que las
+    // teselas de la vista nueva esten cargadas (ver refreshSubLayerTable).
+    let sheetMoveTimer2 = null;
 
     // Función para remarcar todas las filas de la tabla segun el índice activo.
     function highlightRow(idx) {
@@ -3330,24 +3333,88 @@ class miPlugin_layerSwitcher {
       mapClickHandler = null;
     }
 
-    // ── Refresco de la tabla MapLibre al mover el mapa ──────────────────
-    // Los features de una capa MapLibre se piden al viewport
-    // (querySourceFeatures), asi que la tabla se queda obsoleta en cuanto se
-    // desplaza o se hace zoom. Se rehace con un pequeño retardo para no
-    // repetir la consulta en cada evento del arrastre.
+    // ── Refresco de la tabla al mover el mapa ───────────────────────────
+    // Los features de estas capas salen del viewport: MapLibre los pide con
+    // querySourceFeatures y una capa MVT se lee de las teselas de la vista, asi
+    // que tabla y recuentos se quedan obsoletos en cuanto se desplaza o se hace
+    // zoom. Se rehacen con un pequeño retardo para no repetir la consulta en
+    // cada evento del arrastre.
+    //
+    // Ademas del cuerpo se refresca el SELECTOR de sub-capas: es el que dice
+    // entre parentesis cuantas features hay de cada una en la vista, y hasta
+    // ahora se quedaba con las cifras del momento de abrir el panel.
     //
     // Los eventos de la fachada (IDEE.evt.MOVE/CHANGE) no se disparan al mover
     // (medido), asi que se escucha a la implementacion: `moveend` en el mapa de
     // OpenLayers y `scene.camera.moveEnd` en Cesium.
-    function refreshMapLibreTable() {
+    function refreshSubLayerTable() {
       const ctx = mlTableCtx;
       if (!ctx || !ctx.body || !document.body.contains(ctx.body)) return;
-      if (!getMapLibreMap(ctx.layer)) return;
-      ctx.body.innerHTML = buildMapLibreFeaturesTable(ctx.layer, ctx.sourceId, ctx.sourceLayer);
+      if (!ctx.provider || !ctx.provider.disponible()) return;
+      const html = ctx.provider.buildTable(ctx.sourceId, ctx.sourceLayer);
+      if (typeof html === 'string') {
+        ctx.body.innerHTML = html;
+      } else if (html && typeof html.then === 'function') {
+        html.then(function (h) {
+          // La tabla puede haberse cerrado mientras se leian las teselas.
+          if (mlTableCtx === ctx && document.body.contains(ctx.body)) ctx.body.innerHTML = h;
+        }).catch(function () { /* se queda lo que hubiera */ });
+      }
+      actualizarConteosSubCapas(ctx);
+
+      // MapLibre necesita un segundo pase: `moveend` llega antes de que el
+      // mapa haya cargado las teselas de la vista nueva, y querySourceFeatures
+      // solo ve las cargadas. Si aun no estan, se rehace una vez mas (con tope)
+      // cuando deberian estarlo; si no, se quedarian cifras parciales hasta el
+      // siguiente movimiento.
+      if (ctx.layer && isMapLibreLayer(ctx.layer)) {
+        const ml = getMapLibreMap(ctx.layer);
+        const sinCargar = ml && typeof ml.areTilesLoaded === 'function' && !ml.areTilesLoaded();
+        if (sinCargar && (ctx.reintentos || 0) < 2) {
+          ctx.reintentos = (ctx.reintentos || 0) + 1;
+          if (sheetMoveTimer2) clearTimeout(sheetMoveTimer2);
+          sheetMoveTimer2 = setTimeout(function () {
+            sheetMoveTimer2 = null;
+            refreshSubLayerTable();
+          }, 900);
+        } else {
+          ctx.reintentos = 0;
+        }
+      }
+    }
+
+    // Reevalua cuantas features hay de cada sub-capa en la vista y reescribe
+    // SOLO el texto de las opciones del selector. Cambiar `textContent` no
+    // dispara su `change`, asi que la sub-capa elegida y la tabla que se esta
+    // viendo no se mueven.
+    function actualizarConteosSubCapas(ctx) {
+      const picker = ctx.picker;
+      if (!picker || !ctx.provider || !document.body.contains(picker)) return;
+      let conteos = null;
+      try { conteos = ctx.provider.counts(picker); } catch (e) { conteos = null; }
+      if (!conteos) return;
+      Promise.resolve(conteos).then(function (valores) {
+        if (!valores || !document.body.contains(picker)) return;
+        for (let i = 0; i < picker.options.length; i++) {
+          const opcion = picker.options[i];
+          if (!opcion.value) continue;
+          const n = valores[opcion.value];
+          if (n === undefined) continue;
+          // El nombre se guarda la primera vez: reescribir el texto no puede
+          // comerse el paréntesis anterior.
+          let nombre = opcion.getAttribute('data-nombre');
+          if (nombre === null) {
+            nombre = opcion.textContent.replace(/\s*\(\d[\d.]*\)\s*$/, '');
+            opcion.setAttribute('data-nombre', nombre);
+          }
+          opcion.textContent = nombre + (n > 0 ? ' (' + n + ')' : '');
+        }
+      }).catch(function () { /* sin cifras nuevas: se quedan las anteriores */ });
     }
 
     function unbindSheetMove() {
       if (sheetMoveTimer) { clearTimeout(sheetMoveTimer); sheetMoveTimer = null; }
+      if (sheetMoveTimer2) { clearTimeout(sheetMoveTimer2); sheetMoveTimer2 = null; }
       if (!sheetMoveCleanup) return;
       try { sheetMoveCleanup(); } catch (e) { /* ignorar */ }
       sheetMoveCleanup = null;
@@ -3360,10 +3427,20 @@ class miPlugin_layerSwitcher {
       if (!impl) return;
 
       const disparar = function () {
+        // Al pulsar una fila, la propia tabla mueve el mapa para encuadrar el
+        // feature: ese movimiento no debe rehacer la tabla (se perderia la fila
+        // resaltada y la lista que el usuario esta mirando). Se ignora el
+        // primero que llegue, y solo si es reciente.
+        const ctx = mlTableCtx;
+        if (ctx && ctx.ignorarMovimiento) {
+          const desde = ctx.ignorarMovimiento;
+          ctx.ignorarMovimiento = 0;
+          if (Date.now() - desde < 6000) return;
+        }
         if (sheetMoveTimer) clearTimeout(sheetMoveTimer);
         sheetMoveTimer = setTimeout(function () {
           sheetMoveTimer = null;
-          refreshMapLibreTable();
+          refreshSubLayerTable();
         }, 300);
       };
 
@@ -3469,6 +3546,25 @@ class miPlugin_layerSwitcher {
           : null;
         if (gj && gj.geometry && gj.geometry.coordinates) coord = gj.geometry.coordinates;
       } catch (e) { coord = null; }
+      // Los features que construye el selector para las sub-capas de MapLibre y
+      // MVT son features de OpenLayers: no tienen `getGeoJSON`, pero su
+      // geometria esta en 3857 y su extent da el centro para llevar la camara.
+      if (!coord) {
+        try {
+          const geom = item && item.geometry;
+          const ext = geom && geom.getExtent ? geom.getExtent() : null;
+          if (ext) {
+            const centro = [(ext[0] + ext[2]) / 2, (ext[1] + ext[3]) / 2];
+            let ll = null;
+            if (window.IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function') {
+              ll = IDEE.utils.reproject(centro, 'EPSG:3857', 'EPSG:4326');
+            } else if (window.ol && window.ol.proj && window.ol.proj.toLonLat) {
+              ll = window.ol.proj.toLonLat(centro);
+            }
+            if (ll && isFinite(ll[0]) && isFinite(ll[1])) coord = ll;
+          }
+        } catch (e) { /* se queda sin coordenada */ }
+      }
       // Un Point viene como [lon, lat, alt]; una linea o un poligono, anidados.
       while (Array.isArray(coord) && Array.isArray(coord[0])) coord = coord[0];
       if (!coord || !isFinite(coord[0]) || !isFinite(coord[1])) return;
@@ -3491,6 +3587,11 @@ class miPlugin_layerSwitcher {
       const geom = item.geometry;
       if (!geom) return;
 
+      // Marca para que el refresco automatico de la tabla no confunda este
+      // movimiento (provocado por la propia fila) con un desplazamiento del
+      // usuario. Ver bindSheetMove.
+      if (mlTableCtx) mlTableCtx.ignorarMovimiento = Date.now();
+
       // Encuadrar / centrar la vista sobre la geometria.
       let center = null, extent = null;
       try { extent = geom.getExtent ? geom.getExtent() : null; } catch (e) { extent = null; }
@@ -3504,7 +3605,18 @@ class miPlugin_layerSwitcher {
       if (escena && escena.camera) {
         irAFeatureEn3D(item, escena);
       } else if (view && typeof view.fit === 'function' && extent) {
-        try { view.fit(extent, { padding: [40, 40, 40, 40], maxZoom: 14 }); } catch (e) { /* ignorar */ }
+        // El panel de la tabla ocupa la parte de abajo del mapa: si se encuadra
+        // a pelo, el feature queda justo detras de la hoja. Se le pasa su alto
+        // como padding inferior (con tope, para no alejar la vista en exceso).
+        let padAbajo = 40;
+        try {
+          const hoja = document.querySelector('.ls-sheet');
+          if (hoja) {
+            padAbajo = Math.round(hoja.getBoundingClientRect().height) + 24;
+            padAbajo = Math.max(40, Math.min(padAbajo, Math.round(window.innerHeight * 0.55)));
+          }
+        } catch (e) { padAbajo = 40; }
+        try { view.fit(extent, { padding: [40, 40, padAbajo, 40], maxZoom: 14 }); } catch (e) { /* ignorar */ }
       } else if (view && center) {
         try { view.setCenter(center); } catch (e) { /* ignorar */ }
       } else if (!view) {
@@ -3877,11 +3989,17 @@ class miPlugin_layerSwitcher {
       return stack;
     }
 
-    // Instala el dropdown (secundario) de sub-capas en el header del sidenav de
-    // una capa MapLibre y conecta el cambio de seleccion con la tabla del body.
-    // Al elegir una sub-capa se actualiza SOLO el cuerpo, manteniendo abierto el
-    // panel y el primer dropdown de capas.
-    function installMapLibreSubPicker(panel, layer, body) {
+    // Instala el dropdown (secundario) de sub-capas en el header del sidenav y
+    // conecta el cambio de seleccion con la tabla del body. Al elegir una
+    // sub-capa se actualiza SOLO el cuerpo, manteniendo abierto el panel y el
+    // primer dropdown de capas.
+    //
+    // Vale igual para las capas MapLibre (sub-capas = source-layers del estilo)
+    // y para las MVT (sub-capas = capas internas de la tesela, ver
+    // `proveedorMVT_`); lo unico que cambia es el proveedor.
+    //
+    // @param {Object} provider {disponible, getStack, buildTable, counts}
+    function installSubLayerPicker(panel, layer, body, provider) {
       const headLeft = panel.querySelector('.ls-sheet-header-left');
       const picker = document.createElement('select');
       picker.className = 'ls-sheet-sublayer-picker';
@@ -3891,18 +4009,36 @@ class miPlugin_layerSwitcher {
       const titleEl = panel.querySelector('.ls-sheet-title');
       if (headLeft && titleEl) headLeft.insertBefore(picker, titleEl);
 
-      // Guardar el contexto de la tabla para poder rehacerla al mover el mapa:
-      // los features de MapLibre salen del viewport y cambian con la vista.
+      // Contexto de la tabla, para poder rehacerla (y refrescar los recuentos
+      // del selector) al mover el mapa: los features salen del viewport.
+      const ctx = { layer: layer, provider: provider, sourceId: null, sourceLayer: null, body: body, picker: picker };
+
       const setBody = (sid, sl) => {
-        mlTableCtx = { layer: layer, sourceId: sid, sourceLayer: sl, body: body };
-        body.innerHTML = buildMapLibreFeaturesTable(layer, sid, sl);
+        ctx.sourceId = sid;
+        ctx.sourceLayer = sl;
+        mlTableCtx = ctx;
+        const html = provider.buildTable(sid, sl);
+        if (typeof html === 'string') {
+          body.innerHTML = html;
+          return;
+        }
+        // Las teselas de una MVT se leen por red: se avisa mientras llegan.
+        body.innerHTML = '<p style="padding:8px;color:#555;">Leyendo las teselas de la vista…</p>';
+        Promise.resolve(html).then(function (h) {
+          if (mlTableCtx === ctx && document.body.contains(body)) body.innerHTML = h;
+        }).catch(function () {
+          if (mlTableCtx === ctx && document.body.contains(body)) {
+            body.innerHTML = '<p style="padding:8px;color:#555;">No se pudieron leer las teselas de la capa.</p>';
+          }
+        });
       };
       bindSheetMove();
 
-      getMapLibreSubStack(layer).then(function (stack) {
-        if (!stack.length) {
+      Promise.resolve(provider.getStack()).then(function (stack) {
+        if (!stack || !stack.length) {
           picker.remove();
-          body.innerHTML = `<p style="padding:8px;color:#555;">La capa <b>${esc(layer.legend || layer.name || 'Capa')}</b> no expone sub-capas consultables en el estilo.</p>`;
+          body.innerHTML = provider.mensajeSinCapas
+            || `<p style="padding:8px;color:#555;">La capa <b>${esc(layer.legend || layer.name || 'Capa')}</b> no expone sub-capas consultables.</p>`;
           return;
         }
         picker.disabled = false;
@@ -3914,6 +4050,7 @@ class miPlugin_layerSwitcher {
         stack.forEach(function (item) {
           const o = document.createElement('option');
           o.value = `${item.sourceId}::${item.sourceLayer}`;
+          o.setAttribute('data-nombre', item.sourceLayer);
           o.textContent = item.sourceLayer + (item.count > 0 ? ` (${item.count})` : '');
           picker.appendChild(o);
         });
@@ -3932,12 +4069,38 @@ class miPlugin_layerSwitcher {
       });
     }
 
+    // ── Proveedor de sub-capas de una capa MapLibre ─────────────────────
+    function proveedorMapLibre_(layer) {
+      return {
+        disponible: function () { return !!getMapLibreMap(layer); },
+        getStack: function () { return getMapLibreSubStack(layer); },
+        buildTable: function (sid, sl) { return buildMapLibreFeaturesTable(layer, sid, sl); },
+        // Recuento de cada opcion ya listada: se pregunta solo por las que hay
+        // en el selector (300 en la BTN) en vez de recorrer otra vez el estilo.
+        counts: function (picker) {
+          const ml = getMapLibreMap(layer);
+          if (!ml || !picker) return null;
+          const salida = {};
+          for (let i = 0; i < picker.options.length; i++) {
+            const valor = picker.options[i].value;
+            if (!valor) continue;
+            const partes = valor.split('::');
+            try {
+              salida[valor] = (ml.querySourceFeatures(partes[0], { sourceLayer: partes[1] }) || []).length;
+            } catch (e) {
+              salida[valor] = 0;
+            }
+          }
+          return salida;
+        }
+      };
+    }
+
     // ── Paso 2 de una capa MapLibre: tabla de atributos de una sub-capa ──
     // Consulta los features de un source-layer concreto dentro del viewport
     // (querySourceFeatures) y construye la tabla de atributos, cacheandolos
     // como OL features para permitir el resaltado al pulsar una fila.
     function buildMapLibreFeaturesTable(layer, sourceId, sourceLayer) {
-      const layerName = layer.legend || layer.name || 'Capa';
       const ml = getMapLibreMap(layer);
       let gjFeatures = [];
       try {
@@ -3946,19 +4109,25 @@ class miPlugin_layerSwitcher {
       if (!gjFeatures.length) {
         return `<p style="padding:8px;color:#555;">No hay features de <b>${esc(sourceLayer)}</b> en el viewport actual del mapa. Acércate (zoom) o desplázate a una zona con datos y vuelve a pulsar la sub-capa.</p>`;
       }
-
-      // Derivar columnas a partir de las propiedades (GeoJSON).
-      const columns = [];
       const rows = gjFeatures.slice(0, 500).map(function (gj) {
         const props = (gj && gj.properties && typeof gj.properties === 'object') ? gj.properties : {};
         const ol = geoJsonToOlFeature(gj);
-        for (const k in props) { if (!columns.includes(k)) columns.push(k); }
         return { props: props, feature: ol, geometry: ol && ol.getGeometry ? ol.getGeometry() : null };
       });
+      return tablaSubCapaHtml(layer, sourceLayer, rows, gjFeatures.length);
+    }
+
+    // Tabla de atributos comun a las sub-capas de MapLibre y de MVT, para que
+    // las dos se vean igual (mismas columnas, mismo resaltado al pulsar).
+    // Rellena `sheetCtx`, que es lo que usa `locateFeatureByIdx` para llevar la
+    // camara al elemento de la fila.
+    // @param {number} [totalFeatures] Features en la vista, si son mas que las
+    //   filas listadas (se listan 500 como maximo).
+    function tablaSubCapaHtml(layer, sourceLayer, rows, totalFeatures) {
+      const columns = [];
+      rows.forEach(function (row) { for (const k in row.props) { if (!columns.includes(k)) columns.push(k); } });
       if (!columns.length) columns.push('(sin atributos)');
 
-      // Cachear en sheetCtx (misma estructura que buildVectorTable) para que
-      // locateFeatureByIdx resalte el feature convenido al pulsar la fila.
       const cached = rows.map(function (row, i) {
         let extent = null;
         try { extent = row.geometry && row.geometry.getExtent ? row.geometry.getExtent() : null; } catch (e) { extent = null; }
@@ -3972,7 +4141,11 @@ class miPlugin_layerSwitcher {
       sheetCtx = { layerId: layer.idLayer, features: cached, olLayer: null };
 
       const layerId = (typeof layer.idLayer !== 'undefined') ? layer.idLayer : '';
-      let html = `<p class="ls-sheet-note" style="margin-top:0;">Sub-capa <b>${esc(sourceLayer)}</b> · ${rows.length} features del viewport.</p>`;
+      const total = (typeof totalFeatures === 'number' && totalFeatures > rows.length)
+        ? totalFeatures : rows.length;
+      let nota = `Sub-capa <b>${esc(sourceLayer)}</b> · ${total} features del viewport`;
+      if (total > rows.length) nota += ` (se listan las ${rows.length} primeras)`;
+      let html = `<p class="ls-sheet-note" style="margin-top:0;">${nota}.</p>`;
       html += `<table class="ls-attr-table"><thead><tr><th>#</th>`;
       for (const c of columns) html += `<th>${esc(c)}</th>`;
       html += `</tr></thead><tbody>`;
@@ -3987,6 +4160,328 @@ class miPlugin_layerSwitcher {
       });
       html += `</tbody></table>`;
       return html;
+    }
+
+    // ── Capas MVT: capas internas de la tesela ─────────────────────────
+    // Un servicio de teselas vectoriales trae VARIAS capas dentro de la misma
+    // tesela: medido en el de unidades administrativas del IGN, cualquier
+    // z/x/y lleva comunidadautonoma, municipio, provincia y pais en el mismo
+    // fichero. La ficha declara una sola en `parameters.layers`, pero la tabla
+    // las ofrece todas, igual que hace MapLibre con los `source-layer` de su
+    // estilo.
+    //
+    // Los features no se pueden enumerar desde la capa: en 2D la fuente es un
+    // VectorTile de OpenLayers, que no expone las features de las teselas, y en
+    // 3D la fachada de ext/MVTLayer devuelve []. Asi que se leen aqui las
+    // teselas del viewport con el mismo par de modulos que usa ese plugin
+    // (@mapbox/vector-tile + pbf, importados del CDN) y una cache por z/x/y.
+    // Es el equivalente a `querySourceFeatures` de MapLibre.
+    const MVT_MODULO_VT = 'https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@2.0.3/+esm';
+    const MVT_MODULO_PBF = 'https://cdn.jsdelivr.net/npm/pbf@3.2.1/+esm';
+    // Teselas que se leen como maximo por vista: con el lienzo de 1280 px y un
+    // zoom de lectura un nivel por debajo del del mapa son 5x3 = 15. Si la vista
+    // cubre mas, se baja de nivel antes que recortar la zona.
+    const MVT_MAX_TESELAS = 16;
+    const MVT_MAX_CACHE = 40;
+    const MVT_ZOOM_MIN = 5;
+    const MVT_ZOOM_MAX = 14;
+    let mvtDecodificador = null;
+    const mvtCache = new Map();
+
+    // Carga (una sola vez) el decodificador de teselas vectoriales.
+    function cargarDecodificadorMVT() {
+      if (!mvtDecodificador) {
+        mvtDecodificador = Promise.all([
+          import(MVT_MODULO_VT),
+          import(MVT_MODULO_PBF)
+        ]).then(function (modulos) {
+          const vt = modulos[0] || {};
+          const pbf = modulos[1] || {};
+          const VectorTile = vt.VectorTile || (vt.default && vt.default.VectorTile);
+          const Pbf = pbf.default || pbf.Pbf;
+          if (!VectorTile || !Pbf) throw new Error('sin decodificador MVT');
+          return { VectorTile: VectorTile, Pbf: Pbf };
+        });
+        mvtDecodificador.catch(function () { mvtDecodificador = null; });
+      }
+      return mvtDecodificador;
+    }
+
+    // Datos del servicio de una capa MVT: plantilla de URL, capas declaradas y
+    // tamano de la tesela. Se leen de la fachada de la capa porque en 2D es la
+    // del bundle y en 3D la de ext/MVTLayer, que guarda el lector de teselas.
+    function mvtDatos(layer) {
+      let impl = null;
+      try { impl = layer.getImpl ? layer.getImpl() : null; } catch (e) { impl = null; }
+      const lector = (impl && impl.lector) ? impl.lector : null;
+      const cp = layer.constructorParameters || {};
+      const p = cp.parameters || cp.userParameters || {};
+      let url = (impl && impl.url) || p.url || (lector && lector.url) || null;
+      if (!url || typeof url !== 'string' || url.indexOf('{z}') < 0) return null;
+      let declaradas = p.layers || (impl && impl.layers_) || (lector && lector.capas) || [];
+      if (Array.isArray(declaradas)) declaradas = declaradas.map(String);
+      else declaradas = String(declaradas).split(',').map(function (s) { return s.trim(); });
+      declaradas = declaradas.filter(Boolean);
+      return { url: url, declaradas: declaradas };
+    }
+
+    // Detecta una capa MVT. En 2D se identifica por el tipo; en 3D la fachada de
+    // ext/MVTLayer hereda de la implementacion Vector y declara `type: 'Vector'`,
+    // asi que lo que la distingue es el lector de teselas que monta.
+    function esCapaMVT(layer) {
+      const t = String(layer.type || layer._type || '').toLowerCase();
+      let esMvt = (t === 'mvt');
+      if (!esMvt) {
+        let impl = null;
+        try { impl = layer.getImpl ? layer.getImpl() : null; } catch (e) { impl = null; }
+        esMvt = !!(impl && impl.lector && typeof impl.lector.capas !== 'undefined');
+      }
+      return esMvt && !!mvtDatos(layer);
+    }
+
+    // Extension visible del mapa en grados, con un zoom de referencia. Sirve
+    // igual en 2D (extent de OpenLayers, en 3857) que en 3D (rectangulo de la
+    // camara de Cesium). El rectangulo de Cesium incluye la inclinacion, asi que
+    // el zoom se estima con los grados por pixel del centro.
+    function vistaEnGrados() {
+      let impl = null;
+      try { impl = map.getMapImpl ? map.getMapImpl() : null; } catch (e) { impl = null; }
+      if (!impl) return null;
+      const RAD = Math.PI / 180;
+      if (impl.scene && impl.scene.camera) {
+        const escena = impl.scene;
+        let rect = null;
+        try { rect = escena.camera.computeViewRectangle(escena.globe && escena.globe.ellipsoid); } catch (e) { rect = null; }
+        if (!rect || !isFinite(rect.west)) return null;
+        const anchoPx = (escena.canvas && escena.canvas.clientWidth) || 0;
+        const oeste = rect.west / RAD, este = rect.east / RAD;
+        const norte = rect.north / RAD, sur = rect.south / RAD;
+        const porPx = anchoPx > 0 ? (este - oeste) / anchoPx : 360 / 1024;
+        return { oeste: oeste, este: este, norte: norte, sur: sur, zoom: Math.log2(360 / (porPx * 256)) };
+      }
+      const vista = (typeof impl.getView === 'function') ? impl.getView() : null;
+      if (!vista) return null;
+      let ext = null;
+      try { ext = vista.calculateExtent(impl.getSize()); } catch (e) { ext = null; }
+      if (!ext) return null;
+      // 3857 -> 4326 (Web Mercator esferico, exacto).
+      const R = 6378137;
+      const lon = (x) => x / R / RAD;
+      const lat = (y) => (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) / RAD;
+      const zoom = (typeof vista.getZoom === 'function') ? vista.getZoom() : null;
+      return { oeste: lon(ext[0]), este: lon(ext[2]), norte: lat(ext[3]), sur: lat(ext[1]), zoom: zoom };
+    }
+
+    // Teselas z/x/y que cubren la vista. El zoom de lectura va un nivel por
+    // debajo del del mapa: con el lienzo normal son 5x3 teselas, que caben en el
+    // tope. Si la vista es tan amplia que no caben, se baja de nivel hasta que
+    // quepan, para que el recuento cubra TODA la vista y no solo una esquina.
+    function mvtTeselas(vista) {
+      if (!vista || !isFinite(vista.zoom)) return [];
+      const rango = function (z) {
+        const n = Math.pow(2, z);
+        const xDe = (lonVal) => Math.max(0, Math.min(n - 1, Math.floor(((lonVal + 180) / 360) * n)));
+        const yDe = (latVal) => {
+          const r = Math.max(-85.05112878, Math.min(85.05112878, latVal)) * Math.PI / 180;
+          const merc = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2;
+          return Math.max(0, Math.min(n - 1, Math.floor(merc * n)));
+        };
+        const x0 = xDe(vista.oeste), x1 = xDe(vista.este);
+        const y0 = yDe(vista.norte), y1 = yDe(vista.sur);
+        return { x0: x0, x1: x1, y0: y0, y1: y1, total: (x1 - x0 + 1) * (y1 - y0 + 1) };
+      };
+      let z = Math.max(MVT_ZOOM_MIN, Math.min(MVT_ZOOM_MAX, Math.round(vista.zoom) - 1));
+      let r = rango(z);
+      while (r.total > MVT_MAX_TESELAS && z > MVT_ZOOM_MIN) {
+        z--;
+        r = rango(z);
+      }
+      const teselas = [];
+      for (let x = r.x0; x <= r.x1 && teselas.length < MVT_MAX_TESELAS; x++) {
+        for (let y = r.y0; y <= r.y1 && teselas.length < MVT_MAX_TESELAS; y++) teselas.push({ z: z, x: x, y: y });
+      }
+      return teselas;
+    }
+
+    function mvtUrl(url, t) {
+      return url
+        .replace('{z}', t.z)
+        .replace('{x}', t.x)
+        .replace(/\{-y\}/, String(Math.pow(2, t.z) - 1 - t.y))
+        .replace('{y}', t.y);
+    }
+
+    // Descarga y decodifica una tesela. Devuelve { z, x, y, capas } con TODAS
+    // las capas internas y sus features en crudo (props y geometria en unidades
+    // de tesela). Un fallo de red devuelve la tesela vacia: la tabla sigue
+    // funcionando con las demas.
+    function mvtLeerTesela(url, t) {
+      // La clave lleva la URL: dos capas MVT distintas comparten z/x/y y no
+      // pueden compartir tesela decodificada.
+      const clave = url + '|' + t.z + '/' + t.x + '/' + t.y;
+      if (mvtCache.has(clave)) return mvtCache.get(clave);
+      const promesa = cargarDecodificadorMVT().then(function (dec) {
+        return fetch(mvtUrl(url, t)).then(function (respuesta) {
+          if (!respuesta.ok) throw new Error('HTTP ' + respuesta.status);
+          return respuesta.arrayBuffer();
+        }).then(function (buffer) {
+          const salida = { z: t.z, x: t.x, y: t.y, capas: {} };
+          // Tesela vacia: medido, 21 bytes.
+          if (!buffer || buffer.byteLength < 40) return salida;
+          const tesela = new dec.VectorTile(new dec.Pbf(new Uint8Array(buffer)));
+          for (const nombre in tesela.layers) {
+            const capa = tesela.layers[nombre];
+            const features = [];
+            for (let i = 0; i < capa.length; i++) {
+              const f = capa.feature(i);
+              features.push({ tipo: f.type, props: f.properties || {}, geometria: f.loadGeometry() });
+            }
+            salida.capas[nombre] = { extent: capa.extent || 4096, features: features };
+          }
+          return salida;
+        });
+      }).catch(function () {
+        return { z: t.z, x: t.x, y: t.y, capas: {}, error: true };
+      });
+      mvtCache.set(clave, promesa);
+      // Cache acotada por orden de insercion (la mas vieja primero).
+      while (mvtCache.size > MVT_MAX_CACHE) mvtCache.delete(mvtCache.keys().next().value);
+      return promesa;
+    }
+
+    // Lee todas las teselas de la vista actual.
+    function mvtLeerVista(layer) {
+      const datos = mvtDatos(layer);
+      if (!datos) return Promise.resolve({ datos: null, leidas: [] });
+      const teselas = mvtTeselas(vistaEnGrados());
+      if (!teselas.length) return Promise.resolve({ datos: datos, leidas: [] });
+      return Promise.all(teselas.map(function (t) {
+        return mvtLeerTesela(datos.url, t);
+      })).then(function (leidas) {
+        return { datos: datos, leidas: leidas };
+      });
+    }
+
+    // Sub-capas de una capa MVT: las declaradas en la ficha mas las que traen
+    // las teselas, con el numero de features de cada una en la vista.
+    function getMVTSubStack(layer) {
+      return mvtLeerVista(layer).then(function (r) {
+        if (!r.datos) return [];
+        const nombres = [];
+        const conteo = Object.create(null);
+        r.datos.declaradas.forEach(function (n) { if (nombres.indexOf(n) < 0) nombres.push(n); });
+        r.leidas.forEach(function (t) {
+          for (const n in t.capas) {
+            if (nombres.indexOf(n) < 0) nombres.push(n);
+            conteo[n] = (conteo[n] || 0) + t.capas[n].features.length;
+          }
+        });
+        return nombres.map(function (n) {
+          return { sourceId: 'mvt', sourceLayer: n, count: conteo[n] || 0, types: ['mvt'] };
+        });
+      });
+    }
+
+    // Coordenada de la tesela (0..extent) a lon/lat.
+    function mvtPuntoAGrados(t, extent, p) {
+      const n = Math.pow(2, t.z);
+      const lon = ((t.x + p.x / extent) / n) * 360 - 180;
+      const my = (t.y + p.y / extent) / n;
+      const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * my))) * 180 / Math.PI;
+      return [lon, lat];
+    }
+
+    // Area con signo de un anillo: en el MVT el exterior de cada poligono
+    // conserva el signo del primero y sus huecos van al reves.
+    function mvtAreaConSigno(puntos) {
+      let a = 0;
+      for (let i = 0, j = puntos.length - 1; i < puntos.length; j = i++) {
+        a += (puntos[j].x * puntos[i].y - puntos[i].x * puntos[j].y);
+      }
+      return a / 2;
+    }
+
+    // Feature de una tesela MVT a GeoJSON en 4326 (para poder construir la
+    // geometria de OpenLayers como en las capas MapLibre).
+    function mvtFeatureAGeoJSON(t, extent, feature) {
+      const anillos = feature.geometria || [];
+      if (!anillos.length) return null;
+      const aGrados = function (anillo) {
+        return anillo.map(function (p) { return mvtPuntoAGrados(t, extent, p); });
+      };
+      let geometry = null;
+      if (feature.tipo === 1) {
+        const p = aGrados(anillos[0])[0];
+        if (p) geometry = { type: 'Point', coordinates: p };
+      } else if (feature.tipo === 2) {
+        geometry = { type: 'LineString', coordinates: aGrados(anillos[0]) };
+      } else if (feature.tipo === 3) {
+        // Exteriores e huecos por el signo del area, como en ext/MVTLayer.
+        const poligonos = [];
+        let actual = null;
+        let signoExterior = 0;
+        for (let i = 0; i < anillos.length; i++) {
+          const signo = Math.sign(mvtAreaConSigno(anillos[i]));
+          if (!actual || (signoExterior && signo === signoExterior)) {
+            actual = { anillos: [] };
+            poligonos.push(actual);
+            if (!signoExterior) signoExterior = signo;
+          }
+          actual.anillos.push(aGrados(anillos[i]));
+        }
+        if (poligonos.length === 1) {
+          geometry = { type: 'Polygon', coordinates: poligonos[0].anillos };
+        } else if (poligonos.length > 1) {
+          geometry = { type: 'MultiPolygon', coordinates: poligonos.map(function (p) { return p.anillos; }) };
+        }
+      }
+      if (!geometry) return null;
+      return { type: 'Feature', properties: feature.props || {}, geometry: geometry };
+    }
+
+    // Tabla de atributos de una capa interna de un servicio MVT.
+    function buildMVTFeaturesTable(layer, sourceLayer) {
+      return mvtLeerVista(layer).then(function (r) {
+        const items = [];
+        r.leidas.forEach(function (t) {
+          const capa = t.capas[sourceLayer];
+          if (!capa) return;
+          for (let i = 0; i < capa.features.length; i++) {
+            items.push({ tesela: t, extent: capa.extent, feature: capa.features[i] });
+          }
+        });
+        if (!items.length) {
+          const conError = r.leidas.length > 0 && r.leidas.every(function (t) { return t.error; });
+          if (conError) {
+            return `<p style="padding:8px;color:#555;">No se pudieron descargar las teselas del servicio MVT de <b>${esc(layer.legend || layer.name || 'la capa')}</b>. Comprueba que la URL admite CORS.</p>`;
+          }
+          return `<p style="padding:8px;color:#555;">No hay features de <b>${esc(sourceLayer)}</b> en el viewport actual del mapa. Acércate (zoom) o desplázate a una zona con datos y vuelve a pulsar la sub-capa.</p>`;
+        }
+        const rows = items.slice(0, 500).map(function (item) {
+          const props = item.feature.props || {};
+          const gj = mvtFeatureAGeoJSON(item.tesela, item.extent, item.feature);
+          const ol = gj ? geoJsonToOlFeature(gj) : null;
+          return { props: props, feature: ol, geometry: ol && ol.getGeometry ? ol.getGeometry() : null };
+        });
+        return tablaSubCapaHtml(layer, sourceLayer, rows, items.length);
+      });
+    }
+
+    // ── Proveedor de sub-capas de una capa MVT ──────────────────────────
+    function proveedorMVT_(layer) {
+      return {
+        disponible: function () { return !!mvtDatos(layer); },
+        getStack: function () { return getMVTSubStack(layer); },
+        buildTable: function (sid, sl) { return buildMVTFeaturesTable(layer, sl); },
+        counts: function () {
+          return getMVTSubStack(layer).then(function (stack) {
+            const salida = {};
+            stack.forEach(function (i) { salida[i.sourceId + '::' + i.sourceLayer] = i.count; });
+            return salida;
+          });
+        },
+        mensajeSinCapas: `<p style="padding:8px;color:#555;">No se pudieron leer las capas internas del servicio MVT de <b>${esc(layer.legend || layer.name || 'la capa')}</b>. Comprueba que la URL de las teselas admite CORS.</p>`
+      };
     }
 
     // ── Estadisticas de capa RASTER ────────────────────────────────────
@@ -4052,13 +4547,15 @@ class miPlugin_layerSwitcher {
       // Capas seleccionables para el dropdown del header (asincrono).
       const finish = (selectableLayers) => {
         if (kind === 'vector') {
-          // Las capas MapLibre (BTN) no tienen una fuente OL enumerable: se abre
-          // el panel y se instala un dropdown secundario con sus sub-capas. El
-          // builder es asincrono (espera a que cargue el estilo), asi que se
-          // abre el cuerpo vacio y se rellena al cargar.
-          if (isMapLibreLayer(layer)) {
+          // Las capas MapLibre (BTN) y las MVT no tienen una fuente OL
+          // enumerable: se abre el panel y se instala un dropdown secundario con
+          // sus sub-capas (source-layers del estilo en MapLibre, capas internas
+          // de la tesela en MVT). Los dos builders son asincronos, asi que se
+          // abre el cuerpo con el aviso y se rellena al cargar.
+          if (isMapLibreLayer(layer) || esCapaMVT(layer)) {
+            const provider = isMapLibreLayer(layer) ? proveedorMapLibre_(layer) : proveedorMVT_(layer);
             const panel = openSheet(`Tabla de atributos · ${layerName}`, '<p style="padding:8px;color:#555;">Cargando sub-capas…</p>', true, selectableLayers, index);
-            installMapLibreSubPicker(panel, layer, panel.querySelector('.ls-sheet-body'));
+            installSubLayerPicker(panel, layer, panel.querySelector('.ls-sheet-body'), provider);
             return;
           }
           openSheet(`Tabla de atributos · ${layerName}`, buildVectorTable(layer), true, selectableLayers, index);
