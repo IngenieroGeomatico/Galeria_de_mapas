@@ -195,6 +195,16 @@ class miPlugin_layerSwitcher {
     this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
     this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
     this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+    // Modo "una capa a la vez": las capas de este grupo se pintan con un
+    // control de radio (en vez del ojito) y solo puede haber una visible;
+    // encender otra apaga la anterior. Vale `true` (todas las capas del
+    // selector) o una lista de identificadores para dejar fuera las que se
+    // superponen (una ortofoto, un seamark, una red viaria...), que siguen
+    // funcionando como casilla independiente encima del fondo elegido.
+    // OJO CON LOS IDENTIFICADORES: se comparan contra `legend`, `name` e
+    // `idLayer`, y los idLayer se regeneran en cada reinicio de mapa (cambio
+    // 2D/3D), así que en un visualizador hay que pasar `legend` o `name`.
+    this.seleccionUnica = (options.seleccionUnica !== undefined) ? options.seleccionUnica : false;
     // idLayer de la capa cuyo desplegable de opciones (transparencia) está
     // abierto. Se conserva entre re-renders para no cerrarlo al alternar
     // la visibilidad de otra capa.
@@ -367,11 +377,47 @@ class miPlugin_layerSwitcher {
     return null;
   }
 
+  // ── Modo "una capa a la vez" (opción `seleccionUnica`) ───────────────
+  // ¿La capa entra en el grupo radio? La opción puede ser `true` (todas las
+  // capas del selector) o una lista de identificadores (legend, name o
+  // idLayer).
+  _enGrupoRadio(layer) {
+    const opt = this.seleccionUnica;
+    if (!opt || !layer) return false;
+    if (opt === true) return true;
+    const lista = Array.isArray(opt) ? opt : [opt];
+    const ids = [layer.legend, layer.name, layer.idLayer]
+      .map(v => String(v == null ? '' : v));
+    return lista.some(o => ids.indexOf(String(o)) >= 0);
+  }
+
+  // Capas del grupo radio que hay en un mapa, incluidas las que viven dentro
+  // de grupos anidados (una capa puede estar solo ahí).
+  _capasGrupoRadio(mapRef) {
+    const salida = [];
+    if (!mapRef || typeof mapRef.getLayers !== 'function') return salida;
+    const visitar = (l) => {
+      if (!l) return;
+      const esGrupo = (l.type === 'LayerGroup' || l._type === 'LayerGroup' || typeof l.getLayers === 'function');
+      if (esGrupo) {
+        let hijas = [];
+        try { hijas = l.getLayers ? l.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+        return;
+      }
+      if (this._enGrupoRadio(l)) salida.push(l);
+    };
+    try { (mapRef.getLayers() || []).forEach(visitar); } catch (e) { /* sin capas */ }
+    return salida;
+  }
+
   // ── Coordinación de estado (swap 2D/3D con cambioImpl) ───────────────
   // Captura el estado serializable propio de la UI del selector de capas
   // (_optionsOpen y _groupCollapsed). El estado de las capas (visibilidad,
   // opacidad, orden z, renombrado) reside en las propias capas y es
-  // transferido directamente por cambioImpl.
+  // transferido directamente por cambioImpl; la excepción es la capa elegida
+  // en el modo "una capa a la vez", que se guarda aquí (radioVisibleLegend)
+  // porque las capas se recrean con la visibilidad que declara el visor.
   getState() {
     const groupCollapsedCopy = {};
     if (this._groupCollapsed && typeof this._groupCollapsed === 'object') {
@@ -416,12 +462,31 @@ class miPlugin_layerSwitcher {
         }
       }
     }
+    // En el modo "una capa a la vez" la elección sí es estado de la UI: las
+    // capas se recrean desde cero en cada reinicio de mapa con la visibilidad
+    // que declara el visualizador y cambioImpl no la transfiere (solo
+    // reengancha capas que falten), así que sin esto el fondo elegido volvía
+    // al de por defecto al cambiar de 2D a 3D. Se guarda por legend/name,
+    // que son estables, igual que el resto de identificadores de este estado.
+    let radioVisibleLegend = null;
+    if (this.seleccionUnica && this._map) {
+      const visibles = this._capasGrupoRadio(this._map).filter((c) => {
+        try { return !!c.isVisible(); } catch (e) { return false; }
+      });
+      if (visibles.length) {
+        const capa = visibles[visibles.length - 1];
+        radioVisibleLegend = (capa.legend && String(capa.legend) !== String(capa.idLayer))
+          ? capa.legend
+          : (capa.name || null);
+      }
+    }
     return {
       panelCollapsed,
       optionsOpen: idAtOpen,
       optionsOpenLegend: legendAtOpen,
       groupCollapsed: groupCollapsedCopy,
       groupCollapsedLegends,
+      radioVisibleLegend,
     };
   }
 
@@ -554,6 +619,18 @@ class miPlugin_layerSwitcher {
         if (capa) {
           this._groupCollapsed[String(capa.idLayer)] = state.groupCollapsedLegends[leg];
         }
+      }
+    }
+
+    // Restaurar la capa elegida en el modo "una capa a la vez": se enciende
+    // esa y se apagan las demás del grupo. Se resuelve por legend/name porque
+    // el idLayer cambia en cada reinicio de mapa.
+    if (state.radioVisibleLegend) {
+      const elegida = this._findLayerByLegendInMap(mapRef, state.radioVisibleLegend);
+      if (elegida && this._enGrupoRadio(elegida)) {
+        this._capasGrupoRadio(mapRef).forEach((c) => {
+          try { c.setVisible(c === elegida); } catch (e) { /* capa sin visibilidad */ }
+        });
       }
     }
 
@@ -709,6 +786,26 @@ class miPlugin_layerSwitcher {
         hijos.forEach(h => { if (isGroupLayer(h)) stack.push(h); });
       }
       return null;
+    };
+
+    // ¿Esta capa entra en el modo "una capa a la vez"? y ¿cuáles del grupo hay
+    // ahora en el mapa? La lógica vive en la clase (_enGrupoRadio /
+    // _capasGrupoRadio) porque también la necesita el contrato getState/setState
+    // para conservar el fondo elegido al cambiar de implementación.
+    const enGrupoRadio = (layer) => self._enGrupoRadio(layer);
+    const capasGrupoRadio = () => self._capasGrupoRadio(map);
+
+    // Si llegan dos o más capas del grupo encendidas (un estado restaurado,
+    // una capa añadida después del arranque), se queda la última visible y se
+    // apagan las demás: el modo no admite dos y el radio tiene que decir la
+    // verdad de lo que se está viendo.
+    const normalizarGrupoRadio = () => {
+      const visibles = capasGrupoRadio().filter(c => {
+        try { return !!c.isVisible(); } catch (e) { return false; }
+      });
+      if (visibles.length < 2) return;
+      const elegida = visibles[visibles.length - 1];
+      visibles.forEach(c => { if (c !== elegida) c.setVisible(false); });
     };
 
     // z-index REAL de una capa: el que usa el renderer de OpenLayers
@@ -873,7 +970,17 @@ class miPlugin_layerSwitcher {
       // derecha (100%); 100% de transparencia => riel vacio (0%).
       const fillPct = 100 - transpPct;
       const sliderFill = `linear-gradient(to right, #0078d4 0%, #0078d4 ${fillPct}%, #d7dde7 ${fillPct}%, #d7dde7 100%)`;
-      const eyeBtn = `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>`;
+      // En el modo "una capa a la vez" el control no es un ojito sino un
+      // radio: dice cuál se está viendo y, al pulsar otra, la enciende y
+      // apaga la anterior. El resto de capas (las que se superponen y quedan
+      // fuera del grupo) siguen con el ojito de siempre.
+      const esRadio = !node.isGroup && enGrupoRadio(layer);
+      const tituloVisibilidad = esRadio
+        ? (visible ? 'Es la capa que se ve: elige otra para cambiarla' : 'Ver solo esta capa')
+        : (visible ? 'Ocultar capa' : 'Mostrar capa');
+      const eyeBtn = esRadio
+        ? `<button type="button" class="ls-eye ls-radio ${visible ? 'ls-radio-on' : 'ls-radio-off'}" data-id="${index}" role="radio" aria-checked="${visible ? 'true' : 'false'}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')"><span class="ls-radio-marca" aria-hidden="true"></span></button>`
+        : `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>`;
       const optsBtn = `<button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>`;
       const optionsPanel = `
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
@@ -898,7 +1005,7 @@ class miPlugin_layerSwitcher {
       // Nombre clicable: alterna la visibilidad (mismo comportamiento que el
       // ojito) pero sin duplicar el boton. Publico para que no dependa del
       // formato del panel de opciones.
-      const nameBtn = `<button type="button" class="ls-nombre ${node.isGroup ? 'ls-group-name' : ''}" data-id="${index}" title="${visible ? 'Ocultar capa' : 'Mostrar capa'}" onclick="toggleLayerVisibility('${index}')">${layerName}</button>`;
+      const nameBtn = `<button type="button" class="ls-nombre ${node.isGroup ? 'ls-group-name' : ''}" data-id="${index}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')">${layerName}</button>`;
 
       if (node.isGroup) {
         const collapsed = isGroupCollapsed(layer);
@@ -978,6 +1085,7 @@ class miPlugin_layerSwitcher {
     window.renderLayerList = async () => { await renderLayerList(); };
 
     control.activate = async () => {
+      normalizarGrupoRadio();
       await renderLayerList();
     };
 
@@ -986,6 +1094,23 @@ class miPlugin_layerSwitcher {
     window.toggleLayerVisibility = function (index) {
       const layer = findLayerById(index);
       if (!layer || typeof layer.setVisible !== 'function') return;
+
+      // Modo "una capa a la vez" (`seleccionUnica`): encender una capa del
+      // grupo apaga las demás del grupo, y la que ya se está viendo no se
+      // apaga (un radio no se desmarca; apagarla dejaría el hueco sin fondo).
+      // Las capas que quedan fuera del grupo se siguen alternando con el
+      // ojito, encima del fondo elegido.
+      if (!isGroupLayer(layer) && enGrupoRadio(layer)) {
+        if (layer.isVisible()) return;
+        capasGrupoRadio().forEach(c => {
+          if (c !== layer && typeof c.setVisible === 'function') c.setVisible(false);
+        });
+        layer.setVisible(true);
+        if (window.renderLayerList && typeof window.renderLayerList === 'function') {
+          window.renderLayerList();
+        }
+        return;
+      }
 
       // El ojito es el unico control de visibilidad: alterna la capa de forma
       // independiente (varias capas pueden estar visibles a la vez). En un

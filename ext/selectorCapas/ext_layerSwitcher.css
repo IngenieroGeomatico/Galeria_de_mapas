@@ -236,6 +236,48 @@
   background: transparent;
 }
 
+/* ── Modo "una capa a la vez": el ojito pasa a ser un radio ─────────── */
+/* Grupo de radios: solo una capa del grupo puede estar visible, así que el
+   control tiene que decirlo de un vistazo. El botón conserva el tamaño del
+   ojito (la fila no se mueve) y dentro se pinta el círculo. */
+.overlay-layer-selector .ls-radio {
+  opacity: 1;
+}
+
+.overlay-layer-selector .ls-radio-marca {
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 2px solid #7a8794;
+  border-radius: 50%;
+  background: transparent;
+  display: inline-block;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+/* Capa elegida: anillo azul con punto central (el hueco blanco lo deja el
+   box-shadow interior, que se come los 3 px pegados al borde). */
+.overlay-layer-selector .ls-radio-on .ls-radio-marca {
+  border-color: #0078d4;
+  background: #0078d4;
+  box-shadow: inset 0 0 0 3px #ffffff;
+}
+
+.overlay-layer-selector .ls-radio-on {
+  background: #eaf3fc;
+  border: 1px solid #d3e4f5;
+}
+
+/* Capa apagada dentro del grupo: círculo vacío y atenuado */
+.overlay-layer-selector .ls-radio-off {
+  opacity: 0.75;
+  background: transparent;
+}
+
+.overlay-layer-selector .ls-radio-off .ls-radio-marca {
+  background: transparent;
+}
+
 /* ── Botón de opciones (desplegable) ─────────────────────────────── */
 /* Chevron/flecha hacia abajo: abre el panel de opciones de la capa. */
 .overlay-layer-selector .ls-options {

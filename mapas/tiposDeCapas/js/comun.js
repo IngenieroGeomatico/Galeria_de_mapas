@@ -204,8 +204,13 @@ function prepararFondo(opciones) {
  * @param {Object} map Mapa de la API-IDEE.
  * @param {Function} recrear Funcion que vuelve a montar el mapa entero. Es la
  *   que usa el cambio 2D/3D tras recargar el bundle.
+ * @param {Object} [opciones]
+ * @param {Object} [opciones.selector] Opciones extra para el selector de capas
+ *   superpuestas, mezcladas con las de siempre. El visor de XYZ lo usa para
+ *   pedir el modo "una capa a la vez" (`seleccionUnica`).
  */
-function anadirPluginsTipos(map, recrear) {
+function anadirPluginsTipos(map, recrear, opciones) {
+  const opts = opciones || {};
   // El mapa ya existe: la rueda de carga puede irse.
   ocultarCarga();
 
@@ -229,7 +234,9 @@ function anadirPluginsTipos(map, recrear) {
 
   // Arbol de capas superpuestas: la capa de la pagina aparece con su leyenda y
   // se puede apagar para ver el fondo que hay debajo.
-  map.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher({ order: 1 }));
+  map.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher(
+    Object.assign({ order: 1 }, opts.selector || {})
+  ));
 
   // Escala / nivel de zoom y coordenadas del puntero. Sustituye al control
   // 'scale' de la API, que Cesium no sabe construir y abortaria el 3D.

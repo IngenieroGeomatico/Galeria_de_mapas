@@ -57,7 +57,7 @@
     <div class="barra__texto">
       <h1 class="barra__titulo">XYZ <span class="barra__clase">IDEE.layer.XYZ</span></h1>
       <p class="barra__desc">
-        Teselas por z, x e y. Cualquier servicio de mosaicos que siga esa numeración entra sin más.
+        Teselas por z, x e y. Dieciocho fondos de leaflet-providers que cubren España, uno cada vez desde el selector.
       </p>
     </div>
   </header>
@@ -68,15 +68,31 @@
   <template id="codigo">
     <h3>IDEE.layer.XYZ</h3>
     <p>
-      La URL lleva <code>{z}</code>, <code>{x}</code> e <code>{y}</code> en ese orden. <code>crossOrigin</code> va en las opciones de la fuente para que el lienzo no se contamine al leer píxeles.
+      La URL lleva <code>{z}</code> y <code>{x}</code>/<code>{y}</code>; el orden de esos dos es el que pida el servicio (Esri los pide al revés). <code>crossOrigin</code> va en las opciones de la fuente para que el lienzo no se contamine al leer píxeles. Con varios fondos del mismo tipo, el selector se pone en modo «una capa a la vez» con <code>seleccionUnica</code>. Stadia Maps (y los estilos Stamen que sirve) funciona sin clave desde localhost; en un dominio publicado pide clave, que se añade a la URL como <code>?api_key=</code>.
     </p>
-    <pre class="codigo"><code>const capa = new IDEE.layer.XYZ({
-  url: 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-  name: 'Carto',
-  legend: 'Teselas XYZ (Carto)',
-}, { crossOrigin: 'anonymous' });
+    <pre class="codigo"><code>// Los fondos de leaflet-providers que cubren España
+const fondos = [
+  { name: 'OSM', legend: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' },
+  { name: 'OpenTopoMap', legend: 'OpenTopoMap (curvas de nivel)', url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png' },
+  // Stadia sirve también los estilos Stamen; sin clave solo en localhost
+  { name: 'StadiaAlidade', legend: 'Stadia Alidade (claro)', url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png' },
+  { name: 'EsriImagenes', legend: 'Esri imágenes (satélite)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' },
+  // ... hasta dieciocho
+];
 
-mapajs.addLayers(capa);</code></pre>
+fondos.forEach(function (f) {
+  mapajs.addLayers(new IDEE.layer.XYZ({
+    url: f.url,
+    name: f.name,
+    legend: f.legend,
+    isBase: false,
+  }, { displayInLayerSwitcher: true, crossOrigin: 'anonymous' }));
+});
+
+// Selector en modo radio: solo una capa del grupo visible a la vez
+mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher({
+  seleccionUnica: fondos.map(function (f) { return f.legend; }),
+}));</code></pre>
   </template>
 
   <script src="../../js/comun.js"></script>

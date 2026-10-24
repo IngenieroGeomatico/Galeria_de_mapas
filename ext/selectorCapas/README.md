@@ -147,7 +147,7 @@ Es el gestor de las capas superpuestas del mapa (las capas base quedan fuera, la
 | Archivo | Descripción |
 |---|---|
 | `ext_layerSwitcher.js` | El ayudante global `window.miWrapX` (`aplica`, `envuelve`, `olDe`) y la clase `miPlugin_layerSwitcher`, con todo el árbol, los handlers globales del panel, el bottom sheet y la ficha. |
-| `ext_layerSwitcher.css` | Estilos del panel y de la lista (`.overlay-layer-selector`, `.ls-row`, `.ls-eye`, `.ls-options-panel`, `.ls-opacity-slider`, `.ls-drag-handle`, `.ls-group`, `.ls-children`, marcas de drop), del bottom sheet (`.ls-sheet-*`, `.ls-attr-table`), de la ficha (`.ls-ficha-*`) y del botón de la barra (`.ls-supra__*`, icono por máscara). |
+| `ext_layerSwitcher.css` | Estilos del panel y de la lista (`.overlay-layer-selector`, `.ls-row`, `.ls-eye`, `.ls-radio` del modo «una capa a la vez», `.ls-options-panel`, `.ls-opacity-slider`, `.ls-drag-handle`, `.ls-group`, `.ls-children`, marcas de drop), del bottom sheet (`.ls-sheet-*`, `.ls-attr-table`), de la ficha (`.ls-ficha-*`) y del botón de la barra (`.ls-supra__*`, icono por máscara). |
 
 ## 🔧 Integración en un visualizador
 
@@ -167,6 +167,7 @@ Es el gestor de las capas superpuestas del mapa (las capas base quedan fuera, la
 | `color1` | `string\|Object` | `{active:'#ffffff', deactive:'orangered'}` | Color de fondo. |
 | `color2` | `string\|Object` | `{active:'#71A7D3', deactive:'#ffffff'}` | Color de borde (botón + panel, estado normal y `.opened`). |
 | `color3` | `string\|Object` | `{active:'#71A7D3', deactive:'#ffffff'}` | Color de icono y flecha. |
+| `seleccionUnica` | `boolean\|Array` | `false` | Modo «una capa a la vez». `true` convierte todas las capas del selector en un grupo de radio (solo una visible; encender una apaga las demás) y un array deja dentro del grupo solo las capas cuyo `legend`, `name` o `idLayer` esté en la lista, para que las superposiciones (una ortofoto, un seamark) sigan funcionando como casilla independiente. Ojo: los `idLayer` se regeneran en cada reinicio de mapa, así que en un visualizador conviene pasar `legend`. |
 
 > El panel se fija internamente en `IDEE.ui.position.TL` (`IDEE.ui.Panel('toolsExtra_layerSwitcher')`, `collapsible: true`, clase `g-herramienta_selectorCapa`) con el control `controlLayer_layerSwitcher`; no hay opción de posición ni de título de panel. Según el propio código, `addTo` lo crea plegado y el estado abierto solo se recupera vía `setState`.
 
@@ -192,6 +193,17 @@ supra.addItem(layerSwitcherPlugin);      // el botón pasa a la barra
 mapajs.addPlugin(layerSwitcherPlugin);   // el panel sigue en el mapa
 ```
 
+Modo «una capa a la vez» (visor de XYZ: dieciocho fondos y un seamark encima):
+
+```js
+mapajs.addPlugin(new IDEE.plugin.miPlugin_layerSwitcher({
+  order: 1,
+  // Los que van en la lista se comportan como un radio; OpenSeaMap, que no
+  // está, se sigue encendiendo y apagando con el ojito encima del elegido.
+  seleccionUnica: ['OpenStreetMap', 'OpenTopoMap', 'Esri imágenes (satélite)'],
+}));
+```
+
 ## 🎨 Colores
 
 Las seis variables se escriben **en línea** sobre el panel del plugin (no en un `<style>`).
@@ -206,8 +218,8 @@ Las seis variables se escriben **en línea** sobre el panel del plugin (no en un
 
 | Método | Contenido |
 |---|---|
-| `getState()` | `{ panelCollapsed, optionsOpen, optionsOpenLegend, groupCollapsed, groupCollapsedLegends }`. Además del `idLayer` de la capa con el desplegable abierto y del mapa `idLayer → bool` de los grupos plegados, guarda su `legend`/`name` como identificador **estable** (los `idLayer` se regeneran con prefijos temporales en cada reinicio de mapa). |
-| `setState(state, map)` | Restaura el plegado del panel, resuelve el desplegable abierto y los grupos plegados **primero por `idLayer`** y, si esa capa ya no existe, **por `legend`/`name`** (patrón `_findLayerByIdInMap` / `_findLayerByLegendInMap`, ambos recursivos dentro de grupos anidados), filtra defensivamente los identificadores que ya no están y fuerza un re-render de la lista. |
+| `getState()` | `{ panelCollapsed, optionsOpen, optionsOpenLegend, groupCollapsed, groupCollapsedLegends, radioVisibleLegend }`. Además del `idLayer` de la capa con el desplegable abierto y del mapa `idLayer → bool` de los grupos plegados, guarda su `legend`/`name` como identificador **estable** (los `idLayer` se regeneran con prefijos temporales en cada reinicio de mapa). `radioVisibleLegend` es la capa elegida en el modo «una capa a la vez»: la visibilidad de las capas no viaja por aquí (la recrea el visor), pero la elección sí se conserva. |
+| `setState(state, map)` | Restaura el plegado del panel, resuelve el desplegable abierto y los grupos plegados **primero por `idLayer`** y, si esa capa ya no existe, **por `legend`/`name`** (patrón `_findLayerByIdInMap` / `_findLayerByLegendInMap`, ambos recursivos dentro de grupos anidados), filtra defensivamente los identificadores que ya no están, vuelve a encender la capa elegida del grupo radio y fuerza un re-render de la lista. |
 
 El estado de **las capas** (visibilidad, opacidad, orden z, renombrado) no viaja por aquí: reside en las propias capas y lo transfiere directamente `cambioImpl`.
 
