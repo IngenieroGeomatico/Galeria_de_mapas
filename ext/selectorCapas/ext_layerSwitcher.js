@@ -1597,6 +1597,17 @@ class miPlugin_layerSwitcher {
      */
     function _conExtension(capa, hecho, intento) {
       const n = intento || 0;
+      // Una capa MVT se mira ANTES que `getMaxExtent()`: en estas capas esa
+      // llamada devuelve la caja de las teselas YA cargadas (medido: la del
+      // viewport), asi que "zoom a la capa" se quedaba donde estaba. La
+      // cobertura se busca en el TileJSON del servicio y, si no hay documento,
+      // se encuadra el mundo entero (ver _extensionMVT).
+      if (n === 0 && _tieneMVT(capa)) {
+        _extensionMVT(capa, function (extMvt) {
+          hecho(extMvt || _extensionMundo() || null);
+        });
+        return;
+      }
       const ext = _extensionUtil(capa);
       if (ext) { hecho(ext); return; }
       // Un WMS no lleva la extension en el cliente: hay que preguntarsela al
@@ -2387,6 +2398,91 @@ class miPlugin_layerSwitcher {
         }
       } catch (e) { /* sin extensión de proyección */ }
       return null;
+    }
+
+    // ── Extensión de una capa MVT (teselas vectoriales) ─────────────────
+    // `getMaxExtent()` no sirve aqui: en una MVT devuelve la caja de las teselas
+    // YA cargadas (medido con la de unidades administrativas del IGN: la del
+    // viewport en ese momento), de modo que "zoom a la capa" no movia la vista a
+    // ningun sitio util. La cobertura de verdad la publica el servicio en el
+    // TileJSON que acompana a las teselas (`metadata.json` con `bounds`; medido
+    // en .../uadministrativa/metadata.json). Si ese documento no existe o no
+    // trae bounds, se encuadra el MUNDO entero: el boton siempre hace algo y no
+    // se inventa una cobertura.
+    //
+    // Igual que en las MapLibre, el resultado se cachea por capa.
+
+    const _cacheExtensionMVT = new Map();
+
+    /**
+     * Capas MVT que hay dentro de una capa: ella misma o, si es un grupo, sus
+     * hijas (los grupos se pueden anidar).
+     * @param {Object} capa
+     * @returns {Array<Object>}
+     */
+    function _capasMVT(capa) {
+      const salida = [];
+      const visitar = function (c) {
+        if (!c) return;
+        if (esCapaMVT(c)) { salida.push(c); return; }
+        let hijas = [];
+        try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+      };
+      visitar(capa);
+      return salida;
+    }
+
+    /**
+     * ¿La capa, o alguna de sus hijas, es una MVT?
+     * @param {Object} capa
+     * @returns {boolean}
+     */
+    function _tieneMVT(capa) {
+      return _capasMVT(capa).length > 0;
+    }
+
+    /**
+     * Extensión de una capa MVT (o grupo con MVT dentro), en la proyección que
+     * tenga el mapa ahora mismo.
+     * @param {Object} capa
+     * @param {Function} hecho Recibe la extensión o null.
+     */
+    function _extensionMVT(capa, hecho) {
+      const capas = _capasMVT(capa);
+      if (!capas.length) { hecho(null); return; }
+
+      Promise.all(capas.map(function (c) { return _extensionDeUnaMVT(c); }))
+        .then(function (lista) {
+          const validas = lista.filter(function (e) {
+            return Array.isArray(e) && e.length >= 4 && e.slice(0, 4).every(isFinite);
+          });
+          hecho(validas.length ? _unionExtensiones(validas) : null);
+        })
+        .catch(function () { hecho(null); });
+    }
+
+    /**
+     * Extensión de una sola capa MVT: el `bounds` del TileJSON del servicio o,
+     * si no hay documento, el mundo entero.
+     * @param {Object} capa
+     * @returns {Promise<Array<number>|null>}
+     */
+    async function _extensionDeUnaMVT(capa) {
+      if (!capa) return null;
+      const clave = 'mvt|' + String(capa.idLayer || '') + '|' + String(capa.legend || capa.name || '');
+      if (_cacheExtensionMVT.has(clave)) return _cacheExtensionMVT.get(clave);
+
+      const datos = mvtDatos(capa);
+      if (!datos) return null;
+      // Las teselas son lo unico que declara la capa; de ahi se deducen las
+      // carpetas donde puede estar el metadata.json.
+      const bounds = await _boundsDeMetadataTeselas({ tiles: [datos.url] });
+      let ext = null;
+      if (bounds) ext = _reproyectar(bounds, 'EPSG:4326', _codigoDeLaProyeccion());
+      if (!ext) ext = _extensionMundo();
+      if (ext) _cacheExtensionMVT.set(clave, ext);
+      return ext;
     }
 
     /**
