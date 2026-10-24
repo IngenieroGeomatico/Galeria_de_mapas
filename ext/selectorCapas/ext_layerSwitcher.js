@@ -164,10 +164,98 @@
     return envolver(olDe(capa), new Set()) > 0;
   }
 
+  /**
+   * Baja al fondo de la pila las capas de una base recien puesta. Solo actua
+   * en 3D: en Cesium la pila es la coleccion `imageryLayers` (indice 0 = la
+   * de abajo) y las capas se anaden al final, salvo que lleven `isBase`, que
+   * las mete en el 0. Las bases hechas con un grupo (el Hibrido) no llevan
+   * `isBase` en sus hijas, asi que se apilaban ENCIMA de las superpuestas y el
+   * fondo tapaba la capa elegida (medido: las dos hijas del Hibrido en los
+   * indices 19 y 20 con 19 fondos XYZ debajo).
+   *
+   * Se recolocan solo las capas indicadas, conservando su orden relativo, y no
+   * se toca nada si ya estan abajo. En 2D no hace nada (alli manda el z-index,
+   * y las bases ya se crean por debajo).
+   *
+   * @param {Object} mapa Instancia del mapa API-IDEE.
+   * @param {Array} capas Capas o grupos que forman la base.
+   * @returns {number} Cuantas capas de Cesium se han bajado.
+   */
+  function bajaBase(mapa, capas) {
+    let bajadas = 0;
+    try {
+      if (!mapa || typeof mapa.getMapImpl !== 'function') return 0;
+      const impl = mapa.getMapImpl();
+      const coleccion = impl && impl.imageryLayers;
+      // Solo Cesium: el impl de OpenLayers no tiene imageryLayers.
+      if (!coleccion || !impl.scene || !impl.scene.camera) return 0;
+
+      const cesiumDe = function (capa) {
+        try {
+          const i = (capa && typeof capa.getImpl === 'function') ? capa.getImpl() : null;
+          if (!i) return null;
+          if (i.cesiumLayer) return i.cesiumLayer;
+          if (typeof i.getLayer === 'function') return i.getLayer();
+        } catch (e) { /* sin capa Cesium */ }
+        return null;
+      };
+
+      const lista = [];
+      const visitar = function (capa) {
+        if (!capa) return;
+        const esGrupo = (capa.type === 'LayerGroup' || typeof capa.getLayers === 'function');
+        if (esGrupo) {
+          let hijas = [];
+          try { hijas = capa.getLayers ? capa.getLayers() : []; } catch (e) { hijas = []; }
+          hijas.forEach(visitar);
+          return;
+        }
+        const cl = cesiumDe(capa);
+        if (cl && lista.indexOf(cl) < 0) lista.push(cl);
+      };
+      (capas || []).forEach(visitar);
+      if (!lista.length) return 0;
+
+      const indices = lista.map(function (cl) { return coleccion._layers.indexOf(cl); });
+      if (indices.some(function (i) { return i < 0; })) return 0;   // aun no estan
+      // ¿Ya estan al fondo, en el mismo orden relativo? Entonces no se toca.
+      const yaAbajo = indices.slice().sort(function (a, b) { return a - b; })
+        .every(function (v, i) { return v === i; });
+      if (yaAbajo) return 0;
+
+      // Se recolocan de abajo arriba conservando el orden que ya tenian.
+      const ordenadas = lista.slice().sort(function (a, b) {
+        return coleccion._layers.indexOf(a) - coleccion._layers.indexOf(b);
+      });
+      ordenadas.forEach(function (cl) { coleccion.remove(cl, false); });
+      ordenadas.forEach(function (cl, i) { coleccion.add(cl, i); });
+      bajadas = ordenadas.length;
+    } catch (e) { /* defensivo: una base recolocada no debe romper el mapa */ }
+    return bajadas;
+  }
+
+  /**
+   * Programa `bajaBase` varias veces: la API da de alta las capas de forma
+   * asincrona y las hijas de un grupo pueden llegar despues que el grupo.
+   *
+   * @param {Object} mapa Instancia del mapa API-IDEE.
+   * @param {Array} capas Capas o grupos que forman la base.
+   */
+  function programaBajaBase(mapa, capas) {
+    [0, 400, 1500].forEach(function (espera) {
+      setTimeout(function () { bajaBase(mapa, capas); }, espera);
+    });
+  }
+
   window.miWrapX = {
     aplica: aplica,
     envuelve: envuelve,
     olDe: olDe
+  };
+
+  window.miBaseAbajo = {
+    aplica: bajaBase,
+    programa: programaBajaBase
   };
 })();
 
@@ -411,13 +499,117 @@ class miPlugin_layerSwitcher {
     return salida;
   }
 
+  // ── Orden de apilado (z-index) ───────────────────────────────────────
+  // z-index REAL de una capa: el que usa el renderer de OpenLayers
+  // (sortByZIndex) para pintar. Se lee del impl OL (layer.getImpl().olLayer),
+  // que es la fuente de verdad: la fachada puede quedar desincronizada tras
+  // un setZIndex() (no lo refleja). Fallback a la fachada, que en Cesium
+  // devuelve el índice dentro de imageryLayers (0 = la de abajo).
+  _zReal(l) {
+    if (!l) return null;
+    try {
+      const impl = typeof l.getImpl === 'function' ? l.getImpl() : null;
+      const ol = impl && impl.olLayer;
+      if (ol && typeof ol.getZIndex === 'function') {
+        const z = ol.getZIndex();
+        if (z != null) return z;
+      }
+    } catch (e) { /* seguir con fachada */ }
+    try {
+      if (typeof l.getZIndex === 'function') return l.getZIndex();
+    } catch (e) { /* sin z */ }
+    return null;
+  }
+
+  // Escribe el z-index en la fuente de verdad de cada implementacion: el
+  // olLayer en 2D (la fachada no refleja el setZIndex) y la propia fachada en
+  // 3D, que delega en el impl de Cesium (quita la capa de imageryLayers y la
+  // vuelve a insertar en esa posicion).
+  _escribirZ(layer, z) {
+    try {
+      const impl = (typeof layer.getImpl === 'function') ? layer.getImpl() : null;
+      const ol = impl && impl.olLayer;
+      if (ol && typeof ol.setZIndex === 'function') {
+        ol.setZIndex(z);
+        return;
+      }
+    } catch (e) { /* probar la fachada */ }
+    try {
+      if (typeof layer.setZIndex === 'function') layer.setZIndex(z);
+    } catch (e) { /* capa sin z-index */ }
+  }
+
+  // Capas del mapa que participan en el orden de apilado: rasteres y grupos,
+  // incluidas las hijas, y las bases aunque no salgan en el selector. Se
+  // quedan fuera los vectores (en Cesium su setZIndex reindexa TODOS los
+  // dataSources a 0, ver el bundle) y las capas de terreno, que no son
+  // imageryLayers. Devuelve una lista plana.
+  _capasConZ(mapRef) {
+    const salida = [];
+    if (!mapRef || typeof mapRef.getLayers !== 'function') return salida;
+    const visitar = (l) => {
+      if (!l) return;
+      const esGrupo = (l.type === 'LayerGroup' || l._type === 'LayerGroup' || typeof l.getLayers === 'function');
+      const tipo = String(l.type || '');
+      if (esGrupo) {
+        let hijas = [];
+        try { hijas = l.getLayers ? l.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+        return;
+      }
+      if (tipo === 'Vector' || tipo === 'Terrain') return;
+      if (l.displayInLayerSwitcher === false && l.isBase !== true) return;
+      salida.push(l);
+    };
+    try { (mapRef.getLayers() || []).forEach(visitar); } catch (e) { /* sin capas */ }
+    return salida;
+  }
+
+  // Identificador estable de una capa para el estado (legend si no es el id).
+  _identificadorDe(capa) {
+    if (!capa) return null;
+    if (capa.legend && String(capa.legend) !== String(capa.idLayer)) return capa.legend;
+    return capa.name || null;
+  }
+
+  // Reaplica el orden de apilado guardado. `orden` viene de arriba abajo (la
+  // primera se dibuja encima). Los valores de z que ya tienen esas capas en el
+  // mapa nuevo se permutan entre ellas para no invadir el rango de las capas
+  // que no gestiona el selector ni chocar con las constantes Z_INDEX de la
+  // API. El orden guardado ya trae las bases debajo (asi estaban en el mapa de
+  // origen); NO se miran las banderas `isBase` de la instancia nueva porque en
+  // Cesium `isBase` significa "la primera capa visible" y cambia segun lo que
+  // se encienda (medido: con el fondo Esri encendido y los demas apagados, la
+  // propia API marcaba ese fondo como base).
+  _restaurarOrdenZ(mapRef, orden) {
+    if (!mapRef || !Array.isArray(orden) || orden.length < 2) return;
+    const capas = [];
+    for (const item of orden) {
+      const ident = (typeof item === 'string') ? item : (item && (item.legend || item.name));
+      if (!ident) continue;
+      const capa = this._findLayerByLegendInMap(mapRef, ident);
+      if (!capa || capas.indexOf(capa) >= 0) continue;
+      capas.push(capa);
+    }
+    if (capas.length < 2) return;
+
+    const validos = capas.map((c) => this._zReal(c)).filter((z) => typeof z === 'number' && isFinite(z)).sort((a, b) => a - b);
+    const zMin = validos.length ? validos[0] : 0;
+    capas.slice().reverse().forEach((capa, i) => {
+      // Con los z completos se permutan los existentes; si alguno venia nulo,
+      // se rellena una escalera desde el menor.
+      const z = (validos.length === capas.length) ? validos[i] : (zMin + i);
+      this._escribirZ(capa, z);
+    });
+  }
+
   // ── Coordinación de estado (swap 2D/3D con cambioImpl) ───────────────
   // Captura el estado serializable propio de la UI del selector de capas
-  // (_optionsOpen y _groupCollapsed). El estado de las capas (visibilidad,
-  // opacidad, orden z, renombrado) reside en las propias capas y es
-  // transferido directamente por cambioImpl; la excepción es la capa elegida
-  // en el modo "una capa a la vez", que se guarda aquí (radioVisibleLegend)
-  // porque las capas se recrean con la visibilidad que declara el visor.
+  // (_optionsOpen, _groupCollapsed y el orden de apilado). La visibilidad,
+  // la opacidad y el renombrado residen en las propias capas y los transfiere
+  // cambioImpl; hay dos excepciones que se guardan aquí porque las capas se
+  // recrean en cada reinicio de mapa: la capa elegida en el modo "una capa a
+  // la vez" (radioVisibleLegend) y el orden z (ordenZ).
   getState() {
     const groupCollapsedCopy = {};
     if (this._groupCollapsed && typeof this._groupCollapsed === 'object') {
@@ -480,6 +672,29 @@ class miPlugin_layerSwitcher {
           : (capa.name || null);
       }
     }
+    // Orden de apilado (z-index) de arriba abajo. Las capas se recrean en el
+    // orden que declara el visualizador en cada reinicio de mapa (cambio
+    // 2D/3D), asi que sin esto se perdia el reordenado del selector: en 2D
+    // los z volvian a los de creacion y en 3D el orden de imageryLayers era
+    // el de alta de las capas (medido: tras arrastrar las balizas debajo de
+    // "Esri gris claro" volvian arriba, ultimas de la pila). Se guarda por
+    // legend/name, que son estables, con una marca de si es capa base.
+    let ordenZ = [];
+    if (this._map) {
+      const entradas = [];
+      this._capasConZ(this._map).forEach((capa) => {
+        const ident = this._identificadorDe(capa);
+        if (!ident) return;
+        entradas.push({ ident, z: this._zReal(capa) });
+      });
+      entradas.sort((a, b) => {
+        if (a.z == null && b.z == null) return 0;
+        if (a.z == null) return 1;
+        if (b.z == null) return -1;
+        return b.z - a.z;
+      });
+      ordenZ = entradas.map((e) => e.ident);
+    }
     return {
       panelCollapsed,
       optionsOpen: idAtOpen,
@@ -487,6 +702,7 @@ class miPlugin_layerSwitcher {
       groupCollapsed: groupCollapsedCopy,
       groupCollapsedLegends,
       radioVisibleLegend,
+      ordenZ,
     };
   }
 
@@ -631,6 +847,17 @@ class miPlugin_layerSwitcher {
         this._capasGrupoRadio(mapRef).forEach((c) => {
           try { c.setVisible(c === elegida); } catch (e) { /* capa sin visibilidad */ }
         });
+      }
+    }
+
+    // Restaurar el orden de apilado: en 3D la pila es la coleccion de
+    // imageryLayers (indice 0 = abajo) y en 2D el zIndex del renderer, y en
+    // los dos casos las capas se recrean en el orden del visualizador. Se
+    // reaplica antes de renderizar la lista para que el panel y el mapa
+    // cuenten lo mismo.
+    if (Array.isArray(state.ordenZ) && state.ordenZ.length) {
+      try { this._restaurarOrdenZ(mapRef, state.ordenZ); } catch (e) {
+        console.warn('layerSwitcher: no se pudo restaurar el orden de las capas', e);
       }
     }
 
@@ -808,25 +1035,10 @@ class miPlugin_layerSwitcher {
       visibles.forEach(c => { if (c !== elegida) c.setVisible(false); });
     };
 
-    // z-index REAL de una capa: el que usa el renderer de OpenLayers
-    // (sortByZIndex) para pintar. Se lee del impl OL (layer.getImpl().olLayer),
-    // que es la fuente de verdad: la fachada puede quedar desincronizada tras
-    // un setZIndex() (no lo refleja). Fallback a la fachada si no hay impl.
-    const getRealZIndex = (l) => {
-      if (!l) return null;
-      try {
-        const impl = typeof l.getImpl === 'function' ? l.getImpl() : null;
-        const ol = impl && impl.olLayer;
-        if (ol && typeof ol.getZIndex === 'function') {
-          const z = ol.getZIndex();
-          if (z != null) return z;
-        }
-      } catch (e) { /* seguir con fachada */ }
-      try {
-        if (typeof l.getZIndex === 'function') return l.getZIndex();
-      } catch (e) { /* sin z */ }
-      return null;
-    };
+    // z-index REAL de una capa. La implementacion vive en la clase
+    // (_zReal) porque el contrato getState/setState tambien la necesita para
+    // guardar y reaplicar el orden de apilado entre 2D y 3D.
+    const getRealZIndex = (l) => self._zReal(l);
 
     // Ordena una lista de capas de MAYOR a MENOR z-index: la capa que se
     // dibuja encima (z-index mayor) va arriba del todo de la lista. Si alguna
@@ -1329,19 +1541,9 @@ class miPlugin_layerSwitcher {
       }
     };
 
-    // Registra el z-index en la fachada y en el impl OL. Mapea puede leer el z
-    // desde la fachada (getZIndex()) que delega al impl, asi que escribimos el
-    // impl (fuente de verdad del render) y, si la fachada expone setter propio,
-    // tambien lo sincronizamos.
-    const recordZ = (layer, z) => {
-      try {
-        const impl = (typeof layer.getImpl === 'function') ? layer.getImpl() : null;
-        const ol = impl && impl.olLayer;
-        if (ol && typeof ol.setZIndex === 'function') ol.setZIndex(z);
-        // Fallback: si no hay impl OL, intenta setZIndex en la propia fachada.
-        if (!ol && typeof layer.setZIndex === 'function') layer.setZIndex(z);
-      } catch (e) { /* defensivo */ }
-    };
+    // Registra el z-index en la fachada y en el impl OL (logica en _escribirZ,
+    // compartida con la restauracion del orden entre 2D y 3D).
+    const recordZ = (layer, z) => self._escribirZ(layer, z);
 
     // Obtiene el contenedor (raiz de mapa o grupo) de una capa: devuelve la
     // lista de capas "hermanas" (mismo nivel) y el grupo padre (null=raiz).

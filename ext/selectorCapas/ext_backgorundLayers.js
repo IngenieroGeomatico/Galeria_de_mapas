@@ -372,6 +372,9 @@ class miPlugin_baseLayer {
           const selected = this._items.find(function (l) { return l.id === targetId; });
           if (selected && selected.layers && typeof mapRef.addLayers === 'function') {
             mapRef.addLayers(selected.layers);
+            // En 3D, las capas de un grupo base se anaden al final de
+            // imageryLayers y tapaban las superpuestas: se bajan al fondo.
+            if (window.miBaseAbajo) window.miBaseAbajo.programa(mapRef, selected.layers);
             // Las capas base las construye la API a partir de su catálogo, y su
             // wrapX sale del defecto de cada clase de fuente (las TMS con true y
             // las WMTS con false). Se igualan a true para que todas den la vuelta
@@ -614,6 +617,11 @@ class miPlugin_baseLayer {
       var antes = map.getLayers().slice();
       map.addLayers(selected.layers);
       anadidas = map.getLayers().filter(function (l) { return antes.indexOf(l) === -1; });
+      // En 3D las hijas de un grupo base (el Hibrido) no llevan `isBase`, asi
+      // que se anaden ENCIMA de las superpuestas y el fondo tapaba la capa
+      // elegida. Se bajan al fondo de imageryLayers conservando su orden. Ver
+      // window.miBaseAbajo en ext_layerSwitcher.js.
+      if (window.miBaseAbajo) window.miBaseAbajo.programa(map, selected.layers);
       // Ver el comentario del otro alta: el wrapX de las capas base sale del
       // defecto de cada clase de fuente y se iguala a true (window.miWrapX).
       if (window.miWrapX) window.miWrapX.aplica(map);
