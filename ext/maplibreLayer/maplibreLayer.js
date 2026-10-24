@@ -125,7 +125,8 @@
  * `PostProcessStage` que pinta el canvas de MapLibre **sobre el terreno visible**
  * (ver `crearDrape_` y `SHADER_DRAPE`). Para cada píxel:
  *
- *   1. Lee la profundidad del globo y reconstruye la posición ECEF del terreno.
+ *   1. Lee la profundidad del globo y reconstruye la posición del terreno en el
+ *      marco de la escena (ECEF en 3D; en los modos planos, ver más abajo).
  *      La textura entra por un uniform propio (`u_globeDepth`) y no por el
  *      automático `czm_globeDepthTexture`: medido, `uniformState.globeDepthTexture`
  *      NO existe durante los primeros ~12 frames (la escena aún no ha hecho la
@@ -139,8 +140,8 @@
  *      por uniforms en doble precisión, porque la traslación de esa matriz va en
  *      float32 sobre coordenadas de 6,4e6 m, se lleva ~0,5 m y deja el drape 2 px
  *      desplazado a zoom 18 (con el filtrado LINEAR, además difuminado).
- *   2. Pasa del ECEF a mercator por dos caminos, conmutados por zoom (ver
- *      `ZOOM_DRAPE_EXACTO`):
+ *   2. Pasa del marco de la escena a mercator por dos caminos, conmutados por
+ *      zoom (ver `ZOOM_DRAPE_EXACTO`):
  *      - **Zoom alto (lo normal)**: **sin funciones trascendentes**. Web Mercator
  *        es conforme, así que en el entorno del centro de la vista basta con medir
  *        el desplazamiento en este y norte (producto escalar con los ejes de la
@@ -206,21 +207,37 @@
  * el div sigue visible, así que el cambio de una representación a otra no deja
  * hueco.
  *
- * En los modos planos de Cesium (COLUMBUS_VIEW, que es donde pone la escena el
- * selector de S.C.R. al elegir EPSG:3857, y SCENE2D) el drape no vale: reconstruye
- * la profundidad del globo en ECEF y ahí la escena se dibuja sobre el plano de
- * `scene.mapProjection`. Medido al cambiar el S.C.R.: la escena queda en modo 1,
- * el stage seguía activo sin pintar y el div estaba oculto, así que la capa
- * desaparecía. En esos modos manda el overlay plano (`vistaDesdeCamaraPlana_`:
- * centro = punto del plano bajo el centro de pantalla, escala = altura, fovy e
- * inclinación, rumbo = heading) y se compensa la diferencia de proyección: el
- * plano del `Viewer` es una plate carrée (`GeographicProjection`) y MapLibre
- * pinta Mercator, así que el lienzo se recoloca con una homografía por frame
- * (`aplicarTransformacionPlana_`). Sin eso, en Madrid la capa sale un 31 % más
- * estrecha que la base de Cesium. Como la homografía lleva la pantalla a un
- * cuadrilátero del lienzo, en el plano el contenedor se agranda un 30 %
- * alrededor del centro (`ajustarTamanoOverlay_`), para que ese cuadrilátero
- * quepa entero.
+ * MODOS PLANOS DE CESIUM (COLUMBUS_VIEW / SCENE2D)
+ *
+ * Al elegir EPSG:3857 el selector de S.C.R. deja la escena en COLUMBUS_VIEW
+ * (modo 1), que no va en ECEF: Cesium pinta el plano de `scene.mapProjection`,
+ * medido una plate carrée escalada por el radio del elipsoide, con el mundo en
+ * (altura, λ·R, φ·R) —el plano está en x = 0 y sus coordenadas son (y, z)—.
+ * Medido: `mapProjection.project(-3,55°, 40,61°)` = (-395.184, 4.520.685, 0) y
+ * la cámara en (32.704, -413.064, 4.500.049).
+ *
+ * El drape funciona igual: la reconstrucción de la profundidad no cambia (la
+ * copia de profundidad del globo existe también ahí, medido 1280×649) y solo hay
+ * que convertir el punto a mercator en ese marco. `referenciaDrape_` pone el
+ * origen y los ejes en el plano (`este = (0,1,0)`, `norte = (0,0,1)`) y el paso a
+ * mercator en `1/(2π·R)` y `−1/(2π·R·cos φ)`; el camino exacto del shader lee el
+ * punto como (altura, λ·R, φ·R) y saca λ y φ dividiendo por R (`u_plano` y
+ * `u_radProy`). El canvas se pinta con la misma vista en perspectiva que el
+ * overlay (`vistaDesdeCamaraPlana_`), de modo que abarca justo la pantalla y la
+ * capa sale a la misma escala que en 3D; el muestreo por mercator sigue siendo
+ * exacto porque la UV sale de la matriz de MapLibre para cada punto del terreno.
+ * Con la cámara inclinada la capa sigue el relieve y se recorta con él, como en
+ * 3D.
+ *
+ * Queda el overlay plano como reserva (`vistaDesdeCamaraPlana_` +
+ * `aplicarTransformacionPlana_`), para cuando el drape no está disponible
+ * (WebGL1 sin `depthTexture`, stage que no se pudo montar, zoom por encima del
+ * máximo de MapLibre o una proyección que no es plate carrée). Ahí sí hay que
+ * compensar que MapLibre pinta Mercator y el plano es una plate carrée: el
+ * lienzo se recoloca con una homografía por frame, y como la homografía lleva la
+ * pantalla a un cuadrilátero del lienzo, el contenedor se agranda un 30 %
+ * alrededor del centro (`ajustarTamanoOverlay_`). Sin eso, en Madrid la capa
+ * sale un 31 % más estrecha que la base de Cesium.
  *
  * Lo que no hace: no atiende clics (`interactive: false`, igual que en OL); como
  * el div no captura el ratón, Cesium sigue recibiendo todo.
@@ -377,11 +394,17 @@
     // JavaScript y en doble: la mercator normalizada (~0,4) tiene un ULP de
     // 3e-8 en float32 y, con los 2,3e8 de la matriz, ese último bit vale ~4 px.
     'uniform vec4 u_clipCentro;',
-    // Camino exacto (zoom bajo): centro de la vista en ECEF, mercator X del
-    // centro (para elegir la copia del mundo) y conmutador.
+    // Camino exacto (zoom bajo): centro de la vista en el marco de la escena
+    // (ECEF o el plano), mercator X del centro (para elegir la copia del mundo)
+    // y conmutador.
     'uniform vec3 u_origen;',
     'uniform float u_mercCentroX;',
     'uniform float u_global;',
+    // Marco de la escena plana (COLUMBUS_VIEW / SCENE2D): allí el mundo no va
+    // en ECEF sino en (altura, λ·R, φ·R), con R el radio de la proyección.
+    // `u_plano` conmuta la conversión a mercator y `u_radProy` lleva R.
+    'uniform float u_plano;',
+    'uniform float u_radProy;',
     'in vec2 v_textureCoordinates;',
     '',
     'void main() {',
@@ -419,10 +442,20 @@
     '  vec4 clip;',
     '  if (u_global > 0.5) {',
     '    vec3 p = delta + u_origen;',
-    '    float rho = sqrt(p.x * p.x + p.y * p.y);',
-    '    float tanPhi = p.z / ((1.0 - 0.00669437999014) * rho);',
-    '    float mercY = 0.5 - log(tanPhi + sqrt(tanPhi * tanPhi + 1.0)) / (2.0 * czm_pi);',
-    '    float mercX = (atan(p.y, p.x) + czm_pi) / (2.0 * czm_pi);',
+    '    float mercX;',
+    '    float mercY;',
+    '    if (u_plano > 0.5) {',
+    '      // Escena plana: p = (altura, λ·R, φ·R) y la escena pinta una plate',
+    '      // carrée, así que la mercator sale directa de p.y y p.z.',
+    '      float tanPhiPlano = tan(p.z / u_radProy);',
+    '      mercY = 0.5 - log(tanPhiPlano + sqrt(tanPhiPlano * tanPhiPlano + 1.0)) / (2.0 * czm_pi);',
+    '      mercX = (p.y / u_radProy + czm_pi) / (2.0 * czm_pi);',
+    '    } else {',
+    '      float rho = sqrt(p.x * p.x + p.y * p.y);',
+    '      float tanPhi = p.z / ((1.0 - 0.00669437999014) * rho);',
+    '      mercY = 0.5 - log(tanPhi + sqrt(tanPhi * tanPhi + 1.0)) / (2.0 * czm_pi);',
+    '      mercX = (atan(p.y, p.x) + czm_pi) / (2.0 * czm_pi);',
+    '    }',
     '    // Copia del mundo más cercana al centro: sin esto, al cruzar el',
     '    // antimeridiano el punto se va a la copia de al lado y no se pinta.',
     '    mercX += floor(u_mercCentroX - mercX + 0.5);',
@@ -714,8 +747,11 @@
         if (!ancho || !alto) return;
 
         // En los modos planos, el contenedor se agranda para que el
-        // cuadrilátero que ocupa la pantalla en el lienzo siga cabiendo.
+        // cuadrilátero que ocupa la pantalla en el lienzo siga cabiendo; en el
+        // drape hace el mismo papel: el lienzo cubre un 30 % más que la pantalla
+        // a la misma escala, y así ningún punto de terreno cae fuera de él.
         const plana = this.vistaPlana_(viewer);
+        const overlay = plana && !this.usaDrape_();
         const anchoPrevio = this.anchoOverlay_;
         const altoPrevio = this.altoOverlay_;
         this.ajustarTamanoOverlay_(ancho, alto, plana);
@@ -779,7 +815,10 @@
 
         // En los modos planos (COLUMBUS_VIEW / SCENE2D) la cámara no se traduce
         // igual: no hay globo que cortar y el plano va en la proyección de la
-        // escena. Ver `vistaDesdeCamaraPlana_`.
+        // escena. La vista en perspectiva es la misma para el drape y para el div
+        // (`vistaDesdeCamaraPlana_`); lo único que cambia es quién pinta el
+        // lienzo (el stage o el div) y que con drape no se recoloca con la
+        // homografía.
         const vista = plana
           ? this.vistaDesdeCamaraPlana_(viewer, ancho, alto)
           : this.vistaDesdeCamara_(viewer, ancho, alto);
@@ -810,7 +849,7 @@
         // que hasta aquí devolvía la vista anterior. Si se calcula antes, la
         // transformación se queda un paso por detrás y la capa se ve despegada
         // del plano (medido: 28 px a `pitch` -50° y 466 px al cambiar el rumbo).
-        this.aplicarTransformacionPlana_(plana, viewer, ancho, alto);
+        this.aplicarTransformacionPlana_(overlay, viewer, ancho, alto);
         this.pintarSincrono_ = true;
       }
 
@@ -1115,7 +1154,11 @@
             clipCentro: new Cesium.Cartesian4(),
             // Conmutador y mercator X del centro para el camino exacto.
             mercCentroX: 0,
-            global: 0
+            global: 0,
+            // Marco de la escena plana: 1 si el shader debe leer el punto como
+            // (altura, λ·R, φ·R) y R de la proyección.
+            plano: 0,
+            radProy: 6378137
           };
           const capa = this;
           const stage = escena.postProcessStages.add(new Cesium.PostProcessStage({
@@ -1142,7 +1185,9 @@
               u_clipCentro: () => ref.clipCentro,
               u_origen: () => ref.origen,
               u_mercCentroX: () => ref.mercCentroX,
-              u_global: () => ref.global
+              u_global: () => ref.global,
+              u_plano: () => ref.plano,
+              u_radProy: () => ref.radProy
             }
           }));
 
@@ -1153,7 +1198,11 @@
             ref: ref,
             stage: stage,
             ancho: ancho,
-            alto: alto
+            alto: alto,
+            // ¿Se ha subido el canvas a la textura alguna vez? Hasta entonces el
+            // div no se oculta. `fallos` cuenta subidas seguidas fallidas.
+            copiado: false,
+            fallos: 0
           };
           this.drapeSucia_ = true;
           return true;
@@ -1182,6 +1231,15 @@
           pixelFormat: Cesium.PixelFormat.RGBA,
           pixelDatatype: Cesium.PixelDatatype.UNSIGNED_BYTE
         };
+        // Se rellena a cero al crearla: entre la creación y la primera subida del
+        // canvas, una textura sin fuente enseña memoria sin inicializar.
+        try {
+          opciones.source = {
+            width: ancho,
+            height: alto,
+            arrayBufferView: new Uint8Array(ancho * alto * 4)
+          };
+        } catch (e) { /* sin fuente; se rellena en la primera subida */ }
         if (Cesium.Sampler && Cesium.TextureMinificationFilter && Cesium.TextureMagnificationFilter) {
           opciones.sampler = new Cesium.Sampler({
             minificationFilter: Cesium.TextureMinificationFilter.LINEAR,
@@ -1274,14 +1332,12 @@
       actualizarDrape_() {
         const drape = this.drape_;
         if (!drape) return;
-        // En los modos planos el drape no vale: reconstruye la profundidad del
-        // globo en 3D y en el plano la cámara y el buffer van en otro espacio
-        // (medido: el stage se quedaba activo, no pintaba nada y el div estaba
-        // oculto, así que la capa desaparecía). Ahí manda el overlay plano, que
-        // es exactamente la vista del plano: sin inclinación y en 2D.
-        const plana = this.vistaPlana_(this.viewer_);
-        if (plana) this.drapeListo_ = false;
-        const utilizable = !plana && this.drapeUtilizable_();
+        // En los modos planos el drape también vale: la copia de profundidad del
+        // globo existe igual (medido en COLUMBUS_VIEW: 1280×649) y
+        // `referenciaDrape_` reconstruye el punto en el marco del plano. Solo se
+        // renuncia a él si la escena no es una plate carrée (`usaDrape_`), y
+        // entonces manda el overlay plano.
+        const utilizable = this.usaDrape_();
         drape.stage.enabled = this.visibility !== false && utilizable;
         if (!utilizable && this.overlay_ && this.overlay_.style.visibility === 'hidden') {
           this.overlay_.style.visibility = '';
@@ -1289,9 +1345,11 @@
         if (!drape.stage.enabled) return;
 
         // El div se oculta solo cuando el drape ya ha pintado con profundidad
-        // real; antes (primeros frames) aún no hay copia de profundidad y el
-        // drape no pinta, así que se deja el overlay plano a la vista.
-        if (this.drapeListo_ && this.overlay_ && this.overlay_.style.visibility !== 'hidden') {
+        // real y con el canvas subido al menos una vez; antes no hay copia de
+        // profundidad (o la textura aún está a cero) y el drape no pinta, así que
+        // se deja el overlay a la vista.
+        if (this.drapeListo_ && drape.copiado
+          && this.overlay_ && this.overlay_.style.visibility !== 'hidden') {
           this.overlay_.style.visibility = 'hidden';
         }
 
@@ -1327,13 +1385,28 @@
         if (this.drapeSucia_) {
           try {
             drape.textura.copyFrom({ source: lienzo });
+            drape.copiado = true;
+            drape.fallos = 0;
             this.drapeSucia_ = false;
-          } catch (e) { /* se reintenta en el siguiente frame */ }
+          } catch (e) {
+            // Se reintenta en el siguiente frame; si no hay manera, se apaga el
+            // drape y manda el overlay (que sigue visible hasta la primera copia).
+            drape.fallos = (drape.fallos || 0) + 1;
+            if (drape.fallos >= 30) {
+              this.drapeError_ = true;
+              drape.stage.enabled = false;
+              const capa = this;
+              setTimeout(() => {
+                if (capa.drape_) capa.destruirDrape_();
+              }, 0);
+            }
+          }
         }
       }
 
       /**
-       * Calcula el paso de ECEF a mercator en el entorno del centro de la vista.
+       * Calcula el paso del marco de la escena a mercator en el entorno del
+       * centro de la vista.
        *
        * El shader no puede hacerlo: con `atan`/`tan`/`log` (la fórmula exacta)
        * los drivers se desvían ~1e-6 en mercator, que son unos 40 m en el
@@ -1378,15 +1451,57 @@
         const M = A * (1 - E2) / (w * raiz);       // radio meridiano
 
         const ref = drape.ref;
-        ref.origen.x = N * cosLat * cosLon;
-        ref.origen.y = N * cosLat * senLon;
-        ref.origen.z = N * (1 - E2) * senLat;
 
-        // Ejes de la cámara en ECEF (columnas 0-2 de `inverseViewMatrix`, en
-        // doble precisión) y vector cámara - origen. El shader los usa en vez de
-        // la traslación de `czm_inverseView`, que va en float32 y arrastra
-        // ~0,5 m de error sobre coordenadas de 6,4e6 m: medido, eso dejaba el
-        // drape 2 px desplazado a zoom 18 y el filtrado LINEAR lo difuminaba.
+        // Marco de la escena. En 3D el punto reconstruido es ECEF y el origen es
+        // el elipsoide en el centro. En COLUMBUS_VIEW / SCENE2D la escena pinta
+        // el plano de `scene.mapProjection`: medido, una plate carrée escalada
+        // por su radio, con el mundo en (altura, λ·R, φ·R) —el plano está en
+        // x = 0 y sus coordenadas son (y, z)—. Allí el origen es el centro del
+        // plano y la base son los ejes del propio plano.
+        const escena = this.viewer_ && this.viewer_.scene;
+        const plana = this.vistaPlana_(this.viewer_);
+        const marco = plana ? this.marcoPlano_(escena) : null;
+        ref.plano = plana && marco ? 1 : 0;
+        ref.radProy = marco ? marco.radio : A;
+
+        if (ref.plano) {
+          ref.origen.x = 0;
+          ref.origen.y = lon * marco.radio;
+          ref.origen.z = lat * marco.radio;
+          ref.este.x = 0;
+          ref.este.y = 1;
+          ref.este.z = 0;
+          ref.norte.x = 0;
+          ref.norte.y = 0;
+          ref.norte.z = 1;
+          // Plate carrée -> mercator: en el plano el norte es z = φ·R, así que
+          // el paso al mercator es 1/(2π·R·cos φ) (y el este, 1/(2π·R)).
+          ref.escala.x = 1 / (2 * Math.PI * marco.radio);
+          ref.escala.y = -1 / (2 * Math.PI * marco.radio * cosLat);
+        } else {
+          ref.origen.x = N * cosLat * cosLon;
+          ref.origen.y = N * cosLat * senLon;
+          ref.origen.z = N * (1 - E2) * senLat;
+
+          // Base este/norte (geodésica) del centro, en ECEF.
+          ref.este.x = -senLon;
+          ref.este.y = cosLon;
+          ref.este.z = 0;
+          ref.norte.x = -senLat * cosLon;
+          ref.norte.y = -senLat * senLon;
+          ref.norte.z = cosLat;
+          // Paso de metros de terreno a mercator (el este recorre un paralelo y
+          // el norte un meridiano).
+          ref.escala.x = 1 / (2 * Math.PI * N * cosLat);
+          ref.escala.y = -1 / (2 * Math.PI * M * cosLat);
+        }
+
+        // Ejes de la cámara en el marco de la escena (columnas 0-2 de
+        // `inverseViewMatrix`, en doble precisión) y vector cámara - origen. El
+        // shader los usa en vez de la traslación de `czm_inverseView`, que va en
+        // float32 y arrastra ~0,5 m de error sobre coordenadas de 6,4e6 m:
+        // medido, eso dejaba el drape 2 px desplazado a zoom 18 y el filtrado
+        // LINEAR lo difuminaba.
         const camara = this.viewer_ && this.viewer_.scene && this.viewer_.scene.camera;
         const inv = camara && camara.inverseViewMatrix;
         if (inv) {
@@ -1405,18 +1520,9 @@
           ref.desdeOrigen.z = pos.z - ref.origen.z;
         }
 
-        // Base este/norte (geodésica) del centro, en ECEF.
-        ref.este.x = -senLon;
-        ref.este.y = cosLon;
-        ref.este.z = 0;
-        ref.norte.x = -senLat * cosLon;
-        ref.norte.y = -senLat * senLon;
-        ref.norte.z = cosLat;
-        // Mercator del centro y paso de metros de terreno a mercator.
+        // Mercator del centro.
         ref.mercCentro.x = (lon + Math.PI) / (2 * Math.PI);
         ref.mercCentro.y = 0.5 - Math.log(Math.tan(Math.PI / 4 + lat / 2)) / (2 * Math.PI);
-        ref.escala.x = 1 / (2 * Math.PI * N * cosLat);
-        ref.escala.y = -1 / (2 * Math.PI * M * cosLat);
 
         // Conmutador del camino exacto del shader (ver `ZOOM_DRAPE_EXACTO`).
         ref.mercCentroX = ref.mercCentro.x;
@@ -1460,6 +1566,28 @@
           return false;
         }
         return true;
+      }
+
+      /**
+       * Indica si la capa se pinta con el drape (y no con el div).
+       *
+       * En 3D basta con tenerlo montado y que la vista lo permita. En los modos
+       * planos también vale: la copia de profundidad del globo existe igual
+       * (medido en COLUMBUS_VIEW: 1280×649) y `referenciaDrape_` reconstruye el
+       * punto en el marco del plano, así que la capa cae sobre el terreno y se
+       * recorta con el relieve como en 3D. Solo se renuncia a él si la escena
+       * plana no es una plate carrée (`marcoPlano_`), y entonces manda el
+       * overlay con homografía.
+       * @returns {boolean}
+       */
+      usaDrape_() {
+        const drape = this.drape_;
+        if (!drape || !drape.stage) return false;
+        if (this.vistaPlana_(this.viewer_)) {
+          const escena = this.viewer_ && this.viewer_.scene;
+          if (!this.marcoPlano_(escena)) return false;
+        }
+        return this.drapeUtilizable_();
       }
 
       /**
@@ -1561,14 +1689,10 @@
       /**
        * ¿Está la escena en un modo plano de Cesium?
        *
-       * El drape y la sincronización normales reconstruyen la profundidad del
-       * globo en ECEF. En COLUMBUS_VIEW y en SCENE2D la escena se dibuja sobre
-       * el plano de la proyección (`scene.mapProjection`), la cámara mira desde
-       * arriba y el globo no se consulta igual, así que hay que usar el camino
-       * plano. Medido al pasar a EPSG:3857: la escena queda en modo 1
-       * (COLUMBUS_VIEW) y el drape, con la profundidad del globo, no pinta nada,
-       * mientras que el div está oculto porque `drapeListo_` ya era true: la
-       * capa desaparecía y solo se veía la base de Cesium.
+       * En COLUMBUS_VIEW y en SCENE2D la escena se dibuja sobre el plano de la
+       * proyección (`scene.mapProjection`), así que la cámara y los rayos van en
+       * ese marco y no en ECEF. Lo usan la sincronización de la cámara, el
+       * overlay con homografía y el marco del drape (`marcoPlano_`).
        * @param {Object} viewer El `Cesium.Viewer`.
        * @returns {boolean}
        */
@@ -1580,6 +1704,46 @@
           ? Cesium.SceneMode.SCENE3D
           : 3;
         return escena.mode !== modo3D;
+      }
+
+      /**
+       * Marco de la escena plana, para el drape.
+       *
+       * En COLUMBUS_VIEW / SCENE2D Cesium pinta el mundo sobre el plano de
+       * `scene.mapProjection`. Medido con la escena del selector de S.C.R.: es
+       * una plate carrée escalada por el radio del elipsoide, de modo que el
+       * mundo va en `(altura, λ·R, φ·R)` —el plano está en x = 0 y sus
+       * coordenadas son (y, z)— y `unproject(y, z)` devuelve la geográfica. El
+       * shader del drape necesita justo eso: el radio de la proyección.
+       *
+       * Si el visor se montara con otra proyección (p. ej. `WebMercatorProjection`,
+       * que para 45° daría un 12 % más de ordenada) las cuentas no valen, así
+       * que se devuelve null y se queda el overlay plano.
+       * @param {Object} escena La escena de Cesium.
+       * @returns {Object|null} `{radio}` o null.
+       */
+      marcoPlano_(escena) {
+        const Cesium = window.Cesium;
+        const proyeccion = escena && escena.mapProjection;
+        if (!Cesium || !proyeccion || typeof proyeccion.project !== 'function') {
+          return null;
+        }
+        try {
+          const RAD = Math.PI / 180;
+          // A 45° la plate carrée da φ·R y Web Mercator ln(tan(π/4+φ/2))·R.
+          const p = proyeccion.project(new Cesium.Cartographic(0, 45 * RAD, 0));
+          if (!p || !Number.isFinite(p.y) || !(Math.abs(p.y) > 0)) return null;
+          const radio = p.y / (45 * RAD);
+          const esperado = escena.globe && escena.globe.ellipsoid
+            ? escena.globe.ellipsoid.maximumRadius
+            : 6378137;
+          if (!(radio > 0) || Math.abs(radio - esperado) > esperado * 0.01) {
+            return null;
+          }
+          return { radio: radio };
+        } catch (e) {
+          return null;
+        }
       }
 
       /**
@@ -1992,10 +2156,10 @@
         this.visibility = visible;
         if (this.overlay_) this.overlay_.style.display = visible ? 'block' : 'none';
         // Con drape, el div está oculto con `visibility` (para no pintar dos
-        // veces) y quien manda es el stage. En los modos planos el stage se
-        // queda apagado aunque la capa se encienda (ver `actualizarDrape_`).
+        // veces) y quien manda es el stage; también en los modos planos, donde
+        // el drape cae sobre el terreno igual que en 3D (ver `usaDrape_`).
         if (this.drape_ && this.drape_.stage) {
-          this.drape_.stage.enabled = visible !== false && !this.vistaPlana_(this.viewer_);
+          this.drape_.stage.enabled = visible !== false && this.usaDrape_();
         }
         // Al volver a mostrarla hay que ponerse al día: mientras estaba oculta
         // no se ha llamado a `jumpTo`.
