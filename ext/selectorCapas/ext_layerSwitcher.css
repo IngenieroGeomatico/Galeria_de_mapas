@@ -321,7 +321,7 @@
 }
 
 .overlay-layer-selector .ls-options-panel.open {
-  max-height: 260px;
+  max-height: 220px;
   opacity: 1;
   margin-top: 0.15em;
   margin-bottom: 0.15em;
@@ -408,51 +408,10 @@
   margin-top: 0.4em;
 }
 
-/* ── Entidades por BBOX (WFS y OGC API Features) ──────────────────────
-   Fila del desplegable con dos botones: "Todas" (la API descarga las
-   entidades una sola vez) y "La vista" (se piden al servicio solo las que
-   caen en la pantalla y se renuevan al mover el mapa). La pinta el selector
-   solo si la extensión miPlugin_bboxFeatures está en el mapa. Mismo alto y
-   radio que el resto de controles del panel para no romper el ritmo. */
-.overlay-layer-selector .ls-option-bbox {
-  margin-top: 0.4em;
-}
-
-.overlay-layer-selector .ls-bbox-modo {
-  display: flex;
-  gap: 0.25em;
-  margin-left: auto;
-}
-
-.overlay-layer-selector .ls-bbox-btn {
-  border: 1px solid #c9d6e5;
-  border-radius: 999px;
-  background: #fff;
-  color: #445;
-  font-size: 0.75em;
-  line-height: 1;
-  padding: 5px 9px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.overlay-layer-selector .ls-bbox-btn:hover {
-  border-color: #0078d4;
-  color: #0078d4;
-}
-
-/* Elegido: azul de la API, el mismo de los demás controles activos. */
-.overlay-layer-selector .ls-bbox-btn-on,
-.overlay-layer-selector .ls-bbox-btn-on:hover {
-  background: #0078d4;
-  border-color: #0078d4;
-  color: #fff;
-  font-weight: 600;
-}
-
-.overlay-layer-selector .ls-bbox-btn:active {
-  transform: scale(0.96);
-}
+/* ── Objetos geográficos por BBOX (WFS y OGC API Features) ─────────────
+   Ya no vive aquí: los controles de "objetos geográficos" (todas / la vista,
+   límite y paginado) están en la ventana de información, sobre la tabla de
+   atributos. Ver .ls-objetos más abajo. */
 
 .overlay-layer-selector .ls-action {
   width: 28px;
@@ -836,6 +795,124 @@
   font-size: 0.82em;
   color: #666;
   margin: 0.4em 0 0.6em;
+}
+
+/* ── Objetos geográficos: barra sobre la tabla de atributos ───────────
+   Solo en las capas que se pueden pedir por páginas (WFS y OGC API
+   Features, ver ext/bboxFeatures): qué se pide al servicio ("Todas" / "La
+   vista"), cuántos objetos por página (límite, 100 por defecto) y el
+   paginado. El paginado se resuelve en el servidor, así que el mapa y la
+   tabla muestran siempre la misma página de objetos. */
+.ls-objetos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em 0.6em;
+  margin: 0.5em 0 0.6em;
+  padding: 6px 8px;
+  background: #f7f9fc;
+  border: 1px solid #e3e9f2;
+  border-radius: 6px;
+  font-size: 0.85em;
+}
+
+.ls-objetos__titulo {
+  color: #333;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ls-objetos__modo {
+  display: flex;
+  gap: 0.25em;
+}
+
+.ls-objetos__btn {
+  border: 1px solid #c9d6e5;
+  border-radius: 999px;
+  background: #fff;
+  color: #445;
+  font-size: 0.95em;
+  line-height: 1;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.ls-objetos__btn:hover {
+  border-color: #0078d4;
+  color: #0078d4;
+}
+
+/* Elegido: azul de la API, el mismo de los demás controles activos. */
+.ls-objetos__btn-on,
+.ls-objetos__btn-on:hover {
+  background: #0078d4;
+  border-color: #0078d4;
+  color: #fff;
+  font-weight: 600;
+}
+
+.ls-objetos__btn:active {
+  transform: scale(0.96);
+}
+
+/* Límite de objetos por página: a la derecha, separado del modo. */
+.ls-objetos__limite {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin-left: auto;
+  color: #444;
+  white-space: nowrap;
+}
+
+.ls-objetos__limite select {
+  font: inherit;
+  padding: 2px 4px;
+  border: 1px solid #c9d6e5;
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+  cursor: pointer;
+}
+
+.ls-objetos__pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.ls-objetos__pagina {
+  color: #444;
+  white-space: nowrap;
+}
+
+.ls-objetos__pagina-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #c9d6e5;
+  border-radius: 4px;
+  background: #fff;
+  color: #0078d4;
+  font-size: 1em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ls-objetos__pagina-btn:hover:not([disabled]) {
+  border-color: #0078d4;
+  background: #eaf3fc;
+}
+
+.ls-objetos__pagina-btn[disabled] {
+  color: #b7c1cf;
+  border-color: #e3e9f2;
+  cursor: default;
 }
 
 /* Lista de estadisticas (ráster) */

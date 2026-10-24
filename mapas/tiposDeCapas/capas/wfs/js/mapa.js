@@ -1,8 +1,9 @@
 /* =====================================================================
    WFS
    ---------------------------------------------------------------------
-   Entidades de un WFS. La API descarga el DescribeFeatureType para conocer
-   la geometria y luego pide las entidades, que se dibujan en el cliente.
+   Objetos geograficos de un WFS. La API descarga el DescribeFeatureType
+   para conocer la geometria y luego pide los objetos, que se dibujan en el
+   cliente.
    ===================================================================== */
 
 function mapa() {
@@ -20,7 +21,16 @@ function mapa() {
     namespace: 'IDENA',
     name: 'PATRIM_Sym_BICarqueo',
     legend: 'Yacimientos arqueologicos (WFS)',
-  }, {});
+  }, {
+    // Objetos geograficos por pagina. El limite por defecto es 100 (el de la
+    // extension bboxFeatures); se pone aqui porque el servicio tiene 1187
+    // objetos y asi la PRIMERA peticion ya viene acotada. OJO con la clave:
+    // el impl del WFS crea su servicio con `options.vendor`, NO con el tercer
+    // argumento del constructor. El limite y la pagina se cambian desde la
+    // ventana de informacion de la capa, que pide al servicio con `count` y
+    // `startIndex`.
+    vendor: { getFeature: { count: 100 } },
+  });
 
   mapajs.addLayers(capa);
 

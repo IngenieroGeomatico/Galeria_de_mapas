@@ -236,12 +236,14 @@ function anadirPluginsTipos(map, recrear, opciones) {
     order: 0,
   }));
 
-  // Entidades por BBOX (WFS y OGC API Features): deja pedir al servicio solo
-  // las entidades de la vista y renovarlas al mover el mapa. No tiene UI
-  // propia: el selector de capas pinta el control "Entidades: todas / la
-  // vista" en el desplegable de cada capa filtrable. Va antes del selector
-  // para que, al restaurar el estado tras un cambio 2D/3D, el modo de cada
-  // capa ya esté aplicado cuando el selector repinta su lista.
+  // Objetos geograficos por BBOX y por paginas (WFS y OGC API Features): deja
+  // pedir al servicio solo los objetos de la vista y renovarlos al mover el
+  // mapa, con un limite de objetos por pagina y paginado en el servidor. No
+  // tiene UI propia: el selector de capas pinta la barra "Objetos geograficos"
+  // (todas / la vista, limite y paginado) en la ventana de informacion de cada
+  // capa filtrable. Va antes del selector para que, al restaurar el estado tras
+  // un cambio 2D/3D, el modo de cada capa ya este aplicado cuando el selector
+  // repinta su lista.
   if (opts.bboxFeatures) {
     map.addPlugin(new IDEE.plugin.miPlugin_bboxFeatures({}));
   }

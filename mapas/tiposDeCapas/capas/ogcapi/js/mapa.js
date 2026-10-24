@@ -18,7 +18,11 @@ function mapa() {
   const capa = new IDEE.layer.OGCAPIFeatures({
     url: 'https://api-features.idee.es/collections/',
     name: 'falls',
-    limit: 300,
+    // Objetos geográficos por página. El límite por defecto es 100 (el de
+    // la extensión bboxFeatures); se pone aquí para que la PRIMERA petición
+    // ya venga acotada. El límite y la página se cambian desde la ventana de
+    // información de la capa, que pide al servicio con `limit` y `offset`.
+    limit: 100,
     legend: 'Cascadas (OGC API Features)',
   }, {
     style: new IDEE.style.Generic({

@@ -765,6 +765,13 @@ class miPlugin_layerSwitcher {
     if (!state || typeof state !== 'object') return;
     const mapRef = map || this._map;
 
+    // La ventana de información (hoja inferior con la tabla de atributos) vive
+    // en document.body, no dentro del div del mapa, así que el reinicio del
+    // mapa no se la lleva: quedaba abierta con los datos y los idLayer del mapa
+    // viejo. Se cierra aquí, en la instancia nueva (window.closeSheet ya es la
+    // suya y borra la hoja por id).
+    try { if (typeof window.closeSheet === 'function') window.closeSheet(); } catch (e) { /* nada */ }
+
     // Restaurar estado abierto/colapsado del panel del selector: si estaba
     // desplegado antes del swap, reabrirlo (por defecto addTo lo crea plegado).
     if (state.panelCollapsed !== undefined && this._panel) {
@@ -1195,25 +1202,6 @@ class miPlugin_layerSwitcher {
         : `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>`;
       const optsBtn = `<button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>`;
 
-      // Entidades que se piden al servicio: "todas" (descarga única, lo que
-      // hace la API por defecto) o "vista" (se vuelven a pedir al mover el
-      // mapa, solo las del BBOX de la pantalla). Solo aparece en las capas
-      // que sabe filtrar la extensión miPlugin_bboxFeatures (WFS y OGC API
-      // Features) y solo si esa extensión está en el mapa: sin ella no hay
-      // nada que gobernar y el control sobraría.
-      const bboxApi = window.miBBoxFeatures;
-      const soportaBBox = !!(bboxApi && typeof bboxApi.soporta === 'function' && bboxApi.soporta(layer));
-      const modoBBox = soportaBBox ? bboxApi.getModo(layer) : null;
-      const bboxRow = soportaBBox
-        ? `<div class="ls-option-row ls-option-bbox">
-                  <span class="ls-option-label" title="Qué entidades se piden al servicio">Entidades</span>
-                  <div class="ls-bbox-modo" role="group" aria-label="Entidades que se piden al servicio">
-                    <button type="button" class="ls-bbox-btn ${modoBBox === 'todas' ? 'ls-bbox-btn-on' : ''}" data-id="${index}" aria-pressed="${modoBBox === 'todas' ? 'true' : 'false'}" title="Descargar todas las entidades de la capa (una sola petición)" onclick="setBBoxModo('${index}', 'todas')">Todas</button>
-                    <button type="button" class="ls-bbox-btn ${modoBBox === 'vista' ? 'ls-bbox-btn-on' : ''}" data-id="${index}" aria-pressed="${modoBBox === 'vista' ? 'true' : 'false'}" title="Pedir solo las entidades de la vista y renovarlas al mover el mapa (BBOX)" onclick="setBBoxModo('${index}', 'vista')">La vista</button>
-                  </div>
-                </div>`
-        : '';
-
       const optionsPanel = `
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
                 <div class="ls-option-row">
@@ -1221,7 +1209,6 @@ class miPlugin_layerSwitcher {
                   <input type="range" min="0" max="100" value="${transpPct}" class="ls-opacity-slider" style="background:${sliderFill}" aria-label="Transparencia de ${layerName}" oninput="setLayerOpacity('${index}', this.value, this)">
                   <span class="ls-option-value">${transpPct}%</span>
                 </div>
-                ${bboxRow}
                 <div class="ls-actions-row">
                   <button type="button" class="ls-action ls-action-zoom" data-id="${index}" title="Zoom a la capa" onclick="zoomToLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="3.2"></circle></svg></button>
                   <button type="button" class="ls-action ls-action-rename" data-id="${index}" title="Renombrar capa" onclick="startRenameLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
@@ -1377,22 +1364,48 @@ class miPlugin_layerSwitcher {
       renderLayerList();
     };
 
-    // ── Entidades por BBOX (WFS y OGC API Features) ─────────────────────
-    // Alterna entre descargar todas las entidades ("todas") o solo las de la
-    // vista, renovándolas al mover el mapa ("la vista"). El trabajo lo hace
-    // la extensión miPlugin_bboxFeatures; aquí solo se resuelve la capa por
-    // idLayer y se repinta la lista para marcar el botón elegido. Si la
-    // extensión no está en el mapa el control ni siquiera se pinta.
+    // ── Objetos geográficos: modo, límite y página ──────────────────────
+    // La ventana de información (la que abre la tabla de atributos) pinta una
+    // barra para decidir qué se pide al servicio: todos los objetos o solo
+    // los de la vista, cuántos objetos por página (límite) y qué página. El
+    // trabajo lo hace la extensión miPlugin_bboxFeatures, que escribe en el
+    // impl de la capa el bbox, el `count`/`startIndex` (WFS 2.0) o el
+    // `limit`/`offset` (OGC API Features) y la recarga. Aquí solo se resuelve
+    // la capa por idLayer y se repinta la barra sin esperar a la respuesta.
     window.setBBoxModo = function (index, modo) {
-      const capa = findLayerById(index);
-      if (!capa || !window.miBBoxFeatures || typeof window.miBBoxFeatures.setModo !== 'function') return;
-      try {
-        window.miBBoxFeatures.setModo(capa, modo === 'vista' ? 'vista' : 'todas');
-      } catch (e) {
-        console.warn('layerSwitcher: no se pudo cambiar el modo de entidades', e);
-      }
-      renderLayerList();
+      _conCapaDeObjetos(index, function (capa, api) {
+        if (typeof api.setModo === 'function') api.setModo(capa, modo === 'vista' ? 'vista' : 'todas');
+      });
     };
+
+    window.setBBoxLimite = function (index, n) {
+      _conCapaDeObjetos(index, function (capa, api) {
+        if (typeof api.setLimite === 'function') api.setLimite(capa, n);
+      });
+    };
+
+    window.setBBoxPagina = function (index, pagina) {
+      _conCapaDeObjetos(index, function (capa, api) {
+        if (typeof api.setPagina === 'function') api.setPagina(capa, pagina);
+      });
+    };
+
+    /**
+     * Resuelve la capa de un control de objetos geográficos, aplica el cambio
+     * y repinta la barra de la ventana de información.
+     * @param {string} index idLayer de la capa.
+     * @param {Function} accion Recibe (capa, window.miBBoxFeatures).
+     */
+    function _conCapaDeObjetos(index, accion) {
+      const capa = findLayerById(index);
+      if (!capa || !window.miBBoxFeatures) return;
+      try {
+        accion(capa, window.miBBoxFeatures);
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo cambiar los objetos geográficos', e);
+      }
+      refrescarBarraObjetos(capa);
+    }
 
     // ── Colapsar / expandir un grupo de capas ──────────────────────────
     // Alterna el estado y lo conserva en self._groupCollapsed (idLayer -> bool)
@@ -3048,9 +3061,11 @@ class miPlugin_layerSwitcher {
     }
 
     // ── Identificador del tipo de capa ──────────────────────────────────
-    // Devuelve 'vector' si la capa es vectorial (GeoJSON, WFS, Vector...)
-    // y 'raster' en caso contrario. API-IDEE no expone un metodo unico
-    // fiable, asi que se comparan los tipos conocidos por su nombre.
+    // Devuelve 'vector' si la capa es vectorial (GeoJSON, WFS, OGC API
+    // Features, Vector...) y 'raster' en caso contrario. API-IDEE no expone un
+    // metodo unico fiable, asi que se comparan los tipos conocidos por su
+    // nombre. `ogcapifeatures` faltaba: por eso la capa de OGC API Features no
+    // tenia tabla de atributos (se trataba como raster).
     window.getLayerKind = function (layer) {
       let typeName = '';
       try { typeName = String(layer.type || layer._type || ''); } catch (e) { /* ignorar */ }
@@ -3058,7 +3073,7 @@ class miPlugin_layerSwitcher {
         try { typeName = String((layer.getImpl() && layer.getImpl().type) || ''); } catch (e) { /* ignorar */ }
       }
       const t = typeName.toLowerCase();
-      const vectorTypes = ['geojson', 'wfs', 'vector', 'geojsonparser', 'feature', 'mvt', 'kml', 'csv', 'datoselevacion', 'mapbox', 'maplibre'];
+      const vectorTypes = ['geojson', 'wfs', 'vector', 'geojsonparser', 'feature', 'mvt', 'kml', 'csv', 'datoselevacion', 'mapbox', 'maplibre', 'ogcapifeatures'];
       return vectorTypes.includes(t) ? 'vector' : 'raster';
     };
 
@@ -3238,6 +3253,7 @@ class miPlugin_layerSwitcher {
     let closeSheet = function () {
       unbindMapClick();
       unbindSheetMove();
+      unbindSheetReload();
       mlTableCtx = null;
       const old = document.getElementById(SHEET_OVERLAY_ID);
       if (old && old.parentElement) old.parentElement.removeChild(old);
@@ -4193,6 +4209,152 @@ class miPlugin_layerSwitcher {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    /* Texto de una celda de la tabla de atributos. Un valor objeto (algunos
+       servicios devuelven la geometria dentro de las propiedades) se pinta como
+       JSON corto en vez del "[object Object]" de String(). */
+    function textoCelda(v) {
+      if (v === null || v === undefined) return '';
+      if (typeof v !== 'object') return String(v);
+      try {
+        const texto = JSON.stringify(v);
+        if (!texto) return '';
+        return (texto.length > 60) ? texto.slice(0, 59) + '…' : texto;
+      } catch (e) { return ''; }
+    }
+
+    // ── Objetos geográficos: barra, límite y paginado ───────────────────
+    // La barra va sobre la tabla de atributos de las capas WFS y OGC API
+    // Features: qué se pide al servicio ("Todas" o "La vista"), cuántos
+    // objetos por página (límite, 100 por defecto) y el paginado. El paginado
+    // se resuelve EN EL SERVIDOR (startIndex/count en WFS, offset y limit en
+    // OGC API Features), así que el mapa y la tabla muestran siempre la misma
+    // página de objetos. El trabajo lo hace miPlugin_bboxFeatures
+    // (ext/bboxFeatures/bboxFeatures.js) a través de window.miBBoxFeatures.
+    let sheetVectorLayer = null;
+    let sheetReloadCleanup = null;
+    let sheetReloadTimer = null;
+
+    /**
+     * HTML de la barra de objetos geográficos de una capa, o '' si la capa no
+     * sabe pedirse por páginas (WMS, GeoJSON...) o si la extensión no está.
+     * @param {Object} layer Capa de la API-IDEE.
+     * @returns {string}
+     */
+    function barraObjetos(layer) {
+      const api = window.miBBoxFeatures;
+      if (!layer || !api || typeof api.getEstado !== 'function') return '';
+      let soporta = false;
+      try { soporta = typeof api.soporta === 'function' && api.soporta(layer); } catch (e) { soporta = false; }
+      if (!soporta) return '';
+      let estado = null;
+      try { estado = api.getEstado(layer); } catch (e) { estado = null; }
+      if (!estado) return '';
+      let limites = [25, 50, 100, 200, 500];
+      try {
+        if (typeof api.limites === 'function') limites = api.limites() || limites;
+      } catch (e) { /* los de por defecto */ }
+      const id = String(layer.idLayer);
+      const opciones = limites.map(n =>
+        `<option value="${n}" ${Number(n) === Number(estado.limite) ? 'selected' : ''}>${n}</option>`).join('');
+      return `
+        <div class="ls-objetos">
+          <span class="ls-objetos__titulo" title="Qué objetos geográficos se piden al servicio, cuántos por página y en qué página">Objetos geográficos</span>
+          <div class="ls-objetos__modo" role="group" aria-label="Objetos geográficos que se piden al servicio">
+            <button type="button" class="ls-objetos__btn ${estado.modo === 'todas' ? 'ls-objetos__btn-on' : ''}" aria-pressed="${estado.modo === 'todas' ? 'true' : 'false'}" title="Pedir la primera página de todos los objetos de la capa (una sola petición)" onclick="setBBoxModo('${id}', 'todas')">Todas</button>
+            <button type="button" class="ls-objetos__btn ${estado.modo === 'vista' ? 'ls-objetos__btn-on' : ''}" aria-pressed="${estado.modo === 'vista' ? 'true' : 'false'}" title="Pedir la primera página de los objetos de la vista y renovarla al mover el mapa (BBOX)" onclick="setBBoxModo('${id}', 'vista')">La vista</button>
+          </div>
+          <label class="ls-objetos__limite" title="Objetos geográficos que se piden de cada vez">
+            Límite
+            <select onchange="setBBoxLimite('${id}', this.value)" aria-label="Objetos geográficos por página">${opciones}</select>
+          </label>
+          <span class="ls-objetos__pager">
+            <button type="button" class="ls-objetos__pagina-btn" ${estado.hayAnterior ? '' : 'disabled'} title="Página anterior" onclick="setBBoxPagina('${id}', ${estado.pagina - 1})">‹</button>
+            <span class="ls-objetos__pagina" title="El servicio no informa del total de páginas: hay siguiente mientras la página venga completa">Página ${estado.pagina}</span>
+            <button type="button" class="ls-objetos__pagina-btn" ${estado.haySiguiente ? '' : 'disabled'} title="Página siguiente" onclick="setBBoxPagina('${id}', ${estado.pagina + 1})">›</button>
+          </span>
+        </div>`;
+    }
+
+    /**
+     * Cuerpo de la hoja de una capa vectorial: la barra de objetos (si la capa
+     * se pagina en el servidor) y la tabla. Se envuelve en un div propio para
+     * poder rehacer SOLO esto cuando la capa recarga.
+     * @param {Object} layer Capa de la API-IDEE.
+     * @returns {string}
+     */
+    function cuerpoTablaVector(layer) {
+      return `<div class="ls-sheet-objetos-wrap">${barraObjetos(layer)}${buildVectorTable(layer)}</div>`;
+    }
+
+    /**
+     * Vuelve a pintar la barra y la tabla de la hoja abierta. Se llama al
+     * cambiar modo, límite o página (para no esperar a la respuesta) y cada
+     * vez que la capa termina de cargar.
+     * @param {Object} layer Capa de la API-IDEE.
+     */
+    function refrescarBarraObjetos(layer) {
+      const overlay = document.getElementById(SHEET_OVERLAY_ID);
+      if (!overlay || !layer || !sheetVectorLayer) return;
+      if (String(sheetVectorLayer.idLayer) !== String(layer.idLayer)) return;
+      const wrap = overlay.querySelector('.ls-sheet-objetos-wrap');
+      if (!wrap) return;
+      wrap.innerHTML = barraObjetos(layer) + buildVectorTable(layer);
+    }
+
+    /**
+     * Rehace la tabla cuando la capa termina de cargar (evento `LOAD`): es lo
+     * que mantiene la tabla y el mapa con la misma página de objetos cuando la
+     * capa se recarga (cambio de modo, de límite, de página o movimiento del
+     * mapa en "la vista"). Se escucha en el impl y en la fachada porque en 3D
+     * el evento lo dispara la fachada y en 2D el impl.
+     * @param {Object} layer Capa de la API-IDEE.
+     */
+    function bindSheetReload(layer) {
+      unbindSheetReload();
+      sheetVectorLayer = layer || null;
+      if (!layer) return;
+      const avisar = function () {
+        if (sheetReloadTimer) clearTimeout(sheetReloadTimer);
+        sheetReloadTimer = setTimeout(function () {
+          sheetReloadTimer = null;
+          refrescarBarraObjetos(layer);
+        }, 150);
+      };
+      const sueltas = [];
+      const EVENTO = (window.IDEE && IDEE.evt && IDEE.evt.LOAD) || 'load';
+      try {
+        const impl = layer.getImpl ? layer.getImpl() : null;
+        if (impl && typeof impl.on === 'function') {
+          impl.on(EVENTO, avisar);
+          sueltas.push(function () { try { impl.un(EVENTO, avisar); } catch (e) { /* ya no existe */ } });
+        }
+      } catch (e) { /* la capa no deja escuchar */ }
+      try {
+        if (typeof layer.on === 'function') {
+          layer.on(EVENTO, avisar);
+          sueltas.push(function () { try { layer.un(EVENTO, avisar); } catch (e) { /* ya no existe */ } });
+        }
+      } catch (e) { /* la fachada no deja escuchar */ }
+      sheetReloadCleanup = function () {
+        for (let i = 0; i < sueltas.length; i += 1) {
+          try { sueltas[i](); } catch (e) { /* nada */ }
+        }
+      };
+    }
+
+    /** Suelta la escucha de recarga de la tabla y su temporizador. */
+    function unbindSheetReload() {
+      if (sheetReloadCleanup) {
+        try { sheetReloadCleanup(); } catch (e) { /* nada */ }
+      }
+      sheetReloadCleanup = null;
+      if (sheetReloadTimer) {
+        clearTimeout(sheetReloadTimer);
+        sheetReloadTimer = null;
+      }
+      sheetVectorLayer = null;
+    }
+
     // ── Tabla de atributos de capa VECTORIAL ───────────────────────────
     function buildVectorTable(layer) {
       // Referencia a la capa OpenLayers que realmente dibuja los features.
@@ -4233,6 +4395,16 @@ class miPlugin_layerSwitcher {
       const featCount = features.length;
       if (!featCount) {
         sheetCtx = null;
+        // En las capas que se piden por páginas (WFS y OGC API Features) el
+        // vacío puede ser la página siguiente que ya no tiene objetos: se
+        // avisa de eso, que es lo normal al pasarse con el paginado.
+        let paginada = false;
+        try {
+          paginada = !!(window.miBBoxFeatures && window.miBBoxFeatures.soporta && window.miBBoxFeatures.soporta(layer));
+        } catch (e) { paginada = false; }
+        if (paginada) {
+          return `<p class="ls-sheet-note">La capa <b>${esc(layerName)}</b> no tiene objetos geográficos en esta petición: el servicio no ha devuelto ninguno para esta página o esta extensión.</p>`;
+        }
         return `<p style="padding:8px;color:#555;">La capa <b>${esc(layerName)}</b> no tiene features disponibles en el cliente (los datos pueden cargarse de forma remota).</p>`;
       }
 
@@ -4270,7 +4442,12 @@ class miPlugin_layerSwitcher {
         if (typeof props !== 'object' || props === null) props = {};
         const geom = (f.getGeometry ? f.getGeometry() : null);
         for (const key in props) {
-          if (!esMetadato(key) && !columns.includes(key)) columns.push(key);
+          if (esMetadato(key) || columns.includes(key)) continue;
+          // Los valores objeto (algunos servicios devuelven la geometria dentro
+          // de las propiedades) no son atributos de la tabla: se omiten para no
+          // llenar la columna de JSON.
+          if (props[key] !== null && typeof props[key] === 'object') continue;
+          columns.push(key);
         }
         const valorGrupo = props[CLAVE_GRUPO];
         const grupo = (valorGrupo === undefined || valorGrupo === null || valorGrupo === '')
@@ -4325,7 +4502,11 @@ class miPlugin_layerSwitcher {
         html += `<tr class="ls-clickable" data-row-idx="${i}" title="Localizar este elemento en el mapa" onclick="locateFeature('${layerId}', '${i}')">`;
         html += `<td>${i + 1}</td>`;
         for (const c of columns) {
-          html += `<td>${esc(row.props[c] === undefined ? (c === '(sin atributos)' && row.props ? '—' : '') : row.props[c])}</td>`;
+          const v = row.props[c];
+          const txt = (v === undefined)
+            ? ((c === '(sin atributos)' && row.props) ? '—' : '')
+            : textoCelda(v);
+          html += `<td>${esc(txt)}</td>`;
         }
         html += `</tr>`;
       });
@@ -5019,7 +5200,13 @@ class miPlugin_layerSwitcher {
             installSubLayerPicker(panel, layer, panel.querySelector('.ls-sheet-body'), provider);
             return;
           }
-          openSheet(`Tabla de atributos · ${layerName}`, buildVectorTable(layer), true, selectableLayers, index);
+          // Vectorial "de verdad" (GeoJSON, WFS, OGC API Features...): la
+          // barra de objetos geográficos (qué se pide, límite y página) va
+          // sobre la tabla, dentro del mismo cuerpo. La tabla se rehace sola
+          // cuando la capa recarga (ver bindSheetReload).
+          sheetVectorLayer = layer;
+          openSheet(`Tabla de atributos · ${layerName}`, cuerpoTablaVector(layer), true, selectableLayers, index);
+          bindSheetReload(layer);
         } else {
           sheetCtx = null;
           openSheet(`Estadísticas · ${layerName}`, buildRasterInfo(layer), false, selectableLayers, index);
@@ -5067,6 +5254,11 @@ class miPlugin_layerSwitcher {
   // que el plugin deja en window para los atributos onclick en linea del panel.
   destroy() {
     this._destruirSupra();
+    // 0) Ventana de informacion: la hoja inferior sobrevive al plugin (vive en
+    //    document.body), asi que al cambiar 2D/3D se quedaba abierta con la
+    //    tabla del mapa viejo. Se cierra aqui, que ademas suelta la escucha de
+    //    recarga (bindSheetReload) y el resaltado del mapa.
+    try { if (typeof window.closeSheet === 'function') window.closeSheet(); } catch (e) { /* ignora */ }
     // 1) Clic sobre el mapa (singleclick del impl de OpenLayers).
     try {
       if (this._unbindMapClick) this._unbindMapClick();
@@ -5098,7 +5290,7 @@ class miPlugin_layerSwitcher {
       'startRenameLayer', '_renameLayerName', 'handleDragStart', 'handleDragOver',
       'handleDrop', 'handleDragEnd', 'deleteLayer', 'getLayerKind', 'setLayerOpacity',
       'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo', 'openLayerFicha',
-      '_lsPickerLayers', 'setBBoxModo',
+      '_lsPickerLayers', 'setBBoxModo', 'setBBoxLimite', 'setBBoxPagina',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {
