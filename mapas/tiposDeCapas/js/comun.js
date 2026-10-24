@@ -208,6 +208,10 @@ function prepararFondo(opciones) {
  * @param {Object} [opciones.selector] Opciones extra para el selector de capas
  *   superpuestas, mezcladas con las de siempre. El visor de XYZ lo usa para
  *   pedir el modo "una capa a la vez" (`seleccionUnica`).
+ * @param {boolean} [opciones.bboxFeatures=false] Anade la extension
+ *   `miPlugin_bboxFeatures`, que permite pedir a las capas WFS y OGC API
+ *   Features solo las entidades de la vista (BBOX) y renovarlas al mover el
+ *   mapa. El control aparece en el desplegable de opciones de esas capas.
  */
 function anadirPluginsTipos(map, recrear, opciones) {
   const opts = opciones || {};
@@ -231,6 +235,16 @@ function anadirPluginsTipos(map, recrear, opciones) {
     title: 'Capas base',
     order: 0,
   }));
+
+  // Entidades por BBOX (WFS y OGC API Features): deja pedir al servicio solo
+  // las entidades de la vista y renovarlas al mover el mapa. No tiene UI
+  // propia: el selector de capas pinta el control "Entidades: todas / la
+  // vista" en el desplegable de cada capa filtrable. Va antes del selector
+  // para que, al restaurar el estado tras un cambio 2D/3D, el modo de cada
+  // capa ya esté aplicado cuando el selector repinta su lista.
+  if (opts.bboxFeatures) {
+    map.addPlugin(new IDEE.plugin.miPlugin_bboxFeatures({}));
+  }
 
   // Arbol de capas superpuestas: la capa de la pagina aparece con su leyenda y
   // se puede apagar para ver el fondo que hay debajo.

@@ -32,7 +32,7 @@ function mapa() {
 
   mapajs.addLayers(capa);
 
-  anadirPluginsTipos(mapajs, mapa);
+  anadirPluginsTipos(mapajs, mapa, { bboxFeatures: true });
   return mapajs;
 }
 

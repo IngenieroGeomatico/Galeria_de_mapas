@@ -321,7 +321,7 @@
 }
 
 .overlay-layer-selector .ls-options-panel.open {
-  max-height: 220px;
+  max-height: 260px;
   opacity: 1;
   margin-top: 0.15em;
   margin-bottom: 0.15em;
@@ -406,6 +406,52 @@
   display: flex;
   gap: 0.4em;
   margin-top: 0.4em;
+}
+
+/* ── Entidades por BBOX (WFS y OGC API Features) ──────────────────────
+   Fila del desplegable con dos botones: "Todas" (la API descarga las
+   entidades una sola vez) y "La vista" (se piden al servicio solo las que
+   caen en la pantalla y se renuevan al mover el mapa). La pinta el selector
+   solo si la extensión miPlugin_bboxFeatures está en el mapa. Mismo alto y
+   radio que el resto de controles del panel para no romper el ritmo. */
+.overlay-layer-selector .ls-option-bbox {
+  margin-top: 0.4em;
+}
+
+.overlay-layer-selector .ls-bbox-modo {
+  display: flex;
+  gap: 0.25em;
+  margin-left: auto;
+}
+
+.overlay-layer-selector .ls-bbox-btn {
+  border: 1px solid #c9d6e5;
+  border-radius: 999px;
+  background: #fff;
+  color: #445;
+  font-size: 0.75em;
+  line-height: 1;
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.overlay-layer-selector .ls-bbox-btn:hover {
+  border-color: #0078d4;
+  color: #0078d4;
+}
+
+/* Elegido: azul de la API, el mismo de los demás controles activos. */
+.overlay-layer-selector .ls-bbox-btn-on,
+.overlay-layer-selector .ls-bbox-btn-on:hover {
+  background: #0078d4;
+  border-color: #0078d4;
+  color: #fff;
+  font-weight: 600;
+}
+
+.overlay-layer-selector .ls-bbox-btn:active {
+  transform: scale(0.96);
 }
 
 .overlay-layer-selector .ls-action {

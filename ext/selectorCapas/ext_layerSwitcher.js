@@ -1194,6 +1194,26 @@ class miPlugin_layerSwitcher {
         ? `<button type="button" class="ls-eye ls-radio ${visible ? 'ls-radio-on' : 'ls-radio-off'}" data-id="${index}" role="radio" aria-checked="${visible ? 'true' : 'false'}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')"><span class="ls-radio-marca" aria-hidden="true"></span></button>`
         : `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>`;
       const optsBtn = `<button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>`;
+
+      // Entidades que se piden al servicio: "todas" (descarga única, lo que
+      // hace la API por defecto) o "vista" (se vuelven a pedir al mover el
+      // mapa, solo las del BBOX de la pantalla). Solo aparece en las capas
+      // que sabe filtrar la extensión miPlugin_bboxFeatures (WFS y OGC API
+      // Features) y solo si esa extensión está en el mapa: sin ella no hay
+      // nada que gobernar y el control sobraría.
+      const bboxApi = window.miBBoxFeatures;
+      const soportaBBox = !!(bboxApi && typeof bboxApi.soporta === 'function' && bboxApi.soporta(layer));
+      const modoBBox = soportaBBox ? bboxApi.getModo(layer) : null;
+      const bboxRow = soportaBBox
+        ? `<div class="ls-option-row ls-option-bbox">
+                  <span class="ls-option-label" title="Qué entidades se piden al servicio">Entidades</span>
+                  <div class="ls-bbox-modo" role="group" aria-label="Entidades que se piden al servicio">
+                    <button type="button" class="ls-bbox-btn ${modoBBox === 'todas' ? 'ls-bbox-btn-on' : ''}" data-id="${index}" aria-pressed="${modoBBox === 'todas' ? 'true' : 'false'}" title="Descargar todas las entidades de la capa (una sola petición)" onclick="setBBoxModo('${index}', 'todas')">Todas</button>
+                    <button type="button" class="ls-bbox-btn ${modoBBox === 'vista' ? 'ls-bbox-btn-on' : ''}" data-id="${index}" aria-pressed="${modoBBox === 'vista' ? 'true' : 'false'}" title="Pedir solo las entidades de la vista y renovarlas al mover el mapa (BBOX)" onclick="setBBoxModo('${index}', 'vista')">La vista</button>
+                  </div>
+                </div>`
+        : '';
+
       const optionsPanel = `
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
                 <div class="ls-option-row">
@@ -1201,6 +1221,7 @@ class miPlugin_layerSwitcher {
                   <input type="range" min="0" max="100" value="${transpPct}" class="ls-opacity-slider" style="background:${sliderFill}" aria-label="Transparencia de ${layerName}" oninput="setLayerOpacity('${index}', this.value, this)">
                   <span class="ls-option-value">${transpPct}%</span>
                 </div>
+                ${bboxRow}
                 <div class="ls-actions-row">
                   <button type="button" class="ls-action ls-action-zoom" data-id="${index}" title="Zoom a la capa" onclick="zoomToLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="3.2"></circle></svg></button>
                   <button type="button" class="ls-action ls-action-rename" data-id="${index}" title="Renombrar capa" onclick="startRenameLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
@@ -1353,6 +1374,23 @@ class miPlugin_layerSwitcher {
     // cerrarlo al re-renderizar (p.ej. al alternar la visibilidad de otra).
     window.toggleLayerOptions = function (index) {
       self._optionsOpen = self._optionsOpen === index ? null : index;
+      renderLayerList();
+    };
+
+    // ── Entidades por BBOX (WFS y OGC API Features) ─────────────────────
+    // Alterna entre descargar todas las entidades ("todas") o solo las de la
+    // vista, renovándolas al mover el mapa ("la vista"). El trabajo lo hace
+    // la extensión miPlugin_bboxFeatures; aquí solo se resuelve la capa por
+    // idLayer y se repinta la lista para marcar el botón elegido. Si la
+    // extensión no está en el mapa el control ni siquiera se pinta.
+    window.setBBoxModo = function (index, modo) {
+      const capa = findLayerById(index);
+      if (!capa || !window.miBBoxFeatures || typeof window.miBBoxFeatures.setModo !== 'function') return;
+      try {
+        window.miBBoxFeatures.setModo(capa, modo === 'vista' ? 'vista' : 'todas');
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo cambiar el modo de entidades', e);
+      }
       renderLayerList();
     };
 
@@ -5060,7 +5098,7 @@ class miPlugin_layerSwitcher {
       'startRenameLayer', '_renameLayerName', 'handleDragStart', 'handleDragOver',
       'handleDrop', 'handleDragEnd', 'deleteLayer', 'getLayerKind', 'setLayerOpacity',
       'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo', 'openLayerFicha',
-      '_lsPickerLayers',
+      '_lsPickerLayers', 'setBBoxModo',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {

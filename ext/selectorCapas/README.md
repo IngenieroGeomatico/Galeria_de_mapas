@@ -138,6 +138,7 @@ Es el gestor de las capas superpuestas del mapa (las capas base quedan fuera, la
 - **Zoom a la capa**: encuadra la extensión de la capa o del grupo (unión de las extensiones de sus hijas). En 2D con `view.fit(...)`; en 3D con `camera.flyTo` y `Cesium.Rectangle.fromDegrees`. La extensión se busca en `getMaxExtent()`, en la rejilla de la fuente (GeoTIFF) y, en 3D, en `impl.getBoundingBox()`, descartando el «mundo entero» de relleno.
 - **Panel inferior (bottom sheet)** con la tabla de atributos de las capas vectoriales (con sincronía tabla ↔ mapa: pulsar una fila localiza y resalta el feature, y el clic en el mapa marca la fila) o con las estadísticas de las ráster. Las capas MapLibre/MVT abren además un selector de sub-capas.
 - **Ficha de la capa**: modal con los parámetros de construcción (`constructorParameters.userParameters` o `.parameters`, más `options` y `vendorOptions`, y la `url` resuelta) y con el documento del servicio (`getCapabilities()` en WMS/WMTS; `tileset.json` / `metadata.json` en servicios de teselas, validando que sea JSON y no binario).
+- **Entidades por BBOX (WFS y OGC API Features)**: en el desplegable de esas capas aparece la fila «Entidades: Todas / La vista». Es un control **prestado**: lo pinta el selector y lo ejecuta `ext/bboxFeatures/bboxFeatures.js` a través de `window.miBBoxFeatures` (si la extensión no está cargada, la fila no se pinta).
 - **Filtro de capas listables**: quedan fuera las capas base, las marcadas con `displayInLayerSwitcher: false`, las de terreno y las internas autogeneradas (`layer_<n>`, salvo los grupos).
 - **Contrato de estado 2D/3D** completo (panel, desplegable abierto y grupos plegados), resolviendo por `legend` cuando el `idLayer` se regenera.
 - Aplica `window.miWrapX.aplica(map)` en `addTo`, de modo que el visor no tiene que cargar ningún script aparte.
@@ -147,7 +148,7 @@ Es el gestor de las capas superpuestas del mapa (las capas base quedan fuera, la
 | Archivo | Descripción |
 |---|---|
 | `ext_layerSwitcher.js` | Los ayudantes globales `window.miWrapX` (`aplica`, `envuelve`, `olDe`) y `window.miBaseAbajo` (`aplica`, `programa`), y la clase `miPlugin_layerSwitcher`, con todo el árbol, los handlers globales del panel, el bottom sheet y la ficha. |
-| `ext_layerSwitcher.css` | Estilos del panel y de la lista (`.overlay-layer-selector`, `.ls-row`, `.ls-eye`, `.ls-radio` del modo «una capa a la vez», `.ls-options-panel`, `.ls-opacity-slider`, `.ls-drag-handle`, `.ls-group`, `.ls-children`, marcas de drop), del bottom sheet (`.ls-sheet-*`, `.ls-attr-table`), de la ficha (`.ls-ficha-*`) y del botón de la barra (`.ls-supra__*`, icono por máscara). |
+| `ext_layerSwitcher.css` | Estilos del panel y de la lista (`.overlay-layer-selector`, `.ls-row`, `.ls-eye`, `.ls-radio` del modo «una capa a la vez», `.ls-options-panel`, `.ls-opacity-slider`, `.ls-drag-handle`, `.ls-group`, `.ls-children`, marcas de drop), del control de entidades por BBOX (`.ls-option-bbox`, `.ls-bbox-modo`, `.ls-bbox-btn`, `.ls-bbox-btn-on`), del bottom sheet (`.ls-sheet-*`, `.ls-attr-table`), de la ficha (`.ls-ficha-*`) y del botón de la barra (`.ls-supra__*`, icono por máscara). |
 
 ## 🔧 Integración en un visualizador
 
@@ -225,6 +226,28 @@ El estado de **las capas** (visibilidad, opacidad, renombrado) no viaja por aqu�
 
 **Cómo se reaplica el orden** (`_restaurarOrdenZ`): se resuelven las capas por `legend`/`name` en el mapa nuevo, se leen los z que ya tienen y se **permutan** esos mismos valores entre ellas, de abajo arriba. Así no se invade el rango de las capas que el selector no gestiona ni se chocan las constantes `Z_INDEX` de la API. En 2D se escribe el `zIndex` del `olLayer` (fuente de verdad del renderer); en 3D se llama a la fachada, que quita la capa de `imageryLayers` y la reinserta en esa posición (índice 0 = la de abajo). No se miran las banderas `isBase` de la instancia nueva porque en Cesium `isBase` significa «la primera capa visible» y cambia según lo que se encienda.
 
+## 🔲 Entidades por BBOX en el desplegable
+
+Las capas **WFS** y **OGC API Features** llevan una fila más en su desplegable de opciones:
+
+```
+Entidades:  [ Todas ] [ La vista ]
+```
+
+- **Todas**: comportamiento de la API (una sola petición, sin filtro).
+- **La vista**: el servicio recibe el BBOX de lo que se está mirando y la petición se repite al mover el mapa.
+
+El selector solo **pinta y delega**: no sabe nada de BBOX. Todo el trabajo (calcular la extensión, escribirla en el impl, refrescar, escuchar el movimiento y guardar el estado 2D/3D) está en `ext/bboxFeatures/bboxFeatures.js`, que publica `window.miBBoxFeatures`. Por eso:
+
+- La fila se pinta solo si `window.miBBoxFeatures.soporta(layer)` existe y devuelve `true`; si la extensión no está cargada, no aparece nada.
+- Los botones llaman a `window.setBBoxModo(idLayer, modo)`, que resuelve la capa y delega en `window.miBBoxFeatures.setModo(capa, modo)`.
+- **El modo no viaja por el estado del selector**: lo guarda `miPlugin_bboxFeatures` en su propio `getState()`/`setState()` (`{ vista: [identificadores] }`). El selector solo fuerza `renderLayerList()` cuando la extensión termina de aplicar, para que los botones aparezcan en el modo correcto tras un cambio 2D/3D.
+- `destroy()` retira también `setBBoxModo` de `window` (está en la lista `GLOBALES`).
+
+En el visualizador hay que registrar la extensión **antes** del selector (`mapas/tiposDeCapas/js/comun.js`, opción `bboxFeatures`), de modo que el modo de cada capa ya esté aplicado cuando el selector construya la lista.
+
+El panel del desplegable tiene `max-height: 260px` cuando está abierto: con la fila nueva mide 100 px, así que caben todas las opciones sin scroll.
+
 ## 🧩 Métodos públicos
 
 | Método | Descripción |
@@ -237,7 +260,7 @@ El estado de **las capas** (visibilidad, opacidad, renombrado) no viaja por aqu�
 
 ## ✅ Notas
 
-- **Ayudantes globales**: el plugin deja en `window` las funciones que usa el HTML en línea del panel (`renderLayerList`, `toggleLayerVisibility`, `toggleLayerOptions`, `toggleGroup`, `startRenameLayer`, `setLayerOpacity`, `zoomToLayer`, `deleteLayer`, `getLayerKind`, `openLayerInfo`, `openLayerFicha`, `closeSheet`, `locateFeature`, `handleDragStart/DragOver/Drop/DragEnd`...). `destroy()` las retira.
+- **Ayudantes globales**: el plugin deja en `window` las funciones que usa el HTML en línea del panel (`renderLayerList`, `toggleLayerVisibility`, `toggleLayerOptions`, `toggleGroup`, `startRenameLayer`, `setLayerOpacity`, `zoomToLayer`, `deleteLayer`, `getLayerKind`, `openLayerInfo`, `openLayerFicha`, `closeSheet`, `locateFeature`, `setBBoxModo`, `handleDragStart/DragOver/Drop/DragEnd`...). `destroy()` las retira.
 - **Reordenación**: se aplica **reasignando z-index** (`recordZ` → `_escribirZ`), no moviendo la colección. En 2D se escribe el `zIndex` del impl de OpenLayers (el renderer pinta por `zIndex`, no por orden de colección); en 3D se escribe en la fachada, que delega en el impl de Cesium (quita la capa de `imageryLayers` y la reinserta en ese índice). Se indexan solo las capas «listables» de cada contenedor, dejando intactos el z y el intercalado de las auxiliares (por ejemplo `__draw__`) y de las bases. La invariante es que las hijas de un grupo nunca superan el z del grupo.
 - **Base siempre debajo de las superpuestas (3D)**: `window.miBaseAbajo.aplica(mapa, capas)` baja al fondo de `imageryLayers` las capas de una base recién puesta, conservando su orden relativo y sin tocar nada si ya están abajo; `programa(...)` lo reintenta a 0, 400 y 1500 ms porque la API da de alta las capas de forma asíncrona. En 2D no hace nada. Es necesario porque en Cesium una base simple se inserta en el índice 0 (lleva `isBase`), pero las **hijas de un grupo base** (el Híbrido) no llevan `isBase` y se añadían **encima** de las superpuestas (medido: las dos hijas del Híbrido en los índices 19 y 20 con 19 fondos XYZ debajo, o sea que el fondo tapaba la capa elegida). `miPlugin_baseLayer` lo llama tras `addLayers()` en `changeBase` y en el respaldo de `setState`.
 - **Envolver el mundo (`wrapX`)**: `window.miWrapX.aplica(mapa)` pone `wrapX_ = true` en todas las fuentes ráster (las vectoriales no lo tienen) y se queda escuchando altas y bajas de la colección de capas, así que cubre también las capas añadidas después. Hay que tocar el **campo** `wrapX_` y avisar con `changed()`: la API no deja pasar la opción y `source.set('wrapX', false)` no surte efecto en esta versión de OpenLayers. En 3D no hace nada (el impl de Cesium no tiene `getLayers()`).
