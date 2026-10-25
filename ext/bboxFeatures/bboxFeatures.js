@@ -94,6 +94,7 @@
   var TIPO_WFS = 'WFS';
   var TIPO_OGCAPI = 'OGCAPIFeatures';
   var TIPO_FLATGEOBUF = 'FlatGeobuf';
+  var TIPO_GEOPARQUET = 'GeoParquet';
 
   // Espera tras el último movimiento antes de pedir. Un paneo emite un
   // `moveend` por gesto y una rueda puede emitir varios seguidos; 350 ms
@@ -127,9 +128,10 @@
     }
     if (tipo === TIPO_WFS) return TIPO_WFS;
     if (tipo === TIPO_OGCAPI) return TIPO_OGCAPI;
-    // FlatGeobuf se sirve como IDEE.layer.GeoJSON, asi que se reconoce por
-    // la marca que pone ext/flatgeobufLayer al crear la capa.
+    // FlatGeobuf y GeoParquet se sirven como IDEE.layer.GeoJSON, asi que se
+    // reconocen por la marca que pone su extension al crear la capa.
     try { if (capa && capa._flatgeobuf) return TIPO_FLATGEOBUF; } catch (e) { /* noop */ }
+    try { if (capa && capa._geoparquet) return TIPO_GEOPARQUET; } catch (e) { /* noop */ }
     return null;
   }
 
@@ -239,7 +241,7 @@
         /** Vuelve a aplicar el modo de todas las capas filtrables del mapa. */
         aplicarTodo: function (forzar) { self._aplicarTodo(!!forzar); },
         /** Tipos de capa que atiende la extensión. */
-        tipos: function () { return [TIPO_WFS, TIPO_OGCAPI, TIPO_FLATGEOBUF]; },
+        tipos: function () { return [TIPO_WFS, TIPO_OGCAPI, TIPO_FLATGEOBUF, TIPO_GEOPARQUET]; },
         /** La instancia que atiende ahora mismo, para depurar. */
         plugin: self
       };
@@ -323,16 +325,22 @@
       var offset = (ident && Number(this._offset[ident]) > 0) ? Number(this._offset[ident]) : 0;
       var objetos = 0;
       try { objetos = (capa.getFeatures ? capa.getFeatures() : []).length; } catch (e) { objetos = 0; }
+      // FlatGeobuf y GeoParquet no se pagan en el servidor: el fichero se
+      // lee entero (o por row groups) y el paginado no tiene efecto. El
+      // selector oculta límite y páginas para no ofrecer controles falsos.
+      var tipo = tipoDeCapa(capa);
+      var paginable = (tipo === TIPO_WFS || tipo === TIPO_OGCAPI);
       return {
         modo: this.getModo(capa),
         limite: limite,
         offset: offset,
         pagina: Math.floor(offset / limite) + 1,
-        hayAnterior: offset > 0,
+        hayAnterior: paginable && offset > 0,
         // El servicio no dice cuántos objetos hay en total (la API tira
         // `numberMatched`), así que se usa la regla de la página llena: si
         // vienen menos objetos que el límite, esta es la última página.
-        haySiguiente: objetos > 0 && objetos >= limite,
+        haySiguiente: paginable && objetos > 0 && objetos >= limite,
+        paginable: paginable,
         objetos: objetos
       };
     }
@@ -506,7 +514,8 @@
         // FlatGeobuf se carga por bbox desde el inicio: se considera "listo"
         // de inmediato para que bboxFeatures aplique el bbox inicial sin
         // esperar a que pinte features (que nunca pintaria si espera).
-        if (tipoDeCapa(capa) === TIPO_FLATGEOBUF) return true;
+        if (tipoDeCapa(capa) === TIPO_FLATGEOBUF ||
+            tipoDeCapa(capa) === TIPO_GEOPARQUET) return true;
         var impl = capa.getImpl ? capa.getImpl() : null;
         if (!impl) return false;
         if (typeof impl.isLoaded === 'function' && !impl.isLoaded()) return false;
@@ -637,6 +646,12 @@
       // en los dos modos). La clave incluye extensión, límite y página: al
       // cambiar cualquiera de los tres hay que volver a pedir.
       var clave = (bbox || '') + '|' + limite + '|' + offset;
+      // GeoParquet calcula su propio bbox en la CRS del fichero (que puede no
+      // ser 4326 ni 3857). Para no bloquear el refresco al mover el mapa, la
+      // clave usa el bbox del mapa tal cual.
+      if (tipo === TIPO_GEOPARQUET) {
+        try { clave = JSON.stringify(this._map.getBbox()) + '|' + limite + '|' + offset; } catch (e) { /* noop */ }
+      }
       if (!forzar && this._ultimoBBox[ident] === clave) return;
 
       // La capa puede llevar ya justo esta petición (el visualizador la creó
@@ -652,7 +667,7 @@
       // bbox) o solo las features del bbox (HTTP Range, con indice espacial).
       // Se hace de forma asincrona; el resto del flujo (WFS/OGC) sigue el
       // camino sincrono de abajo.
-      if (tipo === TIPO_FLATGEOBUF) {
+      if (tipo === TIPO_FLATGEOBUF || tipo === TIPO_GEOPARQUET) {
         // La propia capa sabe calcular el bbox visible, cachear la ultima
         // carga y refrescarse igual en 2D y en 3D (en 3D ademas escucha el
         // moveEnd de la camara). Aqui solo se le pide el modo.
@@ -662,6 +677,9 @@
           this._listos[ident] = true;
           return;
         }
+      }
+
+      if (tipo === TIPO_FLATGEOBUF) {
         // Respaldo para versiones antiguas sin `_recargar`.
         var selfFg = this;
         var urlFg = null;
@@ -804,7 +822,7 @@
      */
     _peticionPuesta(capa, tipo, impl, bbox, limite, offset) {
       try {
-        if (tipo === TIPO_FLATGEOBUF) {
+        if (tipo === TIPO_FLATGEOBUF || tipo === TIPO_GEOPARQUET) {
           // La capa (`_recargar`) lleva su propia cache de modo+bbox. Aqui
           // siempre hay que dejarla pasar para que decida si recarga o no.
           return false;

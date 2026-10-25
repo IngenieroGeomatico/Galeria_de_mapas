@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>PMTiles | Tipos de capa</title>
+  <meta name="description" content="Capas PMTiles vectoriales y ráster leídas en 2D y en 3D a través de ext/pmtilesLayer.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Selector de capas base -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_backgorundLayers.css">
+  <script src="../../../../ext/selectorCapas/ext_backgorundLayers.js"></script>
+
+  <!-- Arbol de capas superpuestas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Lectura de escala y coordenadas -->
+  <link rel="stylesheet" href="../../../../ext/mapInfo/mapInfo.css">
+  <script src="../../../../ext/mapInfo/mapInfo.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+  <!-- Informacion del punto -->
+  <link rel="stylesheet" href="../../../../ext/information/information.css">
+  <script src="../../../../ext/information/information.js"></script>
+
+  <!-- PMTiles: un unico script. El lector (pmtiles.min.js) lo descarga la
+       propia extension desde su carpeta. -->
+  <script src="../../../../ext/pmtilesLayer/pmtilesLayer.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">PMTiles <span class="barra__clase">ext/pmtilesLayer</span></h1>
+      <p class="barra__desc">
+        Los barrios de Madrid en dos ficheros PMTiles: teselas vectoriales (MVT)
+        y teselas ráster (PNG), leídos por HTTP Range.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.PMTiles (ext/pmtilesLayer)</h3>
+    <p>
+      PMTiles guarda todas las teselas y el directorio en un solo fichero. La
+      extensión lo lee con <code>HTTP Range</code> y crea:
+    </p>
+    <ul>
+      <li>
+        <strong>Vectorial</strong> (<code>type: 'vector'</code>): una capa
+        <code>IDEE.layer.MVT</code> a la que se le cambia la carga de tesela por
+        <code>pmtiles.getZxy()</code>. En 3D la fachada MVT no dibuja teselas,
+        así que este ejemplo solo la añade en 2D.
+      </li>
+      <li>
+        <strong>Ráster</strong> (<code>type: 'raster'</code>): una capa
+        <code>IDEE.layer.TMS</code> cuya fuente (2D) o <code>ImageryLayer</code>
+        (3D) se sustituye por un proveedor PMTiles.
+      </li>
+    </ul>
+    <pre class="codigo"><code>// Vectorial (solo 2D)
+const capaVector = new IDEE.layer.PMTiles({
+  url: '../../../../datos/Madrid_barrios.pmtiles',
+  type: 'vector',
+  layers: 'barrios',
+  name: 'Barrios (vectorial)',
+  legend: 'Barrios de Madrid (PMTiles vectorial)',
+  minZoom: 0,
+  maxZoom: 14,
+}, {
+  style: new IDEE.style.Generic({
+    polygon: {
+      fill: { color: '#5eead4', opacity: 0.25 },
+      stroke: { color: '#0f766e', width: 2 },
+    },
+  }),
+});
+
+// Ráster (2D y 3D)
+const capaRaster = new IDEE.layer.PMTiles({
+  url: '../../../../datos/Madrid_barrios_raster.pmtiles',
+  type: 'raster',
+  name: 'Barrios (ráster)',
+  legend: 'Barrios de Madrid (PMTiles ráster)',
+  minZoom: 0,
+  maxZoom: 13,
+}, {});
+
+mapajs.addLayers(capaRaster);
+if (checkImpl() !== 'cesium') mapajs.addLayers(capaVector);</code></pre>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>

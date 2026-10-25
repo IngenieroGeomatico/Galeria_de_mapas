@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <title>WMC | Tipos de capa</title>
-  <meta name="description" content="Capa WMC de la API-IDEE: un contexto de mapas OGC con sus capas ya montadas, en 2D y en 3D.">
+  <title>GeoParquet | Tipos de capa</title>
+  <meta name="description" content="Capa GeoParquet (.parquet) leída en 2D y en 3D a través de ext/geoparquetLayer.">
 
   <link rel="icon" href="data:,">
 
@@ -40,6 +40,10 @@
   <link rel="stylesheet" href="../../../../ext/information/information.css">
   <script src="../../../../ext/information/information.js"></script>
 
+  <!-- GeoParquet: un unico script. El lector de Parquet (hyparquet) lo
+       descarga la propia extension desde su carpeta. -->
+  <script src="../../../../ext/geoparquetLayer/geoparquetLayer.js"></script>
+
   <!-- Estilos comunes de las paginas de tipo de capa -->
   <link rel="stylesheet" href="../../css/capa.css">
 </head>
@@ -55,9 +59,10 @@
       <span aria-hidden="true">&#8592;</span> Tipos de capa
     </a>
     <div class="barra__texto">
-      <h1 class="barra__titulo">WMC <span class="barra__clase">IDEE.layer.WMC</span></h1>
+      <h1 class="barra__titulo">GeoParquet <span class="barra__clase">ext/geoparquetLayer</span></h1>
       <p class="barra__desc">
-        Un contexto de mapas OGC: un XML que ya trae las capas montadas y el encuadre. La API lo abre, añade lo que describe y lleva la vista a su sitio. En 3D esta versión de la API no trae la clase WMC, así que el cambio deja solo el globo.
+        Un fichero .parquet de los barrios de Madrid, leído en 2D y en 3D como
+        <code>IDEE.layer.GeoParquet</code>.
       </p>
     </div>
   </header>
@@ -66,28 +71,32 @@
 
   <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
   <template id="codigo">
-    <h3>IDEE.layer.WMC</h3>
+    <h3>IDEE.layer.GeoParquet (ext/geoparquetLayer)</h3>
     <p>
-      El WMC se declara solo con la URL del contexto y un nombre. Al añadirlo al mapa, la API lee el XML, crea las capas que describe, con sus estilos y su orden, y lleva la vista al encuadre guardado.
+      La extensión lee el <code>.parquet</code> con <code>hyparquet</code> y crea
+      una capa vectorial nativa (<code>IDEE.layer.GeoParquet</code>, subclase de
+      <code>IDEE.layer.GeoJSON</code>), que pinta en 2D y en 3D.
     </p>
     <p>
-      Un WMC entra con su propio encuadre y su propia proyección, y al cargarse la API
-      recalcula las resoluciones del mapa. Por eso el mapa se declara con
-      <code>projection</code> y <code>resolutions</code> explícitas: así el contexto no le
-      cambia el sistema de referencia ni deja la vista sin zoom.
+      Arranca en modo <strong>«La vista»</strong>: pide el footer por
+      <code>HTTP Range</code>, elige solo los <em>row groups</em> que caen en el
+      bbox visible y descarga esos rangos. El fichero completo se lee cuando se
+      elige <strong>«Todas»</strong> en el panel de la capa
+      (<code>ext/bboxFeatures</code>).
     </p>
-    <p>
-      En 3D no hay ficha que enseñar: la implementación de Cesium de esta versión no trae
-      <code>WMC</code> y el constructor lanza. La página lo comprueba antes de crear la capa y
-      deja el globo con el fondo, para que el cambio 2D/3D siga funcionando.
-    </p>
-    <pre class="codigo"><code>// El WMC trae su encuadre y su proyeccion: el mapa se declara con
-// projection y resolutions para que no se las cambie.
-const capa = new IDEE.layer.WMC({
-  url: '../../datos/contexto.xml',
-  name: 'Contexto',
-  legend: 'Contexto WMC',
-}, {});
+    <pre class="codigo"><code>const capa = new IDEE.layer.GeoParquet({
+  url: '../../../../datos/Madrid_barrios.parquet',
+  name: 'Barrios de Madrid',
+  legend: 'Barrios de Madrid (GeoParquet)',
+  crs: 'EPSG:4326',   // opcional: si no, se lee del metadata geo
+}, {
+  style: new IDEE.style.Generic({
+    polygon: {
+      fill: { color: '#93c5fd', opacity: 0.35 },
+      stroke: { color: '#1d4ed8', width: 2 },
+    },
+  }),
+});
 
 mapajs.addLayers(capa);</code></pre>
   </template>

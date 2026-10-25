@@ -4262,13 +4262,9 @@ class miPlugin_layerSwitcher {
       const id = String(layer.idLayer);
       const opciones = limites.map(n =>
         `<option value="${n}" ${Number(n) === Number(estado.limite) ? 'selected' : ''}>${n}</option>`).join('');
-      return `
-        <div class="ls-objetos">
-          <span class="ls-objetos__titulo" title="Qué objetos geográficos se piden al servicio, cuántos por página y en qué página">Objetos geográficos</span>
-          <div class="ls-objetos__modo" role="group" aria-label="Objetos geográficos que se piden al servicio">
-            <button type="button" class="ls-objetos__btn ${estado.modo === 'todas' ? 'ls-objetos__btn-on' : ''}" aria-pressed="${estado.modo === 'todas' ? 'true' : 'false'}" title="Pedir la primera página de todos los objetos de la capa (una sola petición)" onclick="setBBoxModo('${id}', 'todas')">Todas</button>
-            <button type="button" class="ls-objetos__btn ${estado.modo === 'vista' ? 'ls-objetos__btn-on' : ''}" aria-pressed="${estado.modo === 'vista' ? 'true' : 'false'}" title="Pedir la primera página de los objetos de la vista y renovarla al mover el mapa (BBOX)" onclick="setBBoxModo('${id}', 'vista')">La vista</button>
-          </div>
+      // FlatGeobuf y GeoParquet no se pagan: solo tiene sentido elegir entre
+      // "Todas" y "La vista". El límite y las páginas se ocultan.
+      const controles = (estado.paginable === false) ? '' : `
           <label class="ls-objetos__limite" title="Objetos geográficos que se piden de cada vez">
             Límite
             <select onchange="setBBoxLimite('${id}', this.value)" aria-label="Objetos geográficos por página">${opciones}</select>
@@ -4277,7 +4273,14 @@ class miPlugin_layerSwitcher {
             <button type="button" class="ls-objetos__pagina-btn" ${estado.hayAnterior ? '' : 'disabled'} title="Página anterior" onclick="setBBoxPagina('${id}', ${estado.pagina - 1})">‹</button>
             <span class="ls-objetos__pagina" title="El servicio no informa del total de páginas: hay siguiente mientras la página venga completa">Página ${estado.pagina}</span>
             <button type="button" class="ls-objetos__pagina-btn" ${estado.haySiguiente ? '' : 'disabled'} title="Página siguiente" onclick="setBBoxPagina('${id}', ${estado.pagina + 1})">›</button>
-          </span>
+          </span>`;
+      return `
+        <div class="ls-objetos">
+          <span class="ls-objetos__titulo" title="Qué objetos geográficos se piden al servicio, cuántos por página y en qué página">Objetos geográficos</span>
+          <div class="ls-objetos__modo" role="group" aria-label="Objetos geográficos que se piden al servicio">
+            <button type="button" class="ls-objetos__btn ${estado.modo === 'todas' ? 'ls-objetos__btn-on' : ''}" aria-pressed="${estado.modo === 'todas' ? 'true' : 'false'}" title="Pedir la primera página de todos los objetos de la capa (una sola petición)" onclick="setBBoxModo('${id}', 'todas')">Todas</button>
+            <button type="button" class="ls-objetos__btn ${estado.modo === 'vista' ? 'ls-objetos__btn-on' : ''}" aria-pressed="${estado.modo === 'vista' ? 'true' : 'false'}" title="Pedir la primera página de los objetos de la vista y renovarla al mover el mapa (BBOX)" onclick="setBBoxModo('${id}', 'vista')">La vista</button>
+          </div>${controles}
         </div>`;
     }
 
