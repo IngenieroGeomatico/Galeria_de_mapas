@@ -155,6 +155,66 @@
   }
 
   /**
+   * Extension del fichero PMTiles leida de su cabecera, en grados.
+   *
+   * La cabecera de PMTiles trae `minLon/minLat/maxLon/maxLat`, que es la
+   * cobertura real del fichero. Es lo unico que permite que "zoom a la capa"
+   * funcione en una capa raster: su `getMaxExtent()` nativo devuelve el mundo
+   * entero, igual que el de cualquier TMS, y la fuente de teselas que
+   * sustituimos tampoco declara extension en la rejilla.
+   *
+   * @param {Object} capa
+   * @returns {Array<number>|null} [oeste, sur, este, norte] en grados.
+   */
+  function extensionDeCabecera(capa) {
+    const header = capa && capa._pmtilesHeader;
+    if (!header) return null;
+    const grados = [header.minLon, header.minLat, header.maxLon, header.maxLat].map(Number);
+    if (!grados.every(isFinite)) return null;
+    if (!(grados[0] < grados[2] && grados[1] < grados[3])) return null;
+    return grados;
+  }
+
+  /**
+   * Pasa la extension de la cabecera (grados) a la proyeccion del mapa.
+   *
+   * En 3D la API trabaja en EPSG:4326 y devuelve las extensiones en grados; en
+   * 2D la vista de OpenLayers espera EPSG:3857. La capa sabe en que
+   * implementacion esta porque `setMap()` le deja el mapa en `this.map_`.
+   *
+   * @param {Object} capa
+   * @param {Array<number>} grados [oeste, sur, este, norte].
+   * @returns {Array<number>|null}
+   */
+  function extensionEnProyeccionDelMapa(capa, grados) {
+    let mapaImpl = null;
+    try {
+      const mapa = capa && capa.map_;
+      mapaImpl = (mapa && typeof mapa.getMapImpl === 'function') ? mapa.getMapImpl() : null;
+    } catch (e) {
+      mapaImpl = null;
+    }
+    // Sin mapa no se puede saber la proyección: mejor devolver null y que
+    // `getMaxExtent()` caiga al valor nativo que arriesgar una caja en 3857
+    // dentro de Cesium (o al revés).
+    if (!mapaImpl) return null;
+    const esCesium = !!(mapaImpl.scene && mapaImpl.scene.camera);
+    if (esCesium) return grados;
+
+    const apiActiva = api();
+    if (!(apiActiva && apiActiva.utils && typeof apiActiva.utils.reproject === 'function')) {
+      return null;
+    }
+    try {
+      const suroeste = apiActiva.utils.reproject([grados[0], grados[1]], 'EPSG:4326', 'EPSG:3857');
+      const noreste = apiActiva.utils.reproject([grados[2], grados[3]], 'EPSG:4326', 'EPSG:3857');
+      return [suroeste[0], suroeste[1], noreste[0], noreste[1]];
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
    * MIME de una tesela segun `header.tileType` de PMTiles.
    * @param {number} tipo
    * @returns {string}
@@ -261,6 +321,24 @@
         this._pmtilesTileLoad = null;
         this._pmtilesSource = null;
         this._pmtilesInicializado = false;
+      }
+
+      /**
+       * Extension real del fichero, no la caja de las teselas ya cargadas.
+       *
+       * El MVT nativo devuelve la extension de las teselas que tiene en
+       * memoria, que cambia con el viewport. La cabecera de PMTiles da la
+       * cobertura completa, asi que el boton de zoom del selector encuadra
+       * siempre lo mismo.
+       *
+       * @param {boolean} [user]
+       * @returns {Array<number>|null}
+       */
+      getMaxExtent(user) {
+        const grados = extensionDeCabecera(this);
+        const ext = grados ? extensionEnProyeccionDelMapa(this, grados) : null;
+        if (ext) return ext;
+        return super.getMaxExtent(user);
       }
 
       /**
@@ -443,6 +521,28 @@
         this._pmtilesAlpha = (params.opacity !== undefined && isFinite(Number(params.opacity)))
           ? Number(params.opacity) : 1;
         this._pmtilesInicializado = false;
+        // El TMS nativo no aplica `opacity` al crear la capa (medido: la
+        // fachada seguia devolviendo 1 con opacity:0.9 en el constructor),
+        // asi que el selector pintaba 0% de transparencia aunque el raster
+        // se viera al 90%. Se fija aqui y se vuelve a fijar en
+        // `_pmtilesIniciarOL` cuando ya existe el `olLayer`.
+        try { this.setOpacity(this._pmtilesAlpha); } catch (e) { /* impl aun sin crear */ }
+      }
+
+      /**
+       * Extension real del fichero, en la proyeccion del mapa.
+       *
+       * Sin esto el TMS devuelve el mundo entero y "zoom a la capa" no hacia
+       * nada (ni en 2D ni en 3D). La cobertura sale de la cabecera de PMTiles.
+       *
+       * @param {boolean} [user]
+       * @returns {Array<number>|null}
+       */
+      getMaxExtent(user) {
+        const grados = extensionDeCabecera(this);
+        const ext = grados ? extensionEnProyeccionDelMapa(this, grados) : null;
+        if (ext) return ext;
+        return super.getMaxExtent(user);
       }
 
       /**
@@ -567,6 +667,11 @@
         });
 
         impl.olLayer.setSource(source);
+        // La fuente se cambia despues de crear la capa; se reaplican la
+        // opacidad y la visibilidad por si el cambio de fuente las reinicia
+        // o por si el TMS nativo no aplico `opacity` al construirse.
+        try { impl.olLayer.setOpacity(this._pmtilesAlpha); } catch (e) { /* noop */ }
+        try { impl.olLayer.setVisible(this._pmtilesVisible); } catch (e) { /* noop */ }
         this._pmtilesOLSource = source;
       }
 

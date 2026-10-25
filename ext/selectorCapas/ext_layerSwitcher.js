@@ -605,11 +605,13 @@ class miPlugin_layerSwitcher {
 
   // ── Coordinación de estado (swap 2D/3D con cambioImpl) ───────────────
   // Captura el estado serializable propio de la UI del selector de capas
-  // (_optionsOpen, _groupCollapsed y el orden de apilado). La visibilidad,
-  // la opacidad y el renombrado residen en las propias capas y los transfiere
-  // cambioImpl; hay dos excepciones que se guardan aquí porque las capas se
-  // recrean en cada reinicio de mapa: la capa elegida en el modo "una capa a
-  // la vez" (radioVisibleLegend) y el orden z (ordenZ).
+  // (_optionsOpen, _groupCollapsed, visibilidad/opacidad por capa y orden de
+  // apilado). Las capas se recrean en cada reinicio de mapa (cambio 2D/3D),
+  // así que la visibilidad y la opacidad hay que reaplicarlas aquí: no viajan
+  // en `mapa()` y cambioImpl no las transfiere. Se guardan por legend/name,
+  // que son estables, porque el idLayer cambia en cada reinicio. La capa
+  // elegida en el modo "una capa a la vez" (radioVisibleLegend) y el orden z
+  // (ordenZ) también se guardan aparte.
   getState() {
     const groupCollapsedCopy = {};
     if (this._groupCollapsed && typeof this._groupCollapsed === 'object') {
@@ -695,6 +697,33 @@ class miPlugin_layerSwitcher {
       });
       ordenZ = entradas.map((e) => e.ident);
     }
+    // Visibilidad y opacidad de cada capa, por identificador estable. En el
+    // reinicio del mapa las capas se crean de nuevo con los valores del
+    // visualizador, así que sin esto el selector perdía los cambios hechos
+    // con el ojo y con el deslizador (medido con la capa PMTiles ráster:
+    // 25 % de transparencia volvía al 10 % del constructor al pasar a 3D).
+    const layerStates = [];
+    if (this._map) {
+      this._capasConZ(this._map).forEach((capa) => {
+        if (!capa || capa.isBase === true || capa.displayInLayerSwitcher === false) return;
+        const ident = this._identificadorDe(capa);
+        if (!ident) return;
+        let visible;
+        let opacity;
+        try {
+          if (typeof capa.isVisible === 'function') visible = !!capa.isVisible();
+        } catch (e) { /* capa sin visibilidad */ }
+        try {
+          if (typeof capa.getOpacity === 'function') {
+            const op = Number(capa.getOpacity());
+            if (isFinite(op)) opacity = op;
+          }
+        } catch (e) { /* capa sin opacidad */ }
+        if (visible !== undefined || opacity !== undefined) {
+          layerStates.push({ ident, visible, opacity });
+        }
+      });
+    }
     return {
       panelCollapsed,
       optionsOpen: idAtOpen,
@@ -703,6 +732,7 @@ class miPlugin_layerSwitcher {
       groupCollapsedLegends,
       radioVisibleLegend,
       ordenZ,
+      layerStates,
     };
   }
 
@@ -843,6 +873,47 @@ class miPlugin_layerSwitcher {
           this._groupCollapsed[String(capa.idLayer)] = state.groupCollapsedLegends[leg];
         }
       }
+    }
+
+    // Restaurar visibilidad y opacidad de cada capa. Se resuelve por
+    // legend/name porque el idLayer cambia en cada reinicio de mapa. La
+    // opacidad se aplica con `setLayerOpacity` (porcentaje de transparencia)
+    // para que las capas vectoriales de Cesium reconstruyan sus primitivas y
+    // el cambio se vea de verdad; si aún no está disponible, se llama
+    // directamente a `setOpacity`.
+    if (Array.isArray(state.layerStates)) {
+      state.layerStates.forEach((estadoCapa) => {
+        if (!estadoCapa || !estadoCapa.ident) return;
+        const capa = this._findLayerByLegendInMap(mapRef, estadoCapa.ident);
+        if (!capa) return;
+        // Solo se tocan los valores que han cambiado. Las capas nacen con la
+        // visibilidad y la opacidad del visualizador, y reaplicar lo mismo en
+        // cada swap reconstruiría entidades de Cesium sin necesidad.
+        let visibleActual;
+        try {
+          if (typeof capa.isVisible === 'function') visibleActual = !!capa.isVisible();
+        } catch (e) { /* capa sin visibilidad */ }
+        if (typeof estadoCapa.visible === 'boolean' && estadoCapa.visible !== visibleActual
+          && typeof capa.setVisible === 'function') {
+          try { capa.setVisible(estadoCapa.visible); } catch (e) { /* capa sin visibilidad */ }
+        }
+        let opacidadActual;
+        try {
+          if (typeof capa.getOpacity === 'function') opacidadActual = Number(capa.getOpacity());
+        } catch (e) { /* capa sin opacidad */ }
+        const opacidadDistinta = typeof estadoCapa.opacity === 'number'
+          && (!isFinite(opacidadActual) || Math.abs(opacidadActual - estadoCapa.opacity) > 0.001);
+        if (opacidadDistinta && typeof capa.setOpacity === 'function') {
+          try {
+            const pct = Math.max(0, Math.min(100, Math.round((1 - estadoCapa.opacity) * 100)));
+            if (typeof window.setLayerOpacity === 'function' && capa.idLayer) {
+              window.setLayerOpacity(capa.idLayer, pct);
+            } else {
+              capa.setOpacity(estadoCapa.opacity);
+            }
+          } catch (e) { /* capa sin opacidad */ }
+        }
+      });
     }
 
     // Restaurar la capa elegida en el modo "una capa a la vez": se enciende
