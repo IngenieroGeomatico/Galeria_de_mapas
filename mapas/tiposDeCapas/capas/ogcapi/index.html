@@ -25,9 +25,6 @@
   <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
   <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
 
-  <!-- Objetos geograficos por BBOX y por paginas (WFS y OGC API Features): barra en la ventana de informacion -->
-  <script src="../../../../ext/bboxFeatures/bboxFeatures.js"></script>
-
   <!-- Lectura de escala y coordenadas -->
   <link rel="stylesheet" href="../../../../ext/mapInfo/mapInfo.css">
   <script src="../../../../ext/mapInfo/mapInfo.js"></script>
@@ -71,7 +68,7 @@
   <template id="codigo">
     <h3>IDEE.layer.OGCAPIFeatures</h3>
     <p>
-      La capa necesita la URL del servicio y el nombre de la colección (<code>name</code>). El resto lo negocia la API: formato, sistema de referencia y paginación. El servicio devuelve diez entidades por defecto, así que <code>limit</code> pide todas las de la colección.
+      La capa necesita la URL del servicio y el nombre de la colección (<code>name</code>). El resto lo negocia la API: formato, sistema de referencia y paginación. El servicio devuelve diez objetos por defecto, así que <code>limit</code> pide todos los de la colección.
     </p>
     <pre class="codigo"><code>const capa = new IDEE.layer.OGCAPIFeatures({
   url: 'https://api-features.idee.es/collections/',

@@ -1405,6 +1405,7 @@ class miPlugin_layerSwitcher {
         console.warn('layerSwitcher: no se pudo cambiar los objetos geográficos', e);
       }
       refrescarBarraObjetos(capa);
+      refrescarBarraObjetosFicha(capa);
     }
 
     // ── Colapsar / expandir un grupo de capas ──────────────────────────
@@ -3318,6 +3319,7 @@ class miPlugin_layerSwitcher {
     window.openLayerFicha = function (index) {
       const capa = findLayerById(index);
       if (!capa) return;
+      fichaVectorLayer = capa;
       const nombre = capa.legend || capa.name || 'Sin nombre';
       const cp = capa.constructorParameters || {};
       const construccion = cp.userParameters || cp.parameters || {};
@@ -3339,6 +3341,7 @@ class miPlugin_layerSwitcher {
 
       const parametrosHtml = _tablaDeParametros(construccion, opciones, vendor, url);
       const tipo = _tipoDeCapa(capa);
+      const barraObjetosHtml = (typeof barraObjetos === 'function') ? barraObjetos(capa) : '';
 
       panel.innerHTML =
         `<div class="ls-ficha-header">
@@ -3350,6 +3353,7 @@ class miPlugin_layerSwitcher {
             <div class="ls-ficha-col">
               <div class="ls-ficha-seccion-titulo">Parámetros de construcción</div>
               ${parametrosHtml}
+              ${barraObjetosHtml ? `<div class="ls-ficha-seccion-titulo" style="margin-top:14px">Objetos geográficos</div><div class="ls-ficha-objetos-wrap">${barraObjetosHtml}</div>` : ''}
             </div>
             <div class="ls-ficha-col">
               <div class="ls-ficha-seccion-titulo">Documento del servicio</div>
@@ -3362,6 +3366,7 @@ class miPlugin_layerSwitcher {
       requestAnimationFrame(() => { overlay.classList.add('ls-ficha--open'); });
 
       const cerrar = function () {
+        fichaVectorLayer = null;
         try { overlay.classList.remove('ls-ficha--open'); } catch (e) { /* nada */ }
         setTimeout(function () {
           try { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) { /* nada */ }
@@ -3392,7 +3397,7 @@ class miPlugin_layerSwitcher {
       const todo = Object.assign({}, construccion, { 'url (resuelto)': url },
         Object.keys(opciones).length ? { 'options': opciones } : {},
         Object.keys(vendor).length ? { 'vendorOptions': vendor } : {});
-      const claves = Object.keys(todo).filter(function (k) { return k !== 'options' && k !== 'vendorOptions'; });
+      const claves = Object.keys(todo).filter(function (k) { return k !== 'options' && k !== 'vendorOptions' && k !== 'source'; });
       claves.forEach(function (clave) {
         const valor = todo[clave];
         let texto;
@@ -4231,6 +4236,7 @@ class miPlugin_layerSwitcher {
     // página de objetos. El trabajo lo hace miPlugin_bboxFeatures
     // (ext/bboxFeatures/bboxFeatures.js) a través de window.miBBoxFeatures.
     let sheetVectorLayer = null;
+    let fichaVectorLayer = null;
     let sheetReloadCleanup = null;
     let sheetReloadTimer = null;
 
@@ -4283,7 +4289,7 @@ class miPlugin_layerSwitcher {
      * @returns {string}
      */
     function cuerpoTablaVector(layer) {
-      return `<div class="ls-sheet-objetos-wrap">${barraObjetos(layer)}${buildVectorTable(layer)}</div>`;
+      return `<div class="ls-sheet-objetos-wrap">${buildVectorTable(layer)}</div>`;
     }
 
     /**
@@ -4298,7 +4304,19 @@ class miPlugin_layerSwitcher {
       if (String(sheetVectorLayer.idLayer) !== String(layer.idLayer)) return;
       const wrap = overlay.querySelector('.ls-sheet-objetos-wrap');
       if (!wrap) return;
-      wrap.innerHTML = barraObjetos(layer) + buildVectorTable(layer);
+      wrap.innerHTML = buildVectorTable(layer);
+    }
+
+    /**
+     * Vuelve a pintar la barra de objetos geográficos de la ficha abierta
+     * (si la capa que la originó es la que se está refrescando).
+     */
+    function refrescarBarraObjetosFicha(layer) {
+      if (!layer || !fichaVectorLayer) return;
+      if (String(fichaVectorLayer.idLayer) !== String(layer.idLayer)) return;
+      const wrap = document.querySelector('.ls-ficha-objetos-wrap');
+      if (!wrap) return;
+      wrap.innerHTML = barraObjetos(layer);
     }
 
     /**

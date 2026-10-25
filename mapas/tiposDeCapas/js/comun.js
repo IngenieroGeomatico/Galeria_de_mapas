@@ -36,6 +36,61 @@ if (SVGCarga) {
 }
 
 /**
+ * URL de `ext/bboxFeatures/bboxFeatures.js`, hermana de este fichero.
+ * Se resuelve con `document.currentScript` para que funcione igual en la
+ * raiz, en un subdirectorio y en GitHub Pages.
+ * @type {string}
+ */
+const URL_BBOX_FEATURES = (function () {
+  try {
+    const propio = document.currentScript && document.currentScript.src;
+    if (propio) return new URL('../../../ext/bboxFeatures/bboxFeatures.js', propio).href;
+  } catch (e) { /* sigue abajo */ }
+  return '../../../../ext/bboxFeatures/bboxFeatures.js';
+})();
+
+let promesaBboxFeatures = null;
+
+/**
+ * Carga `ext/bboxFeatures/bboxFeatures.js` una sola vez.
+ *
+ * La extension se pide desde el `js/mapa.js` de cada capa que la usa (WFS,
+ * OGC API Features y FlatGeobuf), no desde el `index.html`: asi la pagina
+ * solo declara lo suyo y no hay que acordarse de anadir el <script> en cada
+ * visor nuevo.
+ * @returns {Promise<void>}
+ */
+function cargarBboxFeatures() {
+  const API = window.IDEE || window.M;
+  if (API && API.plugin && typeof API.plugin.miPlugin_bboxFeatures === 'function') {
+    return Promise.resolve();
+  }
+  if (promesaBboxFeatures) return promesaBboxFeatures;
+
+  promesaBboxFeatures = new Promise(function (resolve, reject) {
+    const script = document.createElement('script');
+    script.src = URL_BBOX_FEATURES;
+    script.async = true;
+    script.onload = function () {
+      const apiCargada = window.IDEE || window.M;
+      if (apiCargada && apiCargada.plugin && typeof apiCargada.plugin.miPlugin_bboxFeatures === 'function') {
+        resolve();
+      } else {
+        promesaBboxFeatures = null;
+        reject(new Error('bboxFeatures: el plugin no se registro'));
+      }
+    };
+    script.onerror = function () {
+      promesaBboxFeatures = null;
+      reject(new Error('bboxFeatures: no se pudo cargar ' + URL_BBOX_FEATURES));
+    };
+    (document.head || document.documentElement).appendChild(script);
+  });
+
+  return promesaBboxFeatures;
+}
+
+/**
  * Capas base que ofrece el selector comun, creadas con el bundle de la API que
  * este cargado en cada momento.
  *
@@ -209,9 +264,10 @@ function prepararFondo(opciones) {
  *   superpuestas, mezcladas con las de siempre. El visor de XYZ lo usa para
  *   pedir el modo "una capa a la vez" (`seleccionUnica`).
  * @param {boolean} [opciones.bboxFeatures=false] Anade la extension
- *   `miPlugin_bboxFeatures`, que permite pedir a las capas WFS y OGC API
- *   Features solo las entidades de la vista (BBOX) y renovarlas al mover el
- *   mapa. El control aparece en el desplegable de opciones de esas capas.
+ *   `miPlugin_bboxFeatures`, que permite pedir a las capas WFS, OGC API
+ *   Features y FlatGeobuf solo los objetos geograficos de la vista (BBOX) y
+ *   renovarlos al mover el mapa. El control aparece en el desplegable de
+ *   opciones de esas capas.
  */
 function anadirPluginsTipos(map, recrear, opciones) {
   const opts = opciones || {};
@@ -245,7 +301,11 @@ function anadirPluginsTipos(map, recrear, opciones) {
   // un cambio 2D/3D, el modo de cada capa ya este aplicado cuando el selector
   // repinta su lista.
   if (opts.bboxFeatures) {
-    map.addPlugin(new IDEE.plugin.miPlugin_bboxFeatures({}));
+    if (IDEE.plugin && typeof IDEE.plugin.miPlugin_bboxFeatures === 'function') {
+      map.addPlugin(new IDEE.plugin.miPlugin_bboxFeatures({}));
+    } else {
+      console.warn('bboxFeatures: el plugin no esta cargado; se omite');
+    }
   }
 
   // Arbol de capas superpuestas: la capa de la pagina aparece con su leyenda y

@@ -93,6 +93,7 @@
   // selector (`getLayerKind`).
   var TIPO_WFS = 'WFS';
   var TIPO_OGCAPI = 'OGCAPIFeatures';
+  var TIPO_FLATGEOBUF = 'FlatGeobuf';
 
   // Espera tras el último movimiento antes de pedir. Un paneo emite un
   // `moveend` por gesto y una rueda puede emitir varios seguidos; 350 ms
@@ -126,6 +127,9 @@
     }
     if (tipo === TIPO_WFS) return TIPO_WFS;
     if (tipo === TIPO_OGCAPI) return TIPO_OGCAPI;
+    // FlatGeobuf se sirve como IDEE.layer.GeoJSON, asi que se reconoce por
+    // la marca que pone ext/flatgeobufLayer al crear la capa.
+    try { if (capa && capa._flatgeobuf) return TIPO_FLATGEOBUF; } catch (e) { /* noop */ }
     return null;
   }
 
@@ -184,7 +188,7 @@
 
       // Modo "solo la vista" por identificador estable de capa. Es un objeto
       // plano para que getState() devuelva algo serializable tal cual.
-      this._vista = {};
+      this._todas = {};
 
       // Límite de objetos por página y desplazamiento (paginado en el
       // servidor) por identificador estable de capa.
@@ -235,7 +239,7 @@
         /** Vuelve a aplicar el modo de todas las capas filtrables del mapa. */
         aplicarTodo: function (forzar) { self._aplicarTodo(!!forzar); },
         /** Tipos de capa que atiende la extensión. */
-        tipos: function () { return [TIPO_WFS, TIPO_OGCAPI]; },
+        tipos: function () { return [TIPO_WFS, TIPO_OGCAPI, TIPO_FLATGEOBUF]; },
         /** La instancia que atiende ahora mismo, para depurar. */
         plugin: self
       };
@@ -267,7 +271,7 @@
      */
     getModo(capa) {
       var ident = identificadorDe(capa);
-      return (ident && this._vista[ident]) ? 'vista' : 'todas';
+      return (ident && this._todas[ident]) ? 'todas' : 'vista';
     }
 
     /**
@@ -280,8 +284,8 @@
       if (!tipoDeCapa(capa)) return;
       var ident = identificadorDe(capa);
       if (!ident) return;
-      if (modo === 'vista') this._vista[ident] = true;
-      else delete this._vista[ident];
+      if (modo === 'todas') this._todas[ident] = true;
+      else delete this._todas[ident];
       // Cambia lo que se pide (con o sin bbox): siempre se vuelve a la
       // primera página.
       this._offset[ident] = 0;
@@ -373,7 +377,7 @@
      * @returns {{vista: string[], limite: Object, offset: Object}}
      */
     getState() {
-      var estado = { vista: Object.keys(this._vista) };
+      var estado = { todas: Object.keys(this._todas) };
       var limites = {};
       var offsets = {};
       var id;
@@ -402,11 +406,11 @@
      */
     setState(state, map) {
       if (!state || typeof state !== 'object') return;
-      var lista = Array.isArray(state.vista) ? state.vista : [];
-      this._vista = {};
+      var lista = Array.isArray(state.todas) ? state.todas : [];
+      this._todas = {};
       for (var i = 0; i < lista.length; i += 1) {
         if (lista[i] !== undefined && lista[i] !== null && lista[i] !== '') {
-          this._vista[String(lista[i])] = true;
+          this._todas[String(lista[i])] = true;
         }
       }
       this._limite = {};
@@ -499,6 +503,10 @@
       var ident = identificadorDe(capa);
       if (ident && this._listos[ident]) return true;
       try {
+        // FlatGeobuf se carga por bbox desde el inicio: se considera "listo"
+        // de inmediato para que bboxFeatures aplique el bbox inicial sin
+        // esperar a que pinte features (que nunca pintaria si espera).
+        if (tipoDeCapa(capa) === TIPO_FLATGEOBUF) return true;
         var impl = capa.getImpl ? capa.getImpl() : null;
         if (!impl) return false;
         if (typeof impl.isLoaded === 'function' && !impl.isLoaded()) return false;
@@ -620,7 +628,7 @@
 
       var ident = identificadorDe(capa) || String(capa.idLayer || '');
       var modoVista = (this.getModo(capa) === 'vista');
-      var bbox = modoVista ? this._bbox(tipo) : null;
+      var bbox = modoVista ? this._bbox(tipo, capa) : null;
       var limite = this.getLimite(capa);
       var offset = (Number(this._offset[ident]) > 0) ? Number(this._offset[ident]) : 0;
 
@@ -637,6 +645,75 @@
       if (this._peticionPuesta(capa, tipo, impl, bbox, limite, offset)) {
         this._ultimoBBox[ident] = clave;
         this._listos[ident] = true;
+        return;
+      }
+
+      // FlatGeobuf: la fuente se rehace descargando el fichero entero (sin
+      // bbox) o solo las features del bbox (HTTP Range, con indice espacial).
+      // Se hace de forma asincrona; el resto del flujo (WFS/OGC) sigue el
+      // camino sincrono de abajo.
+      if (tipo === TIPO_FLATGEOBUF) {
+        // La propia capa sabe calcular el bbox visible, cachear la ultima
+        // carga y refrescarse igual en 2D y en 3D (en 3D ademas escucha el
+        // moveEnd de la camara). Aqui solo se le pide el modo.
+        if (capa && typeof capa._recargar === 'function') {
+          capa._recargar(modoVista ? 'vista' : 'todas', this._map, false);
+          this._ultimoBBox[ident] = clave;
+          this._listos[ident] = true;
+          return;
+        }
+        // Respaldo para versiones antiguas sin `_recargar`.
+        var selfFg = this;
+        var urlFg = null;
+        try { urlFg = capa._flatgeobufUrl || capa.url; } catch (e) { urlFg = capa.url; }
+        var crsFg = (capa && capa._flatgeobufCRS) ? capa._flatgeobufCRS : 'EPSG:4326';
+        // Convertir el bbox (string en 3857, salvo OGC que es lon/lat) a un
+        // rect en la CRS del fichero.
+        var rectFg = null;
+        if (bbox) {
+          var partes = String(bbox).split(',');
+          // 5 partes -> 3857; 4 partes -> lon,lat
+          if (partes.length >= 4) {
+            var n0 = Number(partes[0]);
+            var n1 = Number(partes[1]);
+            var n2 = Number(partes[2]);
+            var n3 = Number(partes[3]);
+            if (isFinite(n0) && isFinite(n1) && isFinite(n2) && isFinite(n3)) {
+              if (crsFg === 'EPSG:4326' && partes.length === 4) {
+                rectFg = { minX: n0, minY: n1, maxX: n2, maxY: n3 };
+              } else if (crsFg === 'EPSG:3857') {
+                rectFg = { minX: n0, minY: n1, maxX: n2, maxY: n3 };
+              } else {
+                // Convertir el bbox 3857 a la CRS del fichero via el mapa.
+                // Fallback: pedir todo.
+                rectFg = null;
+              }
+            }
+          }
+        }
+        var apiFg = (typeof window !== 'undefined')
+          ? (window.flatgeobufLayer || window.miFlatGeobuf)
+          : null;
+        var promesaFg = null;
+        if (rectFg && apiFg && typeof apiFg.cargarBbox === 'function') {
+          promesaFg = apiFg.cargarBbox(urlFg, rectFg, crsFg);
+        } else if (apiFg && typeof apiFg.cargar === 'function') {
+          promesaFg = apiFg.cargar(urlFg, {});
+        } else {
+          console.warn('bboxFeatures: flatgeobuf sin ayudante, no se recarga');
+          return;
+        }
+        promesaFg.then(function (fc) {
+          try {
+            impl.setSource(fc);
+            selfFg._ultimoBBox[ident] = clave;
+            selfFg._listos[ident] = true;
+          } catch (e2) {
+            console.warn('bboxFeatures: flatgeobuf setSource', e2);
+          }
+        }).catch(function (e3) {
+          console.warn('bboxFeatures: flatgeobuf fetch', e3);
+        });
         return;
       }
 
@@ -727,6 +804,11 @@
      */
     _peticionPuesta(capa, tipo, impl, bbox, limite, offset) {
       try {
+        if (tipo === TIPO_FLATGEOBUF) {
+          // La capa (`_recargar`) lleva su propia cache de modo+bbox. Aqui
+          // siempre hay que dejarla pasar para que decida si recarga o no.
+          return false;
+        }
         if (tipo === TIPO_WFS) {
           var gf = (impl.options && impl.options.vendor) ? impl.options.vendor.getFeature : null;
           if (!gf) return false;
@@ -776,9 +858,11 @@
      * @returns {string|null} bbox listo para la URL, o null si no se puede
      *   filtrar (sin vista, mundo entero, proyección desconocida...).
      */
-    _bbox(tipo) {
+    _bbox(tipo, capa) {
       var map = this._map;
       if (!map) return null;
+
+      var crsFlat = (capa && capa._flatgeobufCRS) ? capa._flatgeobufCRS : null;
 
       var b = null;
       try { b = map.getBbox(); } catch (e) { b = null; }
@@ -806,7 +890,7 @@
         if ((maxx - minx) >= ANCHO_MUNDO_3857) return null;
       }
 
-      if (tipo === TIPO_OGCAPI) {
+      if (tipo === TIPO_OGCAPI || (tipo === TIPO_FLATGEOBUF && crsFlat === 'EPSG:4326')) {
         // CRS84: longitud, latitud.
         var ll;
         if (grados) {

@@ -40,4 +40,10 @@ function mapa() {
   return mapajs;
 }
 
-mapa();
+// La extension bboxFeatures se carga desde este fichero, no desde el
+// index.html: aporta el panel "Todas / La vista" y el paginado de la capa.
+cargarBboxFeatures().catch(function (e) {
+  console.warn(e && e.message ? e.message : e);
+}).then(function () {
+  mapa();
+});
