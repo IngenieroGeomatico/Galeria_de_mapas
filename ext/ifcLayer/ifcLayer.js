@@ -271,6 +271,11 @@
         var token = this._ifcToken;
         if (!IDEE || this._ifcFeature || !this._ifcVisualizacion) return;
 
+        // Georreferenciar en 2D tambien: si no hay posicion, leerla del IFC.
+        if (!this._ifcPosition) {
+          this._ifcPosition = await this._ifcLeerPosicion(this._ifcUrl);
+        }
+
         // Si no se paso bbox, se calcula a partir del propio IFC para que la
         // huella represente el modelo (y no un rectangulo arbitrario).
         if (!this._ifcBbox) {
