@@ -26,6 +26,65 @@ const URL_ENGRANAJE = (() => {
 })();
 
 /**
+ * Icono del boton, embebido en el propio plugin.
+ *
+ * El SVG es `img/iconos/globe-alt.svg` (pack Orchid, MIT), pero no se puede
+ * referenciar con una ruta absoluta desde la hoja de estilos: al desplegar en
+ * GitHub Pages el repositorio vive en `/Galeria_de_mapas/`, y un `url("/img/...")`
+ * se resuelve contra la raiz del dominio, no contra la del repositorio. El icono
+ * desaparecia justo en la version desplegada.
+ *
+ * Se guarda aqui como SVG en linea y se convierte a `data:` URI en el constructor
+ * del boton, igual que hacen `ext/plantilla_plugin` y `ext/catalogo`: asi la
+ * mascara no depende de ninguna ruta y sigue funcionando en raiz, en subdirectorio
+ * y en GitHub Pages.
+ */
+const SVG_ICONO_CAMBIO_IMPL =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+  '<path fill="currentColor" d="M29.047 12.95c0-5.274-2.781-10.059-7.437-12.799-0.477-0.281-1.090-0.121-1.369 0.355s-0.121 1.089 0.355 1.369c4.039 2.376 6.45 6.516 6.45 11.074 0 7.574-5.498 13.072-13.072 13.072-1.694 0-3.337-0.317-4.885-0.942-0.511-0.208-1.096 0.040-1.302 0.552s0.040 1.096 0.552 1.302c1.788 0.723 3.684 1.089 5.635 1.089 0.006 0 0.012 0 0.018 0v1.969h-2.904c-0.577 0-1.045 0.447-1.045 0.998s0.468 0.998 1.045 0.998h7.902c0.577 0 1.045-0.447 1.045-0.998s-0.468-0.998-1.045-0.998h-3.012v-2.087c7.681-0.892 13.069-6.903 13.069-14.952zM24.98 13.040c0-6.083-4.93-11.044-11.012-11.044-6.084 0-11.015 4.961-11.015 11.044s4.931 10.982 11.015 10.982c6.083 0 11.012-4.899 11.012-10.982zM4.953 13.040c0-4.97 4.044-9.044 9.014-9.044s9.012 4.074 9.012 9.044-4.043 8.982-9.012 8.982c-4.971 0-9.014-4.012-9.014-8.982z"/>' +
+  '</svg>';
+
+/**
+ * Codifica un SVG para meterlo en un `data:` URI sin romper la URL.
+ * @param {string} svg SVG completo.
+ * @returns {string} SVG codificado.
+ */
+function codificarSvg(svg) {
+  return encodeURIComponent(svg)
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/'/g, '%27')
+    .replace(/\+/g, '%20');
+}
+
+/**
+ * Convierte el icono del constructor en un valor para `--g-plugin-icon-mask`.
+ * Acepta un SVG completo, solo su contenido interior o una URL/ruta.
+ * @param {string} icono Icono en cualquiera de las formas admitidas.
+ * @returns {string|null} `url("...")` listo para CSS, o null si no es valido.
+ */
+function urlDeIcono(icono) {
+  if (typeof icono !== 'string') return null;
+  const limpio = icono.trim();
+  if (!limpio) return null;
+
+  const esUrl = /^(data:|https?:|blob:|file:|\/|\.\/|\.\.\/)/i.test(limpio)
+    || /\.svg(?:[?#].*)?$/i.test(limpio);
+  if (esUrl) {
+    return 'url("' + limpio.replace(/"/g, '%22').replace(/\s/g, '%20') + '")';
+  }
+
+  const traeSvg = /<svg[\s>]/i.test(limpio);
+  const traeForma = /<(path|circle|rect|line|polyline|polygon|ellipse|g|use|symbol|text)\b/i.test(limpio);
+  if (!traeSvg && !traeForma) return null;
+
+  const svg = traeSvg
+    ? limpio
+    : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' + limpio + '</svg>';
+  return 'url("data:image/svg+xml,' + codificarSvg(svg) + '")';
+}
+
+/**
  * Extensiones que amplian capas en la implementacion 3D.
  *
  * Antes de esto, cada visualizador tenia que acordarse de cargar su <script> en
@@ -218,6 +277,10 @@ class miPlugin_cambioImpl {
         this.color1 = (options.color1 !== undefined) ? options.color1 : { active: '#ffffff', deactive: 'orangered' };
         this.color2 = (options.color2 !== undefined) ? options.color2 : { active: '#71A7D3', deactive: '#ffffff' };
         this.color3 = (options.color3 !== undefined) ? options.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+        // Icono del boton. Se admite el SVG completo, solo su contenido interior
+        // o una URL/ruta; si no se pasa nada, se usa el globo embebido en
+        // SVG_ICONO_CAMBIO_IMPL.
+        this.icon = options.icon || options.icono || options.svg || SVG_ICONO_CAMBIO_IMPL;
 
         // Referencias que necesita destroy(): el mapa, el panel, el control y
         // el <style> de colores que se inyecta en <head>.
@@ -523,6 +586,22 @@ class miPlugin_cambioImpl {
     }
 
     // `addTo` será invocado por el framework cuando el plugin se añada al mapa
+    /** Pinta el icono del boton como mascara (ver plantilla_plugin/catalogo). */
+    _aplicarIcono(panelEl) {
+      if (!panelEl || !panelEl.style) return;
+      if (!this.icon) return;
+      const url = urlDeIcono(this.icon);
+      if (!url) {
+        console.warn(this.name + ': el icono no parece un SVG ni una URL, se deja el de por defecto.');
+        return;
+      }
+      try {
+        panelEl.style.setProperty('--g-plugin-icon-mask', url);
+      } catch (e) {
+        console.warn(this.name + ': no se pudo aplicar el icono.', e);
+      }
+    }
+
     addTo(map) {
         this._map = map;
 
@@ -603,6 +682,10 @@ class miPlugin_cambioImpl {
         div.innerHTML = htmlPanel;
 
         var btn = document.getElementById('APIIDEE-herramienta-button');
+
+        // Icono del boton: se inyecta como --g-plugin-icon-mask, igual que en
+        // plantilla_plugin/catalogo, en lugar de una url() absoluta en el CSS.
+        this._aplicarIcono(btn);
 
         // Aplicar colores configurables (color1=fondo, color2=borde, color3=icono).
         // Se inyectan 6 variables CSS (estado normal y ".activated") mediante un
@@ -1150,6 +1233,9 @@ class miPlugin_cambioImpl {
           const icono = document.createElement("span");
           icono.className = "supra-bar__boton-icono cambio-supra__icono";
           icono.setAttribute("aria-hidden", "true");
+
+          // Icono del boton de la barra (el mismo que el del mapa).
+          this._aplicarIcono(icono);
 
           btn.appendChild(icono);
             if (conTexto) {

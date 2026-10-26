@@ -42,11 +42,11 @@
   width: 22px;
   height: 22px;
   background-color: var(--g-plugin-icon-color, #FFF) !important;
-  -webkit-mask-image: url("/img/iconos/globe-alt.svg");
+  -webkit-mask-image: var(--g-plugin-icon-mask, url("../../img/iconos/globe-alt.svg"));
   -webkit-mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
-  mask-image: url("/img/iconos/globe-alt.svg");
+  mask-image: var(--g-plugin-icon-mask, url("../../img/iconos/globe-alt.svg"));
   mask-size: contain;
   mask-repeat: no-repeat;
   mask-position: center;

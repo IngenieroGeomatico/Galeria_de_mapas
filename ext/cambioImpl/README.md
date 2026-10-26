@@ -35,6 +35,7 @@ Es el **motor y coordinador** del cambio de implementación 2D/3D de este reposi
 | Parámetro | Tipo | Por defecto | Descripción |
 |---|---|---|---|
 | `buttonTitle` | `string` | `'Herramienta'` | Texto del `title`/`aria-label` del botón 2D/3D. |
+| `icon` | `string` | globo embebido | Icono del boton (SVG completo, contenido interior o URL/ruta). Se pinta como mascara en --g-plugin-icon-mask, igual que en plantilla_plugin y catalogo; por defecto el SVG de img/iconos/globe-alt.svg. |
 | `mapsFunction` | `function` \| `{same, ol, Cesium}` | `{ ol: undefined, Cesium: undefined }` | Función(es) de arranque del mapa. Si se pasa una función única se asigna a `mapsFunction.same`; si es objeto, se leen `ol` y `Cesium` (cada uno puede ser función). Con `sameMap: true` se invoca `mapsFunction.same()`. |
 | `sameMap` | `boolean` | `true` (`opts.sameMap ?? true`) | Si es `true`, el reinicio llama siempre a `mapsFunction.same()` (una sola función de arranque que se adapta). Si es `false`, se llama a `mapsFunction.ol()` o `mapsFunction.Cesium()` según el destino. |
 | `shareLayers` | `boolean` | `false` (`opts.shareLayers ?? false`) | Transfiere las capas overlay (y base) del mapa viejo al nuevo al cambiar de implementación. En 3D añade `extrudedHeight` a los polígonos vectoriales y reaplica el orden `z` de las capas. |
