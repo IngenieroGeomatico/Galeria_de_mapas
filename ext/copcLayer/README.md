@@ -39,12 +39,12 @@ const capa = new IDEE.layer.COPC({
   name: 'AutzenCOPC',
   legend: 'Autzen (COPC, solo 3D)',
   copc: {
-    maxPoints: 500000,
-    maxVisibleNodes: 40,
-    maxCacheNodes: 80,
-    concurrency: 3,
+    maxPoints: 2500000,
+    maxVisibleNodes: 120,
+    maxCacheNodes: 150,
+    concurrency: 5,
     pixelSize: 2,
-    sseThreshold: 300,
+    sseThreshold: 200,
     colorMode: 'rgb',
     autoFrame: false,
   },
@@ -84,17 +84,35 @@ Opciones `copc` por defecto:
 | Opcion | Valor | Para que sirve |
 |---|---|---|
 | `autoFrame` | `false` | No mover la camara al terminar de cargar. |
-| `maxPoints` | `500000` | Tope de puntos en memoria para un visor de galeria. |
-| `maxVisibleNodes` | `40` | Nodos del octree visibles a la vez. |
-| `maxCacheNodes` | `80` | Nodos en cache. |
-| `concurrency` | `3` | Peticiones `Range` en paralelo. |
+| `maxPoints` | `2500000` | Presupuesto global de puntos de la vista. |
+| `maxVisibleNodes` | `120` | Nodos del octree visibles a la vez. |
+| `maxCacheNodes` | `150` | Nodos en cache. |
+| `concurrency` | `5` | Peticiones `Range` en paralelo. |
 | `debounceMs` | `120` | Espera antes de recalcular el LoD al mover la camara. |
 | `pixelSize` | `2` | Tamano de punto en pixeles. |
-| `sseThreshold` | `300` | Umbral de error de pantalla para bajar de nivel. |
+| `sseThreshold` | `200` | Umbral de error de pantalla para bajar de nivel. |
 | `colorMode` | `'rgb'` | Color de los puntos a partir del RGB del LAZ. |
 | `opacity` | `1` | Opacidad inicial del data source. |
 
-Las opciones son las de `copcesium`; consultar su documentacion para el resto (`pointSize`, filtros, etc.). Los valores de la tabla estan pensados para que el ejemplo de Autzen (10,6 millones de puntos) cargue rapido y no consuma memoria de mas.
+Las opciones son las de `copcesium`; consultar su documentacion para el resto (`pointSize`, filtros, etc.).
+
+El ejemplo de Autzen (10,6 millones de puntos) carga 56 nodos y unos 2,1 millones de puntos a 600 m de altura, suficiente para que la nube se vea como una ortofoto y no como puntos sueltos.
+
+### Presupuesto de puntos y efecto de "tesela nitida"
+
+`maxPoints` es un tope **global** de la vista, no por nodo. El recorrido del octree elige primero los nodos con mayor error de pantalla (los mas cercanos a la camara), los subdivide y acumula sus puntos. Cuando se agota el presupuesto, deja de visitar el resto de la cola: el nodo cercano queda en un nivel de detalle alto y el resto se queda en niveles altos del arbol. Visualmente aparece **una zona nitida rodeada de puntos gruesos**, que es exactamente el sintoma de un presupuesto corto.
+
+Medido en el visor de Autzen a 600 m:
+
+| `maxPoints` | Nodos | Puntos | Resultado |
+|---|---|---|---|
+| `500000` | 17 | 500.779 | Una tesela nitida y el resto grueso. |
+| `1000000` | 30 | 1.013.057 | La tesela nitida sigue siendo visible. |
+| `2000000` | 54 | 2.012.706 | Nube uniforme. |
+| `2500000` | 56 | 2.110.575 | Nube uniforme, sin recortar el ultimo nodo. |
+| `5000000` | 56 | 2.110.575 | Igual que 2,5M: no hay mas nodos que visitar en esa vista. |
+
+El visor de referencia de copcesium usa `maxPoints: 5e6`, `maxVisibleNodes: 100` y `sseThreshold: 250` por defecto. En esta capa se baja a 2,5M porque es el punto en el que la vista de 600 m ya sale completa; subir mas solo reserva memoria que no se usa. Si se quiere priorizar velocidad o memoria en movil, bajar `maxPoints` a 1M y aceptar algo menos de detalle; si se quiere explorar muy de cerca, 2,5M sigue dando margen porque al reducirse el area visible tambien bajan los nodos necesarios.
 
 ---
 

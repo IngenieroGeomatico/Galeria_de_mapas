@@ -44,17 +44,23 @@
     }
   })();
 
-  // Opciones conservadoras para un visor de galeria: el COPC de Autzen tiene
-  // 10,6 millones de puntos y no queremos bajar el arbol entero.
+  // Presupuesto de puntos pensado para que el LoD se reparta por toda la
+  // vista. Con topes bajos (p. ej. 500k) el nodo mas cercano consume el cupo,
+  // se subdivide solo el y el resto queda como una tesela gruesa alrededor:
+  // se ve una zona nitida y el resto borroso. El COPC de Autzen tiene 10,6
+  // millones de puntos; 2,5 millones bastan para una vista uniforme a 600 m
+  // (56 nodos, ~2,1 millones de puntos, ~16 MB) sin bajar el arbol entero ni
+  // disparar la memoria. El visor de copcesium usa 5M; por encima de 2,5M no
+  // se anaden nodos en esa vista.
   var OPCIONES_COPC = {
     autoFrame: false,
-    maxPoints: 500000,
-    maxVisibleNodes: 40,
-    maxCacheNodes: 80,
-    concurrency: 3,
+    maxPoints: 2500000,
+    maxVisibleNodes: 120,
+    maxCacheNodes: 150,
+    concurrency: 5,
     debounceMs: 120,
     pixelSize: 2,
-    sseThreshold: 300,
+    sseThreshold: 200,
     colorMode: 'rgb',
     opacity: 1,
   };

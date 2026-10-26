@@ -61,14 +61,16 @@ function mapa() {
     name: 'AutzenCOPC',
     legend: 'Autzen (COPC, solo 3D)',
     copc: {
-      // Valores de la prueba de concepto: cargan los primeros nodos rapido y
-      // dejan margen para mover la camara sin bajar el arbol completo.
-      maxPoints: 500000,
-      maxVisibleNodes: 40,
-      maxCacheNodes: 80,
-      concurrency: 3,
+      // El presupuesto de puntos debe repartirse por toda la vista. Con 500k
+      // el nodo mas cercano consume el cupo, se subdivide solo el y el resto
+      // queda como una tesela gruesa: se ve una zona nitida y el resto
+      // borroso. Con 2,5M el reparto es uniforme a 600 m.
+      maxPoints: 2500000,
+      maxVisibleNodes: 120,
+      maxCacheNodes: 150,
+      concurrency: 5,
       pixelSize: 2,
-      sseThreshold: 300,
+      sseThreshold: 200,
       colorMode: 'rgb',
       autoFrame: false,
     },
