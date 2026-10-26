@@ -77,6 +77,62 @@ function mapa() {
     mapajs.addLayers(capaVector);
   }
 
+  // PMTiles publicos de Protomaps (optimizados por HTTP Range). Se anaden como
+  // capas vectoriales opcionales: quedan ocultas al arrancar para no tapar el
+  // ejemplo de Madrid, y se pueden activar desde el selector de capas.
+  if (!esCesium) {
+    const estiloEdificiosNZ = new IDEE.style.Generic({
+      polygon: {
+        fill: { color: '#f97316', opacity: 0.45 },
+        stroke: { color: '#7c2d12', width: 1 },
+      },
+    });
+    const capaEdificiosNZ = new IDEE.layer.PMTiles({
+      url: 'https://r2-public.protomaps.com/protomaps-sample-datasets/nz-buildings-v3.pmtiles',
+      type: 'vector',
+      name: 'Edificios NZ (PMTiles)',
+      legend: 'Edificios de Nueva Zelanda (PMTiles)',
+      minZoom: 0,
+      maxZoom: 14,
+      visible: false,
+    }, { style: estiloEdificiosNZ });
+    mapajs.addLayers(capaEdificiosNZ);
+
+    const estiloPois = new IDEE.style.Generic({
+      point: {
+        radius: 4,
+        fill: { color: '#2563eb', opacity: 0.85 },
+        stroke: { color: '#1e3a8a', width: 1 },
+      },
+    });
+    const capaPois = new IDEE.layer.PMTiles({
+      url: 'https://r2-public.protomaps.com/protomaps-sample-datasets/overture-pois.pmtiles',
+      type: 'vector',
+      name: 'POIs Overture (PMTiles)',
+      legend: 'POIs de Overture (PMTiles)',
+      minZoom: 0,
+      maxZoom: 14,
+      visible: false,
+    }, { style: estiloPois });
+    mapajs.addLayers(capaPois);
+
+    const estiloZcta = new IDEE.style.Generic({
+      polygon: {
+        fill: { color: '#a78bfa', opacity: 0.25 },
+        stroke: { color: '#5b21b6', width: 1 },
+      },
+    });
+    const capaZcta = new IDEE.layer.PMTiles({
+      url: 'https://r2-public.protomaps.com/protomaps-sample-datasets/cb_2018_us_zcta510_500k.pmtiles',
+      type: 'vector',
+      name: 'ZIP codes EE. UU. (PMTiles)',
+      legend: 'ZIP codes de EE. UU. (PMTiles)',
+      minZoom: 0,
+      maxZoom: 7,
+      visible: false,
+    }, { style: estiloZcta });
+    mapajs.addLayers(capaZcta);
+  }
   anadirPluginsTipos(mapajs, mapa);
   return mapajs;
 }
