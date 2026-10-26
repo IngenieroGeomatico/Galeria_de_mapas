@@ -605,17 +605,22 @@
             asynchronous: false,
           });
           try {
-            var todasPos = [];
-            instancias.forEach(function (inst) {
-              // no-op
-            });
-            // Calcular bounding sphere a partir de la primera instancia
-            if (instancias.length && instancias[0].geometry && instancias[0].geometry.attributes.position) {
-              var vals = instancias[0].geometry.attributes.position.values;
-              objeto.boundingSphere = Cesium.BoundingSphere.fromVertices(vals);
-            }
+            // no-op
           } catch (e) { /* noop */ }
           viewer.scene.primitives.add(objeto);
+
+          if (this._ifcPosition) {
+            try {
+              viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(
+                  this._ifcPosition.lon, this._ifcPosition.lat,
+                  (this._ifcPosition.height || 0) + 100
+                ),
+                orientation: { pitch: Cesium.Math.toRadians(-45) },
+                duration: 0,
+              });
+            } catch (e) { /* noop */ }
+          }
 
           if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) {
             try { viewer.scene.primitives.remove(objeto); } catch (e) { /* noop */ }
