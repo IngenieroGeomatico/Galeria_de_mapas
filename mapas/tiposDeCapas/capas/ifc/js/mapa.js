@@ -5,7 +5,7 @@
    en 3D se carga sobre Cesium con ext/ifcLayer; en 2D se dibuja la huella.
    ===================================================================== */
 
-const URL_IFC = '../../../satelites/img/ISS_stationary.glb';
+const URL_IFC = 'https://raw.githubusercontent.com/andrewisen/bim-whale-ifc-samples/main/SimpleWall/IFC/SimpleWall.ifc';
 
 // Madrid, centro y huella aproximada del modelo.
 const BBOX_IFC = [-3.71, 40.41, -3.69, 40.42];

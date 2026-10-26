@@ -291,45 +291,37 @@
           if (!viewer || !viewer.scene) throw new Error('IFC: el viewer de Cesium no esta listo');
 
           var url = this._ifcUrl;
-          var esTileset = /\.json(\?|$)/i.test(url) || /tileset/i.test(url);
-          var objeto = null;
+          var glb = await this._ifcConvertir(url);
 
-          if (esTileset && typeof Cesium.Cesium3DTileset !== 'undefined' && typeof Cesium.Cesium3DTileset.fromUrl === 'function') {
-            objeto = await Cesium.Cesium3DTileset.fromUrl(url);
-            if (objeto && this._ifcPosition) {
-              var origin = Cesium.Cartesian3.fromDegrees(
-                this._ifcPosition.lon || this._ifcPosition.x || 0,
-                this._ifcPosition.lat || this._ifcPosition.y || 0,
-                this._ifcPosition.height || this._ifcPosition.z || 0
-              );
-              var hpr = new Cesium.HeadingPitchRoll(this._ifcHeading || 0, 0, 0);
-              objeto.modelMatrix = Cesium.Matrix4.multiply(
-                Cesium.Transforms.headingPitchRollToFixedFrame(origin, hpr),
-                Cesium.Matrix4.fromScale(new Cesium.Cartesian3(this._ifcScale, this._ifcScale, this._ifcScale)),
-                new Cesium.Matrix4()
-              );
-            }
-            viewer.scene.primitives.add(objeto);
-          } else if (typeof Cesium.Model !== 'undefined' && typeof Cesium.Model.fromGltfAsync === 'function') {
-            var opcionesModelo = {
-              url: url,
-              scale: this._ifcScale,
-              minimumPixelSize: 64,
-            };
-            if (this._ifcPosition) {
-              opcionesModelo.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(
-                Cesium.Cartesian3.fromDegrees(
-                  this._ifcPosition.lon || this._ifcPosition.x || 0,
-                  this._ifcPosition.lat || this._ifcPosition.y || 0,
-                  this._ifcPosition.height || this._ifcPosition.z || 0
-                )
-              );
-            }
-            objeto = await Cesium.Model.fromGltfAsync(opcionesModelo);
-            if (objeto) viewer.scene.primitives.add(objeto);
-          } else {
-            throw new Error('IFC: Cesium no expone Cesium3DTileset ni Model');
+          if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) return;
+
+          var blob = new Blob([glb], { type: 'model/gltf-binary' });
+          var blobUrl = URL.createObjectURL(blob);
+
+          var opcionesModelo = {
+            url: blobUrl,
+            scale: this._ifcScale,
+            minimumPixelSize: 64,
+          };
+          if (this._ifcPosition) {
+            var origin = Cesium.Cartesian3.fromDegrees(
+              this._ifcPosition.lon || this._ifcPosition.x || 0,
+              this._ifcPosition.lat || this._ifcPosition.y || 0,
+              this._ifcPosition.height || this._ifcPosition.z || 0
+            );
+            var hpr = new Cesium.HeadingPitchRoll(
+              (this._ifcHeading || 0) * Math.PI / 180, 0, 0
+            );
+            opcionesModelo.modelMatrix = Cesium.Matrix4.multiply(
+              Cesium.Transforms.headingPitchRollToFixedFrame(origin, hpr),
+              Cesium.Matrix4.fromScale(new Cesium.Cartesian3(this._ifcScale, this._ifcScale, this._ifcScale)),
+              new Cesium.Matrix4()
+            );
           }
+
+          var objeto = await Cesium.Model.fromGltfAsync(opcionesModelo);
+
+          try { URL.revokeObjectURL(blobUrl); } catch (e) { /* noop */ }
 
           if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) {
             try { if (objeto && typeof objeto.destroy === 'function') objeto.destroy(); } catch (ex) { /* noop */ }
@@ -338,15 +330,36 @@
 
           this._ifcObjeto = objeto;
           this._ifcAplicarEstado();
-
-          // No forzar zoomTo: algunos modelos disparan errores de bounding
-          // sphere en el render loop; el usuario puede encuadrar manualmente.
         } catch (error) {
           if (!this._ifcDestruido && token === this._ifcToken) {
             this._ifcError = error;
             console.warn('IFC: no se pudo cargar ' + this._ifcUrl, error);
           }
         }
+      }
+
+      async _ifcConvertir(url) {
+        var respuesta = await fetch(url);
+        if (!respuesta.ok) throw new Error('IFC: no se pudo descargar ' + url);
+        var datos = new Uint8Array(await respuesta.arrayBuffer());
+
+        var geometryMod = await import('https://cdn.jsdelivr.net/npm/@ifc-lite/geometry@1.2.1/+esm');
+        var exportMod = await import('https://cdn.jsdelivr.net/npm/@ifc-lite/export@1.2.1/+esm');
+        var wasmMod = await import('https://cdn.jsdelivr.net/npm/@ifc-lite/wasm@1.2.1/+esm');
+        var initWasm = wasmMod.default || wasmMod.initWasm || wasmMod;
+        var wasmUrl = 'https://cdn.jsdelivr.net/npm/@ifc-lite/wasm@1.2.1/pkg/ifc-lite_bg.wasm';
+        try { await initWasm({ module_or_path: wasmUrl }); } catch (e) { /* ya inicializado */ }
+
+        var GeometryProcessor = geometryMod.GeometryProcessor;
+        var GLTFExporter = exportMod.GLTFExporter || exportMod.GltfExporter || exportMod.GLTFExporter;
+        var processor = new GeometryProcessor();
+        await processor.init();
+        var result = await processor.process(datos);
+        var exporter = new GLTFExporter(result);
+        var glb = exporter.exportGLB();
+        try { processor.dispose(); } catch (e) { /* noop */ }
+        if (!glb || !glb.byteLength) throw new Error('IFC: la conversion no produjo geometria');
+        return glb;
       }
 
       _ifcAplicarEstado() {
