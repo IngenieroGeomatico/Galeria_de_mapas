@@ -47,6 +47,27 @@ function mapa() {
   });
 
   mapajs.addLayers(capa);
+  // GeoParquet publico de Source Cooperative (edificios Overture de Texas).
+  // Se anade como capa adicional: en la vista inicial de Madrid no carga
+  // features; al desplazarse a Texas lee solo los row groups del bbox visible.
+  const estiloEdificiosTX = new IDEE.style.Generic({
+    polygon: {
+      fill: { color: '#f97316', opacity: 0.35 },
+      stroke: { color: '#7c2d12', width: 1 },
+    },
+  });
+  const capaEdificiosTX = new IDEE.layer.GeoParquet({
+    url: 'https://data.source.coop/humane-intelligence/bias-bounty-mapping-equity-challenge/reference/south-central-tx/south-central-tx-overture-buildings.parquet',
+    name: 'Edificios Overture (Texas)',
+    legend: 'Edificios Overture Texas (GeoParquet)',
+    // El fichero tiene columnas anidadas (names, sources, bbox...). Solo se
+    // piden columnas escalares simples para evitar "parquet column not found".
+    columns: ['geometry', 'height', 'subtype', 'class'],
+  }, {
+    style: estiloEdificiosTX,
+  });
+  mapajs.addLayers(capaEdificiosTX);
+
 
   anadirPluginsTipos(mapajs, mapa, { bboxFeatures: true });
 
