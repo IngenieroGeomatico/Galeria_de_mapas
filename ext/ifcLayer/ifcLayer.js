@@ -105,6 +105,7 @@
         this._ifc = true;
         this._ifcUrl = String(p.url || '');
         this._ifcDirecto = (p.directo === true || p.direct === true);
+        this._ifcVisualizacion = (p.visualizacion !== false);
         var urlMinuscula = this._ifcUrl.toLowerCase();
         var esIfc = urlMinuscula.indexOf('.ifc') !== -1;
         if (p.convertir === false || p.convert === false) this._ifcDebeConvertir = false;
@@ -268,7 +269,7 @@
       async _ifcPintarHuella() {
         var IDEE = api();
         var token = this._ifcToken;
-        if (!IDEE || this._ifcFeature) return;
+        if (!IDEE || this._ifcFeature || !this._ifcVisualizacion) return;
 
         // Si no se paso bbox, se calcula a partir del propio IFC para que la
         // huella represente el modelo (y no un rectangulo arbitrario).
@@ -406,6 +407,7 @@
         var token = this._ifcToken;
         var Cesium = window.Cesium;
         try {
+          if (!this._ifcVisualizacion) return;
           var viewer = map.getMapImpl();
           if (!viewer || !viewer.scene) throw new Error('IFC: el viewer de Cesium no esta listo');
 

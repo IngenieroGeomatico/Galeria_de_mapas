@@ -54,6 +54,20 @@ function mapa() {
   mapajs.addLayers(capa);
   window.capaIFC = capa;
 
+  // ------------------------------------------------------------------
+  // Otros IFC de ejemplo (https://github.com/youshengCode/IfcSampleFiles).
+  // Se dejan comentados para no cargarlos todos a la vez; cambia
+  // `visualizacion: false` a `true` (o descomenta el bloque) para usarlos.
+  // ------------------------------------------------------------------
+  // const capasIFCExtra = [
+  //   new IDEE.layer.IFC({ url: 'https://raw.githubusercontent.com/youshengCode/IfcSampleFiles/main/Ifc4_Revit_ARC.ifc', name: 'RevitARC', legend: 'Revit ARC (IFC4)', visualizacion: false, directo: false, scale: 1 }, {}),
+  //   new IDEE.layer.IFC({ url: 'https://raw.githubusercontent.com/youshengCode/IfcSampleFiles/main/Ifc4_Revit_MEP.ifc', name: 'RevitMEP', legend: 'Revit MEP (IFC4)', visualizacion: false, directo: false, scale: 1 }, {}),
+  //   new IDEE.layer.IFC({ url: 'https://raw.githubusercontent.com/youshengCode/IfcSampleFiles/main/Ifc4_Revit_STR.ifc', name: 'RevitSTR', legend: 'Revit STR (IFC4)', visualizacion: false, directo: false, scale: 1 }, {}),
+  //   new IDEE.layer.IFC({ url: 'https://raw.githubusercontent.com/youshengCode/IfcSampleFiles/main/Ifc2x3_Duplex_MEP.ifc', name: 'DuplexMEP', legend: 'Duplex MEP (IFC2x3)', visualizacion: false, directo: false, scale: 1 }, {}),
+  //   new IDEE.layer.IFC({ url: 'https://raw.githubusercontent.com/youshengCode/IfcSampleFiles/main/Ifc2x3_SampleCastle.ifc', name: 'SampleCastle', legend: 'Sample Castle (IFC2x3)', visualizacion: false, directo: false, scale: 1 }, {}),
+  // ];
+  // capasIFCExtra.forEach(function (c) { if (c && c._ifcVisualizacion !== false) mapajs.addLayers(c); });
+
   anadirPluginsTipos(mapajs, mapa);
   return mapajs;
 }
