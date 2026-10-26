@@ -104,6 +104,11 @@
 
         this._ifc = true;
         this._ifcUrl = String(p.url || '');
+        var urlMinuscula = this._ifcUrl.toLowerCase();
+        var esIfc = urlMinuscula.indexOf('.ifc') !== -1;
+        if (p.convertir === false || p.convert === false) this._ifcConvertir = false;
+        else if (p.convertir === true || p.convert === true) this._ifcConvertir = true;
+        else this._ifcConvertir = esIfc;
         this._ifcBbox = Array.isArray(ext) && ext.length === 4 ? ext.slice() : null;
         this._ifcPosition = p.position || null;
         this._ifcHeading = (typeof p.heading === 'number') ? p.heading : 0;
@@ -341,12 +346,16 @@
           if (!viewer || !viewer.scene) throw new Error('IFC: el viewer de Cesium no esta listo');
 
           var url = this._ifcUrl;
-          var glb = await this._ifcConvertir(url);
+          var blobUrl = url;
+
+          if (this._ifcConvertir) {
+            var glb = await this._ifcConvertir(url);
+            if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) return;
+            var blob = new Blob([glb], { type: 'model/gltf-binary' });
+            blobUrl = URL.createObjectURL(blob);
+          }
 
           if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) return;
-
-          var blob = new Blob([glb], { type: 'model/gltf-binary' });
-          var blobUrl = URL.createObjectURL(blob);
 
           var opcionesModelo = {
             url: blobUrl,
