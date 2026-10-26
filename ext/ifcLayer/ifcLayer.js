@@ -436,7 +436,7 @@
             var origin = Cesium.Cartesian3.fromDegrees(
               this._ifcPosition.lon || this._ifcPosition.x || 0,
               this._ifcPosition.lat || this._ifcPosition.y || 0,
-              this._ifcPosition.height || this._ifcPosition.z || 0
+              (this._ifcPosition.height || this._ifcPosition.z || 0) + 50
             );
             var hpr = new Cesium.HeadingPitchRoll(
               (this._ifcHeading || 0) * Math.PI / 180, 0, 0
@@ -524,7 +524,7 @@
             var origin = Cesium.Cartesian3.fromDegrees(
               this._ifcPosition.lon || this._ifcPosition.x || 0,
               this._ifcPosition.lat || this._ifcPosition.y || 0,
-              this._ifcPosition.height || this._ifcPosition.z || 0
+              (this._ifcPosition.height || this._ifcPosition.z || 0) + 50
             );
             var hpr = new Cesium.HeadingPitchRoll((this._ifcHeading || 0) * Math.PI / 180, 0, 0);
             georef = Cesium.Matrix4.multiply(
@@ -607,6 +607,10 @@
           try {
             // no-op
           } catch (e) { /* noop */ }
+          try {
+            var centroMundo = georef ? Cesium.Matrix4.getTranslation(georef, new Cesium.Cartesian3()) : new Cesium.Cartesian3(0, 0, 0);
+            objeto.boundingSphere = new Cesium.BoundingSphere(centroMundo, 100);
+          } catch (e) { console.warn('IFC directo: bs err', e); }
           viewer.scene.primitives.add(objeto);
 
           if (this._ifcPosition) {
@@ -614,7 +618,7 @@
               viewer.camera.flyTo({
                 destination: Cesium.Cartesian3.fromDegrees(
                   this._ifcPosition.lon, this._ifcPosition.lat,
-                  (this._ifcPosition.height || 0) + 100
+                  (this._ifcPosition.height || 0) + 150
                 ),
                 orientation: { pitch: Cesium.Math.toRadians(-45) },
                 duration: 0,
