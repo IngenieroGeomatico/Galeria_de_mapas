@@ -104,6 +104,7 @@
 
         this._ifc = true;
         this._ifcUrl = String(p.url || '');
+        this._ifcDirecto = (p.directo === true || p.direct === true);
         var urlMinuscula = this._ifcUrl.toLowerCase();
         var esIfc = urlMinuscula.indexOf('.ifc') !== -1;
         if (p.convertir === false || p.convert === false) this._ifcConvertir = false;
@@ -345,6 +346,10 @@
           var viewer = map.getMapImpl();
           if (!viewer || !viewer.scene) throw new Error('IFC: el viewer de Cesium no esta listo');
 
+          if (this._ifcDirecto) {
+            return this._ifcCargarDirecto(map, token);
+          }
+
           var url = this._ifcUrl;
           var blobUrl = url;
 
@@ -419,6 +424,143 @@
         try { processor.dispose(); } catch (e) { /* noop */ }
         if (!glb || !glb.byteLength) throw new Error('IFC: la conversion no produjo geometria');
         return glb;
+      }
+
+      async _ifcCargarDirecto(map, token) {
+        var self = this;
+        var Cesium = window.Cesium;
+        try {
+          var viewer = map.getMapImpl();
+          if (!viewer || !viewer.scene) throw new Error('IFC: el viewer de Cesium no esta listo');
+
+          var respuesta = await fetch(this._ifcUrl);
+          if (!respuesta.ok) throw new Error('IFC: no se pudo descargar ' + this._ifcUrl);
+          var datos = new Uint8Array(await respuesta.arrayBuffer());
+
+          // Inicializar web-ifc
+          var WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.77/+esm');
+          var IfcAPI = WebIFC.IfcAPI || WebIFC.default && WebIFC.default.IfcAPI;
+          var apiIfc = new IfcAPI();
+          if (typeof apiIfc.SetWasmPath === 'function') {
+            apiIfc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.77/', true);
+          }
+          await apiIfc.Init();
+
+          var modelID = apiIfc.OpenModel(datos);
+          if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) return;
+
+          // Matriz de georreferenciacion del modelo
+          var georef = null;
+          if (this._ifcPosition) {
+            var origin = Cesium.Cartesian3.fromDegrees(
+              this._ifcPosition.lon || this._ifcPosition.x || 0,
+              this._ifcPosition.lat || this._ifcPosition.y || 0,
+              this._ifcPosition.height || this._ifcPosition.z || 0
+            );
+            var hpr = new Cesium.HeadingPitchRoll((this._ifcHeading || 0) * Math.PI / 180, 0, 0);
+            georef = Cesium.Matrix4.multiply(
+              Cesium.Transforms.headingPitchRollToFixedFrame(origin, hpr),
+              Cesium.Matrix4.fromScale(new Cesium.Cartesian3(this._ifcScale, this._ifcScale, this._ifcScale)),
+              new Cesium.Matrix4()
+            );
+          }
+
+          var instancias = [];
+          apiIfc.StreamAllMeshes(modelID, function (mesh) {
+            for (var i = 0; i < mesh.geometries.size(); i++) {
+              var pg = mesh.geometries.get(i);
+              var geom = apiIfc.GetGeometry(modelID, pg.geometryExpressID);
+              var verts = apiIfc.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+              var inds = apiIfc.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
+              if (!verts || !verts.length || !inds || !inds.length) return;
+
+              var m = pg.flatTransformation || [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+              var positions = new Float64Array(verts.length);
+              for (var v = 0; v < verts.length; v += 3) {
+                var x = verts[v], y = verts[v+1], z = verts[v+2];
+                positions[v]   = m[0]*x + m[4]*y + m[8]*z + m[12];
+                positions[v+1] = m[1]*x + m[5]*y + m[9]*z + m[13];
+                positions[v+2] = m[2]*x + m[6]*y + m[10]*z + m[14];
+              }
+
+              var color = pg.color || { x: 0.8, y: 0.8, z: 0.8, w: 1 };
+              var r = Math.round((color.x || 0.8) * 255);
+              var g = Math.round((color.y || 0.8) * 255);
+              var b = Math.round((color.z || 0.8) * 255);
+              var a = Math.round(((color.w === undefined) ? 1 : color.w) * 255);
+              var colorValues = new Uint8Array(positions.length / 3 * 4);
+              for (var c = 0; c < colorValues.length; c += 4) {
+                colorValues[c] = r;
+                colorValues[c+1] = g;
+                colorValues[c+2] = b;
+                colorValues[c+3] = a;
+              }
+
+              var instance = new Cesium.GeometryInstance({
+                geometry: new Cesium.Geometry({
+                  attributes: {
+                    position: new Cesium.GeometryAttribute({
+                      componentDatatype: Cesium.ComponentDatatype.DOUBLE,
+                      componentsPerAttribute: 3,
+                      values: positions,
+                    }),
+                    color: new Cesium.GeometryAttribute({
+                      componentDatatype: Cesium.ComponentDatatype.UNSIGNED_BYTE,
+                      componentsPerAttribute: 4,
+                      values: colorValues,
+                      normalized: true,
+                    }),
+                    normal: new Cesium.GeometryAttribute({
+                      componentDatatype: Cesium.ComponentDatatype.FLOAT,
+                      componentsPerAttribute: 3,
+                      values: new Float32Array(positions.length).fill(0).map(function(_,i){ return (i%3===2)?1:0; }),
+                    }),
+                  },
+                  indices: inds,
+                  primitiveType: Cesium.PrimitiveType.TRIANGLES,
+                  boundingSphere: new Cesium.BoundingSphere(new Cesium.Cartesian3(0, 0, 0), 5),
+                }),
+                modelMatrix: georef || Cesium.Matrix4.IDENTITY,
+              });
+              instancias.push(instance);
+            }
+          });
+
+          try { apiIfc.CloseModel(modelID); } catch (e) { /* noop */ }
+
+          if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) return;
+
+          var objeto = new Cesium.Primitive({
+            geometryInstances: instancias,
+            appearance: new Cesium.PerInstanceColorAppearance({ flat: false, translucent: false }),
+            asynchronous: false,
+          });
+          try {
+            var todasPos = [];
+            instancias.forEach(function (inst) {
+              // no-op
+            });
+            // Calcular bounding sphere a partir de la primera instancia
+            if (instancias.length && instancias[0].geometry && instancias[0].geometry.attributes.position) {
+              var vals = instancias[0].geometry.attributes.position.values;
+              objeto.boundingSphere = Cesium.BoundingSphere.fromVertices(vals);
+            }
+          } catch (e) { /* noop */ }
+          viewer.scene.primitives.add(objeto);
+
+          if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) {
+            try { viewer.scene.primitives.remove(objeto); } catch (e) { /* noop */ }
+            return;
+          }
+
+          this._ifcObjeto = objeto;
+          this._ifcAplicarEstado();
+        } catch (error) {
+          if (!this._ifcDestruido && token === this._ifcToken) {
+            this._ifcError = error;
+            console.warn('IFC directo: no se pudo cargar ' + this._ifcUrl, error);
+          }
+        }
       }
 
       _ifcAplicarEstado() {

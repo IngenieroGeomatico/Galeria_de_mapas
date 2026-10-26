@@ -33,6 +33,7 @@ function mapa() {
     legend: 'Modelo IFC (3D)',
     position: { lon: CENTRO_4326.x, lat: CENTRO_4326.y, height: 100 },
     scale: 1,
+    directo: true,
   }, {
     style: new IDEE.style.Generic({
       polygon: {
