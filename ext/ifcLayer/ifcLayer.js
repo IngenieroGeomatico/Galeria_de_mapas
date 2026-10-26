@@ -275,6 +275,16 @@
         if (!this._ifcPosition) {
           this._ifcPosition = await this._ifcLeerPosicion(this._ifcUrl);
         }
+        // Fallback: si el IFC no declara IfcSite, colocar en el centro del mapa.
+        if (!this._ifcPosition && this.map_) {
+          try {
+            var centro = this.map_.getCenter();
+            var reproj = await IDEE.utils.reproject([centro.x, centro.y], 'EPSG:3857', 'EPSG:4326');
+            this._ifcPosition = { lon: reproj[0], lat: reproj[1], height: 0 };
+          } catch (e) {
+            this._ifcPosition = { lon: 0, lat: 0, height: 0 };
+          }
+        }
 
         // Si no se paso bbox, se calcula a partir del propio IFC para que la
         // huella represente el modelo (y no un rectangulo arbitrario).
@@ -423,6 +433,15 @@
           if (!this._ifcPosition) {
             this._ifcPosition = await this._ifcLeerPosicion(this._ifcUrl);
           }
+          if (!this._ifcPosition && map) {
+            try {
+              var v0 = map.getMapImpl();
+              var carto = v0.camera.positionCartographic;
+              this._ifcPosition = { lon: carto.longitude * 180 / Math.PI, lat: carto.latitude * 180 / Math.PI, height: 0 };
+            } catch (e) {
+              this._ifcPosition = { lon: 0, lat: 0, height: 0 };
+            }
+          }
 
           if (!this._ifcBbox && this._ifcPosition) {
             this._ifcObtenerBounds(this._ifcUrl).then(function (info) {
@@ -544,6 +563,15 @@
 
           if (!this._ifcPosition) {
             this._ifcPosition = await this._ifcLeerPosicion(this._ifcUrl);
+          }
+          if (!this._ifcPosition && map) {
+            try {
+              var v1 = map.getMapImpl();
+              var carto1 = v1.camera.positionCartographic;
+              this._ifcPosition = { lon: carto1.longitude * 180 / Math.PI, lat: carto1.latitude * 180 / Math.PI, height: 0 };
+            } catch (e) {
+              this._ifcPosition = { lon: 0, lat: 0, height: 0 };
+            }
           }
 
           if (!this._ifcBbox && this._ifcPosition) {
