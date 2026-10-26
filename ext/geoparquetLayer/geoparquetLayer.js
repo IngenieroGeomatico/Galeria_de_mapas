@@ -621,6 +621,60 @@
        * @param {boolean} forzar
        * @returns {Promise}
        */
+      /**
+       * Extension de la capa para "zoom a la capa", en EPSG:3857.
+       *
+       * Se calcula a partir de las estadisticas de cobertura (`bbox`) del
+       * metadata de GeoParquet, que da el rectangulo de cada row group. Asi
+       * el boton encuadra todos los datos del fichero, no solo los que ya se
+       * han cargado en la vista actual.
+       * @returns {Array<number>|null} [x0, y0, x1, y1] o null.
+       */
+      _extensionParaZoom() {
+        const info = this._gpInfo;
+        if (!info || !info.covering || !info.covering.bbox) return null;
+        const b = info.covering.bbox;
+        const xminPath = b.xmin;
+        const yminPath = b.ymin;
+        const xmaxPath = b.xmax;
+        const ymaxPath = b.ymax;
+        if (!Array.isArray(xminPath) || !Array.isArray(yminPath) ||
+            !Array.isArray(xmaxPath) || !Array.isArray(ymaxPath)) return null;
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let hay = false;
+        const grupos = (info.metadata && info.metadata.row_groups) || [];
+        for (let i = 0; i < grupos.length; i += 1) {
+          const rg = grupos[i];
+          const sx = estadisticasDe(rg, xminPath);
+          const sy = estadisticasDe(rg, yminPath);
+          const sxmax = estadisticasDe(rg, xmaxPath);
+          const symax = estadisticasDe(rg, ymaxPath);
+          if (sx && isFinite(Number(sx.min))) { minX = Math.min(minX, Number(sx.min)); hay = true; }
+          if (sy && isFinite(Number(sy.min))) { minY = Math.min(minY, Number(sy.min)); hay = true; }
+          if (sxmax && isFinite(Number(sxmax.max))) { maxX = Math.max(maxX, Number(sxmax.max)); hay = true; }
+          if (symax && isFinite(Number(symax.max))) { maxY = Math.max(maxY, Number(symax.max)); hay = true; }
+        }
+        if (!hay || !isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
+        if (maxX <= minX || maxY <= minY) return null;
+
+        const desde = info.crs || 'EPSG:4326';
+        const API = (typeof window !== 'undefined') ? (window.IDEE || window.M) : null;
+        let oeste = [minX, minY];
+        let este = [maxX, maxY];
+        if (desde && desde !== 'EPSG:3857' && API && API.utils && typeof API.utils.reproject === 'function') {
+          try {
+            oeste = API.utils.reproject([minX, minY], desde, 'EPSG:3857');
+            este = API.utils.reproject([maxX, maxY], desde, 'EPSG:3857');
+          } catch (e) { return null; }
+        }
+        if (!Array.isArray(oeste) || !Array.isArray(este)) return null;
+        if (!isFinite(oeste[0]) || !isFinite(oeste[1]) || !isFinite(este[0]) || !isFinite(este[1])) return null;
+        return [oeste[0], oeste[1], este[0], este[1]];
+      }
       _recargar(modo, map, forzar) {
         const self = this;
         const url = this._geoparquetUrl;

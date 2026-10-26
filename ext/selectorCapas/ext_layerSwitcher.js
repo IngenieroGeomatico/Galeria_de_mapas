@@ -2082,7 +2082,13 @@ class miPlugin_layerSwitcher {
         });
         return;
       }
-      const ext = _extensionUtil(capa);
+      if (n === 0 && _tieneGeoParquet(capa)) {
+        _extensionGeoParquet(capa, function (extGp) {
+          if (_esExtension(extGp)) { hecho(extGp); return; }
+          _conExtension(capa, hecho, 1);
+        });
+        return;
+      }      const ext = _extensionUtil(capa);
       if (ext) { hecho(ext); return; }
       // Un WMS no lleva la extension en el cliente: hay que preguntarsela al
       // servicio (capacidades y, si el bbox que declara no sirve, lo que pinta
@@ -2715,6 +2721,23 @@ class miPlugin_layerSwitcher {
      * @param {Object} capa
      * @returns {boolean}
      */
+    function _tieneGeoParquet(capa) {
+      return !!(capa && capa._geoparquet === true);
+    }
+
+    function _extensionGeoParquet(capa, hecho) {
+      if (!capa || typeof capa._prepararFuente !== 'function' || !capa._geoparquetUrl) {
+        hecho(null);
+        return;
+      }
+      capa._prepararFuente(capa._geoparquetUrl).then(function () {
+        let ext = null;
+        try {
+          if (typeof capa._extensionParaZoom === 'function') ext = capa._extensionParaZoom();
+        } catch (e) { ext = null; }
+        hecho(ext);
+      }).catch(function () { hecho(null); });
+    }
     function _capaCargando(capa) {
       let impl = null;
       try { impl = (capa && typeof capa.getImpl === 'function') ? capa.getImpl() : null; } catch (e) { return false; }
