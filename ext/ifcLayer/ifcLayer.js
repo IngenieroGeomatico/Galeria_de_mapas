@@ -705,8 +705,13 @@
       }
 
       setVisible(visible) {
+        var antes = this._ifcVisible;
         this._ifcVisible = (visible !== false);
         if (super.setVisible) super.setVisible(this._ifcVisible);
+        // Cargar bajo demanda al activar la capa en el selector.
+        if (this._ifcVisible && !antes && !this._ifcIniciado && this.map_ && this._ifcVisualizacion) {
+          this._ifcIniciar(this.map_);
+        }
         this._ifcAplicarEstado();
       }
 
