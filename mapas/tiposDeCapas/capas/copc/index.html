@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>COPC | Tipos de capa</title>
+  <meta name="description" content="Capa COPC de la galería: nube de puntos LAZ leída por HTTP Range y pintada en 3D con copcesium; en 2D, su huella.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Selector de capas base -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_backgorundLayers.css">
+  <script src="../../../../ext/selectorCapas/ext_backgorundLayers.js"></script>
+
+  <!-- Arbol de capas superpuestas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Lectura de escala y coordenadas -->
+  <link rel="stylesheet" href="../../../../ext/mapInfo/mapInfo.css">
+  <script src="../../../../ext/mapInfo/mapInfo.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+  <!-- Informacion del punto -->
+  <link rel="stylesheet" href="../../../../ext/information/information.css">
+  <script src="../../../../ext/information/information.js"></script>
+
+  <!-- Capa COPC: instala IDEE.layer.COPC y carga copcesium solo en 3D -->
+  <script src="../../../../ext/copcLayer/copcLayer.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">COPC <span class="barra__clase">IDEE.layer.COPC</span></h1>
+      <p class="barra__desc">
+        Nube de puntos LAZ/COPC leída por HTTP Range. En 3D se pintan los puntos con
+        <code>copcesium</code>; en 2D solo se dibuja la huella, porque OpenLayers no lee COPC.
+        El ejemplo es Autzen (Oregón), fuera de la cobertura del fondo IGN: en 2D se verá la huella
+        sobre el fondo vacío y en 3D los puntos sobre el globo.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.COPC</h3>
+    <p>
+      COPC (<em>Cloud Optimized Point Cloud</em>) es un LAZ 1.4 organizado en un octree y con un
+      directorio al principio del fichero. El cliente pide por <code>Range</code> solo los nodos que
+      necesita para el nivel de detalle de la vista; no hay que descargar el fichero entero.
+    </p>
+    <p>
+      Cesium no lee COPC de serie. La extensión <code>ext/copcLayer</code> envuelve
+      <a href="https://github.com/connormanning/copcesium" target="_blank" rel="noopener">copcesium</a>
+      (MIT) en una capa con la fachada de la API: visibilidad, opacidad, zoom a la capa y borrado
+      funcionan como en cualquier otra capa. En 2D se dibuja el <code>bbox</code> del COPC.
+    </p>
+    <pre class="codigo"><code>// 3D: puntos reales; 2D: huella del bbox
+const capa = new IDEE.layer.COPC({
+  url: 'https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz',
+  bbox: [-123.075542, 44.049719, -123.061960, 44.062780],
+  name: 'AutzenCOPC',
+  legend: 'Autzen (COPC, solo 3D)',
+  copc: {
+    maxPoints: 500000,
+    maxVisibleNodes: 40,
+    maxCacheNodes: 80,
+    concurrency: 3,
+    pixelSize: 2,
+    sseThreshold: 300,
+    autoFrame: false,
+  },
+}, {
+  style: new IDEE.style.Generic({
+    polygon: {
+      fill: { color: '#5eead4', opacity: 0.12 },
+      stroke: { color: '#0f766e', width: 2 },
+    },
+  }),
+});
+
+mapajs.addLayers(capa);</code></pre>
+    <p>
+      El <code>bbox</code> va en EPSG:4326. Si se omite, la capa no puede dibujar la huella ni
+      encuadrar el botón de zoom en 2D; en 3D los puntos se siguen leyendo.
+    </p>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>

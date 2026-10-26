@@ -565,6 +565,30 @@ class miPlugin_layerSwitcher {
     return salida;
   }
 
+  // Capas cuyo estado de visibilidad/opacidad hay que conservar. A diferencia
+  // de `_capasConZ`, incluye las vectoriales: no participan en el reordenado z
+  // (en Cesium `setZIndex` reindexa todos los dataSources), pero su ojo y su
+  // transparencia también tienen que sobrevivir al cambio 2D/3D.
+  _capasConEstado(mapRef) {
+    const salida = [];
+    if (!mapRef || typeof mapRef.getLayers !== 'function') return salida;
+    const visitar = (l) => {
+      if (!l) return;
+      const esGrupo = (l.type === 'LayerGroup' || l._type === 'LayerGroup' || typeof l.getLayers === 'function');
+      if (esGrupo) {
+        let hijas = [];
+        try { hijas = l.getLayers ? l.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+        return;
+      }
+      if (l.type === 'Terrain' || l._type === 'Terrain') return;
+      if (l.displayInLayerSwitcher === false && l.isBase !== true) return;
+      salida.push(l);
+    };
+    try { (mapRef.getLayers() || []).forEach(visitar); } catch (e) { /* sin capas */ }
+    return salida;
+  }
+
   // Identificador estable de una capa para el estado (legend si no es el id).
   _identificadorDe(capa) {
     if (!capa) return null;
@@ -704,7 +728,7 @@ class miPlugin_layerSwitcher {
     // 25 % de transparencia volvía al 10 % del constructor al pasar a 3D).
     const layerStates = [];
     if (this._map) {
-      this._capasConZ(this._map).forEach((capa) => {
+      this._capasConEstado(this._map).forEach((capa) => {
         if (!capa || capa.isBase === true || capa.displayInLayerSwitcher === false) return;
         const ident = this._identificadorDe(capa);
         if (!ident) return;

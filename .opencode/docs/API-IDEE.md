@@ -73,6 +73,21 @@ mapa();
 - **Evento de mapa (mapa listo)**: `mapajs.on(evt.COMPLETED, ...)` con
   `const evt = (window.IDEE || window.M).evt`.
 
+### Capas nativas añadidas en `ext/`
+
+Estas extensiones no son plugins: se cargan con un `<script>` y parchean una
+clase `IDEE.layer.*`. El cambio 2D/3D recarga el bundle, así que cada una se
+reinstala sobre la base nueva (sondeo de 10 ms y evento `load` del bundle):
+
+- `FlatGeobuf`, `GeoParquet`, `PMTiles`, `GeoTIFF` y `MapLibre`: capas
+  vectoriales/ráster con lector vendorizado y lectura por HTTP `Range` cuando
+  el formato lo permite.
+- `COPC`: `new IDEE.layer.COPC({ url, bbox, copc }, { style })`. En 3D lee los
+  puntos con `copcesium` (`CopcDataSource` sobre el viewer) y en 2D dibuja la
+  huella del `bbox` en EPSG:4326. `getMaxExtent()` devuelve 4326 en 3D y 3857
+  en 2D; `removeLayers(capa)` destruye el data source al recibir
+  `REMOVED_LAYER`; `capa.getCopcStats()` expone nodos/caché/error.
+
 ## Plugins de `ext/` — clases `miPlugin_*`
 
 Cada carpeta de `ext/` contiene 1-2 clases `miPlugin_*` (una clase por plugin):
