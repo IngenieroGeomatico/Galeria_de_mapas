@@ -86,6 +86,22 @@
 
         super(baseParams, opcionesBase);
 
+        // Estilo por defecto para que la huella sea visible en 2D si el
+        // visualizador no pasa uno propio.
+        if (!estilo) {
+          try {
+            var IDEE0 = api();
+            if (IDEE0 && IDEE0.style && IDEE0.style.Generic) {
+              this.setStyle(new IDEE0.style.Generic({
+                polygon: {
+                  fill: { color: '#e11d48', opacity: 0.25 },
+                  stroke: { color: '#9f1239', width: 2 },
+                },
+              }));
+            }
+          } catch (e) { /* noop */ }
+        }
+
         this._ifc = true;
         this._ifcUrl = String(p.url || '');
         this._ifcBbox = Array.isArray(ext) && ext.length === 4 ? ext.slice() : null;
@@ -298,6 +314,7 @@
             var opcionesModelo = {
               url: url,
               scale: this._ifcScale,
+              minimumPixelSize: 64,
             };
             if (this._ifcPosition) {
               opcionesModelo.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(
@@ -322,7 +339,8 @@
           this._ifcObjeto = objeto;
           this._ifcAplicarEstado();
 
-          try { if (viewer && viewer.zoomTo) viewer.zoomTo(objeto); } catch (ex) { /* noop */ }
+          // No forzar zoomTo: algunos modelos disparan errores de bounding
+          // sphere en el render loop; el usuario puede encuadrar manualmente.
         } catch (error) {
           if (!this._ifcDestruido && token === this._ifcToken) {
             this._ifcError = error;
