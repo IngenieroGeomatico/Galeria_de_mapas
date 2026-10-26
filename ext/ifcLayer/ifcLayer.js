@@ -424,6 +424,22 @@
             this._ifcPosition = await this._ifcLeerPosicion(this._ifcUrl);
           }
 
+          if (!this._ifcBbox && this._ifcPosition) {
+            this._ifcObtenerBounds(this._ifcUrl).then(function (info) {
+              var b = info && (info.shiftedBounds || info.originalBounds);
+              if (!b || !b.min || !b.max) return;
+              var anchoM = b.max.x - b.min.x;
+              var altoM = b.max.y - b.min.y;
+              var lon = self._ifcPosition.lon;
+              var lat = self._ifcPosition.lat;
+              var mPorGradoLat = 111320;
+              var mPorGradoLon = 111320 * Math.cos(lat * Math.PI / 180);
+              var dLat = ((altoM / 2) / mPorGradoLat) || 0.0001;
+              var dLon = ((anchoM / 2) / mPorGradoLon) || 0.0001;
+              self._ifcBbox = [lon - dLon, lat - dLat, lon + dLon, lat + dLat];
+            }).catch(function () { /* noop */ });
+          }
+
           var url = this._ifcUrl;
           var blobUrl = url;
 
@@ -528,6 +544,22 @@
 
           if (!this._ifcPosition) {
             this._ifcPosition = await this._ifcLeerPosicion(this._ifcUrl);
+          }
+
+          if (!this._ifcBbox && this._ifcPosition) {
+            this._ifcObtenerBounds(this._ifcUrl).then(function (info) {
+              var b = info && (info.shiftedBounds || info.originalBounds);
+              if (!b || !b.min || !b.max) return;
+              var anchoM = b.max.x - b.min.x;
+              var altoM = b.max.y - b.min.y;
+              var lon = self._ifcPosition.lon;
+              var lat = self._ifcPosition.lat;
+              var mPorGradoLat = 111320;
+              var mPorGradoLon = 111320 * Math.cos(lat * Math.PI / 180);
+              var dLat = ((altoM / 2) / mPorGradoLat) || 0.0001;
+              var dLon = ((anchoM / 2) / mPorGradoLon) || 0.0001;
+              self._ifcBbox = [lon - dLon, lat - dLat, lon + dLon, lat + dLat];
+            }).catch(function () { /* noop */ });
           }
 
           var respuesta = await fetch(this._ifcUrl);
