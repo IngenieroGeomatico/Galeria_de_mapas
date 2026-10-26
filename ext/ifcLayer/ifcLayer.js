@@ -437,6 +437,8 @@
             url: blobUrl,
             scale: this._ifcScale,
             minimumPixelSize: 64,
+            silhouetteColor: Cesium.Color.WHITE.withAlpha(0.6),
+            silhouetteSize: 2.0,
           };
           if (this._ifcPosition) {
             var origin = Cesium.Cartesian3.fromDegrees(
@@ -465,6 +467,19 @@
 
           this._ifcObjeto = objeto;
           this._ifcAplicarEstado();
+
+          if (this._ifcPosition) {
+            try {
+              viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(
+                  this._ifcPosition.lon, this._ifcPosition.lat,
+                  (this._ifcPosition.height || 0) + 100
+                ),
+                orientation: { pitch: Cesium.Math.toRadians(-45) },
+                duration: 0,
+              });
+            } catch (e) { /* noop */ }
+          }
         } catch (error) {
           if (!this._ifcDestruido && token === this._ifcToken) {
             this._ifcError = error;

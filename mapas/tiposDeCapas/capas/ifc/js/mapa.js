@@ -32,7 +32,7 @@ function mapa() {
     name: 'ModeloIFC',
     legend: 'Modelo IFC (3D)',
     scale: 1,
-    directo: true,
+    directo: false,
   }, {
     style: new IDEE.style.Generic({
       polygon: {
