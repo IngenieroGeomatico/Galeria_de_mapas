@@ -556,35 +556,55 @@
 
         const self = this;
         const promesa = cargarVendor().then(function (hy) {
+          function finalizar(file, metadata) {
+            const geo = geoDeMetadata(metadata);
+            const primaria = (geo && geo.primary_column) || 'geometry';
+            const col = (geo && geo.columns && geo.columns[primaria]) || {};
+            const covering = (col.covering && col.covering.bbox) || null;
+            const crs = self._geoparquetCRS || crsDeGeo(col.crs) || 'EPSG:4326';
+            const columnas = columnasDeLectura(metadata, primaria, self._gpColumnas, covering);
+            const info = {
+              url: url,
+              file: file,
+              metadata: metadata,
+              geo: geo,
+              primaria: primaria,
+              crs: crs,
+              covering: covering,
+              columnas: columnas,
+              hy: hy
+            };
+            self._geoparquetCRS = crs;
+            self._gpInfo = info;
+            return info;
+          }
+
+          // Camino normal: footer y row groups por HTTP Range.
           return hy.asyncBufferFromUrl({ url: url }).then(function (crudo) {
-            // minSize 0: no se cachea el fichero entero; solo los rangos.
             const file = hy.cachedAsyncBuffer(crudo, { minSize: 0 });
-            // initialFetchSize pequeno: para el footer no hace falta medio MB.
             return hy.parquetMetadataAsync(file, { initialFetchSize: 32768 }).then(function (metadata) {
-              const geo = geoDeMetadata(metadata);
-              const primaria = (geo && geo.primary_column) || 'geometry';
-              const col = (geo && geo.columns && geo.columns[primaria]) || {};
-              const covering = (col.covering && col.covering.bbox) || null;
-              const crs = self._geoparquetCRS || crsDeGeo(col.crs) || 'EPSG:4326';
-              const columnas = columnasDeLectura(metadata, primaria, self._gpColumnas, covering);
-              const info = {
-                url: url,
-                file: file,
-                metadata: metadata,
-                geo: geo,
-                primaria: primaria,
-                crs: crs,
-                covering: covering,
-                columnas: columnas,
-                hy: hy
+              return finalizar(file, metadata);
+            });
+          }).catch(function () {
+            // Algunos servidores estaticos (GitHub Pages) sirven el .parquet con
+            // Content-Encoding: gzip. Un fetch completo se descomprime bien, pero
+            // las peticiones por rangos reciben bytes comprimidos y el footer deja
+            // de ser "PAR1". Se recurre entonces a descargar el fichero entero.
+            return fetch(url).then(function (res) {
+              if (!res.ok) throw new Error('GeoParquet: fetch ' + res.status);
+              return res.arrayBuffer();
+            }).then(function (buf) {
+              const file = {
+                byteLength: buf.byteLength,
+                slice: function (inicio, fin) {
+                  return Promise.resolve(buf.slice(inicio, fin));
+                }
               };
-              self._geoparquetCRS = crs;
-              self._gpInfo = info;
-              return info;
+              const metadata = hy.parquetMetadata(buf);
+              return finalizar(file, metadata);
             });
           });
         });
-
         this._gpPromesaFuente = { url: url, promesa: promesa };
         promesa.catch(function () {
           if (self._gpPromesaFuente && self._gpPromesaFuente.promesa === promesa) {
