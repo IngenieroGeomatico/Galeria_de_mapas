@@ -321,12 +321,12 @@
 
           var objeto = await Cesium.Model.fromGltfAsync(opcionesModelo);
 
-          try { URL.revokeObjectURL(blobUrl); } catch (e) { /* noop */ }
-
           if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) {
             try { if (objeto && typeof objeto.destroy === 'function') objeto.destroy(); } catch (ex) { /* noop */ }
             return;
           }
+
+          try { viewer.scene.primitives.add(objeto); } catch (e) { console.warn('IFC: no se pudo anadir a la escena', e); }
 
           this._ifcObjeto = objeto;
           this._ifcAplicarEstado();
