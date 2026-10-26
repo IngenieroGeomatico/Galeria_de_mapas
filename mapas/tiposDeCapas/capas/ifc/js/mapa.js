@@ -9,8 +9,8 @@ const URL_IFC = 'https://raw.githubusercontent.com/andrewisen/bim-whale-ifc-samp
 
 // Madrid, centro y huella aproximada del modelo.
 const BBOX_IFC = undefined;
-const CENTRO_4326 = { x: -3.7038, y: 40.4168 };
-const CENTRO_3857 = { x: -411882, y: 4926433 };
+const CENTRO_4326 = { x: -71.059, y: 42.3587 };
+const CENTRO_3857 = { x: -7912000, y: 5213000 };
 
 function mapa() {
   prepararFondo();
@@ -31,7 +31,6 @@ function mapa() {
     url: URL_IFC,
     name: 'ModeloIFC',
     legend: 'Modelo IFC (3D)',
-    position: { lon: CENTRO_4326.x, lat: CENTRO_4326.y, height: 100 },
     scale: 1,
     directo: true,
   }, {

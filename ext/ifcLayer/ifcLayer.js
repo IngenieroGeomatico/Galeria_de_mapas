@@ -107,9 +107,9 @@
         this._ifcDirecto = (p.directo === true || p.direct === true);
         var urlMinuscula = this._ifcUrl.toLowerCase();
         var esIfc = urlMinuscula.indexOf('.ifc') !== -1;
-        if (p.convertir === false || p.convert === false) this._ifcConvertir = false;
-        else if (p.convertir === true || p.convert === true) this._ifcConvertir = true;
-        else this._ifcConvertir = esIfc;
+        if (p.convertir === false || p.convert === false) this._ifcDebeConvertir = false;
+        else if (p.convertir === true || p.convert === true) this._ifcDebeConvertir = true;
+        else this._ifcDebeConvertir = esIfc;
         this._ifcBbox = Array.isArray(ext) && ext.length === 4 ? ext.slice() : null;
         this._ifcPosition = p.position || null;
         this._ifcHeading = (typeof p.heading === 'number') ? p.heading : 0;
@@ -338,6 +338,67 @@
         }
       }
 
+      /**
+       * Lee la georreferenciacion del IFC (IfcSite) y la devuelve como
+       * { lon, lat, height }. Si el IFC no la declara, devuelve null.
+       * @param {string} url
+       * @returns {Promise<Object|null>}
+       */
+      async _ifcLeerPosicion(url) {
+        try {
+          var respuesta = await fetch(url);
+          if (!respuesta.ok) return null;
+          var datos = new Uint8Array(await respuesta.arrayBuffer());
+
+          var WebIFC = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.77/+esm');
+          var IfcAPI = WebIFC.IfcAPI || (WebIFC.default && WebIFC.default.IfcAPI);
+          var apiIfc = new IfcAPI();
+          if (typeof apiIfc.SetWasmPath === 'function') {
+            apiIfc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.77/', true);
+          }
+          await apiIfc.Init();
+
+          var modelID = apiIfc.OpenModel(datos);
+
+          var aGrados = function (valor) {
+            if (!valor || !Array.isArray(valor.value)) return null;
+            var v = valor.value;
+            var d = (v.length > 0) ? v[0] : 0;
+            var m = (v.length > 1) ? v[1] : 0;
+            var sec = (v.length > 2) ? v[2] : 0;
+            var micro = (v.length > 3) ? v[3] : 0;
+            return d + (m / 60) + ((sec + (micro / 1000000)) / 3600);
+          };
+
+          var lon = null;
+          var lat = null;
+          var height = 0;
+
+          try {
+            var sites = apiIfc.GetLineIDsWithType(modelID, WebIFC.IFCSITE);
+            if (sites && sites.size && sites.size() > 0) {
+              var site = apiIfc.GetLine(modelID, sites.get(0), true);
+              lat = aGrados(site.RefLatitude);
+              lon = aGrados(site.RefLongitude);
+              if (site.RefElevation && typeof site.RefElevation._representationValue === 'number') {
+                height = site.RefElevation._representationValue;
+              } else if (site.RefElevation && typeof site.RefElevation.value === 'number') {
+                height = site.RefElevation.value;
+              }
+            }
+          } catch (e) { /* sin IfcSite */ }
+
+          try { apiIfc.CloseModel(modelID); } catch (e) { /* noop */ }
+
+          if (typeof lat === 'number' && typeof lon === 'number') {
+            return { lon: lon, lat: lat, height: height };
+          }
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
       async _ifcCargar(map) {
         var self = this;
         var token = this._ifcToken;
@@ -350,10 +411,14 @@
             return this._ifcCargarDirecto(map, token);
           }
 
+          if (!this._ifcPosition) {
+            this._ifcPosition = await this._ifcLeerPosicion(this._ifcUrl);
+          }
+
           var url = this._ifcUrl;
           var blobUrl = url;
 
-          if (this._ifcConvertir) {
+          if (this._ifcDebeConvertir) {
             var glb = await this._ifcConvertir(url);
             if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) return;
             var blob = new Blob([glb], { type: 'model/gltf-binary' });
@@ -432,6 +497,10 @@
         try {
           var viewer = map.getMapImpl();
           if (!viewer || !viewer.scene) throw new Error('IFC: el viewer de Cesium no esta listo');
+
+          if (!this._ifcPosition) {
+            this._ifcPosition = await this._ifcLeerPosicion(this._ifcUrl);
+          }
 
           var respuesta = await fetch(this._ifcUrl);
           if (!respuesta.ok) throw new Error('IFC: no se pudo descargar ' + this._ifcUrl);
