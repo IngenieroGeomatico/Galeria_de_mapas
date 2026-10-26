@@ -258,6 +258,9 @@
         var processor = new GeometryProcessor();
         await processor.init();
         var result = await processor.process(datos);
+        if (result && result.coordinateInfo && result.coordinateInfo.originalBounds) {
+          this._ifcMinZ = result.coordinateInfo.originalBounds.min.z;
+        }
         try { processor.dispose(); } catch (e) { /* noop */ }
         return result && result.coordinateInfo ? result.coordinateInfo : null;
       }
@@ -389,7 +392,6 @@
           } catch (e) { /* sin IfcSite */ }
 
           try { apiIfc.CloseModel(modelID); } catch (e) { /* noop */ }
-
           if (typeof lat === 'number' && typeof lon === 'number') {
             return { lon: lon, lat: lat, height: height };
           }
@@ -425,6 +427,10 @@
             blobUrl = URL.createObjectURL(blob);
           }
 
+          if (isFinite(this._ifcMinZ) && this._ifcPosition) {
+            this._ifcPosition.height = (this._ifcPosition.height || 0) - this._ifcMinZ;
+          }
+
           if (this._ifcDestruido || token !== this._ifcToken || this.map_ !== map) return;
 
           var opcionesModelo = {
@@ -436,7 +442,7 @@
             var origin = Cesium.Cartesian3.fromDegrees(
               this._ifcPosition.lon || this._ifcPosition.x || 0,
               this._ifcPosition.lat || this._ifcPosition.y || 0,
-              (this._ifcPosition.height || this._ifcPosition.z || 0) + 50
+              (this._ifcPosition.height || this._ifcPosition.z || 0)
             );
             var hpr = new Cesium.HeadingPitchRoll(
               (this._ifcHeading || 0) * Math.PI / 180, 0, 0
@@ -524,7 +530,7 @@
             var origin = Cesium.Cartesian3.fromDegrees(
               this._ifcPosition.lon || this._ifcPosition.x || 0,
               this._ifcPosition.lat || this._ifcPosition.y || 0,
-              (this._ifcPosition.height || this._ifcPosition.z || 0) + 50
+              (this._ifcPosition.height || this._ifcPosition.z || 0)
             );
             var hpr = new Cesium.HeadingPitchRoll((this._ifcHeading || 0) * Math.PI / 180, 0, 0);
             georef = Cesium.Matrix4.multiply(
@@ -535,6 +541,7 @@
           }
 
           var instancias = [];
+          var minZ = Infinity;
           apiIfc.StreamAllMeshes(modelID, function (mesh) {
             for (var i = 0; i < mesh.geometries.size(); i++) {
               var pg = mesh.geometries.get(i);
@@ -542,6 +549,9 @@
               var verts = apiIfc.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
               var inds = apiIfc.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
               if (!verts || !verts.length || !inds || !inds.length) return;
+              for (var mv = 2; mv < verts.length; mv += 3) {
+                if (verts[mv] < minZ) minZ = verts[mv];
+              }
 
               var m = pg.flatTransformation || [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
               var positions = new Float64Array(verts.length);
@@ -618,7 +628,7 @@
               viewer.camera.flyTo({
                 destination: Cesium.Cartesian3.fromDegrees(
                   this._ifcPosition.lon, this._ifcPosition.lat,
-                  (this._ifcPosition.height || 0) + 150
+                  (this._ifcPosition.height || 0) + 100
                 ),
                 orientation: { pitch: Cesium.Math.toRadians(-45) },
                 duration: 0,
