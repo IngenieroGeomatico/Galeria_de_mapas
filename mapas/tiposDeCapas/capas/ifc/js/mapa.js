@@ -8,7 +8,7 @@
 const URL_IFC = 'https://raw.githubusercontent.com/andrewisen/bim-whale-ifc-samples/main/SimpleWall/IFC/SimpleWall.ifc';
 
 // Madrid, centro y huella aproximada del modelo.
-const BBOX_IFC = [-3.71, 40.41, -3.69, 40.42];
+const BBOX_IFC = undefined;
 const CENTRO_4326 = { x: -3.7038, y: 40.4168 };
 const CENTRO_3857 = { x: -411882, y: 4926433 };
 
@@ -19,7 +19,7 @@ function mapa() {
 
   mapajs = IDEE.map({
     container: 'mapaDIV',
-    zoom: 16,
+    zoom: 18,
     center: es3D ? CENTRO_4326 : CENTRO_3857,
   });
 
@@ -29,7 +29,6 @@ function mapa() {
 
   const capa = new IDEE.layer.IFC({
     url: URL_IFC,
-    bbox: BBOX_IFC,
     name: 'ModeloIFC',
     legend: 'Modelo IFC (3D)',
     position: { lon: CENTRO_4326.x, lat: CENTRO_4326.y, height: 100 },

@@ -231,10 +231,60 @@
         this._ifcCargar(map);
       }
 
+      /**
+       * Obtiene los bounds (en metros, coordenadas locales) de un IFC sin
+       * llegar a exportarlo a GLB. Sirve para dibujar la huella en 2D.
+       * @param {string} url
+       * @returns {Promise<Object>}
+       */
+      async _ifcObtenerBounds(url) {
+        var respuesta = await fetch(url);
+        if (!respuesta.ok) throw new Error('IFC: no se pudo descargar ' + url);
+        var datos = new Uint8Array(await respuesta.arrayBuffer());
+
+        var geometryMod = await import('https://cdn.jsdelivr.net/npm/@ifc-lite/geometry@1.2.1/+esm');
+        var wasmMod = await import('https://cdn.jsdelivr.net/npm/@ifc-lite/wasm@1.2.1/+esm');
+        var initWasm = wasmMod.default || wasmMod.initWasm || wasmMod;
+        var wasmUrl = 'https://cdn.jsdelivr.net/npm/@ifc-lite/wasm@1.2.1/pkg/ifc-lite_bg.wasm';
+        try { await initWasm({ module_or_path: wasmUrl }); } catch (e) { /* ya inicializado */ }
+
+        var GeometryProcessor = geometryMod.GeometryProcessor;
+        var processor = new GeometryProcessor();
+        await processor.init();
+        var result = await processor.process(datos);
+        try { processor.dispose(); } catch (e) { /* noop */ }
+        return result && result.coordinateInfo ? result.coordinateInfo : null;
+      }
+
       async _ifcPintarHuella() {
         var IDEE = api();
         var token = this._ifcToken;
-        if (!IDEE || !this._ifcBbox || this._ifcFeature) return;
+        if (!IDEE || this._ifcFeature) return;
+
+        // Si no se paso bbox, se calcula a partir del propio IFC para que la
+        // huella represente el modelo (y no un rectangulo arbitrario).
+        if (!this._ifcBbox) {
+          try {
+            var info = await this._ifcObtenerBounds(this._ifcUrl);
+            var b = info && (info.shiftedBounds || info.originalBounds);
+            if (b && b.min && b.max) {
+              var anchoM = b.max.x - b.min.x;
+              var altoM = b.max.y - b.min.y;
+              var pos = this._ifcPosition || {};
+              var lon = (typeof pos.lon === 'number') ? pos.lon : (typeof pos.x === 'number' ? pos.x : 0);
+              var lat = (typeof pos.lat === 'number') ? pos.lat : (typeof pos.y === 'number' ? pos.y : 0);
+              var mPorGradoLat = 111320;
+              var mPorGradoLon = 111320 * Math.cos(lat * Math.PI / 180);
+              var dLat = ((altoM / 2) / mPorGradoLat) || 0.0001;
+              var dLon = ((anchoM / 2) / mPorGradoLon) || 0.0001;
+              this._ifcBbox = [lon - dLon, lat - dLat, lon + dLon, lat + dLat];
+            }
+          } catch (e) {
+            console.warn('IFC: no se pudo calcular la huella', e);
+          }
+        }
+
+        if (!this._ifcBbox) return;
 
         var o = this._ifcBbox[0];
         var s = this._ifcBbox[1];
