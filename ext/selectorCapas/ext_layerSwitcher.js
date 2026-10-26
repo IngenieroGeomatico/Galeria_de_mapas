@@ -2735,7 +2735,14 @@ class miPlugin_layerSwitcher {
         try {
           if (typeof capa._extensionParaZoom === 'function') ext = capa._extensionParaZoom();
         } catch (e) { ext = null; }
-        hecho(ext);
+        if (ext) { hecho(ext); return; }
+        if (typeof capa._extensionParaZoomCompleta === 'function') {
+          capa._extensionParaZoomCompleta().then(function (ext2) {
+            hecho(ext2);
+          }).catch(function () { hecho(null); });
+          return;
+        }
+        hecho(null);
       }).catch(function () { hecho(null); });
     }
     function _capaCargando(capa) {

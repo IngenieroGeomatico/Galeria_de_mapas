@@ -676,6 +676,72 @@
         if (!isFinite(oeste[0]) || !isFinite(oeste[1]) || !isFinite(este[0]) || !isFinite(este[1])) return null;
         return [oeste[0], oeste[1], este[0], este[1]];
       }
+      /**
+       * Extension de la capa cuando no hay cobertura bbox: lee todas las filas
+       * y calcula su caja. Solo se usa como plan B para ficheros pequenos o sin
+       * metadata de cobertura.
+       * @returns {Promise<Array<number>|null>}
+       */
+      async _extensionParaZoomCompleta() {
+        const info = this._gpInfo;
+        if (!info) return null;
+        const total = Number(info.metadata && info.metadata.num_rows ? info.metadata.num_rows : 0);
+        if (!total || total > 200000) return null;
+        try {
+          const filas = await info.hy.parquetReadObjects({
+            file: info.file,
+            metadata: info.metadata,
+            rowStart: 0,
+            rowEnd: total,
+            columns: info.columnas
+          });
+          let minX = Infinity;
+          let minY = Infinity;
+          let maxX = -Infinity;
+          let maxY = -Infinity;
+          let hay = false;
+          const primaria = info.primaria;
+          for (let i = 0; i < filas.length; i += 1) {
+            let geom = filas[i] ? filas[i][primaria] : null;
+            if (geom && !(geom.type && geom.coordinates)) {
+              geom = wkbAGeoJSON(geom, info.hy);
+            }
+            if (!geom || !geom.coordinates) continue;
+            const recorrer = function (coords) {
+              if (typeof coords[0] === 'number') {
+                const x = coords[0];
+                const y = coords[1];
+                if (isFinite(x) && isFinite(y)) {
+                  minX = Math.min(minX, x);
+                  minY = Math.min(minY, y);
+                  maxX = Math.max(maxX, x);
+                  maxY = Math.max(maxY, y);
+                  hay = true;
+                }
+                return;
+              }
+              for (let k = 0; k < coords.length; k += 1) recorrer(coords[k]);
+            };
+            recorrer(geom.coordinates);
+          }
+          if (!hay || maxX <= minX || maxY <= minY) return null;
+          const desde = info.crs || 'EPSG:4326';
+          const API = (typeof window !== 'undefined') ? (window.IDEE || window.M) : null;
+          let oeste = [minX, minY];
+          let este = [maxX, maxY];
+          if (desde && desde !== 'EPSG:3857' && API && API.utils && typeof API.utils.reproject === 'function') {
+            try {
+              oeste = API.utils.reproject([minX, minY], desde, 'EPSG:3857');
+              este = API.utils.reproject([maxX, maxY], desde, 'EPSG:3857');
+            } catch (e) { return null; }
+          }
+          if (!Array.isArray(oeste) || !Array.isArray(este)) return null;
+          if (!isFinite(oeste[0]) || !isFinite(oeste[1]) || !isFinite(este[0]) || !isFinite(este[1])) return null;
+          return [oeste[0], oeste[1], este[0], este[1]];
+        } catch (e) {
+          return null;
+        }
+      }
       _recargar(modo, map, forzar) {
         const self = this;
         const url = this._geoparquetUrl;
