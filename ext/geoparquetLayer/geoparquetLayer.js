@@ -632,8 +632,9 @@
        */
       _extensionParaZoom() {
         const info = this._gpInfo;
-        if (!info || !info.covering || !info.covering.bbox) return null;
-        const b = info.covering.bbox;
+        const b = (info && info.covering) ? info.covering : null;
+        if (!b || !Array.isArray(b.xmin)) return null;
+        
         const xminPath = b.xmin;
         const yminPath = b.ymin;
         const xmaxPath = b.xmax;
