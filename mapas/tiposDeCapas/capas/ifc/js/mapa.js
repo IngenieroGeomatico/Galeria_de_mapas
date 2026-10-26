@@ -27,13 +27,22 @@ function mapa() {
     window.ifcLayer.instalar();
   }
 
-  const capa = new IDEE.layer.IFC({
+  // Parametros de la capa IFC. La posicion se deriva del propio IFC (IfcSite);
+  // si se omite, el modelo se georreferencia solo.
+  const parametrosIFC = {
     url: URL_IFC,
     name: 'ModeloIFC',
     legend: 'Modelo IFC (3D)',
-    scale: 1,
+    // Conversión a GLB en memoria (recomendado para visualización profesional).
+    convertir: true,
+    // Modo directo (web-ifc) experimental: true para evitar la conversión.
     directo: false,
-  }, {
+    scale: 1,
+    visible: true,
+    opacity: 1,
+  };
+
+  const capa = new IDEE.layer.IFC(parametrosIFC, {
     style: new IDEE.style.Generic({
       polygon: {
         fill: { color: '#e11d48', opacity: 0.25 },
