@@ -93,6 +93,17 @@
 
   // ---------- Carga del lector (vendor) ----------
 
+  /**
+   * URL del descompresor ZSTD, hermano de este script.
+   * @type {string}
+   */
+  const URL_FZSTD = (function () {
+    const propio = urlDeEsteScript();
+    if (propio) {
+      try { return new URL('fzstd.min.js', propio).href; } catch (e) { /* sigue */ }
+    }
+    return 'fzstd.min.js';
+  })();
   let promesaVendor = null;
 
   /**
@@ -107,6 +118,14 @@
       return Promise.resolve(window.hyparquet);
     }
     if (promesaVendor) return promesaVendor;
+
+    if (typeof window !== 'undefined' && !window.fzstd) {
+      const scriptZstd = document.createElement('script');
+      scriptZstd.src = URL_FZSTD;
+      scriptZstd.async = false;
+      (document.head || document.documentElement).appendChild(scriptZstd);
+    }
+
 
     promesaVendor = new Promise(function (resolve, reject) {
       const script = document.createElement('script');
@@ -206,9 +225,10 @@
    * @param {string} primaria Nombre de la columna de geometria.
    * @param {string[]} [pedidas] Lista explicita de propiedades.
    * @param {Object} [covering] Cobertura `bbox` del metadata.
+   * @param {Object} [where] Condiciones alfanumericas para asegurar que se lean.
    * @returns {string[]}
    */
-  function columnasDeLectura(metadata, primaria, pedidas, covering) {
+  function columnasDeLectura(metadata, primaria, pedidas, covering, where) {
     const todas = columnasDeMetadata(metadata);
     const bboxTop = new Set(['bbox']);
     if (covering) {
@@ -222,9 +242,161 @@
     });
     if (Array.isArray(pedidas) && pedidas.length) {
       const set = new Set(pedidas.map(String));
+      if (where && typeof where === 'object') {
+        Object.keys(where).forEach(function (wCol) { set.add(String(wCol)); });
+      }
       props = props.filter(function (n) { return set.has(n); });
     }
     return [primaria].concat(props);
+  }
+
+  /**
+   * Extrae el valor numerico o textual de una estadistica.
+   * @param {Object} stat
+   * @param {boolean} esMax
+   * @returns {*}
+   */
+  function valorEstadistica(stat, esMax) {
+    if (!stat) return undefined;
+    if (esMax) {
+      return stat.max !== undefined && stat.max !== null ? stat.max : stat.max_value;
+    }
+    return stat.min !== undefined && stat.min !== null ? stat.min : stat.min_value;
+  }
+
+  /**
+   * Busca las estadisticas de una columna en un row group.
+   * @param {Object} rg Row group.
+   * @param {string} nombreColumna
+   * @returns {Object|null}
+   */
+  function estadisticasDeColumna(rg, nombreColumna) {
+    if (!rg || !Array.isArray(rg.columns) || !nombreColumna) return null;
+    const nombre = String(nombreColumna).toLowerCase();
+    for (let i = 0; i < rg.columns.length; i += 1) {
+      const col = rg.columns[i] || {};
+      const md = col.meta_data || col;
+      const path = md.path_in_schema || md.pathInSchema || [];
+      if (path.length && String(path[path.length - 1]).toLowerCase() === nombre) {
+        return md.statistics || null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Evalua si las estadisticas de un row group permiten descartarlo segun
+   * condiciones alfanumericas (pushdown predicate).
+   * @param {Object} rg Row group.
+   * @param {Object} where Condiciones, ej: { poblacion: { min: 5000 }, provincia: 'Madrid' }
+   * @returns {{descartar:boolean, evaluado:boolean}}
+   */
+  function evaluarEstadisticasRowGroup(rg, where) {
+    if (!where || typeof where !== 'object') return { descartar: false, evaluado: false };
+    const campos = Object.keys(where);
+    let evaluado = false;
+
+    for (let i = 0; i < campos.length; i += 1) {
+      const campo = campos[i];
+      const condicion = where[campo];
+      if (condicion === undefined || condicion === null) continue;
+
+      const stats = estadisticasDeColumna(rg, campo);
+      if (!stats) continue;
+
+      const sMin = valorEstadistica(stats, false);
+      const sMax = valorEstadistica(stats, true);
+      if (sMin === undefined && sMax === undefined) continue;
+
+      evaluado = true;
+
+      // Igualdad simple directa
+      if (typeof condicion !== 'object' || condicion instanceof Date) {
+        const target = (condicion instanceof Date) ? condicion.toISOString() : condicion;
+        if (sMin !== undefined && typeof target === 'number' && Number(target) < Number(sMin)) return { descartar: true, evaluado: true };
+        if (sMax !== undefined && typeof target === 'number' && Number(target) > Number(sMax)) return { descartar: true, evaluado: true };
+        if (sMin !== undefined && typeof target === 'string' && String(target) < String(sMin)) return { descartar: true, evaluado: true };
+        if (sMax !== undefined && typeof target === 'string' && String(target) > String(sMax)) return { descartar: true, evaluado: true };
+        continue;
+      }
+
+      // Operadores: { $gt, $gte, $lt, $lte, $eq, $in, min, max, gt, gte, lt, lte, eq, in }
+      const gt = condicion.$gt !== undefined ? condicion.$gt : condicion.gt;
+      const gte = condicion.$gte !== undefined ? condicion.$gte : (condicion.gte !== undefined ? condicion.gte : condicion.min);
+      const lt = condicion.$lt !== undefined ? condicion.$lt : condicion.lt;
+      const lte = condicion.$lte !== undefined ? condicion.$lte : (condicion.lte !== undefined ? condicion.lte : condicion.max);
+      const eq = condicion.$eq !== undefined ? condicion.$eq : condicion.eq;
+      const inList = Array.isArray(condicion.$in) ? condicion.$in : (Array.isArray(condicion.in) ? condicion.in : null);
+
+      if (gt !== undefined && sMax !== undefined) {
+        if (Number(sMax) <= Number(gt)) return { descartar: true, evaluado: true };
+      }
+      if (gte !== undefined && sMax !== undefined) {
+        if (Number(sMax) < Number(gte)) return { descartar: true, evaluado: true };
+      }
+      if (lt !== undefined && sMin !== undefined) {
+        if (Number(sMin) >= Number(lt)) return { descartar: true, evaluado: true };
+      }
+      if (lte !== undefined && sMin !== undefined) {
+        if (Number(sMin) > Number(lte)) return { descartar: true, evaluado: true };
+      }
+      if (eq !== undefined) {
+        if (sMin !== undefined && Number(eq) < Number(sMin)) return { descartar: true, evaluado: true };
+        if (sMax !== undefined && Number(eq) > Number(sMax)) return { descartar: true, evaluado: true };
+      }
+      if (inList && inList.length) {
+        let algunoEntra = false;
+        for (let j = 0; j < inList.length; j += 1) {
+          const item = inList[j];
+          const dentroMin = (sMin === undefined) || (typeof item === 'number' ? Number(item) >= Number(sMin) : String(item) >= String(sMin));
+          const dentroMax = (sMax === undefined) || (typeof item === 'number' ? Number(item) <= Number(sMax) : String(item) <= String(sMax));
+          if (dentroMin && dentroMax) {
+            algunoEntra = true;
+            break;
+          }
+        }
+        if (!algunoEntra) return { descartar: true, evaluado: true };
+      }
+    }
+
+    return { descartar: false, evaluado: evaluado };
+  }
+
+  /**
+   * Evalua una fila concreta frente al predicado where.
+   * @param {Object} props
+   * @param {Object} where
+   * @returns {boolean}
+   */
+  function cumplePredicadoFila(props, where) {
+    if (!where || typeof where !== 'object') return true;
+    const campos = Object.keys(where);
+    for (let i = 0; i < campos.length; i += 1) {
+      const campo = campos[i];
+      const condicion = where[campo];
+      if (condicion === undefined || condicion === null) continue;
+      const val = props[campo];
+
+      if (typeof condicion !== 'object' || condicion instanceof Date) {
+        if (val !== condicion) return false;
+        continue;
+      }
+
+      const gt = condicion.$gt !== undefined ? condicion.$gt : condicion.gt;
+      const gte = condicion.$gte !== undefined ? condicion.$gte : (condicion.gte !== undefined ? condicion.gte : condicion.min);
+      const lt = condicion.$lt !== undefined ? condicion.$lt : condicion.lt;
+      const lte = condicion.$lte !== undefined ? condicion.$lte : (condicion.lte !== undefined ? condicion.lte : condicion.max);
+      const eq = condicion.$eq !== undefined ? condicion.$eq : condicion.eq;
+      const inList = Array.isArray(condicion.$in) ? condicion.$in : (Array.isArray(condicion.in) ? condicion.in : null);
+
+      if (gt !== undefined && !(val > gt)) return false;
+      if (gte !== undefined && !(val >= gte)) return false;
+      if (lt !== undefined && !(val < lt)) return false;
+      if (lte !== undefined && !(val <= lte)) return false;
+      if (eq !== undefined && val !== eq) return false;
+      if (inList && !inList.includes(val)) return false;
+    }
+    return true;
   }
 
   /**
@@ -260,23 +432,24 @@
     const sxmax = estadisticasDe(rg, covering.xmax);
     const symax = estadisticasDe(rg, covering.ymax);
     if (!sxmin || !symin || !sxmax || !symax) return null;
-    const minX = Number(sxmin.min);
-    const minY = Number(symin.min);
-    const maxX = Number(sxmax.max);
-    const maxY = Number(symax.max);
+    const minX = Number(sxmin.min !== undefined && sxmin.min !== null ? sxmin.min : sxmin.min_value);
+    const minY = Number(symin.min !== undefined && symin.min !== null ? symin.min : symin.min_value);
+    const maxX = Number(sxmax.max !== undefined && sxmax.max !== null ? sxmax.max : sxmax.max_value);
+    const maxY = Number(symax.max !== undefined && symax.max !== null ? symax.max : symax.max_value);
     if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
     return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
   }
 
   /**
-   * Row groups que caen en el rectangulo visible. Si un row group no tiene
-   * estadisticas, se incluye (no se puede descartar con seguridad).
+   * Row groups que caen en el rectangulo visible y cumplen los predicados
+   * alfanumericos.
    * @param {Object} metadata FileMetaData.
-   * @param {{minX:number,minY:number,maxX:number,maxY:number}} rect
-   * @param {Object} covering Cobertura del metadata.
+   * @param {{minX:number,minY:number,maxX:number,maxY:number}|null} rect
+   * @param {Object} [covering] Cobertura del metadata.
+   * @param {Object} [where] Condiciones alfanumericas.
    * @returns {{indices:number[], rangos:Array<{inicio:number,fin:number}>, conStats:boolean}}
    */
-  function gruposEnBbox(metadata, rect, covering) {
+  function gruposParaCarga(metadata, rect, covering, where) {
     const grupos = (metadata && metadata.row_groups) || [];
     const indices = [];
     const rangos = [];
@@ -288,12 +461,26 @@
       const rg = grupos[i];
       const num = Number(rg && rg.num_rows ? rg.num_rows : 0);
       let entra = true;
-      const bb = bboxDeRowGroup(rg, covering);
-      if (bb) {
-        conStats = true;
-        entra = !(bb.maxX < rect.minX || bb.minX > rect.maxX ||
-          bb.maxY < rect.minY || bb.minY > rect.maxY);
+
+      if (rect && covering) {
+        const bb = bboxDeRowGroup(rg, covering);
+        if (bb) {
+          conStats = true;
+          entra = !(bb.maxX < rect.minX || bb.minX > rect.maxX ||
+            bb.maxY < rect.minY || bb.minY > rect.maxY);
+        }
       }
+
+      if (entra && where && typeof where === 'object') {
+        const evaluacion = evaluarEstadisticasRowGroup(rg, where);
+        if (evaluacion.descartar) {
+          entra = false;
+        }
+        if (evaluacion.evaluado) {
+          conStats = true;
+        }
+      }
+
       if (entra) {
         indices.push(i);
         if (abierto && abierto.fin === fila) {
@@ -427,12 +614,21 @@
 
         super(params, e || {}, i || {});
 
+        let filterOpt = params.filter !== undefined ? params.filter : params.filtro;
+        let whereOpt = params.where !== undefined ? params.where : null;
+        if (filterOpt && typeof filterOpt === 'object' && !Array.isArray(filterOpt)) {
+          whereOpt = Object.assign({}, whereOpt || {}, filterOpt);
+          filterOpt = null;
+        }
+
         this._geoparquet = true;
         this._geoparquetUrl = url;
         this._geoparquetCRS = params._geoparquetCRS || params.crs || null;
         this._gpColumnas = Array.isArray(params.columns) ? params.columns.slice() : null;
+        this._gpFilter = (typeof filterOpt === 'function') ? filterOpt : null;
+        this._gpWhere = (whereOpt && typeof whereOpt === 'object') ? Object.assign({}, whereOpt) : null;
 
-        // Estado del teselado por bbox.
+        // Estado del teselado por bbox y filtros.
         this._gpModo = 'vista';
         this._gpBbox = null;
         this._gpCargando = false;
@@ -506,6 +702,134 @@
       }
 
       /**
+       * Obtiene los metadatos estructurados de GeoParquet del fichero.
+       * @returns {Promise<Object>}
+       */
+      getGeoParquetMetadata() {
+        const self = this;
+        if (!this._geoparquetUrl) return Promise.reject(new Error('GeoParquet: sin URL definida'));
+        return this._prepararFuente(this._geoparquetUrl).then(function (info) {
+          const geo = info.geo || {};
+          const primaria = info.primaria || 'geometry';
+          const colGeo = (geo.columns && geo.columns[primaria]) || {};
+          return {
+            url: info.url,
+            version: geo.version || null,
+            primaryColumn: primaria,
+            crs: info.crs,
+            geometryTypes: colGeo.geometry_types || [],
+            bbox: colGeo.bbox || null,
+            covering: info.covering || null,
+            columns: columnasDeMetadata(info.metadata),
+            loadedColumns: info.columnas ? info.columnas.slice() : [],
+            numRows: Number(info.metadata && info.metadata.num_rows ? info.metadata.num_rows : 0),
+            numRowGroups: (info.metadata && info.metadata.row_groups) ? info.metadata.row_groups.length : 0,
+            rawGeo: geo,
+            rawMetadata: info.metadata
+          };
+        });
+      }
+
+      /**
+       * Obtiene el filtro alfanumerico activo.
+       * @returns {Function|null}
+       */
+      getFilter() {
+        return this._gpFilter;
+      }
+
+      /**
+       * Establece un filtro alfanumerico (predicado `(properties, feature) => boolean`
+       * o bien un objeto de condiciones where) y recarga la capa.
+       * @param {Function|Object|null} filtro
+       * @returns {Promise}
+       */
+      setFilter(filtro) {
+        if (typeof filtro === 'function') {
+          this._gpFilter = filtro;
+        } else if (filtro && typeof filtro === 'object') {
+          this._gpWhere = Object.assign({}, filtro);
+          this._gpFilter = null;
+        } else {
+          this._gpFilter = null;
+          this._gpWhere = null;
+        }
+        if (this._gpInfo) {
+          this._gpInfo.columnas = columnasDeLectura(
+            this._gpInfo.metadata,
+            this._gpInfo.primaria,
+            this._gpColumnas,
+            this._gpInfo.covering,
+            this._gpWhere
+          );
+        }
+        return this._recargar(this._gpModo, this.map_, true);
+      }
+
+      /**
+       * Obtiene las condiciones alfanumericas where activas para pushdown.
+       * @returns {Object|null}
+       */
+      getWhere() {
+        return this._gpWhere ? Object.assign({}, this._gpWhere) : null;
+      }
+
+      /**
+       * Establece condiciones alfanumericas declarativas para pushdown en footer
+       * y filtrado exacto fila a fila.
+       * @param {Object|null} where
+       * @returns {Promise}
+       */
+      setWhere(where) {
+        this._gpWhere = (where && typeof where === 'object') ? Object.assign({}, where) : null;
+        if (this._gpInfo) {
+          this._gpInfo.columnas = columnasDeLectura(
+            this._gpInfo.metadata,
+            this._gpInfo.primaria,
+            this._gpColumnas,
+            this._gpInfo.covering,
+            this._gpWhere
+          );
+        }
+        return this._recargar(this._gpModo, this.map_, true);
+      }
+
+      /**
+       * Obtiene la lista de columnas solicitadas.
+       * @returns {string[]|null}
+       */
+      getColumns() {
+        return this._gpColumnas ? this._gpColumnas.slice() : null;
+      }
+
+      /**
+       * Define las columnas alfanumericas a solicitar y recarga la capa.
+       * @param {string[]|null} columnas
+       * @returns {Promise}
+       */
+      setColumns(columnas) {
+        this._gpColumnas = Array.isArray(columnas) ? columnas.slice() : null;
+        if (this._gpInfo) {
+          this._gpInfo.columnas = columnasDeLectura(
+            this._gpInfo.metadata,
+            this._gpInfo.primaria,
+            this._gpColumnas,
+            this._gpInfo.covering,
+            this._gpWhere
+          );
+        }
+        return this._recargar(this._gpModo, this.map_, true);
+      }
+
+      /**
+       * Fuerza la recarga de la capa.
+       * @returns {Promise}
+       */
+      reload() {
+        return this._recargar(this._gpModo, this.map_, true);
+      }
+
+      /**
        * En 3D, recarga al terminar de mover la camara (modo vista).
        * @param {Object} map
        */
@@ -560,9 +884,28 @@
             const geo = geoDeMetadata(metadata);
             const primaria = (geo && geo.primary_column) || 'geometry';
             const col = (geo && geo.columns && geo.columns[primaria]) || {};
-            const covering = (col.covering && col.covering.bbox) || null;
+            let covering = (col.covering && col.covering.bbox) || null;
+            if (!covering) {
+              const schema = (metadata && metadata.schema) || [];
+              const nombres = new Set(schema.map(function (s) { return s && s.name; }));
+              if (nombres.has('bbox') && nombres.has('minx') && nombres.has('miny') && nombres.has('maxx') && nombres.has('maxy')) {
+                covering = {
+                  xmin: ['bbox', 'minx'],
+                  ymin: ['bbox', 'miny'],
+                  xmax: ['bbox', 'maxx'],
+                  ymax: ['bbox', 'maxy']
+                };
+              } else if (nombres.has('bbox') && nombres.has('xmin') && nombres.has('ymin') && nombres.has('xmax') && nombres.has('ymax')) {
+                covering = {
+                  xmin: ['bbox', 'xmin'],
+                  ymin: ['bbox', 'ymin'],
+                  xmax: ['bbox', 'xmax'],
+                  ymax: ['bbox', 'ymax']
+                };
+              }
+            }
             const crs = self._geoparquetCRS || crsDeGeo(col.crs) || 'EPSG:4326';
-            const columnas = columnasDeLectura(metadata, primaria, self._gpColumnas, covering);
+            const columnas = columnasDeLectura(metadata, primaria, self._gpColumnas, covering, self._gpWhere);
             const info = {
               url: url,
               file: file,
@@ -632,7 +975,37 @@
        */
       _extensionParaZoom() {
         const info = this._gpInfo;
-        const b = (info && info.covering) ? info.covering : null;
+        if (!info) return null;
+
+        const desde = info.crs || 'EPSG:4326';
+        const API = (typeof window !== 'undefined') ? (window.IDEE || window.M) : null;
+
+        function re座標(minX, minY, maxX, maxY) {
+          if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
+          if (maxX <= minX || maxY <= minY) return null;
+          let oeste = [minX, minY];
+          let este = [maxX, maxY];
+          if (desde && desde !== 'EPSG:3857' && API && API.utils && typeof API.utils.reproject === 'function') {
+            try {
+              oeste = API.utils.reproject([minX, minY], desde, 'EPSG:3857');
+              este = API.utils.reproject([maxX, maxY], desde, 'EPSG:3857');
+            } catch (e) { return null; }
+          }
+          if (!Array.isArray(oeste) || !Array.isArray(este)) return null;
+          if (!isFinite(oeste[0]) || !isFinite(oeste[1]) || !isFinite(este[0]) || !isFinite(este[1])) return null;
+          return [oeste[0], oeste[1], este[0], este[1]];
+        }
+
+        // 1. Si el metadata geo trae bbox directo:
+        const geo = info.geo;
+        const col = (geo && geo.columns && geo.columns[info.primaria || 'geometry']) || {};
+        if (Array.isArray(col.bbox) && col.bbox.length === 4) {
+          const extGeo = re座標(Number(col.bbox[0]), Number(col.bbox[1]), Number(col.bbox[2]), Number(col.bbox[3]));
+          if (extGeo) return extGeo;
+        }
+
+        // 2. Si hay estadisticas de cobertura en los row groups:
+        const b = info.covering;
         if (!b || !Array.isArray(b.xmin)) return null;
         
         const xminPath = b.xmin;
@@ -654,27 +1027,17 @@
           const sy = estadisticasDe(rg, yminPath);
           const sxmax = estadisticasDe(rg, xmaxPath);
           const symax = estadisticasDe(rg, ymaxPath);
-          if (sx && isFinite(Number(sx.min))) { minX = Math.min(minX, Number(sx.min)); hay = true; }
-          if (sy && isFinite(Number(sy.min))) { minY = Math.min(minY, Number(sy.min)); hay = true; }
-          if (sxmax && isFinite(Number(sxmax.max))) { maxX = Math.max(maxX, Number(sxmax.max)); hay = true; }
-          if (symax && isFinite(Number(symax.max))) { maxY = Math.max(maxY, Number(symax.max)); hay = true; }
+          const vxMin = sx ? (sx.min !== undefined && sx.min !== null ? sx.min : sx.min_value) : undefined;
+          const vyMin = sy ? (sy.min !== undefined && sy.min !== null ? sy.min : sy.min_value) : undefined;
+          const vxMax = sxmax ? (sxmax.max !== undefined && sxmax.max !== null ? sxmax.max : sxmax.max_value) : undefined;
+          const vyMax = symax ? (symax.max !== undefined && symax.max !== null ? symax.max : symax.max_value) : undefined;
+          if (vxMin !== undefined && isFinite(Number(vxMin))) { minX = Math.min(minX, Number(vxMin)); hay = true; }
+          if (vyMin !== undefined && isFinite(Number(vyMin))) { minY = Math.min(minY, Number(vyMin)); hay = true; }
+          if (vxMax !== undefined && isFinite(Number(vxMax))) { maxX = Math.max(maxX, Number(vxMax)); hay = true; }
+          if (vyMax !== undefined && isFinite(Number(vyMax))) { maxY = Math.max(maxY, Number(vyMax)); hay = true; }
         }
-        if (!hay || !isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
-        if (maxX <= minX || maxY <= minY) return null;
-
-        const desde = info.crs || 'EPSG:4326';
-        const API = (typeof window !== 'undefined') ? (window.IDEE || window.M) : null;
-        let oeste = [minX, minY];
-        let este = [maxX, maxY];
-        if (desde && desde !== 'EPSG:3857' && API && API.utils && typeof API.utils.reproject === 'function') {
-          try {
-            oeste = API.utils.reproject([minX, minY], desde, 'EPSG:3857');
-            este = API.utils.reproject([maxX, maxY], desde, 'EPSG:3857');
-          } catch (e) { return null; }
-        }
-        if (!Array.isArray(oeste) || !Array.isArray(este)) return null;
-        if (!isFinite(oeste[0]) || !isFinite(oeste[1]) || !isFinite(este[0]) || !isFinite(este[1])) return null;
-        return [oeste[0], oeste[1], este[0], este[1]];
+        if (!hay) return null;
+        return re座標(minX, minY, maxX, maxY);
       }
       /**
        * Extension de la capa cuando no hay cobertura bbox: lee todas las filas
@@ -772,19 +1135,24 @@
             }
           }
 
-          if (!forzar && self._gpModo === modo && self._gpBbox === clave) {
+          const whereClave = self._gpWhere ? JSON.stringify(self._gpWhere) : '';
+          const filterClave = self._gpFilter ? String(self._gpFilter) : '';
+          const claveCompleta = modo + '|' + clave + '|w:' + whereClave + '|f:' + filterClave;
+
+          if (!forzar && self._gpModo === modo && self._gpBbox === claveCompleta) {
             return { saltado: true, features: null, info: info, seleccion: null };
           }
 
           let seleccion;
-          if (rect && info.covering) {
-            seleccion = gruposEnBbox(info.metadata, rect, info.covering);
+          if ((rect && info.covering) || self._gpWhere) {
+            seleccion = gruposParaCarga(info.metadata, rect, info.covering, self._gpWhere);
             // Sin estadisticas utiles no se puede podar: se lee todo.
             if (!seleccion.conStats) seleccion = null;
           }
           if (!seleccion) {
             const total = Number(info.metadata.num_rows || 0);
-            seleccion = { indices: null, rangos: [{ inicio: 0, fin: total }], conStats: false };
+            const limite = (modo === 'vista' && total > 50000) ? 50000 : total;
+            seleccion = { indices: null, rangos: [{ inicio: 0, fin: limite }], conStats: false };
           }
 
           const rangos = seleccion.rangos || [];
@@ -830,32 +1198,37 @@
                   props[nombre] = normalizarValor(fila[nombre]);
                 }
 
+                if (self._gpWhere && !cumplePredicadoFila(props, self._gpWhere)) {
+                  continue;
+                }
+
                 const feature = {
                   type: 'Feature',
                   id: rango.inicio + i,
                   geometry: geom,
                   properties: props
                 };
+                if (typeof self._gpFilter === 'function') {
+                  let pasa = false;
+                  try {
+                    pasa = self._gpFilter(props, feature);
+                  } catch (ef) {
+                    pasa = true;
+                  }
+                  if (!pasa) continue;
+                }
                 features.push(info.crs !== 'EPSG:4326'
                   ? reproyectarFeature(feature, info.crs, 'EPSG:4326')
                   : feature);
               }
             }
-            return { saltado: false, features: features, info: info, seleccion: seleccion };
+            return { saltado: false, features: features, info: info, seleccion: seleccion, claveCompleta: claveCompleta };
           });
         }).then(function (resultado) {
           self._gpCargando = false;
           if (!resultado.saltado) {
             self._gpModo = modo;
-            self._gpBbox = (modo === 'vista') ? resultado.clave || self._gpBbox : '';
-            // El clave se calcula dentro del primer then; se reconstruye aqui
-            // para no arrastrar otra variable.
-            if (modo === 'vista' && resultado.info) {
-              const vista = self._bboxVista(map, resultado.info.crs);
-              self._gpBbox = vista ? vista.clave : '';
-            } else {
-              self._gpBbox = '';
-            }
+            self._gpBbox = resultado.claveCompleta || '';
             try {
               if (typeof self.setSource === 'function') {
                 self.setSource({ type: 'FeatureCollection', features: resultado.features || [] });

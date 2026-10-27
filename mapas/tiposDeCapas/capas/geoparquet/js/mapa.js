@@ -47,28 +47,43 @@ function mapa() {
   });
 
   mapajs.addLayers(capa);
-  // GeoParquet publico de Source Cooperative (edificios Overture de Texas).
-  // Se anade como capa adicional: en la vista inicial de Madrid no carga
-  // features; al desplazarse a Texas lee solo los row groups del bbox visible.
-  // GeoParquet publico con compresion sin soporte ZSTD en este lector: se usa
-  // el fichero de paises de Natural Earth (sin comprimir, 177 filas) para que
-  // el ejemplo funcione tambien al desplegarlo.
-  const estiloPaises = new IDEE.style.Generic({
+
+  // GeoParquet publico: Overture Buildings (España)
+  // desde Source Cooperative (cholmes/overture/geoparquet-country-quad).
+  const estiloOvertureEdificios = new IDEE.style.Generic({
     polygon: {
-      fill: { color: '#93c5fd', opacity: 0.35 },
-      stroke: { color: '#1d4ed8', width: 1 },
+      fill: { color: '#ec4899', opacity: 0.35 },
+      stroke: { color: '#be185d', width: 1 },
     },
   });
-  const capaPaises = new IDEE.layer.GeoParquet({
-    url: 'https://raw.githubusercontent.com/geoarrow/geoarrow-data/v0.2.0/natural-earth/files/natural-earth_countries.parquet',
-    name: 'Paises (GeoParquet)',
-    legend: 'Paises Natural Earth (GeoParquet)',
-    crs: 'EPSG:4326',
-    columns: ['geometry', 'name', 'continent'],
+  const capaOvertureEdificiosES = new IDEE.layer.GeoParquet({
+    url: 'https://data.source.coop/cholmes/overture/geoparquet-country-quad/country_iso=ES/ES.parquet',
+    name: 'Edificios Overture España (GeoParquet)',
+    legend: 'Edificios Overture España (GeoParquet)',
+    columns: ['geometry', 'height', 'class', 'numfloors'],
   }, {
-    style: estiloPaises,
+    style: estiloOvertureEdificios,
   });
-  mapajs.addLayers(capaPaises);
+  mapajs.addLayers(capaOvertureEdificiosES);
+
+  // GeoParquet publico: Overture Places / POIs (España)
+  // desde Source Cooperative (cholmes/overture/places-geoparquet-country).
+  const estiloOverturePlaces = new IDEE.style.Generic({
+    point: {
+      radius: 4,
+      fill: { color: '#06b6d4', opacity: 0.8 },
+      stroke: { color: '#0e7490', width: 1 },
+    },
+  });
+  const capaOverturePlacesES = new IDEE.layer.GeoParquet({
+    url: 'https://data.source.coop/cholmes/overture/places-geoparquet-country/ES.parquet',
+    name: 'Lugares Overture España (GeoParquet)',
+    legend: 'Lugares / POIs Overture España (GeoParquet)',
+    columns: ['geometry', 'names', 'categories', 'confidence'],
+  }, {
+    style: estiloOverturePlaces,
+  });
+  mapajs.addLayers(capaOverturePlacesES);
 
 
   anadirPluginsTipos(mapajs, mapa, { bboxFeatures: true });

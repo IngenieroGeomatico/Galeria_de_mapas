@@ -132,6 +132,24 @@ function mapa() {
       visible: false,
     }, { style: estiloZcta });
     mapajs.addLayers(capaZcta);
+
+    // Overture Open Buildings global de Source Cooperative (cholmes/overture)
+    const estiloOvertureGlobal = new IDEE.style.Generic({
+      polygon: {
+        fill: { color: '#fb923c', opacity: 0.35 },
+        stroke: { color: '#c2410c', width: 1 },
+      },
+    });
+    const capaOvertureGlobal = new IDEE.layer.PMTiles({
+      url: 'https://data.source.coop/cholmes/overture/overture-buildings.pmtiles',
+      type: 'vector',
+      name: 'Edificios Overture Global (PMTiles)',
+      legend: 'Edificios Overture Global (PMTiles - Source Cooperative)',
+      minZoom: 0,
+      maxZoom: 14,
+      visible: false,
+    }, { style: estiloOvertureGlobal });
+    mapajs.addLayers(capaOvertureGlobal);
   }
   anadirPluginsTipos(mapajs, mapa);
   return mapajs;
