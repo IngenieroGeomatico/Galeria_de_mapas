@@ -1420,7 +1420,9 @@
               metadata: info.metadata,
               rowStart: rango.inicio,
               rowEnd: rango.fin,
-              columns: info.columnas
+              columns: info.columnas,
+              rowFormat: 'object',
+              geoparquet: true
             }).then(function (filas) {
               return { rango: rango, filas: filas || [] };
             });
