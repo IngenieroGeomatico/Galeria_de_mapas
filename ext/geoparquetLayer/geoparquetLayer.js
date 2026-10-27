@@ -681,6 +681,11 @@
         this._gpWhere = (whereOpt && typeof whereOpt === 'object') ? Object.assign({}, whereOpt) : null;
         this._gpRequestInit = params.requestInit || (params.headers ? { headers: params.headers } : null);
         this._gpByteLength = typeof params.byteLength === 'number' ? params.byteLength : null;
+        this._gpLimit = typeof params.limit === 'number' && params.limit > 0
+          ? Math.round(params.limit)
+          : (typeof params.maxFeatures === 'number' && params.maxFeatures > 0 ? Math.round(params.maxFeatures) : null);
+        this._gpMinZoom = typeof params.minZoom === 'number' && params.minZoom >= 0 ? params.minZoom : null;
+        this._gpMaxZoom = typeof params.maxZoom === 'number' && params.maxZoom >= 0 ? params.maxZoom : null;
 
         // Estado del teselado por bbox y filtros.
         this._gpModo = 'vista';
@@ -885,6 +890,60 @@
             this._gpWhere
           );
         }
+        return this._recargar(this._gpModo, this.map_, true);
+      }
+
+      /**
+       * Obtiene el limite maximo de features a cargar.
+       * @returns {number|null}
+       */
+      getLimit() {
+        return this._gpLimit;
+      }
+
+      /**
+       * Establece un limite maximo de features y recarga la capa.
+       * @param {number|null} limite
+       * @returns {Promise}
+       */
+      setLimit(limite) {
+        this._gpLimit = typeof limite === 'number' && limite > 0 ? Math.round(limite) : null;
+        return this._recargar(this._gpModo, this.map_, true);
+      }
+
+      /**
+       * Obtiene el zoom minimo de visualizacion.
+       * @returns {number|null}
+       */
+      getMinZoom() {
+        return this._gpMinZoom;
+      }
+
+      /**
+       * Establece el zoom minimo para pedir datos.
+       * @param {number|null} zoom
+       * @returns {Promise}
+       */
+      setMinZoom(zoom) {
+        this._gpMinZoom = typeof zoom === 'number' && zoom >= 0 ? zoom : null;
+        return this._recargar(this._gpModo, this.map_, true);
+      }
+
+      /**
+       * Obtiene el zoom maximo de visualizacion.
+       * @returns {number|null}
+       */
+      getMaxZoom() {
+        return this._gpMaxZoom;
+      }
+
+      /**
+       * Establece el zoom maximo para pedir datos.
+       * @param {number|null} zoom
+       * @returns {Promise}
+       */
+      setMaxZoom(zoom) {
+        this._gpMaxZoom = typeof zoom === 'number' && zoom >= 0 ? zoom : null;
         return this._recargar(this._gpModo, this.map_, true);
       }
 
@@ -1183,6 +1242,25 @@
         if (!esCapaVisible(this)) {
           return Promise.resolve();
         }
+
+        // Comprobacion de umbral de escala / zoom
+        if (map && typeof map.getZoom === 'function') {
+          let zoomActual = null;
+          try { zoomActual = map.getZoom(); } catch (e) { zoomActual = null; }
+          if (zoomActual !== null) {
+            if (this._gpMinZoom !== null && zoomActual < this._gpMinZoom) {
+              try { if (typeof this.setSource === 'function') this.setSource({ type: 'FeatureCollection', features: [] }); } catch (e) {}
+              this._gpCargando = false;
+              return Promise.resolve({ saltado: true, fueraDeEscala: true });
+            }
+            if (this._gpMaxZoom !== null && zoomActual > this._gpMaxZoom) {
+              try { if (typeof this.setSource === 'function') this.setSource({ type: 'FeatureCollection', features: [] }); } catch (e) {}
+              this._gpCargando = false;
+              return Promise.resolve({ saltado: true, fueraDeEscala: true });
+            }
+          }
+        }
+
         modo = (modo === 'todas') ? 'todas' : 'vista';
         // Cualquier peticion invalida una carga inicial que aun no haya
         // arrancado (ver setMap): la ultima intencion es la que manda.
@@ -1244,10 +1322,18 @@
 
           return Promise.all(lecturas).then(function (bloques) {
             const features = [];
+            let limiteAlcanzado = false;
+
             for (let b = 0; b < bloques.length; b += 1) {
+              if (limiteAlcanzado) break;
               const rango = bloques[b].rango;
               const filas = bloques[b].filas;
               for (let i = 0; i < filas.length; i += 1) {
+                if (self._gpLimit && features.length >= self._gpLimit) {
+                  limiteAlcanzado = true;
+                  break;
+                }
+
                 const fila = filas[i];
                 let geom = fila[info.primaria];
                 if (geom && !(geom.type && geom.coordinates)) {

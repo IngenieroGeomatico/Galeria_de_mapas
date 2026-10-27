@@ -48,8 +48,53 @@ function mapa() {
 
   mapajs.addLayers(capa);
 
-  // Exponer la capa en consola para depuracion y consultas interactivas
+  // GeoParquet publico remoto: Edificios Overture España (Source Cooperative)
+  // Con límite de 500 objetos y zoom mínimo 14 para máxima fluidez.
+  const estiloOvertureEdificios = new IDEE.style.Generic({
+    polygon: {
+      fill: { color: '#ec4899', opacity: 0.4 },
+      stroke: { color: '#be185d', width: 1 },
+    },
+  });
+  const capaOvertureEdificiosES = new IDEE.layer.GeoParquet({
+    url: 'https://data.source.coop/cholmes/overture/geoparquet-country-quad/country_iso=ES/ES.parquet',
+    name: 'Edificios Overture España',
+    legend: 'Edificios Overture España (GeoParquet)',
+    visibility: false,
+    minZoom: 14,
+    limit: 500,
+    columns: ['height', 'class', 'numfloors'],
+  }, {
+    style: estiloOvertureEdificios,
+  });
+  mapajs.addLayers(capaOvertureEdificiosES);
+
+  // GeoParquet publico remoto: Lugares / POIs Overture España (Source Cooperative)
+  // Con límite de 500 puntos y zoom mínimo 12.
+  const estiloOverturePlaces = new IDEE.style.Generic({
+    point: {
+      radius: 4,
+      fill: { color: '#06b6d4', opacity: 0.85 },
+      stroke: { color: '#0891b2', width: 1 },
+    },
+  });
+  const capaOverturePlacesES = new IDEE.layer.GeoParquet({
+    url: 'https://data.source.coop/cholmes/overture/places-geoparquet-country/ES.parquet',
+    name: 'Lugares Overture España',
+    legend: 'Lugares / POIs Overture España (GeoParquet)',
+    visibility: false,
+    minZoom: 12,
+    limit: 500,
+    columns: ['names', 'categories', 'confidence'],
+  }, {
+    style: estiloOverturePlaces,
+  });
+  mapajs.addLayers(capaOverturePlacesES);
+
+  // Exponer capas en consola para depuracion y consultas interactivas
   window.capaBarrios = capa;
+  window.capaEdificios = capaOvertureEdificiosES;
+  window.capaPlaces = capaOverturePlacesES;
 
   anadirPluginsTipos(mapajs, mapa, { bboxFeatures: true });
 

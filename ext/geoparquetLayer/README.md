@@ -101,6 +101,8 @@ capa.getGeoParquetMetadata().then((info) => {
 - `name`, `legend`: Identificadores para el selector de capas.
 - `crs`: Código CRS destino/origen (opcional, por defecto se extrae del metadata).
 - `columns`: Array de nombres de columnas a leer (opcional, para *Column Pruning*).
+- `limit` / `maxFeatures`: Límite máximo de geometrías a cargar en la vista (opcional, ej. `500`).
+- `minZoom` / `maxZoom`: Niveles de zoom mínimo y máximo para solicitar datos (opcional).
 - `where`: Objeto de condiciones declarativas para *Predicate Pushdown*.
 - `filter` / `filtro`: Función `(properties, feature) => boolean` o bien objeto de condiciones `where`.
 - `headers` / `requestInit`: Cabeceras de autenticación (ej. `{ Authorization: 'Bearer ...' }`) para servidores S3 o APIs privadas.
@@ -109,6 +111,9 @@ capa.getGeoParquetMetadata().then((info) => {
 
 ### Métodos públicos
 - `capa.getGeoParquetMetadata()`: Devuelve `Promise<Object>` con los metadatos estructurados.
+- `capa.setLimit(limit)` / `capa.getLimit()`: Establece/obtiene el límite de geometrías.
+- `capa.setMinZoom(zoom)` / `capa.getMinZoom()`: Establece/obtiene el zoom mínimo.
+- `capa.setMaxZoom(zoom)` / `capa.getMaxZoom()`: Establece/obtiene el zoom máximo.
 - `capa.setWhere(where)` / `capa.getWhere()`: Establece/obtiene condiciones de *Predicate Pushdown*.
 - `capa.setFilter(fnOrWhere)` / `capa.getFilter()`: Establece/obtiene el predicado de filtro.
 - `capa.setColumns(columns)` / `capa.getColumns()`: Modifica/obtiene las columnas a solicitar.
