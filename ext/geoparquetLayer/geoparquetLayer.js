@@ -1377,6 +1377,8 @@
             seleccion = { indices: null, rangos: [{ inicio: 0, fin: limite }], conStats: false };
           }
 
+          const rangos = (seleccion && seleccion.rangos) || [];
+
           // En modo vista con límite, para evitar descargar bloques masivos innecesarios,
           // acotamos los rangos a descargar al límite configurado.
           let rangosParaLeer = rangos;
