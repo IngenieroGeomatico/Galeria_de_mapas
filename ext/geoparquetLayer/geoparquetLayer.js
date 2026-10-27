@@ -805,8 +805,7 @@
         setTimeout(function () {
           if (self._gpTokenInicial !== token) return;
           self._recargar('vista', map, false);
-          // En 3D el bbox cambia al mover la camara.
-          self._escucharCamara3D(map);
+          self._escucharMovimiento(map);
         }, 0);
       }
 
@@ -817,8 +816,7 @@
         const map = t;
         // Arranque en "La vista": footer + solo los row groups visibles.
         this._recargar('vista', map, false);
-        // En 3D el bbox cambia al mover la camara.
-        this._escucharCamara3D(map);
+        this._escucharMovimiento(map);
       }
 
       destroy() {
@@ -829,8 +827,13 @@
         this._gpTimer3D = null;
         this._gpRetryTimer = null;
         try {
-          if (this._gpMoveEnd && this._gpMoveEnd.camara && this._gpMoveEnd.cola) {
-            this._gpMoveEnd.camara.moveEnd.removeEventListener(this._gpMoveEnd.cola);
+          if (this._gpMoveEnd) {
+            if (this._gpMoveEnd.camara && this._gpMoveEnd.cola) {
+              this._gpMoveEnd.camara.moveEnd.removeEventListener(this._gpMoveEnd.cola);
+            }
+            if (this._gpMoveEnd.olMap && this._gpMoveEnd.cola && typeof this._gpMoveEnd.olMap.un === 'function') {
+              this._gpMoveEnd.olMap.un('moveend', this._gpMoveEnd.cola);
+            }
           }
         } catch (ex) { /* noop */ }
         this._gpMoveEnd = null;
@@ -1046,22 +1049,15 @@
        * En 3D, recarga al terminar de mover la camara (modo vista).
        * @param {Object} map
        */
-      _escucharCamara3D(map) {
+      _escucharMovimiento(map) {
         if (!map) return;
-        // En 2D no hay escena ni camara: no se programa ningun reintento.
-        let inicial = null;
-        try { inicial = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : null; } catch (ex) { inicial = null; }
-        if (!inicial || !inicial.scene) return;
         const self = this;
-        let intentos = 0;
-        const intentar = function () {
-          intentos += 1;
-          let impl = null;
-          try { impl = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : null; } catch (ex) { impl = null; }
-          if (!impl || !impl.scene || !impl.scene.camera || !impl.scene.camera.moveEnd) {
-            if (intentos < 60) self._gpRetryTimer = setTimeout(intentar, 500);
-            return;
-          }
+        let impl = null;
+        try { impl = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : (map.getMap ? map.getMap() : null); } catch (e) { impl = null; }
+        if (!impl) return;
+
+        // 3D Cesium
+        if (impl.scene && impl.scene.camera && impl.scene.camera.moveEnd) {
           const camara = impl.scene.camera;
           const cola = function () {
             try {
@@ -1075,8 +1071,24 @@
             camara.moveEnd.addEventListener(cola);
             self._gpMoveEnd = { camara: camara, cola: cola };
           } catch (ex) { /* noop */ }
-        };
-        intentar();
+          return;
+        }
+
+        // 2D OpenLayers
+        if (typeof impl.on === 'function') {
+          const cola2D = function () {
+            try {
+              if (self._gpTimer3D) clearTimeout(self._gpTimer3D);
+              self._gpTimer3D = setTimeout(function () {
+                self._recargar(self._gpModo, map, false);
+              }, 200);
+            } catch (ex) { /* noop */ }
+          };
+          try {
+            impl.on('moveend', cola2D);
+            self._gpMoveEnd = { olMap: impl, cola: cola2D };
+          } catch (ex) { /* noop */ }
+        }
       }
 
       /**
@@ -1489,9 +1501,7 @@
                   }
                   if (!pasa) continue;
                 }
-                features.push(info.crs !== 'EPSG:4326'
-                  ? reproyectarFeature(feature, info.crs, 'EPSG:4326')
-                  : feature);
+                features.push(feature);
               }
             }
             return { saltado: false, features: features, info: info, seleccion: seleccion, claveCompleta: claveCompleta };
@@ -1504,6 +1514,23 @@
             try {
               if (typeof self.setSource === 'function') {
                 self.setSource({ type: 'FeatureCollection', features: resultado.features || [] });
+              }
+              // En OpenLayers las features se inyectan en EPSG:4326 y se transforman a la proyeccion del mapa
+              if (self.getImpl && typeof self.getImpl().getLayer === 'function') {
+                const olLayer = self.getImpl().getLayer();
+                const source = olLayer && olLayer.getSource && olLayer.getSource();
+                const olMap = (map && typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
+                const mapProj = (olMap && olMap.getView && olMap.getView().getProjection && olMap.getView().getProjection().getCode()) || 'EPSG:3857';
+                const fileCRS = resultado.info ? resultado.info.crs : 'EPSG:4326';
+                if (mapProj && fileCRS && mapProj !== fileCRS && window.ol && window.ol.proj) {
+                  const olFeatures = (source && source.getFeatures) ? source.getFeatures() : [];
+                  for (let f = 0; f < olFeatures.length; f += 1) {
+                    const g = olFeatures[f].getGeometry && olFeatures[f].getGeometry();
+                    if (g && typeof g.transform === 'function') {
+                      g.transform(fileCRS, mapProj);
+                    }
+                  }
+                }
               }
             } catch (ex) { /* noop */ }
             if (resultado.seleccion) {
