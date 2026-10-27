@@ -1050,6 +1050,8 @@
        * @param {Object} map
        */
       _escucharMovimiento(map) {
+        // La escucha de moveend en 2D ya la gestiona de forma centralizada ext/bboxFeatures
+        // evitando duplicar eventos y bloqueos de red concurrentes.
         if (!map) return;
         const self = this;
         let impl = null;
@@ -1070,23 +1072,6 @@
           try {
             camara.moveEnd.addEventListener(cola);
             self._gpMoveEnd = { camara: camara, cola: cola };
-          } catch (ex) { /* noop */ }
-          return;
-        }
-
-        // 2D OpenLayers
-        if (typeof impl.on === 'function') {
-          const cola2D = function () {
-            try {
-              if (self._gpTimer3D) clearTimeout(self._gpTimer3D);
-              self._gpTimer3D = setTimeout(function () {
-                self._recargar(self._gpModo, map, false);
-              }, 200);
-            } catch (ex) { /* noop */ }
-          };
-          try {
-            impl.on('moveend', cola2D);
-            self._gpMoveEnd = { olMap: impl, cola: cola2D };
           } catch (ex) { /* noop */ }
         }
       }
@@ -1512,44 +1497,8 @@
             self._gpModo = modo;
             self._gpBbox = resultado.claveCompleta || '';
             try {
-              const rawFeatures = resultado.features || [];
-              const IDEE = api();
-
-              // Si disponemos de IDEE.Feature y addFeatures (patrón de alta fidelidad)
-              if (IDEE && typeof IDEE.Feature === 'function' && typeof self.addFeatures === 'function') {
-                if (typeof self.clear === 'function') {
-                  try { self.clear(); } catch (err) { /* noop */ }
-                }
-                const featuresInstanciadas = rawFeatures.map(function (f) {
-                  try {
-                    const id = (f && f.id !== null && f.id !== undefined) ? String(f.id) : undefined;
-                    return new IDEE.Feature(id, f);
-                  } catch (e) {
-                    return null;
-                  }
-                }).filter(function (f) { return f !== null; });
-
-                self.addFeatures(featuresInstanciadas);
-              } else if (typeof self.setSource === 'function') {
-                self.setSource({ type: 'FeatureCollection', features: rawFeatures });
-              }
-
-              // Reproyectar geometrías en OpenLayers de EPSG:4326 a la proyección del mapa (EPSG:3857)
-              if (self.getImpl && typeof self.getImpl().getLayer === 'function') {
-                const olLayer = self.getImpl().getLayer();
-                const source = olLayer && olLayer.getSource && olLayer.getSource();
-                const olMap = (map && typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
-                const mapProj = (olMap && olMap.getView && olMap.getView().getProjection && olMap.getView().getProjection().getCode()) || 'EPSG:3857';
-                const fileCRS = (resultado.info && resultado.info.crs) || 'EPSG:4326';
-                if (mapProj && fileCRS && mapProj !== fileCRS && window.ol && window.ol.proj) {
-                  const olFeatures = (source && source.getFeatures) ? source.getFeatures() : [];
-                  for (let f = 0; f < olFeatures.length; f += 1) {
-                    const g = olFeatures[f].getGeometry && olFeatures[f].getGeometry();
-                    if (g && typeof g.transform === 'function') {
-                      g.transform(fileCRS, mapProj);
-                    }
-                  }
-                }
+              if (typeof self.setSource === 'function') {
+                self.setSource({ type: 'FeatureCollection', features: resultado.features || [] });
               }
             } catch (ex) { /* noop */ }
             if (resultado.seleccion) {
