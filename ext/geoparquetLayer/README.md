@@ -103,6 +103,8 @@ capa.getGeoParquetMetadata().then((info) => {
 - `columns`: Array de nombres de columnas a leer (opcional, para *Column Pruning*).
 - `where`: Objeto de condiciones declarativas para *Predicate Pushdown*.
 - `filter` / `filtro`: Función `(properties, feature) => boolean` o bien objeto de condiciones `where`.
+- `headers` / `requestInit`: Cabeceras de autenticación (ej. `{ Authorization: 'Bearer ...' }`) para servidores S3 o APIs privadas.
+- `byteLength`: Tamaño total en bytes del archivo (opcional: ahorra la petición HTTP HEAD inicial).
 - `style`: Estilo de la capa (`IDEE.style.Generic`).
 
 ### Métodos públicos

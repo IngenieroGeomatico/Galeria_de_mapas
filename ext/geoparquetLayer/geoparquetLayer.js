@@ -627,6 +627,8 @@
         this._gpColumnas = Array.isArray(params.columns) ? params.columns.slice() : null;
         this._gpFilter = (typeof filterOpt === 'function') ? filterOpt : null;
         this._gpWhere = (whereOpt && typeof whereOpt === 'object') ? Object.assign({}, whereOpt) : null;
+        this._gpRequestInit = params.requestInit || (params.headers ? { headers: params.headers } : null);
+        this._gpByteLength = typeof params.byteLength === 'number' ? params.byteLength : null;
 
         // Estado del teselado por bbox y filtros.
         this._gpModo = 'vista';
@@ -923,7 +925,11 @@
           }
 
           // Camino normal: footer y row groups por HTTP Range.
-          return hy.asyncBufferFromUrl({ url: url }).then(function (crudo) {
+          const bufferOpts = { url: url };
+          if (self._gpRequestInit) bufferOpts.requestInit = self._gpRequestInit;
+          if (self._gpByteLength) bufferOpts.byteLength = self._gpByteLength;
+
+          return hy.asyncBufferFromUrl(bufferOpts).then(function (crudo) {
             const file = hy.cachedAsyncBuffer(crudo, { minSize: 0 });
             return hy.parquetMetadataAsync(file, { initialFetchSize: 32768 }).then(function (metadata) {
               return finalizar(file, metadata);
@@ -933,7 +939,7 @@
             // Content-Encoding: gzip. Un fetch completo se descomprime bien, pero
             // las peticiones por rangos reciben bytes comprimidos y el footer deja
             // de ser "PAR1". Se recurre entonces a descargar el fichero entero.
-            return fetch(url).then(function (res) {
+            return fetch(url, self._gpRequestInit || {}).then(function (res) {
               if (!res.ok) throw new Error('GeoParquet: fetch ' + res.status);
               return res.arrayBuffer();
             }).then(function (buf) {
