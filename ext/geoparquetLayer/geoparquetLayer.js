@@ -1377,8 +1377,24 @@
             seleccion = { indices: null, rangos: [{ inicio: 0, fin: limite }], conStats: false };
           }
 
-          const rangos = seleccion.rangos || [];
-          const lecturas = rangos.map(function (rango) {
+          // En modo vista con límite, para evitar descargar bloques masivos innecesarios,
+          // acotamos los rangos a descargar al límite configurado.
+          let rangosParaLeer = rangos;
+          if (modo === 'vista' && self._gpLimit && rangos.length > 0) {
+            let acumulado = 0;
+            const rangosAcotados = [];
+            for (let r = 0; r < rangos.length; r += 1) {
+              const rg = rangos[r];
+              const tam = rg.fin - rg.inicio;
+              rangosAcotados.push(rg);
+              acumulado += tam;
+              // Si el tamaño de filas seleccionadas supera el límite x 2, no pedimos más bloques
+              if (acumulado >= Math.max(self._gpLimit * 2, 2000)) break;
+            }
+            rangosParaLeer = rangosAcotados;
+          }
+
+          const lecturas = rangosParaLeer.map(function (rango) {
             return info.hy.parquetReadObjects({
               file: info.file,
               metadata: info.metadata,

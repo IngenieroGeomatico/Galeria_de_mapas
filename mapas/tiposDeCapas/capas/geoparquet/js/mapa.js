@@ -62,7 +62,7 @@ function mapa() {
     legend: 'Edificios Overture España (GeoParquet)',
     visibility: false,
     minZoom: 14,
-    limit: 500,
+    limit: 4,
     columns: ['height', 'class', 'numfloors'],
   }, {
     style: estiloOvertureEdificios,
@@ -84,7 +84,7 @@ function mapa() {
     legend: 'Lugares / POIs Overture España (GeoParquet)',
     visibility: false,
     minZoom: 12,
-    limit: 500,
+    limit: 200,
     columns: ['names', 'categories', 'confidence'],
   }, {
     style: estiloOverturePlaces,
