@@ -441,29 +441,57 @@
   }
 
   /**
+   * Precomputa, para cada row group, su rango de filas y su extent espacial
+   * a partir de las estadisticas de cobertura (bbox).
+   * @param {Object} metadata FileMetaData.
+   * @param {Object} covering Cobertura declarada en metadata.
+   * @returns {Array<{index:number, rowStart:number, rowEnd:number, extent:{minX:number,minY:number,maxX:number,maxY:number}|null}>}
+   */
+  function precomputarExtentsRowGroups(metadata, covering) {
+    const grupos = (metadata && metadata.row_groups) || [];
+    const resultado = [];
+    let fila = 0;
+    for (let i = 0; i < grupos.length; i += 1) {
+      const rg = grupos[i];
+      const num = Number(rg && rg.num_rows ? rg.num_rows : 0);
+      const bb = covering ? bboxDeRowGroup(rg, covering) : null;
+      resultado.push({
+        index: i,
+        rowStart: fila,
+        rowEnd: fila + num,
+        extent: bb
+      });
+      fila += num;
+    }
+    return resultado;
+  }
+
+  /**
    * Row groups que caen en el rectangulo visible y cumplen los predicados
    * alfanumericos.
    * @param {Object} metadata FileMetaData.
+   * @param {Array<Object>} extentsPrecomputados Array precalculado de extents de row groups.
    * @param {{minX:number,minY:number,maxX:number,maxY:number}|null} rect
    * @param {Object} [covering] Cobertura del metadata.
    * @param {Object} [where] Condiciones alfanumericas.
    * @returns {{indices:number[], rangos:Array<{inicio:number,fin:number}>, conStats:boolean}}
    */
-  function gruposParaCarga(metadata, rect, covering, where) {
+  function gruposParaCarga(metadata, extentsPrecomputados, rect, covering, where) {
     const grupos = (metadata && metadata.row_groups) || [];
     const indices = [];
     const rangos = [];
-    let fila = 0;
-    let abierto = null;
     let conStats = false;
+    let abierto = null;
 
     for (let i = 0; i < grupos.length; i += 1) {
       const rg = grupos[i];
+      const infoRg = extentsPrecomputados ? extentsPrecomputados[i] : null;
+      const fila = infoRg ? infoRg.rowStart : 0;
       const num = Number(rg && rg.num_rows ? rg.num_rows : 0);
       let entra = true;
 
       if (rect && covering) {
-        const bb = bboxDeRowGroup(rg, covering);
+        const bb = infoRg ? infoRg.extent : bboxDeRowGroup(rg, covering);
         if (bb) {
           conStats = true;
           entra = !(bb.maxX < rect.minX || bb.minX > rect.maxX ||
@@ -483,16 +511,17 @@
 
       if (entra) {
         indices.push(i);
-        if (abierto && abierto.fin === fila) {
-          abierto.fin = fila + num;
+        const rowStart = infoRg ? infoRg.rowStart : fila;
+        const rowEnd = infoRg ? infoRg.rowEnd : (fila + num);
+        if (abierto && abierto.fin === rowStart) {
+          abierto.fin = rowEnd;
         } else {
-          abierto = { inicio: fila, fin: fila + num };
+          abierto = { inicio: rowStart, fin: rowEnd };
           rangos.push(abierto);
         }
       } else {
         abierto = null;
       }
-      fila += num;
     }
 
     return { indices: indices, rangos: rangos, conStats: conStats };
@@ -596,6 +625,45 @@
   }
 
   // ---------- Valores de propiedades ----------
+
+  /**
+   * Sanea un objeto de propiedades para que sea JSON-serializable limpio y
+   * compatible con los estilos y renderizadores de OpenLayers / Cesium
+   * (sin BigInt, sin buffers o typed arrays en memoria).
+   * @param {Object} props
+   * @returns {Object}
+   */
+  function sanitizarPropiedades(props) {
+    if (!props || typeof props !== 'object') return {};
+    const salida = {};
+    const claves = Object.keys(props);
+    for (let i = 0; i < claves.length; i += 1) {
+      const k = claves[i];
+      const v = props[k];
+      if (v === undefined || v === null) continue;
+      if (typeof v === 'bigint') {
+        const n = Number(v);
+        salida[k] = Number.isSafeInteger(n) ? n : String(v);
+      } else if (v instanceof Uint8Array || ArrayBuffer.isView(v)) {
+        continue; // Descarta buffers binarios auxiliares no utilizables en UI
+      } else if (v instanceof Date) {
+        salida[k] = v.toISOString();
+      } else if (typeof v === 'object') {
+        try {
+          salida[k] = JSON.parse(JSON.stringify(v, function (key, val) {
+            if (typeof val === 'bigint') return Number(val);
+            if (val instanceof Uint8Array || ArrayBuffer.isView(val)) return undefined;
+            return val;
+          }));
+        } catch (e) {
+          salida[k] = String(v);
+        }
+      } else {
+        salida[k] = v;
+      }
+    }
+    return salida;
+  }
 
   function normalizarValor(valor) {
     if (typeof valor === 'bigint') {
@@ -1032,6 +1100,7 @@
             }
             const crs = self._geoparquetCRS || crsDeGeo(col.crs) || 'EPSG:4326';
             const columnas = columnasDeLectura(metadata, primaria, self._gpColumnas, covering, self._gpWhere);
+            const rowGroupExtents = precomputarExtentsRowGroups(metadata, covering);
             const info = {
               url: url,
               file: file,
@@ -1041,6 +1110,7 @@
               crs: crs,
               covering: covering,
               columnas: columnas,
+              rowGroupExtents: rowGroupExtents,
               hy: hy
             };
             self._geoparquetCRS = crs;
@@ -1297,7 +1367,7 @@
 
           let seleccion;
           if ((rect && info.covering) || self._gpWhere) {
-            seleccion = gruposParaCarga(info.metadata, rect, info.covering, self._gpWhere);
+            seleccion = gruposParaCarga(info.metadata, info.rowGroupExtents, rect, info.covering, self._gpWhere);
             // Sin estadisticas utiles no se puede podar: se lee todo.
             if (!seleccion.conStats) seleccion = null;
           }
@@ -1356,18 +1426,20 @@
                     });
                     if (esCobertura) continue;
                   }
-                  props[nombre] = normalizarValor(fila[nombre]);
+                  props[nombre] = fila[nombre];
                 }
 
                 if (self._gpWhere && !cumplePredicadoFila(props, self._gpWhere)) {
                   continue;
                 }
 
+                const propsLimpias = sanitizarPropiedades(props);
+
                 const feature = {
                   type: 'Feature',
                   id: rango.inicio + i,
                   geometry: geom,
-                  properties: props
+                  properties: propsLimpias
                 };
                 if (typeof self._gpFilter === 'function') {
                   let pasa = false;
@@ -1429,7 +1501,38 @@
        * @returns {{rect:Object, clave:string}|null}
        */
       _bboxVista(map, crsFg) {
-        if (!map || typeof map.getBbox !== 'function') return null;
+        if (!map) return null;
+        const destino = crsFg || 'EPSG:4326';
+        const API = api();
+
+        // 1. Intentar obtener el BBOX exacto directamente de OpenLayers si está disponible
+        let olMap = null;
+        try { olMap = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : null; } catch (e) { olMap = null; }
+        if (olMap && olMap.getView && olMap.getSize && window.ol && window.ol.proj) {
+          try {
+            const size = olMap.getSize();
+            const view = olMap.getView();
+            if (size && view) {
+              const extent = view.calculateExtent(size);
+              const mapProj = (view.getProjection && view.getProjection().getCode()) || 'EPSG:3857';
+              let extentDest = extent;
+              if (mapProj !== destino) {
+                extentDest = window.ol.proj.transformExtent(extent, mapProj, destino);
+              }
+              if (Array.isArray(extentDest) && extentDest.length === 4 &&
+                  isFinite(extentDest[0]) && isFinite(extentDest[1]) &&
+                  isFinite(extentDest[2]) && isFinite(extentDest[3])) {
+                return {
+                  rect: { minX: extentDest[0], minY: extentDest[1], maxX: extentDest[2], maxY: extentDest[3] },
+                  clave: extentDest.map(function (n) { return Math.round(n * 10000) / 10000; }).join(',')
+                };
+              }
+            }
+          } catch (e) { /* fallback a getBbox de la API */ }
+        }
+
+        // 2. Fallback estándar para Cesium 3D o mapas genéricos
+        if (typeof map.getBbox !== 'function') return null;
         let b = null;
         try { b = map.getBbox(); } catch (ex) { return null; }
         if (!b || !b.x || !b.y) return null;
@@ -1453,7 +1556,6 @@
           return null;
         }
 
-        const destino = crsFg || 'EPSG:4326';
         const aFichero = function (x, y) {
           try {
             if ((destino === 'EPSG:4326' && grados) ||
@@ -1461,7 +1563,7 @@
               return [x, y];
             }
             const desde = grados ? 'EPSG:4326' : (code || 'EPSG:3857');
-            const p = api().utils.reproject([x, y], desde, destino);
+            const p = API.utils.reproject([x, y], desde, destino);
             return (p && isFinite(p[0]) && isFinite(p[1])) ? [p[0], p[1]] : null;
           } catch (ex) { return null; }
         };
@@ -1471,7 +1573,7 @@
         if (!sw || !ne) return null;
         return {
           rect: { minX: sw[0], minY: sw[1], maxX: ne[0], maxY: ne[1] },
-          clave: [sw[0], sw[1], ne[0], ne[1]].join(',')
+          clave: [Math.round(sw[0] * 10000) / 10000, Math.round(sw[1] * 10000) / 10000, Math.round(ne[0] * 10000) / 10000, Math.round(ne[1] * 10000) / 10000].join(',')
         };
       }
     };
