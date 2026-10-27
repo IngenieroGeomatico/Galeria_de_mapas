@@ -1512,16 +1512,35 @@
             self._gpModo = modo;
             self._gpBbox = resultado.claveCompleta || '';
             try {
-              if (typeof self.setSource === 'function') {
-                self.setSource({ type: 'FeatureCollection', features: resultado.features || [] });
+              const rawFeatures = resultado.features || [];
+              const IDEE = api();
+
+              // Si disponemos de IDEE.Feature y addFeatures (patrón de alta fidelidad)
+              if (IDEE && typeof IDEE.Feature === 'function' && typeof self.addFeatures === 'function') {
+                if (typeof self.clear === 'function') {
+                  try { self.clear(); } catch (err) { /* noop */ }
+                }
+                const featuresInstanciadas = rawFeatures.map(function (f) {
+                  try {
+                    const id = (f && f.id !== null && f.id !== undefined) ? String(f.id) : undefined;
+                    return new IDEE.Feature(id, f);
+                  } catch (e) {
+                    return null;
+                  }
+                }).filter(function (f) { return f !== null; });
+
+                self.addFeatures(featuresInstanciadas);
+              } else if (typeof self.setSource === 'function') {
+                self.setSource({ type: 'FeatureCollection', features: rawFeatures });
               }
-              // En OpenLayers las features se inyectan en EPSG:4326 y se transforman a la proyeccion del mapa
+
+              // Reproyectar geometrías en OpenLayers de EPSG:4326 a la proyección del mapa (EPSG:3857)
               if (self.getImpl && typeof self.getImpl().getLayer === 'function') {
                 const olLayer = self.getImpl().getLayer();
                 const source = olLayer && olLayer.getSource && olLayer.getSource();
                 const olMap = (map && typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
                 const mapProj = (olMap && olMap.getView && olMap.getView().getProjection && olMap.getView().getProjection().getCode()) || 'EPSG:3857';
-                const fileCRS = resultado.info ? resultado.info.crs : 'EPSG:4326';
+                const fileCRS = (resultado.info && resultado.info.crs) || 'EPSG:4326';
                 if (mapProj && fileCRS && mapProj !== fileCRS && window.ol && window.ol.proj) {
                   const olFeatures = (source && source.getFeatures) ? source.getFeatures() : [];
                   for (let f = 0; f < olFeatures.length; f += 1) {
