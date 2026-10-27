@@ -854,8 +854,9 @@
         if (this.options) this.options.visibility = !!visible;
         this.visibility = !!visible;
 
-        if (visible && this.map_) {
-          this._recargar(this._gpModo, this.map_, true);
+        if (visible) {
+          const mapaDest = this.map_ || (this.getImpl && this.getImpl().getMap && this.getImpl().getMap());
+          this._recargar(this._gpModo, mapaDest, true);
         }
       }
 
@@ -1327,6 +1328,8 @@
         const self = this;
         const url = this._geoparquetUrl;
         if (!url) return Promise.resolve();
+        if (!map) map = this.map_;
+
         if (!esCapaVisible(this)) {
           return Promise.resolve();
         }
@@ -1543,7 +1546,7 @@
 
         // 1. Intentar obtener el BBOX exacto directamente de OpenLayers si está disponible
         let olMap = null;
-        try { olMap = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : null; } catch (e) { olMap = null; }
+        try { olMap = (typeof map.getMapImpl === 'function') ? map.getMapImpl() : (map.getMap ? map.getMap() : null); } catch (e) { olMap = null; }
         if (olMap && olMap.getView && olMap.getSize && window.ol && window.ol.proj) {
           try {
             const size = olMap.getSize();
@@ -1558,9 +1561,13 @@
               if (Array.isArray(extentDest) && extentDest.length === 4 &&
                   isFinite(extentDest[0]) && isFinite(extentDest[1]) &&
                   isFinite(extentDest[2]) && isFinite(extentDest[3])) {
+                const minX = Math.min(extentDest[0], extentDest[2]);
+                const maxX = Math.max(extentDest[0], extentDest[2]);
+                const minY = Math.min(extentDest[1], extentDest[3]);
+                const maxY = Math.max(extentDest[1], extentDest[3]);
                 return {
-                  rect: { minX: extentDest[0], minY: extentDest[1], maxX: extentDest[2], maxY: extentDest[3] },
-                  clave: extentDest.map(function (n) { return Math.round(n * 10000) / 10000; }).join(',')
+                  rect: { minX: minX, minY: minY, maxX: maxX, maxY: maxY },
+                  clave: [minX, minY, maxX, maxY].map(function (n) { return Math.round(n * 10000) / 10000; }).join(',')
                 };
               }
             }
