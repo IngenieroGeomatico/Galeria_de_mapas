@@ -73,22 +73,24 @@
   <template id="codigo">
     <h3>IDEE.layer.GeoParquet (ext/geoparquetLayer)</h3>
     <p>
-      La extensión lee el <code>.parquet</code> con <code>hyparquet</code> y crea
+      La extensión lee ficheros <code>.parquet</code> con <code>hyparquet</code> y crea
       una capa vectorial nativa (<code>IDEE.layer.GeoParquet</code>, subclase de
-      <code>IDEE.layer.GeoJSON</code>), que pinta en 2D y en 3D.
+      <code>IDEE.layer.GeoJSON</code>), compatible con 2D (OpenLayers) y 3D (Cesium).
     </p>
     <p>
-      Arranca en modo <strong>«La vista»</strong>: pide el footer por
-      <code>HTTP Range</code>, elige solo los <em>row groups</em> que caen en el
-      bbox visible y descarga esos rangos. El fichero completo se lee cuando se
-      elige <strong>«Todas»</strong> en el panel de la capa
-      (<code>ext/bboxFeatures</code>).
+      <strong>Optimizaciones incluidas:</strong>
     </p>
-    <pre class="codigo"><code>const capa = new IDEE.layer.GeoParquet({
+    <ul>
+      <li><strong>HTTP Range:</strong> Descarga únicamente el footer y los <em>Row Groups</em> visibles.</li>
+      <li><strong>Column Pruning:</strong> Poda de columnas para no descargar atributos innecesarios.</li>
+      <li><strong>Predicate Pushdown:</strong> Descarte de bloques de filas mediante estadísticas del footer (<code>where</code>).</li>
+    </ul>
+    <pre class="codigo"><code>// 1. Capa local con seleccion de columnas
+const capaBarrios = new IDEE.layer.GeoParquet({
   url: '../../../../datos/Madrid_barrios.parquet',
   name: 'Barrios de Madrid',
   legend: 'Barrios de Madrid (GeoParquet)',
-  crs: 'EPSG:4326',   // opcional: si no, se lee del metadata geo
+  crs: 'EPSG:4326',   // opcional: si se omite se lee del metadata 'geo'
 }, {
   style: new IDEE.style.Generic({
     polygon: {
@@ -97,8 +99,20 @@
     },
   }),
 });
+mapajs.addLayers(capaBarrios);
 
-mapajs.addLayers(capa);</code></pre>
+// 2. Capa remota con Column Pruning
+const capaOverture = new IDEE.layer.GeoParquet({
+  url: 'https://data.source.coop/cholmes/overture/places-geoparquet-country/ES.parquet',
+  name: 'Lugares Overture España',
+  legend: 'Lugares / POIs Overture España',
+  visibility: false,
+  columns: ['names', 'categories', 'confidence'],
+});
+mapajs.addLayers(capaOverture);
+
+// 3. Inspeccion de metadatos desde JS
+capaBarrios.getGeoParquetMetadata().then(info => console.log(info));</code></pre>
   </template>
 
   <script src="../../js/comun.js"></script>
