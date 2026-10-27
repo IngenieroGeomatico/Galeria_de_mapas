@@ -531,11 +531,20 @@
 
   function esCapaVisible(capa) {
     if (!capa) return true;
+    try {
+      const impl = (typeof capa.getImpl === 'function') ? capa.getImpl() : null;
+      if (impl) {
+        if (typeof impl.isVisible === 'function') return !!impl.isVisible();
+        if (typeof impl.getVisible === 'function') return !!impl.getVisible();
+        const olLayer = (typeof impl.getLayer === 'function') ? impl.getLayer() : (impl.layer_ || null);
+        if (olLayer && typeof olLayer.getVisible === 'function') return !!olLayer.getVisible();
+      }
+    } catch (e) { /* noop */ }
     if (typeof capa.isVisible === 'function') {
-      try { return capa.isVisible(); } catch (e) { /* noop */ }
+      try { return !!capa.isVisible(); } catch (e) { /* noop */ }
     }
     if (typeof capa.getVisible === 'function') {
-      try { return capa.getVisible(); } catch (e) { /* noop */ }
+      try { return !!capa.getVisible(); } catch (e) { /* noop */ }
     }
     if (capa.options && capa.options.visibility !== undefined) {
       return !!capa.options.visibility;
@@ -834,10 +843,19 @@
        */
       setVisible(visible) {
         if (typeof super.setVisible === 'function') {
-          super.setVisible(visible);
+          try { super.setVisible(visible); } catch (e) { /* noop */ }
         }
+        try {
+          const impl = (typeof this.getImpl === 'function') ? this.getImpl() : null;
+          if (impl && typeof impl.setVisible === 'function') {
+            impl.setVisible(visible);
+          }
+        } catch (e) { /* noop */ }
+        if (this.options) this.options.visibility = !!visible;
+        this.visibility = !!visible;
+
         if (visible && this.map_) {
-          this._recargar(this._gpModo, this.map_, false);
+          this._recargar(this._gpModo, this.map_, true);
         }
       }
 
