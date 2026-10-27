@@ -48,49 +48,8 @@ function mapa() {
 
   mapajs.addLayers(capa);
 
-  // GeoParquet publico: Overture Buildings (España)
-  // desde Source Cooperative (cholmes/overture/geoparquet-country-quad).
-  const estiloOvertureEdificios = new IDEE.style.Generic({
-    polygon: {
-      fill: { color: '#ec4899', opacity: 0.35 },
-      stroke: { color: '#be185d', width: 1 },
-    },
-  });
-  const capaOvertureEdificiosES = new IDEE.layer.GeoParquet({
-    url: 'https://data.source.coop/cholmes/overture/geoparquet-country-quad/country_iso=ES/ES.parquet',
-    name: 'Edificios Overture España',
-    legend: 'Edificios Overture España (GeoParquet)',
-    visibility: false,
-    columns: ['height', 'class', 'numfloors'],
-  }, {
-    style: estiloOvertureEdificios,
-  });
-  mapajs.addLayers(capaOvertureEdificiosES);
-
-  // GeoParquet publico: Overture Places / POIs (España)
-  // desde Source Cooperative (cholmes/overture/places-geoparquet-country).
-  const estiloOverturePlaces = new IDEE.style.Generic({
-    point: {
-      radius: 4,
-      fill: { color: '#06b6d4', opacity: 0.8 },
-      stroke: { color: '#0e7490', width: 1 },
-    },
-  });
-  const capaOverturePlacesES = new IDEE.layer.GeoParquet({
-    url: 'https://data.source.coop/cholmes/overture/places-geoparquet-country/ES.parquet',
-    name: 'Lugares Overture España',
-    legend: 'Lugares / POIs Overture España (GeoParquet)',
-    visibility: false,
-    columns: ['names', 'categories', 'confidence'],
-  }, {
-    style: estiloOverturePlaces,
-  });
-  mapajs.addLayers(capaOverturePlacesES);
-
-  // Exponer capas en consola para depuracion y consultas interactivas
+  // Exponer la capa en consola para depuracion y consultas interactivas
   window.capaBarrios = capa;
-  window.capaEdificios = capaOvertureEdificiosES;
-  window.capaPlaces = capaOverturePlacesES;
 
   anadirPluginsTipos(mapajs, mapa, { bboxFeatures: true });
 

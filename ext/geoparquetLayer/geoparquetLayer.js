@@ -498,6 +498,58 @@
     return { indices: indices, rangos: rangos, conStats: conStats };
   }
 
+  // ---------- Ayudantes espaciales y visibilidad ----------
+
+  function esCapaVisible(capa) {
+    if (!capa) return true;
+    if (typeof capa.isVisible === 'function') {
+      try { return capa.isVisible(); } catch (e) { /* noop */ }
+    }
+    if (typeof capa.getVisible === 'function') {
+      try { return capa.getVisible(); } catch (e) { /* noop */ }
+    }
+    if (capa.options && capa.options.visibility !== undefined) {
+      return !!capa.options.visibility;
+    }
+    if (capa.visibility !== undefined) {
+      return !!capa.visibility;
+    }
+    return true;
+  }
+
+  function bboxDeGeometria(geom) {
+    if (!geom || !geom.coordinates) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const recorrer = function (c) {
+      if (typeof c[0] === 'number') {
+        const x = c[0], y = c[1];
+        if (isFinite(x) && isFinite(y)) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+        return;
+      }
+      for (let i = 0; i < c.length; i += 1) recorrer(c[i]);
+    };
+    recorrer(geom.coordinates);
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+  }
+
+  function geometriaTocaRect(geom, rect) {
+    if (!geom || !rect) return true;
+    if (geom.type === 'Point') {
+      const c = geom.coordinates;
+      if (!c || typeof c[0] !== 'number') return false;
+      return c[0] >= rect.minX && c[0] <= rect.maxX && c[1] >= rect.minY && c[1] <= rect.maxY;
+    }
+    const bb = bboxDeGeometria(geom);
+    if (!bb) return true;
+    return !(bb.maxX < rect.minX || bb.minX > rect.maxX || bb.maxY < rect.minY || bb.minY > rect.maxY);
+  }
+
   // ---------- Reproyeccion ----------
 
   function reproyectarCoordenada(coord, desde, hasta) {
@@ -701,6 +753,19 @@
         } catch (ex) { /* noop */ }
         this._gpMoveEnd = null;
         if (typeof super.destroy === 'function') super.destroy();
+      }
+
+      /**
+       * Cambia la visibilidad de la capa y dispara la recarga si se hace visible por primera vez.
+       * @param {boolean} visible
+       */
+      setVisible(visible) {
+        if (typeof super.setVisible === 'function') {
+          super.setVisible(visible);
+        }
+        if (visible && this.map_) {
+          this._recargar(this._gpModo, this.map_, false);
+        }
       }
 
       /**
@@ -1115,6 +1180,9 @@
         const self = this;
         const url = this._geoparquetUrl;
         if (!url) return Promise.resolve();
+        if (!esCapaVisible(this)) {
+          return Promise.resolve();
+        }
         modo = (modo === 'todas') ? 'todas' : 'vista';
         // Cualquier peticion invalida una carga inicial que aun no haya
         // arrancado (ver setMap): la ultima intencion es la que manda.
@@ -1186,6 +1254,7 @@
                   geom = wkbAGeoJSON(geom, info.hy);
                 }
                 if (!geom || !geom.type) continue;
+                if (modo === 'vista' && rect && !geometriaTocaRect(geom, rect)) continue;
 
                 const props = {};
                 const claves = Object.keys(fila);
