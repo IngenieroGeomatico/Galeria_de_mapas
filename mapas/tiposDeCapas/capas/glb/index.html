@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>GLB | Tipos de capa</title>
+  <meta name="description" content="Capa GLB de la galería: modelos glTF/GLB no georreferenciados colocados por posición o por bbox, con giro, escala y cota.">
+
+  <link rel="icon" href="data:,">
+
+  <!-- API-IDEE en local. cambioImpl cambia '.ol.min.js' por '.cesium.min.js'
+       sobre estos mismos src/href, asi que las rutas locales sirven igual. -->
+  <link href="../../../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet">
+  <script src="../../../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../../../js/api-idee/configuration-1.1.0.js"></script>
+
+  <!-- Selector de capas base -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_backgorundLayers.css">
+  <script src="../../../../ext/selectorCapas/ext_backgorundLayers.js"></script>
+
+  <!-- Arbol de capas superpuestas -->
+  <link rel="stylesheet" href="../../../../ext/selectorCapas/ext_layerSwitcher.css">
+  <script src="../../../../ext/selectorCapas/ext_layerSwitcher.js"></script>
+
+  <!-- Lectura de escala y coordenadas -->
+  <link rel="stylesheet" href="../../../../ext/mapInfo/mapInfo.css">
+  <script src="../../../../ext/mapInfo/mapInfo.js"></script>
+
+  <!-- Cambio 2D / 3D -->
+  <link rel="stylesheet" href="../../../../ext/cambioImpl/cambioImpl.css">
+  <script src="../../../../ext/cambioImpl/cambioImpl.js"></script>
+
+  <!-- Codigo de la capa -->
+  <link rel="stylesheet" href="../../../../ext/modal/modal.css">
+  <script src="../../../../ext/modal/modal.js"></script>
+  <!-- Informacion del punto -->
+  <link rel="stylesheet" href="../../../../ext/information/information.css">
+  <script src="../../../../ext/information/information.js"></script>
+
+  <!-- Capa GLB: instala IDEE.layer.glb -->
+  <script src="../../../../ext/glbLayer/glbLayer.js"></script>
+
+  <!-- Estilos comunes de las paginas de tipo de capa -->
+  <link rel="stylesheet" href="../../css/capa.css">
+</head>
+
+<body>
+
+  <div id="cargaSVG">
+    <img src="../../../../img/iconos/gear-spinner.svg" alt="Cargando">
+  </div>
+
+  <header class="barra">
+    <a class="barra__volver" href="../../index.html">
+      <span aria-hidden="true">&#8592;</span> Tipos de capa
+    </a>
+    <div class="barra__texto">
+      <h1 class="barra__titulo">GLB <span class="barra__clase">IDEE.layer.glb</span></h1>
+      <p class="barra__desc">
+        Modelos glTF/GLB sin georreferenciación propia, colocados con
+        <code>position</code> o con <code>bbox</code>; en 2D se dibuja su huella.
+      </p>
+    </div>
+  </header>
+
+  <div id="mapaDIV"></div>
+
+  <!-- Codigo que abre el boton del modal. Es el mismo que ejecuta js/mapa.js. -->
+  <template id="codigo">
+    <h3>IDEE.layer.glb</h3>
+    <p>
+      Un <code>.glb</code> es una malla 3D y no guarda ni dónde va ni cómo se
+      orienta. Esta extensión (<code>ext/glbLayer</code>) añade a la API una
+      capa que lo coloca en el globo y, en 2D, dibuja su huella.
+    </p>
+    <pre><code>new IDEE.layer.glb({
+  url: 'modelo.glb',
+  // Punto de colocación (lon/lat en EPSG:4326)
+  position: { lon: -0.8793, lat: 41.6566, height: 0 },
+  // O un rectángulo: manda sobre `position` y es la huella en 2D
+  // bbox: [-0.8795, 41.6560, -0.8777, 41.6566],
+  heading: 20,      // grados, horario desde el norte
+  pitch: 0,
+  roll: 0,
+  scale: 0.35,      // número o { x, y, z }
+  heightOffset: 0,  // metros
+  baseAlSuelo: true,
+  ajustarABbox: false, // con bbox: escala el modelo para encajarlo
+});</code></pre>
+    <p>
+      Si llegan <code>bbox</code> y <code>position</code> a la vez, manda el
+      <code>bbox</code>: su centro es el punto de colocación y de
+      <code>position</code> solo se aprovecha la altura. La huella 2D sale del
+      <code>bbox</code> o, si no lo hay, de la extensión real del modelo
+      (leída del JSON del glTF).
+    </p>
+  </template>
+
+  <script src="../../js/comun.js"></script>
+  <script src="./js/mapa.js"></script>
+
+</body>
+
+</html>
