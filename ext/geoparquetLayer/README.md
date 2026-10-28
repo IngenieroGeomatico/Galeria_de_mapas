@@ -99,6 +99,7 @@ capa.getGeoParquetMetadata().then((info) => {
 ### Parámetros del constructor
 - `url`: URL del fichero `.parquet`.
 - `name`, `legend`: Identificadores para el selector de capas.
+- `visibility`: Visibilidad inicial (`false` para cargar solo al activarla). Se acepta en el primer objeto y en el segundo.
 - `crs`: Código CRS destino/origen (opcional, por defecto se extrae del metadata).
 - `columns`: Array de nombres de columnas a leer (opcional, para *Column Pruning*).
 - `limit` / `maxFeatures`: Límite máximo de geometrías a cargar en la vista (opcional, ej. `500`).
@@ -121,7 +122,16 @@ capa.getGeoParquetMetadata().then((info) => {
 
 ---
 
+## Notas de implementación
+
+- **Las features se escriben con `removeFeatures()` + `addFeatures()`** (creando `IDEE.Feature` desde cada objeto GeoJSON), no con `setSource()`. En OpenLayers las geometrías se reproyectan **antes** de `addFeatures()`, transformando la geometría del impl de cada `IDEE.Feature` (la fachada y el impl comparten el mismo feature de OpenLayers), de modo que el índice espacial de la fuente se construye ya en la proyección de la vista. En Cesium se dejan en la CRS del fichero, que es lo que espera el impl 3D; allí las entidades se añaden de forma asíncrona y `getFeatures()` puede tardar unos segundos en devolver los objetos.
+- **No llamar a `clear()` dentro de `_recargar()`**: en la API 1.1.0 `clear()` acaba en `removeFilter()` → `setFilter(null)`, y si `setFilter()` recarga se reentra en `_recargar()` en bucle (medido: una recarga cada 10-15 ms y el renderer bloqueado). `setFilter(null)` sin filtro activo devuelve `Promise.resolve()` y `_recargar()` quita las features con `removeFeatures()`.
+- **`visibility`**: `IDEE.layer.GeoJSON` lee la visibilidad del **segundo** argumento (opciones del impl), no del primero. `GeoParquet` la copia del primero al segundo si hace falta, así que `visibility: false` funciona en cualquiera de las dos posiciones.
+- **Umbral de zoom**: al salir de `minZoom`/`maxZoom` se vacían las features y se pone `_gpBbox = null`; si no, al volver al mismo encuadre la caché de `modo + bbox` daría la carga por hecha y la capa se quedaría vacía hasta un `reload()` forzado.
+
+---
+
 ## Dependencias
 
-- `hyparquet.min.js`: Lector ligero de Apache Parquet en JavaScript (~20 KB).
+- `hyparquet.min.js`: Lector ligero de Apache Parquet en JavaScript (~64 KB).
 - `fzstd.min.js`: Descompresor Zstandard (ZSTD) para compresión estándar en Parquet.

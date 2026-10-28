@@ -49,7 +49,7 @@ function mapa() {
   mapajs.addLayers(capa);
 
   // GeoParquet publico remoto: Edificios Overture España (Source Cooperative)
-  // Con límite de 500 objetos y zoom mínimo 14 para máxima fluidez.
+  // Con límite de 300 objetos y zoom mínimo 14 para máxima fluidez.
   const estiloOvertureEdificios = new IDEE.style.Generic({
     polygon: {
       fill: { color: '#ec4899', opacity: 0.4 },
@@ -60,17 +60,17 @@ function mapa() {
     url: 'https://data.source.coop/cholmes/overture/geoparquet-country-quad/country_iso=ES/ES.parquet',
     name: 'Edificios Overture España',
     legend: 'Edificios Overture España (GeoParquet)',
-    visibility: false,
     minZoom: 14,
-    limit: 4,
+    limit: 300,
     columns: ['height', 'class', 'numfloors'],
   }, {
     style: estiloOvertureEdificios,
+    visibility: false,
   });
   mapajs.addLayers(capaOvertureEdificiosES);
 
   // GeoParquet publico remoto: Lugares / POIs Overture España (Source Cooperative)
-  // Con límite de 500 puntos y zoom mínimo 12.
+  // Con límite de 400 puntos y zoom mínimo 12.
   const estiloOverturePlaces = new IDEE.style.Generic({
     point: {
       radius: 4,
@@ -82,12 +82,12 @@ function mapa() {
     url: 'https://data.source.coop/cholmes/overture/places-geoparquet-country/ES.parquet',
     name: 'Lugares Overture España',
     legend: 'Lugares / POIs Overture España (GeoParquet)',
-    visibility: false,
     minZoom: 12,
-    limit: 200,
+    limit: 400,
     columns: ['names', 'categories', 'confidence'],
   }, {
     style: estiloOverturePlaces,
+    visibility: false,
   });
   mapajs.addLayers(capaOverturePlacesES);
 

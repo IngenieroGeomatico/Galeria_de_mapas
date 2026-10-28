@@ -741,7 +741,16 @@
           params.source = { type: 'FeatureCollection', features: [] };
         }
 
-        super(params, e || {}, i || {});
+        // `IDEE.layer.GeoJSON` lee la visibilidad del segundo argumento (las
+        // opciones del impl), no del primero. Se admite en ambos para que
+        // `visibility: false` funcione tanto en la forma documentada por la
+        // API como en la que usa el resto de capas del repositorio.
+        const implOpts = Object.assign({}, e || {});
+        if (params.visibility !== undefined && implOpts.visibility === undefined) {
+          implOpts.visibility = params.visibility;
+        }
+
+        super(params, implOpts, i || {});
 
         let filterOpt = params.filter !== undefined ? params.filter : params.filtro;
         let whereOpt = params.where !== undefined ? params.where : null;
@@ -801,7 +810,7 @@
         // no debe pisarla.
         const token = (this._gpTokenInicial = (this._gpTokenInicial || 0) + 1);
         // Se difiere un turno para que `map.addLayers()` termine de enganchar
-        // el impl antes de que `setSource()` cambie su fuente.
+        // el impl antes de que `_recargar()` escriba las features.
         setTimeout(function () {
           if (self._gpTokenInicial !== token) return;
           self._recargar('vista', map, false);
@@ -864,6 +873,24 @@
       }
 
       /**
+       * Quita las features de la capa sin pasar por `clear()`.
+       *
+       * `clear()` de la API llama a `removeFilter()` -> `setFilter(null)` y,
+       * con un filtro activo, eso recargaria la capa y reentraria en
+       * `_recargar()`. Aqui solo se quitan las features ya pintadas.
+       */
+      _vaciarFeatures() {
+        try {
+          if (typeof this.removeFeatures === 'function' && typeof this.getFeatures === 'function') {
+            const actuales = this.getFeatures(true) || [];
+            if (actuales.length) this.removeFeatures(actuales);
+          } else if (typeof this.clear === 'function') {
+            try { this.clear(); } catch (e) { /* noop */ }
+          }
+        } catch (e) { /* noop */ }
+      }
+
+      /**
        * Obtiene los metadatos estructurados de GeoParquet del fichero.
        * @returns {Promise<Object>}
        */
@@ -907,6 +934,14 @@
        * @returns {Promise}
        */
       setFilter(filtro) {
+        const sinFiltro = (filtro === null || filtro === undefined || filtro === false);
+        // `removeFilter()` de la API (y por tanto `clear()`) llama aqui con
+        // null. Si no habia filtro, no se recarga: recargar dentro de `clear()`
+        // reentra en `_recargar()` y este vuelve a llamar a `clear()`, lo que
+        // dejaba el navegador en un bucle infinito.
+        if (sinFiltro && !this._gpFilter && !this._gpWhere) {
+          return Promise.resolve();
+        }
         if (typeof filtro === 'function') {
           this._gpFilter = filtro;
         } else if (filtro && typeof filtro === 'object') {
@@ -1196,7 +1231,7 @@
         const desde = info.crs || 'EPSG:4326';
         const API = (typeof window !== 'undefined') ? (window.IDEE || window.M) : null;
 
-        function re座標(minX, minY, maxX, maxY) {
+        function reproyectarExtent3857(minX, minY, maxX, maxY) {
           if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
           if (maxX <= minX || maxY <= minY) return null;
           let oeste = [minX, minY];
@@ -1216,7 +1251,7 @@
         const geo = info.geo;
         const col = (geo && geo.columns && geo.columns[info.primaria || 'geometry']) || {};
         if (Array.isArray(col.bbox) && col.bbox.length === 4) {
-          const extGeo = re座標(Number(col.bbox[0]), Number(col.bbox[1]), Number(col.bbox[2]), Number(col.bbox[3]));
+          const extGeo = reproyectarExtent3857(Number(col.bbox[0]), Number(col.bbox[1]), Number(col.bbox[2]), Number(col.bbox[3]));
           if (extGeo) return extGeo;
         }
 
@@ -1253,7 +1288,7 @@
           if (vyMax !== undefined && isFinite(Number(vyMax))) { maxY = Math.max(maxY, Number(vyMax)); hay = true; }
         }
         if (!hay) return null;
-        return re座標(minX, minY, maxX, maxY);
+        return reproyectarExtent3857(minX, minY, maxX, maxY);
       }
       /**
        * Extension de la capa cuando no hay cobertura bbox: lee todas las filas
@@ -1337,12 +1372,17 @@
           try { zoomActual = map.getZoom(); } catch (e) { zoomActual = null; }
           if (zoomActual !== null) {
             if (this._gpMinZoom !== null && zoomActual < this._gpMinZoom) {
-              try { if (typeof this.setSource === 'function') this.setSource({ type: 'FeatureCollection', features: [] }); } catch (e) {}
+              this._vaciarFeatures();
+              // Sin esto, al volver al mismo encuadre `_gpBbox` seguiria
+              // diciendo que esa vista ya esta cargada y la capa se quedaria
+              // vacia hasta forzar un reload.
+              this._gpBbox = null;
               this._gpCargando = false;
               return Promise.resolve({ saltado: true, fueraDeEscala: true });
             }
             if (this._gpMaxZoom !== null && zoomActual > this._gpMaxZoom) {
-              try { if (typeof this.setSource === 'function') this.setSource({ type: 'FeatureCollection', features: [] }); } catch (e) {}
+              this._vaciarFeatures();
+              this._gpBbox = null;
               this._gpCargando = false;
               return Promise.resolve({ saltado: true, fueraDeEscala: true });
             }
@@ -1397,51 +1437,26 @@
 
           const rangos = (seleccion && seleccion.rangos) || [];
 
-          // En modo vista con límite, para evitar descargar bloques masivos innecesarios,
-          // acotamos los rangos a descargar al límite configurado.
-          let rangosParaLeer = rangos;
-          if (modo === 'vista' && self._gpLimit && rangos.length > 0) {
-            let acumulado = 0;
-            const rangosAcotados = [];
+          // Lectura secuencial de row groups hasta alcanzar el limite configurado
+          return (async function leerRowGroups() {
+            const rawFeatures = [];
+
             for (let r = 0; r < rangos.length; r += 1) {
-              const rg = rangos[r];
-              const tam = rg.fin - rg.inicio;
-              rangosAcotados.push(rg);
-              acumulado += tam;
-              // Si el tamaño de filas seleccionadas supera el límite x 2, no pedimos más bloques
-              if (acumulado >= Math.max(self._gpLimit * 2, 2000)) break;
-            }
-            rangosParaLeer = rangosAcotados;
-          }
+              if (self._gpLimit && rawFeatures.length >= self._gpLimit) break;
+              const rango = rangos[r];
 
-          const lecturas = rangosParaLeer.map(function (rango) {
-            return info.hy.parquetReadObjects({
-              file: info.file,
-              metadata: info.metadata,
-              rowStart: rango.inicio,
-              rowEnd: rango.fin,
-              columns: info.columnas,
-              rowFormat: 'object',
-              geoparquet: true
-            }).then(function (filas) {
-              return { rango: rango, filas: filas || [] };
-            });
-          });
+              const filas = await info.hy.parquetReadObjects({
+                file: info.file,
+                metadata: info.metadata,
+                rowStart: rango.inicio,
+                rowEnd: rango.fin,
+                columns: info.columnas,
+                rowFormat: 'object',
+                geoparquet: true
+              });
 
-          return Promise.all(lecturas).then(function (bloques) {
-            const features = [];
-            let limiteAlcanzado = false;
-
-            for (let b = 0; b < bloques.length; b += 1) {
-              if (limiteAlcanzado) break;
-              const rango = bloques[b].rango;
-              const filas = bloques[b].filas;
-              for (let i = 0; i < filas.length; i += 1) {
-                if (self._gpLimit && features.length >= self._gpLimit) {
-                  limiteAlcanzado = true;
-                  break;
-                }
-
+              for (let i = 0; i < (filas || []).length; i += 1) {
+                if (self._gpLimit && rawFeatures.length >= self._gpLimit) break;
                 const fila = filas[i];
                 let geom = fila[info.primaria];
                 if (geom && !(geom.type && geom.coordinates)) {
@@ -1473,34 +1488,78 @@
 
                 const propsLimpias = sanitizarPropiedades(props);
 
-                const feature = {
+                const featObj = {
                   type: 'Feature',
-                  id: rango.inicio + i,
+                  id: String(rango.inicio + i),
                   geometry: geom,
                   properties: propsLimpias
                 };
                 if (typeof self._gpFilter === 'function') {
                   let pasa = false;
                   try {
-                    pasa = self._gpFilter(props, feature);
+                    pasa = self._gpFilter(props, featObj);
                   } catch (ef) {
                     pasa = true;
                   }
                   if (!pasa) continue;
                 }
-                features.push(feature);
+                rawFeatures.push(featObj);
               }
             }
-            return { saltado: false, features: features, info: info, seleccion: seleccion, claveCompleta: claveCompleta };
-          });
+            return { saltado: false, features: rawFeatures, info: info, seleccion: seleccion, claveCompleta: claveCompleta };
+          })();
         }).then(function (resultado) {
           self._gpCargando = false;
           if (!resultado.saltado) {
             self._gpModo = modo;
             self._gpBbox = resultado.claveCompleta || '';
             try {
-              if (typeof self.setSource === 'function') {
-                self.setSource({ type: 'FeatureCollection', features: resultado.features || [] });
+              const feats = resultado.features || [];
+              const IDEE = api();
+
+              // En OpenLayers las geometrias se reproyectan ANTES de anadir
+              // las features: asi el indice espacial de la fuente se construye
+              // ya en la proyeccion de la vista. En Cesium se dejan en la CRS
+              // del fichero, que es lo que espera el impl 3D.
+              let mapProj = null;
+              try {
+                const olMap = (map && typeof map.getMapImpl === 'function') ? map.getMapImpl() : null;
+                const view = (olMap && typeof olMap.getView === 'function') ? olMap.getView() : null;
+                if (view && typeof view.getProjection === 'function') {
+                  mapProj = view.getProjection().getCode();
+                }
+              } catch (e) { mapProj = null; }
+              const fileCRS = (resultado.info && resultado.info.crs) || 'EPSG:4326';
+
+              // OJO: no usar `self.clear()`: su `removeFilter()` llama a
+              // nuestro `setFilter(null)`, que recarga la capa y reentra en
+              // `_recargar()` (bucle infinito). Se quitan solo las features.
+              self._vaciarFeatures();
+
+              if (IDEE && typeof IDEE.Feature === 'function' && typeof self.addFeatures === 'function') {
+                const instancias = feats.map(function (f) {
+                  try {
+                    return new IDEE.Feature(f.id, f);
+                  } catch (e) {
+                    return null;
+                  }
+                }).filter(function (f) { return f !== null; });
+
+                if (mapProj && fileCRS && mapProj !== fileCRS) {
+                  for (let fi = 0; fi < instancias.length; fi += 1) {
+                    try {
+                      const implFeature = instancias[fi].getImpl && instancias[fi].getImpl();
+                      const olFeature = implFeature && implFeature.getFeature && implFeature.getFeature();
+                      const geom = olFeature && olFeature.getGeometry && olFeature.getGeometry();
+                      if (geom && typeof geom.transform === 'function') {
+                        geom.transform(fileCRS, mapProj);
+                      }
+                    } catch (e) { /* feature sin geometria transformable */ }
+                  }
+                }
+                self.addFeatures(instancias);
+              } else if (typeof self.setSource === 'function') {
+                self.setSource({ type: 'FeatureCollection', features: feats });
               }
             } catch (ex) { /* noop */ }
             if (resultado.seleccion) {
