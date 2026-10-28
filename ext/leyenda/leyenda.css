@@ -1,0 +1,474 @@
+/* =====================================================================
+   HOJA DE ESTILOS: PLUGIN DE LEYENDA DE CAPAS
+   Repositorio: Galeria_de_mapas (API-IDEE / API-CNIG)
+   =====================================================================
+
+   El panel usa las variables CSS que inyecta el JS desde el constructor:
+     --g-plugin-bg-color / --g-plugin-bg-color-active (fondo)
+     --g-plugin-border-color / --g-plugin-border-color-active (borde)
+     --g-plugin-icon-color / --g-plugin-icon-color-active (icono/texto)
+   ===================================================================== */
+
+/* ── Contenedor del panel ─────────────────────────────────────────────── */
+.g-herramienta_leyenda {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  color: #333333;
+}
+
+/* ── Icono del botón: glifo de la propia API ──────────────────────────── */
+/* `g-cartografia-lista` (\e92c) es una lista con viñetas, que es justo lo
+   que representa una leyenda. Se pinta con `content` y la fuente de la
+   API, no con una clase g-cartografia-* en el botón: esa clase arrastraría
+   los estilos del panel. */
+.g-herramienta_leyenda .m-tools:before {
+  content: "\e92c";
+  font-family: g-cartografia;
+  font-style: normal;
+  font-weight: 400;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  font-size: 20px;
+  text-align: center;
+  background-color: transparent;
+  color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.g-herramienta_leyenda.opened .m-tools:before {
+  color: var(--g-plugin-icon-color-active, #71A7D3);
+}
+
+/* ── Icono propio pasado en el constructor ────────────────────────────── */
+/* Si el plugin recibe `icon`, el JS añade la clase `leyenda-icono-propio`
+   y se vuelve al mecanismo de máscara de la plantilla. */
+.g-herramienta_leyenda.leyenda-icono-propio .m-tools:before {
+  content: '';
+  font-family: inherit;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: var(--g-plugin-icon-mask, none);
+  mask-image: var(--g-plugin-icon-mask, none);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.g-herramienta_leyenda.leyenda-icono-propio.opened .m-tools:before {
+  background-color: var(--g-plugin-icon-color-active, #71A7D3);
+}
+
+/* ── Vista interior ───────────────────────────────────────────────────── */
+.leyenda-container {
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+  max-width: 360px;
+  box-sizing: border-box;
+}
+
+.leyenda-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.leyenda-titulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leyenda-btn-refrescar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--g-plugin-icon-color-active, #71A7D3);
+  cursor: pointer;
+}
+
+.leyenda-btn-refrescar svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.leyenda-btn-refrescar:hover {
+  background-color: #e8eef5;
+  border-color: #c9d8e8;
+}
+
+.leyenda-btn-refrescar:focus-visible {
+  outline: 2px solid var(--g-plugin-icon-color-active, #71A7D3);
+  outline-offset: 1px;
+}
+
+.leyenda-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  background-color: #ffffff;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* ── Selector de capas ────────────────────────────────────────────────── */
+.leyenda-selector {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #fafafa;
+}
+
+.leyenda-selector-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #666666;
+}
+
+.leyenda-contador {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background-color: var(--g-plugin-icon-color-active, #71A7D3);
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.leyenda-lista {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.leyenda-fila {
+  margin: 0;
+  padding: 0;
+}
+
+.leyenda-opcion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.leyenda-opcion:hover {
+  background-color: #eef4fa;
+}
+
+.leyenda-check {
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--g-plugin-icon-color-active, #71A7D3);
+}
+
+.leyenda-nombre {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leyenda-grupo {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #888888;
+}
+
+.leyenda-badge-oculta {
+  flex: 0 0 auto;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: #fff1d6;
+  color: #a15c00;
+  font-size: 10px;
+}
+
+.leyenda-fila-oculta .leyenda-nombre {
+  color: #888888;
+}
+
+.leyenda-vacio {
+  padding: 8px 10px;
+  color: #888888;
+  font-size: 12px;
+}
+
+/* ── Tarjetas de leyenda ──────────────────────────────────────────────── */
+.leyenda-resultados {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.leyenda-tarjeta {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+.leyenda-tarjeta-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.leyenda-tarjeta-titulo {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333333;
+}
+
+.leyenda-tarjeta-quitar {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: #888888;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.leyenda-tarjeta-quitar:hover {
+  color: #c00000;
+}
+
+.leyenda-tarjeta-quitar:focus-visible {
+  outline: 2px solid var(--g-plugin-icon-color-active, #71A7D3);
+  outline-offset: 1px;
+}
+
+.leyenda-tarjeta-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.leyenda-imagen {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.leyenda-entradas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.leyenda-entrada {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.leyenda-entrada-imagen {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+  max-width: 100px;
+  max-height: 24px;
+  object-fit: contain;
+}
+
+.leyenda-entrada-etiqueta {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.leyenda-nota {
+  margin: 0;
+  color: #777777;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.leyenda-texto,
+.leyenda-cargando,
+.leyenda-mensaje {
+  margin: 0;
+  color: #777777;
+  font-size: 12px;
+}
+
+.leyenda-error {
+  margin: 0;
+  color: #b00020;
+  font-size: 12px;
+}
+
+.leyenda-enlace {
+  font-size: 11px;
+  color: #0b5cad;
+}
+
+/* ── Leyenda de bandas del ráster ─────────────────────────────────────── */
+.leyenda-bandas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leyenda-bandas-titulo {
+  margin: 0;
+  color: #444444;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.leyenda-rampa {
+  height: 14px;
+  border: 1px solid #cccccc;
+  border-radius: 3px;
+  background: linear-gradient(to right, #000000, #ffffff);
+}
+
+.leyenda-rampa-extremos {
+  display: flex;
+  justify-content: space-between;
+  color: #777777;
+  font-size: 10px;
+}
+
+.leyenda-canales {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.leyenda-canal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.leyenda-canal-muestra {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #bbbbbb;
+  border-radius: 3px;
+}
+
+.leyenda-canal-rojo {
+  background-color: #d32f2f;
+}
+
+.leyenda-canal-verde {
+  background-color: #388e3c;
+}
+
+.leyenda-canal-azul {
+  background-color: #1976d2;
+}
+
+.leyenda-canal-alfa {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #cccccc 25%, transparent 25%, transparent 75%, #cccccc 75%),
+    linear-gradient(45deg, #cccccc 25%, transparent 25%, transparent 75%, #cccccc 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+}
+
+/* ====================================================================
+   PANEL EN LA ESQUINA TR
+   --------------------------------------------------------------------
+   Mismo ajuste que la plantilla: en TR el botón de plegado es un item más
+   del flex del panel y la cabecera le pasa por encima. Se saca de flujo
+   solo con el panel abierto, y la cabecera lleva box-sizing porque la API
+   la deja en content-box.
+   ==================================================================== */
+
+.m-areas > div.m-area > div.m-panel > div.m-panel-controls > div {
+  background-color: #fff;
+  border-radius: 0;
+  box-shadow: none;
+  display: table;
+  overflow: hidden;
+  padding: 0;
+  position: inherit !important;
+}
+
+.m-areas > div.m-area > div.m-panel.opened {
+  background-color: #fdfdfd00 !important;
+}
+
+.m-areas > .m-top.m-right > .m-panel.g-herramienta_leyenda.opened > button.m-panel-btn {
+  position: absolute;
+  left: -40px;
+  top: 0;
+}
+
+.m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
+  box-sizing: border-box;
+}
+
+/* ── Pantallas estrechas ──────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .leyenda-container {
+    min-width: 240px;
+    max-width: 300px;
+  }
+
+  .leyenda-body {
+    max-height: 50vh;
+  }
+}
