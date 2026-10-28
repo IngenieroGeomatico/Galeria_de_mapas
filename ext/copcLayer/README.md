@@ -3,7 +3,7 @@
 Extension que anade soporte para **COPC** (*Cloud Optimized Point Cloud*) como capa nativa de la API: `IDEE.layer.COPC`. COPC es un LAZ 1.4 organizado en un octree y con un directorio al principio del fichero, asi que el cliente solo pide por HTTP `Range` los nodos que necesita para el nivel de detalle de la vista. Cesium no lee COPC de serie: la extension usa `copcesium` (MIT) para convertir los nodos en primitivas de puntos del viewer.
 
 - **3D**: se leen y pintan los puntos reales sobre Cesium.
-- **2D**: OpenLayers no lee COPC; se dibuja solo la **huella** del `bbox` para que la capa se pueda listar, ocultar y encuadrar desde el selector.
+- **2D**: OpenLayers no lee COPC; se dibuja solo la **huella** del `bbox` para que la capa se pueda listar, ocultar y encuadrar desde el selector. (La via de pintar puntos reales en 2D esta medida en `.opencode/docs/Capas3Den2D.md`: viable, pero con presupuesto de ~60 k puntos y un vendor propio.)
 
 La capa hereda de `IDEE.layer.Vector`, que es la clase de la API que funciona en 2D y en 3D y la que entiende el selector. `GenericVector` no sirve para esto (medido: su impl no tiene `setVisible` y `map.addLayers` falla).
 
