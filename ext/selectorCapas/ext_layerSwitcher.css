@@ -202,6 +202,9 @@
   margin-left: 0.4em;
   width: 30px;
   height: 30px;
+  /* La insignia del tercer estado (encendida pero sin pintar) se coloca
+     en una esquina del boton. */
+  position: relative;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -234,6 +237,38 @@
 .overlay-layer-selector .ls-eye-off {
   opacity: 0.55;
   background: transparent;
+}
+
+/* ── Tercer estado: encendida, pero ahora mismo no se pinta ────────── */
+/* La capa está visible para la API y el usuario no la ha apagado, pero no
+   se ve: el zoom actual queda fuera de su minZoom/maxZoom o su cobertura
+   no cae en la vista. No es "oculta", así que no se tacha el ojo: se deja
+   abierto y se avisa en ámbar con una insignia, sin cambiar lo que hace el
+   botón al pulsarlo (sigue alternando la visibilidad). */
+.overlay-layer-selector .ls-eye-fuera {
+  color: #b26a00;
+  background: #fff4e0;
+  border: 1px solid #f0d9b0;
+}
+
+.overlay-layer-selector .ls-eye-fuera:hover {
+  background: #ffe8c4;
+}
+
+.overlay-layer-selector .ls-eye-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #b26a00;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+  pointer-events: none;
 }
 
 /* ── Modo "una capa a la vez": el ojito pasa a ser un radio ─────────── */

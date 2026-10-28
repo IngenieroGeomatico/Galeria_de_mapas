@@ -297,6 +297,8 @@ class miPlugin_layerSwitcher {
     // abierto. Se conserva entre re-renders para no cerrarlo al alternar
     // la visibilidad de otra capa.
     this._optionsOpen = null;
+    // Desenganche del refresco del ojito al mover el mapa (ver addTo/destroy).
+    this._lsOjosUnbind = null;
     // Estado de colapso/expansión de los grupos de capas (idLayer -> bool).
     // Se conserva entre re-renders; si un grupo no está presente, se usa el
     // valor "collapsed" con el que se creó (constructorParameters).
@@ -1254,19 +1256,348 @@ class miPlugin_layerSwitcher {
         .map(nodeOf);
     };
 
+    // ── Estado del ojito: encendida, oculta o encendida pero sin pintar ──
+    // Una capa puede estar visible para la API y aun así no pintar nada: su
+    // minZoom/maxZoom deja fuera el zoom actual o su cobertura no cae en la
+    // vista. Ese caso no es "oculta" (el usuario la tiene encendida), así que
+    // el ojito necesita un tercer dibujo. Se resuelve solo con datos que ya
+    // están en el cliente (nada de red), porque hay que recalcularlo en cada
+    // movimiento del mapa.
+
+    /**
+     * minZoom/maxZoom efectivos de una capa, en la escala de la vista.
+     *
+     * Se miran la fachada de la API (`minZoom`/`getMinZoom`), los campos de
+     * los plugins propios (GeoParquet, PMTiles) y las hijas de un grupo: un
+     * grupo se queda con el rango más amplio, que es cuando alguna de sus
+     * capas puede pintar.
+     *
+     * @param {Object} capa
+     * @returns {{min: number|null, max: number|null}}
+     */
+    function _limitesZoomCapa(capa) {
+      const salida = { min: null, max: null };
+      const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : null;
+      const sumar = (min, max) => {
+        if (min !== null) salida.min = (salida.min === null) ? min : Math.min(salida.min, min);
+        if (max !== null) salida.max = (salida.max === null) ? max : Math.max(salida.max, max);
+      };
+      const visitar = (c) => {
+        if (!c) return;
+        let min = num(c.minZoom);
+        let max = num(c.maxZoom);
+        if (min === null && typeof c.getMinZoom === 'function') {
+          try { min = num(c.getMinZoom()); } catch (e) { min = null; }
+        }
+        if (max === null && typeof c.getMaxZoom === 'function') {
+          try { max = num(c.getMaxZoom()); } catch (e) { max = null; }
+        }
+        // Plugins propios: no pasan el límite por el constructor de la API.
+        if (min === null && c._gpMinZoom !== undefined) min = num(c._gpMinZoom);
+        if (max === null && c._gpMaxZoom !== undefined) max = num(c._gpMaxZoom);
+        if (min === null && c._pmtilesMinZoom !== undefined) min = num(c._pmtilesMinZoom);
+        if (max === null && c._pmtilesMaxZoom !== undefined) max = num(c._pmtilesMaxZoom);
+        sumar(min, max);
+        let hijas = [];
+        try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+      };
+      visitar(capa);
+      return salida;
+    }
+
+    /**
+     * ¿Alguna capa del grupo no tiene una extensión conocida?
+     *
+     * `_extensionUtil` une solo las hijas con extensión válida y descarta
+     * las que cubren el mundo. En un grupo mixto (una capa local + una
+     * global) la unión se queda con la local y avisar al salir de ella sería
+     * un falso positivo: si alguna hija no tiene extensión fiable, el grupo
+     * no se comprueba.
+     *
+     * @param {Object} grupo
+     * @returns {boolean}
+     */
+    function _grupoConExtensionDesconocida(grupo) {
+      let desconocida = false;
+      const visitar = (c) => {
+        if (desconocida || !c) return;
+        let hijas = [];
+        try { hijas = c.getLayers ? c.getLayers() : []; } catch (e) { hijas = []; }
+        if (!hijas.length) {
+          if (!_esExtension(_extensionUtil(c))) desconocida = true;
+          return;
+        }
+        hijas.forEach(visitar);
+      };
+      visitar(grupo);
+      return desconocida;
+    }
+
+    /**
+     * Extensión de la capa en grados (EPSG:4326), con lo que ya está en el
+     * cliente.
+     *
+     * Si la cobertura todavía no se conoce, devuelve `null` y el ojito no
+     * avisa: mejor no avisar que avisar mal. No se piden capacidades ni
+     * metadatos por red, porque esto se ejecuta en cada movimiento del mapa.
+     *
+     * @param {Object} capa
+     * @returns {Array<number>|null} [oeste, sur, este, norte].
+     */
+    function _extensionCapaEnGrados(capa) {
+      // GeoParquet es el caso que más interesa (datos de una ciudad: al
+      // salir de ella la capa no pinta nada) y publica su cobertura en
+      // 3857 en cuanto ha leído el metadata, en la primera carga.
+      try {
+        if (capa && capa._geoparquet === true && typeof capa._extensionParaZoom === 'function') {
+          const extGp = capa._extensionParaZoom();
+          if (_esExtension(extGp)) {
+            const enGrados = _reproyectar(extGp.slice(0, 4), 'EPSG:3857', 'EPSG:4326');
+            if (enGrados) return enGrados;
+          }
+        }
+      } catch (e) { /* sin cobertura todavía */ }
+
+      // En un grupo, la unión de extensiones solo vale si TODAS las hijas
+      // tienen una cobertura fiable (ver `_grupoConExtensionDesconocida`).
+      if (capa && typeof capa.getLayers === 'function' && _grupoConExtensionDesconocida(capa)) return null;
+
+      const ext = _extensionUtil(capa);
+      if (!_esExtension(ext)) return null;
+      const n = ext.slice(0, 4).map(Number);
+      // En 3D (Cesium) la API devuelve grados y en 2D, unidades de la
+      // proyección del mapa. Los grados se reconocen porque no pasan de
+      // 180/90, igual que se hace en `_irAExtentEn3D`.
+      if (n[0] >= -180 && n[2] <= 180 && n[1] >= -90 && n[3] <= 90) return n;
+      return _reproyectar(n, _codigoDeLaProyeccion(), 'EPSG:4326');
+    }
+
+    /**
+     * ¿Se solapan una extensión y la vista actual? Ambas en grados y en el
+     * mismo orden [oeste, sur, este, norte].
+     *
+     * @param {Array<number>} ext
+     * @param {Object} vista Resultado de `vistaEnGrados()`.
+     * @returns {boolean}
+     */
+    function _seSolapaConVista(ext, vista) {
+      if (!ext || !vista) return true;
+      return !(ext[2] < vista.oeste || ext[0] > vista.este ||
+               ext[3] < vista.sur || ext[1] > vista.norte);
+    }
+
+    /**
+     * ¿Se puede usar la extensión de la capa para decidir si se ve?
+     *
+     * En MVT `getMaxExtent()` devuelve la caja de las teselas YA cargadas (la
+     * del viewport anterior), y en MapLibre la cobertura vive en el estilo o
+     * en el TileJSON, no en el cliente: con esas dos, al mover el mapa se
+     * avisaría en falso. Se dejan fuera y solo se comprueba el zoom.
+     *
+     * @param {Object} capa
+     * @returns {boolean}
+     */
+    function _extentFiable(capa) {
+      try {
+        if (_tieneMVT(capa)) return false;
+        if (_tieneMapLibre(capa)) return false;
+      } catch (e) { /* si falla la detección se comprueba igual */ }
+      return true;
+    }
+
+    /**
+     * Estado del ojito de una capa.
+     *
+     * - `on`: encendida y, con lo que se sabe, pintando.
+     * - `off`: apagada por el usuario.
+     * - `fuera`: encendida, pero ahora mismo no se ve (zoom fuera de su
+     *   rango o cobertura fuera de la vista).
+     *
+     * @param {Object} capa
+     * @returns {{estado: string, motivo: (string|null), detalle: string}}
+     */
+    function _estadoOjoCapa(capa) {
+      let visible = true;
+      try { visible = (capa && typeof capa.isVisible === 'function') ? !!capa.isVisible() : true; } catch (e) { visible = true; }
+      if (!visible) return { estado: 'off', motivo: null, detalle: '' };
+
+      const vista = vistaEnGrados();
+
+      // El zoom que manda es el de la API: es el que usan las capas para
+      // decidir si cargan (GeoParquet compara `map.getZoom()` con su
+      // minZoom). En 3D, `vistaEnGrados().zoom` es una estimación por
+      // grados/píxel y puede no coincidir, así que solo se usa de reserva.
+      let zoomActual = vista ? vista.zoom : null;
+      try {
+        const z = (map && typeof map.getZoom === 'function') ? Number(map.getZoom()) : NaN;
+        if (isFinite(z)) zoomActual = z;
+      } catch (e) { /* se queda con la estimada */ }
+
+      // 1) Fuera de la escala de la capa.
+      if (isFinite(zoomActual)) {
+        const lim = _limitesZoomCapa(capa);
+        if (lim.min !== null && zoomActual < lim.min) {
+          return {
+            estado: 'fuera',
+            motivo: 'zoom',
+            detalle: 'el zoom actual (' + _formatoZoom(zoomActual) + ') es menor que el mínimo de la capa (' + _formatoZoom(lim.min) + ')',
+          };
+        }
+        if (lim.max !== null && zoomActual > lim.max) {
+          return {
+            estado: 'fuera',
+            motivo: 'zoom',
+            detalle: 'el zoom actual (' + _formatoZoom(zoomActual) + ') es mayor que el máximo de la capa (' + _formatoZoom(lim.max) + ')',
+          };
+        }
+      }
+
+      // 2) Cobertura fuera de la vista (sin vista no se puede decidir).
+      if (vista && _extentFiable(capa)) {
+        const ext = _extensionCapaEnGrados(capa);
+        if (ext && !_seSolapaConVista(ext, vista)) {
+          return {
+            estado: 'fuera',
+            motivo: 'extension',
+            detalle: 'su cobertura queda fuera de la vista actual',
+          };
+        }
+      }
+
+      return { estado: 'on', motivo: null, detalle: '' };
+    }
+
+    /** Zoom con un decimal y coma decimal, para los títulos del ojito. */
+    function _formatoZoom(v) {
+      const n = Math.round(Number(v) * 10) / 10;
+      return String(n).replace('.', ',');
+    }
+
+    /** Título (tooltip) del botón de visibilidad según el estado. */
+    function _tituloOjo(estado, esRadio) {
+      if (estado.estado === 'fuera') {
+        return 'Encendida, pero no se ve: ' + estado.detalle + '. Pulsa para ocultarla.';
+      }
+      if (estado.estado === 'off') return esRadio ? 'Ver solo esta capa' : 'Mostrar capa';
+      return esRadio ? 'Es la capa que se ve: elige otra para cambiarla' : 'Ocultar capa';
+    }
+
+    // SVG del ojo abierto y del ojo tachado. Son inline (como el resto de
+    // iconos del plugin) en lugar de emojis: los emojis 👁/🚫 dependen de la
+    // fuente del sistema y en algunos navegadores aparecen como un punto.
+    const SVG_OJO_ABIERTO = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    const SVG_OJO_TACHADO = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+
+    /**
+     * Dibujo del ojito. El estado `fuera` mantiene el ojo ABIERTO (la capa
+     * está encendida) y añade la insignia "!" que pinta el CSS.
+     */
+    function _svgOjo(estado) {
+      return estado === 'off' ? SVG_OJO_TACHADO : SVG_OJO_ABIERTO;
+    }
+
+    /**
+     * Repinta un botón de visibilidad ya montado con el estado actual.
+     * Se usa al mover el mapa, sin rehacer la lista (rehacerla cerraría el
+     * desplegable de opciones y cortaría un arrastre en curso).
+     *
+     * @param {HTMLElement} btn
+     * @param {Object} capa
+     */
+    function _aplicarOjoBoton(btn, capa) {
+      if (!btn || !capa) return;
+      const estado = _estadoOjoCapa(capa);
+      const visible = estado.estado !== 'off';
+      const fuera = estado.estado === 'fuera';
+      const esRadio = btn.classList.contains('ls-radio');
+      if (esRadio) {
+        btn.classList.toggle('ls-radio-on', visible);
+        btn.classList.toggle('ls-radio-off', !visible);
+        btn.innerHTML = '<span class="ls-radio-marca" aria-hidden="true"></span>'
+          + (fuera ? '<span class="ls-eye-badge" aria-hidden="true">!</span>' : '');
+        btn.setAttribute('aria-checked', visible ? 'true' : 'false');
+      } else {
+        btn.classList.toggle('ls-eye-on', visible);
+        btn.classList.toggle('ls-eye-off', !visible);
+        btn.innerHTML = _svgOjo(estado.estado)
+          + (fuera ? '<span class="ls-eye-badge" aria-hidden="true">!</span>' : '');
+      }
+      btn.classList.toggle('ls-eye-fuera', fuera);
+      btn.title = _tituloOjo(estado, esRadio);
+    }
+
+    /** Recalcula y repinta los ojitos ya montados en el panel. */
+    function _refrescarOjos() {
+      let botones = [];
+      try {
+        botones = Array.prototype.slice.call(
+          document.querySelectorAll('.g-herramienta_selectorCapa .ls-eye[data-id]')
+        );
+      } catch (e) { return; }
+      botones.forEach((btn) => {
+        const capa = findLayerById(btn.getAttribute('data-id'));
+        if (capa) _aplicarOjoBoton(btn, capa);
+      });
+    }
+
+    /**
+     * Engancha `hecho` al final de cada movimiento del mapa, en 2D y en 3D,
+     * y devuelve la función que lo desengancha.
+     *
+     * No se usa la fachada de la API porque no publica un evento de fin de
+     * movimiento: se escucha a la implementación, que es la que sabe cuándo
+     * termina (en OpenLayers, `moveend`; en Cesium, `camera.moveEnd`).
+     *
+     * @param {Function} hecho
+     * @returns {Function}
+     */
+    function _engancharFinDeMovimiento(hecho) {
+      const sueltas = [];
+      let pendiente = null;
+      // Se agrupa la ráfaga: un `fit()` dispara varios eventos seguidos.
+      const diferido = function () {
+        if (pendiente) clearTimeout(pendiente);
+        pendiente = setTimeout(function () { pendiente = null; hecho(); }, 120);
+      };
+
+      let impl = null;
+      try { impl = (map && typeof map.getMapImpl === 'function') ? map.getMapImpl() : null; } catch (e) { impl = null; }
+      const escena = (impl && impl.scene) ? impl.scene : null;
+      if (escena && escena.camera) {
+        const camara = escena.camera;
+        if (camara.moveEnd && typeof camara.moveEnd.addEventListener === 'function') {
+          camara.moveEnd.addEventListener(diferido);
+          sueltas.push(function () { try { camara.moveEnd.removeEventListener(diferido); } catch (e) { /* ya suelto */ } });
+        } else if (camara.changed && typeof camara.changed.addEventListener === 'function') {
+          // Reserva para versiones de Cesium sin `moveEnd`.
+          try { camara.percentageChanged = 0.05; } catch (e) { /* sin umbral */ }
+          camara.changed.addEventListener(diferido);
+          sueltas.push(function () { try { camara.changed.removeEventListener(diferido); } catch (e) { /* ya suelto */ } });
+        }
+      } else if (impl && typeof impl.on === 'function') {
+        impl.on('moveend', diferido);
+        sueltas.push(function () { try { impl.un('moveend', diferido); } catch (e) { /* ya suelto */ } });
+      }
+
+      return function () {
+        if (pendiente) { clearTimeout(pendiente); pendiente = null; }
+        sueltas.forEach(function (s) { try { s(); } catch (e) { /* ya suelto */ } });
+      };
+    }
+
     const renderLayerNode = (node, depth) => {
       const layer = node.layer;
       const layerName = getLayerDisplayName(layer);
       const index = layer.idLayer;
-      const visible = layer.isVisible ? layer.isVisible() : true;
-      // icono de ojo: abierto = capa visible, tachado/cerrado = oculta.
-      // Se usan SVGs inline (como el resto de iconos del plugin) en lugar de
-      // emojis: los emojis 👁/🚫 dependen de la fuente del sistema y en algunos
-      // navegadores/visualizadores no se renderizan (aparecen como un punto o
-      // un cuadro). El SVG es fiable y consistente en todos los visualizadores.
-      const eyeIcon = visible
-        ? `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
-        : `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+      // El ojito tiene TRES estados (ver `_estadoOjoCapa`): abierto (visible
+      // y pintando), tachado (oculta) y abierto con insignia (encendida,
+      // pero ahora mismo no se ve porque el zoom o la vista la dejan fuera).
+      const estadoOjo = _estadoOjoCapa(layer);
+      const visible = estadoOjo.estado !== 'off';
+      const fueraDeVista = estadoOjo.estado === 'fuera';
+      const eyeIcon = _svgOjo(estadoOjo.estado);
+      const badgeOjo = fueraDeVista ? '<span class="ls-eye-badge" aria-hidden="true">!</span>' : '';
       // Transparencia actual en % (100 = totalmente transparente).
       // La API usa opacidad 0..1, asi que transparencia = (1 - opacity).
       let opacity = 1;
@@ -1289,12 +1620,11 @@ class miPlugin_layerSwitcher {
       // apaga la anterior. El resto de capas (las que se superponen y quedan
       // fuera del grupo) siguen con el ojito de siempre.
       const esRadio = !node.isGroup && enGrupoRadio(layer);
-      const tituloVisibilidad = esRadio
-        ? (visible ? 'Es la capa que se ve: elige otra para cambiarla' : 'Ver solo esta capa')
-        : (visible ? 'Ocultar capa' : 'Mostrar capa');
+      const tituloVisibilidad = _tituloOjo(estadoOjo, esRadio);
+      const claseFuera = fueraDeVista ? ' ls-eye-fuera' : '';
       const eyeBtn = esRadio
-        ? `<button type="button" class="ls-eye ls-radio ${visible ? 'ls-radio-on' : 'ls-radio-off'}" data-id="${index}" role="radio" aria-checked="${visible ? 'true' : 'false'}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')"><span class="ls-radio-marca" aria-hidden="true"></span></button>`
-        : `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}" data-id="${index}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}</button>`;
+        ? `<button type="button" class="ls-eye ls-radio ${visible ? 'ls-radio-on' : 'ls-radio-off'}${claseFuera}" data-id="${index}" role="radio" aria-checked="${visible ? 'true' : 'false'}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')"><span class="ls-radio-marca" aria-hidden="true"></span>${badgeOjo}</button>`
+        : `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}${claseFuera}" data-id="${index}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}${badgeOjo}</button>`;
       const optsBtn = `<button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>`;
 
       const optionsPanel = `
@@ -1369,6 +1699,11 @@ class miPlugin_layerSwitcher {
         const preview = document.querySelector('#m-herramienta-previews-layerSwitcher');
         if (preview) preview.innerHTML = control.htmlView;
 
+        // Hay capas cuya extensión llega después de pintar la lista (un
+        // GeoTIFF en 3D, un GeoParquet en su primera carga). Un segundo pase
+        // corrige el ojito sin rehacer la lista.
+        setTimeout(_refrescarOjos, 1200);
+
         // Enlaza los eventos de drag & drop UNA sola vez por lista. Se usan
         // listeners delegados en el <ul> para que sigan funcionando tras cada
         // re-render (renderLayerList reemplaza el innerHTML).
@@ -1437,16 +1772,9 @@ class miPlugin_layerSwitcher {
         window.renderLayerList();
       } else if (layer && layer.isVisible) {
         const eye = document.querySelector('.g-herramienta_selectorCapa .ls-eye[data-id="' + index + '"]');
-        const visible = layer.isVisible();
-        if (eye) {
-          // Mismo SVG que en el render principal (ver eyeIcon en renderLayerNode).
-          eye.innerHTML = visible
-            ? `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`
-            : `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
-          eye.classList.toggle('ls-eye-on', visible);
-          eye.classList.toggle('ls-eye-off', !visible);
-          eye.title = visible ? 'Ocultar capa' : 'Mostrar capa';
-        }
+        // Mismo dibujo y mismo estado que en el render principal
+        // (`_aplicarOjoBoton` incluye el tercer estado "fuera").
+        if (eye) _aplicarOjoBoton(eye, layer);
       }
     };
 
@@ -5390,6 +5718,13 @@ class miPlugin_layerSwitcher {
     // arriba, pero lo alcanza la elevacion de la declaracion de funcion).
     this._unbindMapClick = unbindMapClick;
 
+    // ── Refresco del ojito al terminar de mover el mapa ─────────────────
+    // El estado "encendida pero no se ve" depende del zoom y de la vista, así
+    // que se recalcula al final de cada movimiento. Solo se repintan los
+    // ojitos ya montados: rehacer la lista cerraría el desplegable de
+    // opciones y cortaría un arrastre en curso.
+    this._lsOjosUnbind = _engancharFinDeMovimiento(_refrescarOjos);
+
     control.activate();
   }
 
@@ -5410,6 +5745,12 @@ class miPlugin_layerSwitcher {
       if (this._unbindMapClick) this._unbindMapClick();
     } catch (e) { /* ignora: el mapa puede estar ya destruido */ }
     this._unbindMapClick = null;
+
+    // 1 bis) Refresco del ojito al mover el mapa.
+    try {
+      if (this._lsOjosUnbind) this._lsOjosUnbind();
+    } catch (e) { /* ignora: el mapa puede estar ya destruido */ }
+    this._lsOjosUnbind = null;
 
     // 2) Listener de capas añadidas en la fachada de la API.
     try {
