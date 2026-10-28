@@ -215,6 +215,10 @@ mapajs.addLayers(capaIFC);
 - **En 2D (OpenLayers)**:
   - Lee la georreferenciación (`position`, `IfcSite` o `IfcMapConversion`) y las dimensiones calculadas del modelo para proyectar la huella poligonal exacta en EPSG:3857.
   - Ofrece metadatos en las propiedades de la entidad (huella, coordenadas, enlace de descarga).
+- **3D Tiles (2D y 3D)**:
+  - La huella se lee del propio `tileset.json`: `root.boundingVolume.region` (radianes) o `box` + `root.transform` (matriz 4x4 a ECEF, esquinas convertidas a geodésicas). No hace falta `position`.
+  - Si el tileset no está georreferenciado (sin `transform` y con el `box` en coordenadas locales) no hay huella: se mantiene el comportamiento anterior (`position` manual o aviso de "no georreferenciado").
+  - En 3D la huella también se calcula (sin dibujarla) para que el selector pueda encuadrar la capa.
 - **En 3D (Cesium)**:
   - Carga el recurso 3D con orientación, sombras y materiales PBR.
   - Vuela suavemente a la posición del modelo al activarse.

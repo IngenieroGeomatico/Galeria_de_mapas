@@ -20,11 +20,18 @@
  *     visible,             // Visibilidad inicial (true por defecto)
  *     opacity,             // Opacidad inicial (0 a 1)
  *   }, { style });
+ *
+ * HUELLA EN 2D (y extensión de la capa en 3D):
+ *   - IFC: se deduce de `IfcSite` / `IfcMapConversion` y del AABB del modelo.
+ *   - 3D Tiles: se lee `root.boundingVolume` del `tileset.json` (`region`, o
+ *     `box` + `transform`). Si el tileset no está georreferenciado (sin
+ *     `transform` y con el `box` en coordenadas locales) no hay huella.
+ *   - glTF/GLB: el formato no lleva georreferenciación; solo con `position`.
  */
 (function () {
   'use strict';
 
-  var VERSION = '2.4.0';
+  var VERSION = '2.5.0';
 
   function api() {
     return window.IDEE || window.M || null;
@@ -63,6 +70,155 @@
       Math.max(sw[0], ne[0]),
       Math.max(sw[1], ne[1]),
     ];
+  }
+
+  /* ---------------------------------------------------------------------
+   * Huella 2D de un tileset 3D Tiles.
+   *
+   * Un `tileset.json` describe su volumen con `root.boundingVolume`, que
+   * puede ser:
+   *   - `region`: [oeste, sur, este, norte, alturaMin, alturaMax] en radianes.
+   *   - `box`: 12 números (centro + 3 semiejes) en el sistema local de la
+   *     tesela; hay que aplicarles `root.transform` (matriz 4x4 column-major
+   *     que pasa a ECEF) y convertir las esquinas a geodésicas.
+   *
+   * Si no hay `region` ni `transform` el `box` está en coordenadas locales
+   * (típicamente centrado en 0,0,0) y no hay forma de georreferenciarlo: se
+   * devuelve null y la capa se queda sin huella.
+   * ------------------------------------------------------------------- */
+
+  function esFinito(v) {
+    return typeof v === 'number' && isFinite(v);
+  }
+
+  function bboxValida(bbox) {
+    if (!Array.isArray(bbox) || bbox.length < 4) return null;
+    var o = Number(bbox[0]);
+    var s = Number(bbox[1]);
+    var e = Number(bbox[2]);
+    var n = Number(bbox[3]);
+    if (!esFinito(o) || !esFinito(s) || !esFinito(e) || !esFinito(n)) return null;
+    if (o < -180 || e > 180 || s < -90 || n > 90) return null;
+    if (e <= o || n <= s) return null;
+    return [o, s, e, n];
+  }
+
+  /** Punto ECEF (WGS84) a [lon, lat] en grados. Formula cerrada de Bowring. */
+  function ecefALonLat(x, y, z) {
+    if (!esFinito(x) || !esFinito(y) || !esFinito(z)) return null;
+    var a = 6378137;
+    var f = 1 / 298.257223563;
+    var e2 = f * (2 - f);
+    var b = a * (1 - f);
+    var ep2 = (a * a - b * b) / (b * b);
+    var p = Math.sqrt(x * x + y * y);
+    if (p < 1) return null;
+    var theta = Math.atan2(a * z, b * p);
+    var sen = Math.sin(theta);
+    var cos = Math.cos(theta);
+    var lat = Math.atan2(z + ep2 * b * sen * sen * sen, p - e2 * a * cos * cos * cos);
+    var lon = Math.atan2(y, x);
+    return [lon * 180 / Math.PI, lat * 180 / Math.PI];
+  }
+
+  /** Matriz 4x4 column-major (como `root.transform`) por un punto [x, y, z]. */
+  function aplicarMatriz4(m, v) {
+    return [
+      m[0] * v[0] + m[4] * v[1] + m[8] * v[2] + m[12],
+      m[1] * v[0] + m[5] * v[1] + m[9] * v[2] + m[13],
+      m[2] * v[0] + m[6] * v[1] + m[10] * v[2] + m[14],
+    ];
+  }
+
+  function bboxDeRegion(region) {
+    var o = region[0] * 180 / Math.PI;
+    var s = region[1] * 180 / Math.PI;
+    var e = region[2] * 180 / Math.PI;
+    var n = region[3] * 180 / Math.PI;
+    if (!esFinito(o) || !esFinito(s) || !esFinito(e) || !esFinito(n)) return null;
+    // Region que cruza el antimeridiano (o viene expresada fuera de rango):
+    // se abre al mundo entero, que es lo unico representable en [o, s, e, n].
+    if (o > e || o < -180 || e > 180) { o = -180; e = 180; }
+    return bboxValida([o, s, e, n]);
+  }
+
+  function bboxDeBox(box, transform) {
+    var identidad = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    var T = (Array.isArray(transform) && transform.length === 16) ? transform : identidad;
+
+    // Centro en ECEF: si no cae cerca de la superficie terrestre, el box esta
+    // en coordenadas locales y no se puede georreferenciar.
+    var centro = aplicarMatriz4(T, [box[0], box[1], box[2]]);
+    var radio = Math.sqrt(centro[0] * centro[0] + centro[1] * centro[1] + centro[2] * centro[2]);
+    if (!esFinito(radio) || radio < 6.0e6 || radio > 7.0e6) return null;
+
+    var semi = [
+      [box[3], box[4], box[5]],
+      [box[6], box[7], box[8]],
+      [box[9], box[10], box[11]],
+    ];
+
+    var o = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+    for (var i = -1; i <= 1; i += 2) {
+      for (var j = -1; j <= 1; j += 2) {
+        for (var k = -1; k <= 1; k += 2) {
+          var local = [
+            box[0] + i * semi[0][0] + j * semi[1][0] + k * semi[2][0],
+            box[1] + i * semi[0][1] + j * semi[1][1] + k * semi[2][1],
+            box[2] + i * semi[0][2] + j * semi[1][2] + k * semi[2][2],
+          ];
+          var p = aplicarMatriz4(T, local);
+          var ll = ecefALonLat(p[0], p[1], p[2]);
+          if (!ll) continue;
+          if (ll[0] < o) o = ll[0];
+          if (ll[0] > e) e = ll[0];
+          if (ll[1] < s) s = ll[1];
+          if (ll[1] > n) n = ll[1];
+        }
+      }
+    }
+    return bboxValida([o, s, e, n]);
+  }
+
+  function bboxDeTilesetJSON(json, base, nivel) {
+    if (!json || typeof json !== 'object') return null;
+    var raiz = json.root || (json.tileset && json.tileset.root) || null;
+    if (!raiz) return null;
+
+    var bv = raiz.boundingVolume;
+    if (bv) {
+      if (Array.isArray(bv.region) && bv.region.length >= 4) {
+        var porRegion = bboxDeRegion(bv.region);
+        if (porRegion) return porRegion;
+      }
+      if (Array.isArray(bv.box) && bv.box.length >= 12) {
+        var porBox = bboxDeBox(bv.box, raiz.transform);
+        if (porBox) return porBox;
+      }
+    }
+
+    // Tileset externo: la raiz apunta a otro `tileset.json` (un solo salto).
+    if (nivel < 1 && raiz.content && typeof raiz.content.uri === 'string' && /\.json(\?|#|$)/i.test(raiz.content.uri)) {
+      return descargarHuellaDeTileset(raiz.content.uri, base, nivel + 1);
+    }
+    return null;
+  }
+
+  async function descargarHuellaDeTileset(url, base, nivel) {
+    var absoluta = url;
+    try {
+      absoluta = base ? new URL(url, base).href : new URL(url, document.baseURI).href;
+    } catch (e) { /* se deja tal cual */ }
+
+    var respuesta = await fetch(absoluta, { mode: 'cors' });
+    if (!respuesta.ok) throw new Error('HTTP ' + respuesta.status + ' al leer ' + absoluta);
+    var json = await respuesta.json();
+    return bboxDeTilesetJSON(json, absoluta, nivel || 0);
+  }
+
+  /** Huella [oeste, sur, este, norte] en EPSG:4326 de un `tileset.json`, o null. */
+  function huellaDeTileset(url) {
+    return descargarHuellaDeTileset(url, null, 0);
   }
 
   function normalizarPosicion(pos) {
@@ -476,6 +632,7 @@
         this._ifcFeature = false;
         this._ifcGeorreferenciado = Boolean(this._ifcPosition);
         this._ifcExtent3857 = this._ifcBbox ? bbox4326A3857(this._ifcBbox) : null;
+        this._ifcFuenteHuella = this._ifcBbox ? 'parametros' : null;
         this._ifcToken = 0;
         this._ifcListenerMap = null;
         this._ifcOnRemoved = null;
@@ -756,6 +913,28 @@
         };
       }
 
+      /**
+       * Completa `_ifcBbox` leyendo la huella del `tileset.json` cuando la capa
+       * apunta a un 3D Tiles. No dibuja nada: deja la extensión lista para que
+       * el selector pueda encuadrar la capa y para pintar la huella en 2D.
+       * Si falla (CORS, red, tileset con coordenadas locales) se mantiene el
+       * comportamiento anterior: `position` manual o ninguna huella.
+       */
+      async _ifcHuellaDeTilesetSiFalta() {
+        if (this._ifcBbox || this._ifcDestruido || !this._ifcUrl) return;
+        var token = this._ifcToken;
+        try {
+          var bbox = await huellaDeTileset(this._ifcUrl);
+          if (!bbox || this._ifcDestruido || token !== this._ifcToken) return;
+          this._ifcBbox = bbox;
+          this._ifcExtent3857 = bbox4326A3857(bbox);
+          this._ifcGeorreferenciado = true;
+          this._ifcFuenteHuella = 'tileset';
+        } catch (e) {
+          console.warn('IFC: no se pudo leer la huella del 3D Tiles (' + (e && e.message ? e.message : e) + ')');
+        }
+      }
+
       async _ifcPintarHuella() {
         var IDEE = api();
         var token = this._ifcToken;
@@ -763,6 +942,17 @@
 
         var urlLower = this._ifcUrl.toLowerCase();
         var esIfc = urlLower.indexOf('.ifc') !== -1;
+        var esTileset = !esIfc && (urlLower.indexOf('tileset.json') !== -1 ||
+          urlLower.indexOf('3dtiles') !== -1 || urlLower.indexOf('3d-tiles') !== -1);
+        var formato = esTileset
+          ? '3D Tiles'
+          : ((urlLower.indexOf('.glb') !== -1 || urlLower.indexOf('.gltf') !== -1) ? 'glTF' : 'IFC');
+
+        // 3D Tiles: la huella real sale del propio `tileset.json` (region o box + transform).
+        if (esTileset && !this._ifcBbox) {
+          await this._ifcHuellaDeTilesetSiFalta();
+          if (this._ifcDestruido || token !== this._ifcToken) return;
+        }
 
         if (esIfc && (!this._ifcPosition || !this._ifcBbox)) {
           try {
@@ -789,9 +979,10 @@
         }
 
         // VALIDACIÓN DE GEORREFERENCIACIÓN ESTRICTA
-        if (!this._ifcPosition) {
+        // En 3D Tiles la huella puede venir del propio tileset, sin `position`.
+        if (!this._ifcPosition && !this._ifcBbox) {
           this._ifcGeorreferenciado = false;
-          this._ifcError = new Error('IFC no georreferenciado: el modelo no declara IfcSite (RefLatitude/RefLongitude) ni IfcMapConversion. No se puede ubicar en el mapa.');
+          this._ifcError = new Error('IFC no georreferenciado: el modelo no declara IfcSite (RefLatitude/RefLongitude) ni IfcMapConversion, y el tileset no publica una huella (region o box + transform). No se puede ubicar en el mapa.');
           console.warn('IFC: ' + this._ifcError.message);
           return;
         }
@@ -826,10 +1017,12 @@
             },
             properties: {
               nombre: this.legend || this.name || 'Modelo IFC',
-              formato: 'IFC',
+              formato: formato,
               url: this._ifcUrl,
               oeste: o, sur: s, este: e, norte: n,
-              nota: 'Modelo BIM visualizable en 3D (Cesium)',
+              nota: esTileset
+                ? 'Conjunto 3D Tiles visualizable en 3D (Cesium); huella leída del tileset.json'
+                : 'Modelo BIM visualizable en 3D (Cesium)',
             },
           })]);
           this._ifcFeature = true;
@@ -869,6 +1062,8 @@
             viewer.scene.primitives.add(objeto3D);
             this._ifcObjeto = objeto3D;
             this._ifcAplicarEstado();
+            // Huella para que el selector pueda encuadrar la capa (no se dibuja en 3D).
+            this._ifcHuellaDeTilesetSiFalta();
             return;
           }
 
