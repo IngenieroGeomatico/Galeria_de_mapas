@@ -73,7 +73,9 @@
       - Nombre de la clase: class miPlugin_<nombre>
       - Propiedad de identificación: this.name = 'miPlugin_<nombre>'
       - Id de panel y control en addTo: 'tools_<nombre>', 'control_<nombre>'
-      - Clases CSS del panel: 'g-herramienta_<nombre>'
+      - Clases CSS del panel: 'g-herramienta_<nombre> g-panel-lateral'
+        (`g-panel-lateral` abre el panel al lado del boton en vez de debajo;
+        quitarla si el panel no es plegable o es de panel completo)
       - Exposición triple al final del fichero:
           window.miPlugin_<nombre> = ...
           window.IDEE.plugin.miPlugin_<nombre> = ...
@@ -521,7 +523,7 @@
       // TODO: Personalizar el identificador y clases del panel
       const panel = new IDEE.ui.Panel('tools_plantilla', {
         collapsible: this.collapsible,
-        className: 'g-herramienta_plantilla',
+        className: 'g-herramienta_plantilla g-panel-lateral',
         collapsedButtonClass: 'm-tools',
         position: pos,
         // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre

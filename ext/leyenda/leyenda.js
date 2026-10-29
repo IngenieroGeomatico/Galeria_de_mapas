@@ -555,7 +555,7 @@
 
       var panel = new IDEE.ui.Panel('tools_leyenda', {
         collapsible: this.collapsible,
-        className: 'g-herramienta_leyenda',
+        className: 'g-herramienta_leyenda g-panel-lateral',
         collapsedButtonClass: 'm-tools',
         position: pos,
         order: this.order,

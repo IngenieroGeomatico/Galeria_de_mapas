@@ -1105,7 +1105,7 @@
 
       const panel = new IDEE.ui.Panel('tools_catalogo', {
         collapsible: this.collapsible,
-        className: 'g-herramienta_catalogo',
+        className: 'g-herramienta_catalogo g-panel-lateral',
         collapsedButtonClass: 'm-tools',
         position: pos,
         order: this.order,

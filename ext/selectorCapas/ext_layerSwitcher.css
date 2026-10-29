@@ -1707,3 +1707,80 @@
 .m-panel.g-herramienta_selectorCapa.g-panel-en-barra > .m-panel-btn {
   display: none;
 }
+
+/* PANEL LATERAL (clase opt-in `g-panel-lateral`): el panel abierto se queda
+   en 40x40 (solo el boton) y sus controles salen al lado, para no empujar a
+   los demas paneles de la esquina. La explicacion completa, con las medidas y
+   los tres detalles que no son opcionales, esta en
+   ext/plantilla_plugin/plantilla_plugin.css (mismos selectores). */
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  background-color: transparent !important;
+  overflow: visible !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  z-index: 2;
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  left: 0 !important;
+  right: auto !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  right: 0 !important;
+  left: auto !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  position: absolute !important;
+  top: 0 !important;
+  z-index: 1;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  left: 100% !important;
+  right: auto !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  right: 100% !important;
+  left: auto !important;
+}
+
+/* En las areas inferiores el panel crece hacia arriba: los controles se
+   anclan al fondo del boton para no salirse por debajo de la ventana. */
+.m-areas > .m-area.m-bottom > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  bottom: 0 !important;
+  top: auto !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
+  position: static !important;
+}
+
+/* En pantallas estrechas los controles no caben al lado del boton: en un
+   viewport de 360 px median 324 px y se salian 14 px por el borde derecho.
+   Se limitan al hueco que queda a partir del boton (100vw - 60px: 10 de
+   margen + 40 del boton + 10 de aire) y el control interior se deja
+   encoger. Misma explicacion en ext/plantilla_plugin/plantilla_plugin.css. */
+@media (max-width: 768px) {
+  .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+    max-width: calc(100vw - 60px);
+  }
+
+  .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
+    max-width: 100%;
+  }
+}

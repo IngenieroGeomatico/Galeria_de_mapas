@@ -1061,7 +1061,7 @@ class miPlugin_layerSwitcher {
     if (window.miWrapX) window.miWrapX.aplica(map);
     const panelExtra = new IDEE.ui.Panel('toolsExtra_layerSwitcher', {
       collapsible: true,
-      className: 'g-herramienta_selectorCapa',
+      className: 'g-herramienta_selectorCapa g-panel-lateral',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TL,
       // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el

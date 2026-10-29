@@ -319,7 +319,7 @@ class miPlugin_attribution {
     // className g-herramienta_* + collapsedButtonClass m-tools + cabecera
     // #m-herramienta-title-* inyectada en .m-panel-controls para poder arrastrar el panel.
     const panel = new IDEE.ui.Panel('toolsExtra_attribution', {
-      className: 'g-herramienta_attribution',
+      className: 'g-herramienta_attribution g-panel-lateral',
       collapsible: this.collapsible_,
       collapsed: this.collapsed_,
       collapsedButtonClass: 'm-tools',
@@ -434,7 +434,7 @@ class miPlugin_attribution {
     };
 
     const panel = new IDEE.ui.Panel('toolsExtra_attribution', {
-      className: 'g-herramienta_attribution m-attribution-lite',
+      className: 'g-herramienta_attribution g-panel-lateral m-attribution-lite',
       collapsible: this.collapsible_,
       collapsed: this.collapsed_,
       collapsedButtonClass: 'm-tools',

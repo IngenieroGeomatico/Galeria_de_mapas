@@ -194,3 +194,118 @@
 .m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
   box-sizing: border-box;
 }
+
+/* ====================================================================
+   PANEL LATERAL (clase opt-in `g-panel-lateral`)
+   --------------------------------------------------------------------
+   La API apila los paneles de cada esquina en un flex column: al abrir
+   uno, el panel crece a lo alto de su contenido y empuja a los demas,
+   que acaban fuera de pantalla. IDEE.ui.Panel no tiene opcion para
+   abrirlo a un lado (solo collapsible, collapsed, className,
+   collapsedButtonClass, openedButtonClass, tooltip, order y position).
+
+   Con esta clase el panel abierto se queda en 40x40 (solo el boton) y su
+   `.m-panel-controls` sale de flujo y se coloca al lado: a la derecha en
+   las areas m-left y a la izquierda en las m-right. Los botones de los
+   demas paneles ya no se mueven.
+
+   Tres cosas que no son opcionales:
+   - El boton se fuerza a left:0 / right:0 porque la hoja del selector de
+     capas tiene `.opened .g-cartografia-flecha-izquierda { right:-40px
+     !important }` y los paneles TR de cada plugin se sacan con
+     `left:-40px`. Sin esto el boton se separa del panel.
+   - Los hijos directos de `.m-panel-controls` pasan a position:static
+     !important: la API los deja en position:inherit !important y, al
+     pasar el contenedor a absolute, heredarian absolute y se irian
+     fuera de la caja (medido: -370,-58).
+   - max-height + overflow evitan que un panel alto se salga por abajo;
+     en las areas inferiores los controles se anclan al fondo.
+
+   El `:not(.no-collapsible)` es la red de seguridad: la API pone esa
+   clase a los paneles sin boton (collapsible:false) y esos no deben
+   encogerse a 40x40 ni sacar su contenido de flujo.
+
+   Solo se aplica a los paneles marcados. Los paneles internos de la API
+   (layerswitcher, mapinfo, attributions, panzoom...) y los plugins de
+   panel completo (storymap, comparacion, modal) no llevan la clase.
+   ==================================================================== */
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  background-color: transparent !important;
+  overflow: visible !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  z-index: 2;
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  left: 0 !important;
+  right: auto !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  right: 0 !important;
+  left: auto !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  position: absolute !important;
+  top: 0 !important;
+  z-index: 1;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  left: 100% !important;
+  right: auto !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  right: 100% !important;
+  left: auto !important;
+}
+
+/* En las areas inferiores el panel crece hacia arriba: los controles se
+   anclan al fondo del boton para no salirse por debajo de la ventana. */
+.m-areas > .m-area.m-bottom > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  bottom: 0 !important;
+  top: auto !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
+  position: static !important;
+}
+
+/* --------------------------------------------------------------------
+   PANEL LATERAL EN PANTALLAS ESTRECHAS
+   --------------------------------------------------------------------
+   El panel lateral se coloca a partir del boton (x = margen 10 + boton 40),
+   asi que solo quedan libres 100vw - 60 px. En un viewport de 360 px los
+   controles median 324 px y se salian 14 px por el borde derecho (medido),
+   porque el ancho lo pone el contenido del control, no el panel.
+
+   El max-width sobre `.m-panel-controls` no basta por si solo: el hijo
+   directo conserva su ancho propio (420 px en el selector de capas) y
+   desbordaria igual, asi que se le pone max-width:100% para que encoja
+   dentro del contenedor. El `overflow: auto` del bloque anterior se queda
+   con la parte que aun no quepa.
+   -------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+    max-width: calc(100vw - 60px);
+  }
+
+  .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
+    max-width: 100%;
+  }
+}

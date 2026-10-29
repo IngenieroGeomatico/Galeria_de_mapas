@@ -293,7 +293,7 @@ class miPlugin_georrefTeselas {
     // selectorizan las reglas de georrefTeselas.css y lo que da especificidad
     // suficiente para que el botón salga naranja en vez de azul. La opción
     // `className` se AÑADE, no sustituye.
-    this.className_ = ['g-herramienta_georrefTeselas', options.className].filter(Boolean).join(' ');
+    this.className_ = ['g-herramienta_georrefTeselas', 'g-panel-lateral', options.className].filter(Boolean).join(' ');
     // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
     // API monta como flex column). Es un valor CSS `order`, no un índice: lo
     // aplica la propia API haciendo style.order sobre el panel, así que no hay

@@ -77,7 +77,7 @@ class miPlugin_miNombre {
     // 1) Construcción del panel con identificador + opciones
     this._panel = new IDEE.ui.Panel('tools_miNombre', {
       collapsible: true,
-      className: 'g-herramienta_miNombre',
+      className: 'g-herramienta_miNombre g-panel-lateral',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TL,
     });

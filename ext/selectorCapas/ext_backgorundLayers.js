@@ -431,7 +431,7 @@ class miPlugin_baseLayer {
     // mapa (y con el el panel) cuando el plugin se desmonta.
     var panel = new IDEE.ui.Panel('toolsExtra_baseLayer', {
       collapsible: true,
-      className: 'g-herramienta_baseLayer',
+      className: 'g-herramienta_baseLayer g-panel-lateral',
       collapsedButtonClass: 'm-tools',
       position: position,
       // `order` lo aplica la propia API: IDEE.ui.Panel hace style.order sobre el

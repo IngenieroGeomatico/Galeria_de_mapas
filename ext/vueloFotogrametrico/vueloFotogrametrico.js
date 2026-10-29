@@ -1608,7 +1608,7 @@
     this.tooltip_ = options.tooltip || 'Vuelo fotogrametrico';
     // Clase base del panel. Es la que usan las reglas de vueloFotogrametrico.css,
     // asi que NO se sustituye: la opcion `className` se AÑADE.
-    this.className_ = ['g-herramienta_vuelo', options.className].filter(Boolean).join(' ');
+    this.className_ = ['g-herramienta_vuelo', 'g-panel-lateral', options.className].filter(Boolean).join(' ');
     // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
     // API monta como flex column). Es un valor CSS `order`, no un índice: lo
     // aplica la propia API haciendo style.order sobre el panel, así que no hay

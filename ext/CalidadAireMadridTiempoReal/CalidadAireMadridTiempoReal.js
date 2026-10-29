@@ -288,7 +288,7 @@ class miPlugin_calidadAire {
     const panelExtra = new IDEE.ui.Panel('toolsExtra_calidadAire', {
       collapsible: true,
       collapsed: false,
-      className: 'g-herramienta',
+      className: 'g-herramienta g-panel-lateral',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.TL,
       // `order` lo aplica la propia API (style.order dentro del area, que es
@@ -761,7 +761,7 @@ class miPlugin_leyenda {
 
     const panelExtra = new IDEE.ui.Panel('toolsExtra_leyenda', {
       collapsible: true,
-      className: 'g-herramienta_leyenda',
+      className: 'g-herramienta_leyenda g-panel-lateral',
       collapsedButtonClass: 'm-tools',
       position: IDEE.ui.position.BL,
       // Ver addTo(): `order` lo aplica la propia API.

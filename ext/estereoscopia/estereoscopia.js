@@ -211,7 +211,7 @@
     this.tooltip_ = options.tooltip || 'Estereoscopía';
     // Clase base del panel. Es la que usan las reglas de estereoscopia.css, así que
     // NO se sustituye: la opción `className` se AÑADE.
-    this.className_ = ['g-herramienta_estereo', options.className].filter(Boolean).join(' ');
+    this.className_ = ['g-herramienta_estereo', 'g-panel-lateral', options.className].filter(Boolean).join(' ');
 
     // Posición del panel dentro de la esquina elegida (área `.m-area`, que la
     // API monta como flex column). Es un valor CSS `order`, no un índice: lo
