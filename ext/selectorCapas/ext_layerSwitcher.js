@@ -303,6 +303,10 @@ class miPlugin_layerSwitcher {
     // Se conserva entre re-renders; si un grupo no está presente, se usa el
     // valor "collapsed" con el que se creó (constructorParameters).
     this._groupCollapsed = {};
+    // Capa del modo "una capa a la vez" que estaba encendida al pulsar
+    // "Ocultar todas", para devolverla al pulsar "Mostrar todas". Es un
+    // recuerdo transitorio de la acción masiva, no estado persistente.
+    this._radioVisibleAntesDeOcultar = null;
     // Panel contenedor del selector (colapsable). Referencia guardada en
     // addTo() para poder conservar su estado abierto/colapsado entre swaps
     // 2D/3D (contrato EstadoPlugins), igual que hacen FiltroCapas o storymap.
@@ -736,6 +740,7 @@ class miPlugin_layerSwitcher {
         if (!ident) return;
         let visible;
         let opacity;
+        let selectedStyle;
         try {
           if (typeof capa.isVisible === 'function') visible = !!capa.isVisible();
         } catch (e) { /* capa sin visibilidad */ }
@@ -745,10 +750,52 @@ class miPlugin_layerSwitcher {
             if (isFinite(op)) opacity = op;
           }
         } catch (e) { /* capa sin opacidad */ }
-        if (visible !== undefined || opacity !== undefined) {
-          layerStates.push({ ident, visible, opacity });
+        try {
+          if (capa._selectedStyleName !== undefined) {
+            selectedStyle = capa._selectedStyleName;
+          } else if (capa._selectedStyleIndex !== undefined) {
+            selectedStyle = capa._selectedStyleIndex;
+          } else if (capa._currentStyleId !== undefined) {
+            selectedStyle = capa._currentStyleId;
+          } else if (typeof capa.getStyles === 'function') {
+            const st = capa.getStyles();
+            if (st) selectedStyle = st;
+          }
+        } catch (e) { /* capa sin estilos */ }
+        if (visible !== undefined || opacity !== undefined || selectedStyle !== undefined) {
+          layerStates.push({ ident, visible, opacity, style: selectedStyle });
         }
       });
+    }
+    // Visibilidad de los GRUPOS. `_capasConEstado` los salta a propósito (un
+    // grupo no tiene opacidad ni estilo propios), pero su ojito sí es estado
+    // de la UI: al reiniciarse el mapa el grupo volvía a nacer visible aunque
+    // el usuario lo hubiera apagado, y con él el estado de la barra de
+    // acciones rápidas ("Ocultar todas" con todo apagado). Se guarda aparte y
+    // por legend/name, como el resto de identificadores estables.
+    const groupStates = [];
+    if (this._map) {
+      const visitarGrupos = (l) => {
+        if (!l) return;
+        const esGrupo = (l.type === 'LayerGroup' || l._type === 'LayerGroup' || typeof l.getLayers === 'function');
+        if (!esGrupo) return;
+        let saltar = false;
+        try {
+          const impl = (typeof l.getImpl === 'function') ? l.getImpl() : null;
+          if (l.isBase === true || (impl && impl.isBase === true)) saltar = true;
+          if (l.displayInLayerSwitcher === false || (impl && impl.displayInLayerSwitcher === false)) saltar = true;
+        } catch (e) { /* se queda como está */ }
+        if (!saltar) {
+          const ident = this._identificadorDe(l);
+          let visible;
+          try { if (typeof l.isVisible === 'function') visible = !!l.isVisible(); } catch (e) { /* sin visibilidad */ }
+          if (ident && visible !== undefined) groupStates.push({ ident, visible });
+        }
+        let hijas = [];
+        try { hijas = l.getLayers ? l.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitarGrupos);
+      };
+      try { (this._map.getLayers() || []).forEach(visitarGrupos); } catch (e) { /* sin capas */ }
     }
     return {
       panelCollapsed,
@@ -759,6 +806,7 @@ class miPlugin_layerSwitcher {
       radioVisibleLegend,
       ordenZ,
       layerStates,
+      groupStates,
     };
   }
 
@@ -939,6 +987,32 @@ class miPlugin_layerSwitcher {
             }
           } catch (e) { /* capa sin opacidad */ }
         }
+        if (estadoCapa.style !== undefined && estadoCapa.style !== null) {
+          try {
+            if (typeof window.setLayerStyle === 'function' && capa.idLayer) {
+              window.setLayerStyle(capa.idLayer, estadoCapa.style);
+            }
+          } catch (e) { /* ignorar fallo al restaurar estilo */ }
+        }
+      });
+    }
+
+    // Restaurar la visibilidad de los grupos, que viaja aparte de las capas
+    // (`layerStates` solo lleva hojas). Sin esto, un grupo apagado por el
+    // usuario volvía a nacer visible tras el cambio 2D/3D y con él se
+    // encendía el rótulo "Ocultar todas" de la barra de acciones rápidas.
+    // Igual que en el resto, se resuelve por legend/name porque el idLayer
+    // se regenera al recrear el mapa.
+    if (Array.isArray(state.groupStates)) {
+      state.groupStates.forEach((estadoGrupo) => {
+        if (!estadoGrupo || !estadoGrupo.ident) return;
+        if (typeof estadoGrupo.visible !== 'boolean') return;
+        const grupo = this._findLayerByLegendInMap(mapRef, estadoGrupo.ident);
+        if (!grupo || typeof grupo.setVisible !== 'function') return;
+        let visibleActual;
+        try { visibleActual = !!grupo.isVisible(); } catch (e) { visibleActual = true; }
+        if (visibleActual === estadoGrupo.visible) return;
+        try { grupo.setVisible(estadoGrupo.visible); } catch (e) { /* grupo sin visibilidad */ }
       });
     }
 
@@ -1488,6 +1562,12 @@ class miPlugin_layerSwitcher {
     // fuente del sistema y en algunos navegadores aparecen como un punto.
     const SVG_OJO_ABIERTO = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
     const SVG_OJO_TACHADO = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+    // Chevrones para la acción masiva sobre grupos: hacia dentro (plegar) y
+    // hacia fuera (desplegar). Se dibujan como el resto de iconos del plugin
+    // (SVG en línea con stroke=currentColor) para que hereden el color del
+    // botón y no dependan de emojis ni de la fuente del sistema.
+    const SVG_PLEGAR_GRUPOS = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 20 5-5 5 5"></path><path d="m7 4 5 5 5-5"></path></svg>';
+    const SVG_DESPLEGAR_GRUPOS = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg>';
 
     /**
      * Dibujo del ojito. El estado `fuera` mantiene el ojo ABIERTO (la capa
@@ -1586,6 +1666,152 @@ class miPlugin_layerSwitcher {
       };
     }
 
+    /**
+     * Obtiene la lista de estilos disponibles para una capa (vectorial o ráster).
+     * Devuelve { styles: [{ id, name, styleObj, isVector, isWms }], currentId } o null si no tiene múltiples estilos.
+     * @param {Object} layer
+     * @returns {Object|null}
+     */
+    function getLayerAvailableStyles(layer) {
+      if (!layer) return null;
+      const stylesList = [];
+
+      // 1. Capas Vectoriales (Vector, GeoJSON, KML, WFS, etc.)
+      let rawVectorStyles = null;
+      if (layer.options && Array.isArray(layer.options.styles) && layer.options.styles.length > 0) {
+        rawVectorStyles = layer.options.styles;
+      } else if (layer.constructorParameters && layer.constructorParameters.options && Array.isArray(layer.constructorParameters.options.styles) && layer.constructorParameters.options.styles.length > 0) {
+        rawVectorStyles = layer.constructorParameters.options.styles;
+      } else if (layer.constructorParameters && Array.isArray(layer.constructorParameters.styles) && layer.constructorParameters.styles.length > 0) {
+        rawVectorStyles = layer.constructorParameters.styles;
+      } else if (Array.isArray(layer.predefinedStyles) && layer.predefinedStyles.length > 0) {
+        rawVectorStyles = layer.predefinedStyles;
+      } else if (Array.isArray(layer.styles) && layer.styles.length > 0 && typeof layer.styles[0] === 'object') {
+        rawVectorStyles = layer.styles;
+      }
+
+      if (rawVectorStyles && rawVectorStyles.length > 1) {
+        rawVectorStyles.forEach((st, idx) => {
+          let name = '';
+          if (st) {
+            name = st.name || (st.options_ && st.options_.name) || (st.impl_ && st.impl_.options_ && st.impl_.options_.name) || st.title || st.label || st.id || '';
+          }
+          if (!name) name = 'Estilo ' + (idx + 1);
+          stylesList.push({
+            id: String(idx),
+            name: String(name),
+            styleObj: st,
+            isVector: true,
+          });
+        });
+
+        let currentId = '0';
+        if (layer._selectedStyleIndex !== undefined && stylesList[layer._selectedStyleIndex]) {
+          currentId = String(layer._selectedStyleIndex);
+        } else if (layer._selectedStyleName) {
+          const match = stylesList.find(s => s.name === layer._selectedStyleName);
+          if (match) currentId = match.id;
+        } else if (typeof layer.getStyle === 'function') {
+          const cur = layer.getStyle();
+          if (cur) {
+            const matchIdx = rawVectorStyles.indexOf(cur);
+            if (matchIdx !== -1) currentId = String(matchIdx);
+            else {
+              const curName = cur.name || (cur.options_ && cur.options_.name);
+              if (curName) {
+                const m = stylesList.find(s => s.name === curName);
+                if (m) currentId = m.id;
+              }
+            }
+          }
+        }
+        return { styles: stylesList, currentId, isVector: true };
+      }
+
+      // 2. Capas WMS (o con setStyles)
+      const layerType = String(layer.type || layer._type || (layer.getImpl && layer.getImpl().type) || '').toLowerCase();
+      const esWMS = layerType === 'wms' || typeof layer.setStyles === 'function' || _esCapaWMS(layer);
+
+      if (esWMS) {
+        let wmsRaw = layer.options && (layer.options.availableStyles || layer.options.styles);
+        if (!wmsRaw && layer.constructorParameters && layer.constructorParameters.options) {
+          wmsRaw = layer.constructorParameters.options.availableStyles || layer.constructorParameters.options.styles;
+        }
+        if (!wmsRaw && layer.availableStyles) wmsRaw = layer.availableStyles;
+        if (!wmsRaw && layer.styles && typeof layer.styles === 'string' && layer.styles.includes(',')) wmsRaw = layer.styles;
+
+        if (Array.isArray(wmsRaw)) {
+          wmsRaw.forEach((item, idx) => {
+            if (typeof item === 'string') {
+              stylesList.push({ id: item, name: item || 'Por defecto', isWms: true });
+            } else if (item && typeof item === 'object') {
+              const id = item.name || item.id || item.style || String(idx);
+              const name = item.title || item.name || item.label || id;
+              stylesList.push({ id: String(id), name: String(name), isWms: true });
+            }
+          });
+        } else if (typeof wmsRaw === 'string' && wmsRaw.trim()) {
+          const parts = wmsRaw.split(/[,;\/]/).map(s => s.trim()).filter(Boolean);
+          if (parts.length > 1) {
+            parts.forEach((p) => {
+              stylesList.push({ id: p, name: p || 'Por defecto', isWms: true });
+            });
+          }
+        }
+
+        // Si no hay estilos explícitos en las opciones, se usan los que el
+        // plugin ya haya leído del GetCapabilities al abrir el panel de la
+        // capa (`toggleLayerOptions` los deja en `_wmsAvailableStyles`). No se
+        // consulta aquí la caché porque este render es síncrono.
+        if (stylesList.length === 0 && Array.isArray(layer._wmsAvailableStyles)) {
+          layer._wmsAvailableStyles.forEach((s) => {
+            stylesList.push({ id: s.id || s.name, name: s.name || s.title || s.id, isWms: true });
+          });
+        }
+
+        if (stylesList.length > 1) {
+          let currentStyles = '';
+          if (typeof layer.getStyles === 'function') {
+            try { currentStyles = layer.getStyles() || ''; } catch (e) {}
+          }
+          if (!currentStyles && layer.options && typeof layer.options.styles === 'string') {
+            currentStyles = layer.options.styles;
+          }
+          let currentId = stylesList[0].id;
+          if (layer._selectedStyleName) {
+            const m = stylesList.find(s => s.id === layer._selectedStyleName || s.name === layer._selectedStyleName);
+            if (m) currentId = m.id;
+          } else if (layer._currentStyleId) {
+            const m = stylesList.find(s => s.id === layer._currentStyleId);
+            if (m) currentId = m.id;
+          } else if (currentStyles) {
+            const match = stylesList.find(s => s.id === currentStyles || s.name === currentStyles);
+            if (match) currentId = match.id;
+          }
+          return { styles: stylesList, currentId, isWms: true };
+        }
+      }
+
+      // 3. Soporte universal para capas con availableStyles
+      const av = (layer.options && layer.options.availableStyles) || layer.availableStyles;
+      if (Array.isArray(av) && av.length > 1) {
+        av.forEach((item, idx) => {
+          if (typeof item === 'string') {
+            stylesList.push({ id: item, name: item, styleObj: item });
+          } else if (item && typeof item === 'object') {
+            const id = item.id || item.name || String(idx);
+            const name = item.title || item.name || item.label || id;
+            stylesList.push({ id: String(id), name: String(name), styleObj: item.style || item });
+          }
+        });
+        let currentId = stylesList[0].id;
+        if (layer._currentStyleId !== undefined) currentId = String(layer._currentStyleId);
+        return { styles: stylesList, currentId };
+      }
+
+      return null;
+    }
+
     const renderLayerNode = (node, depth) => {
       const layer = node.layer;
       const layerName = getLayerDisplayName(layer);
@@ -1627,6 +1853,24 @@ class miPlugin_layerSwitcher {
         : `<button type="button" class="ls-eye ${visible ? 'ls-eye-on' : 'ls-eye-off'}${claseFuera}" data-id="${index}" title="${tituloVisibilidad}" onclick="toggleLayerVisibility('${index}')">${eyeIcon}${badgeOjo}</button>`;
       const optsBtn = `<button type="button" class="ls-options ${optionsOpen ? 'ls-options-open' : ''}" data-id="${index}" title="Opciones de la capa" onclick="toggleLayerOptions('${index}')">▾</button>`;
 
+      // Selector de estilos si la capa tiene múltiples estilos disponibles
+      const availableStyles = getLayerAvailableStyles(layer);
+      let stylesRowHtml = '';
+      if (availableStyles && availableStyles.styles && availableStyles.styles.length > 1) {
+        const optionsHtml = availableStyles.styles.map((st) => {
+          const isSelected = String(st.id) === String(availableStyles.currentId);
+          return `<option value="${_escaparHtml(st.id)}" ${isSelected ? 'selected' : ''}>${_escaparHtml(st.name)}</option>`;
+        }).join('');
+
+        stylesRowHtml = `
+                <div class="ls-option-row ls-option-row-style">
+                  <span class="ls-option-label" title="Estilo visual de la capa">Estilo</span>
+                  <select class="ls-style-select" aria-label="Estilo de ${layerName}" onchange="setLayerStyle('${index}', this.value)">
+                    ${optionsHtml}
+                  </select>
+                </div>`;
+      }
+
       const optionsPanel = `
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
                 <div class="ls-option-row">
@@ -1634,6 +1878,7 @@ class miPlugin_layerSwitcher {
                   <input type="range" min="0" max="100" value="${transpPct}" class="ls-opacity-slider" style="background:${sliderFill}" aria-label="Transparencia de ${layerName}" oninput="setLayerOpacity('${index}', this.value, this)">
                   <span class="ls-option-value">${transpPct}%</span>
                 </div>
+                ${stylesRowHtml}
                 <div class="ls-actions-row">
                   <button type="button" class="ls-action ls-action-zoom" data-id="${index}" title="Zoom a la capa" onclick="zoomToLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><circle cx="12" cy="12" r="3.2"></circle></svg></button>
                   <button type="button" class="ls-action ls-action-rename" data-id="${index}" title="Renombrar capa" onclick="startRenameLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></button>
@@ -1695,7 +1940,68 @@ class miPlugin_layerSwitcher {
           + 'No se han encontrado capas superpuestas para gestionar desde el selector de capas.'
           + '</li>';
 
-        control.htmlView = `<ul class="overlay-layer-selector">${cuerpo}</ul>`;
+        // ── Barra de acciones rápidas ──────────────────────────────────
+        // Los rótulos se calculan sobre el árbol ya construido (no se vuelve
+        // a recorrer el mapa): así dicen la verdad de lo que hay pintado.
+        // - "Ocultar todas" / "Mostrar todas": es un interruptor maestro. Si
+        //   se ve ALGUNA capa HOJA, el botón las apaga todas; si no se ve
+        //   ninguna, las enciende. Se evita el criterio "si no están todas,
+        //   enciende": en el modo "una capa a la vez" nunca se pueden ver
+        //   todas (solo una del grupo puede estar encendida) y el botón se
+        //   quedaría clavado en "Mostrar todas" sin poder apagar nada.
+        //   Los nodos de grupo no cuentan: su visibilidad es la del grupo y
+        //   no dice si se está viendo algo (un grupo apagado con las hijas
+        //   encendidas no pinta nada, pero al revés tampoco).
+        // - "Plegar grupos" / "Desplegar grupos": según si ya están todos
+        //   plegados. Solo aparece si hay grupos, para no dejar un botón
+        //   muerto en un selector de capas sueltas.
+        let totalHojas = 0;
+        let visiblesHojas = 0;
+        let totalGrupos = 0;
+        let gruposPlegados = 0;
+        const contarNodos = (nodos) => {
+          nodos.forEach((n) => {
+            if (n.isGroup) {
+              totalGrupos++;
+              if (isGroupCollapsed(n.layer)) gruposPlegados++;
+              contarNodos(n.children);
+              return;
+            }
+            totalHojas++;
+            let visible = true;
+            try {
+              visible = !!(n.layer && typeof n.layer.isVisible === 'function' && n.layer.isVisible());
+            } catch (e) { visible = true; }
+            if (visible) visiblesHojas++;
+          });
+        };
+        contarNodos(tree);
+
+        const algoVisible = visiblesHojas > 0;
+        const todosPlegados = totalGrupos > 0 && gruposPlegados >= totalGrupos;
+        const toolbarHtml = (totalHojas + totalGrupos) === 0 ? '' : `
+          <div class="ls-toolbar" role="toolbar" aria-label="Acciones rápidas del selector de capas">
+            <button type="button" class="ls-tool ls-tool-visibilidad" data-accion="visibilidad"
+              title="${algoVisible ? 'Ocultar todas las capas del selector' : 'Mostrar todas las capas del selector'}"
+              aria-pressed="${algoVisible ? 'true' : 'false'}"
+              onclick="toggleAllLayersVisibility()">
+              ${algoVisible ? SVG_OJO_TACHADO : SVG_OJO_ABIERTO}
+              <span class="ls-tool-text">${algoVisible ? 'Ocultar todas' : 'Mostrar todas'}</span>
+            </button>
+            ${totalGrupos ? `<button type="button" class="ls-tool ls-tool-grupos" data-accion="grupos"
+              title="${todosPlegados ? 'Desplegar todos los grupos de capas' : 'Plegar todos los grupos de capas'}"
+              aria-pressed="${todosPlegados ? 'true' : 'false'}"
+              onclick="toggleAllGroups()">
+              ${todosPlegados ? SVG_DESPLEGAR_GRUPOS : SVG_PLEGAR_GRUPOS}
+              <span class="ls-tool-text">${todosPlegados ? 'Desplegar grupos' : 'Plegar grupos'}</span>
+            </button>` : ''}
+          </div>`;
+
+        // El contenedor con clase `overlay-layer-selector` pasa de ser el
+        // propio <ul> a un <div> que envuelve la barra y la lista: todas las
+        // reglas CSS del plugin son descendientes de esa clase, así que el
+        // árbol se pinta igual y la barra puede quedarse fija al hacer scroll.
+        control.htmlView = `<div class="overlay-layer-selector">${toolbarHtml}<ul class="ls-lista">${cuerpo}</ul></div>`;
         const preview = document.querySelector('#m-herramienta-previews-layerSwitcher');
         if (preview) preview.innerHTML = control.htmlView;
 
@@ -1778,12 +2084,117 @@ class miPlugin_layerSwitcher {
       }
     };
 
+    // ── Acciones masivas: mostrar/ocultar todas y plegar/desplegar grupos ──
+    // Actúan sobre TODO lo que lista el selector, no solo sobre la raíz: una
+    // capa que vive dentro de un grupo también tiene su ojito en la lista y
+    // su visibilidad es estado de la UI (se conserva entre swaps 2D/3D), así
+    // que dejarla fuera del "todas" daría un resultado a medias. Los grupos
+    // entran también: ocultar un grupo esconde a sus hijas en el render, y
+    // para que "mostrar todas" las devuelva hay que encender el grupo además
+    // de cada hija.
+
+    /** ¿Está visible la capa? Sin lanzar si no expone isVisible(). */
+    function _esVisible(capa) {
+      try { return !!(capa && typeof capa.isVisible === 'function' && capa.isVisible()); } catch (e) { return false; }
+    }
+
+    window.toggleAllLayersVisibility = async function () {
+      let capas = [];
+      try { capas = await getSelectableLayers(); } catch (e) { capas = []; }
+      if (!capas.length) return;
+
+      // Interruptor maestro: si se ve ALGUNA capa hoja, el botón las apaga
+      // todas; si no se ve ninguna, las enciende. Es la misma regla que usa
+      // el rótulo en el render, para que lo que dice el botón sea lo que hace.
+      // Los grupos no cuentan: su visibilidad es la del contenedor, no la de
+      // una capa que se esté viendo.
+      const ocultarTodas = capas.some(c => !isGroupLayer(c) && _esVisible(c));
+
+      if (ocultarTodas) {
+        // Se recuerda qué capa del modo "una capa a la vez" estaba encendida
+        // para devolverla al volver a mostrar: en ese modo solo puede haber
+        // una visible y elegir otra cambiaría el fondo que tenía el usuario.
+        self._radioVisibleAntesDeOcultar = null;
+        const radioVisible = capas.find(c => !isGroupLayer(c) && enGrupoRadio(c) && _esVisible(c));
+        if (radioVisible) self._radioVisibleAntesDeOcultar = radioVisible.legend || radioVisible.name || null;
+        capas.forEach((c) => {
+          try { if (typeof c.setVisible === 'function') c.setVisible(false); } catch (e) { /* capa sin visibilidad */ }
+        });
+      } else {
+        // En el modo "una capa a la vez" no se pueden encender todas: se
+        // enciende la que ya estaba visible (si el usuario apagó a mano) o la
+        // que había antes de "Ocultar todas", y se apagan las demás, que es
+        // la única combinación que admite el modo.
+        let radioElegida = capas.find(c => !isGroupLayer(c) && enGrupoRadio(c) && _esVisible(c)) || null;
+        if (!radioElegida && self._radioVisibleAntesDeOcultar) {
+          radioElegida = capas.find(c => !isGroupLayer(c) && enGrupoRadio(c) && (
+            String(c.legend) === String(self._radioVisibleAntesDeOcultar) ||
+            String(c.name) === String(self._radioVisibleAntesDeOcultar)
+          )) || null;
+        }
+        if (!radioElegida) radioElegida = capas.find(c => !isGroupLayer(c) && enGrupoRadio(c)) || null;
+        capas.forEach((c) => {
+          try {
+            if (typeof c.setVisible !== 'function') return;
+            if (!isGroupLayer(c) && enGrupoRadio(c)) {
+              c.setVisible(c === radioElegida);
+              return;
+            }
+            c.setVisible(true);
+          } catch (e) { /* capa sin visibilidad */ }
+        });
+      }
+
+      if (typeof window.renderLayerList === 'function') window.renderLayerList();
+    };
+
+    window.toggleAllGroups = async function () {
+      let capas = [];
+      try { capas = await getSelectableLayers(); } catch (e) { capas = []; }
+
+      // Grupos únicos, incluidos los anidados (una capa puede estar solo
+      // dentro de un subgrupo y ese subgrupo no aparece en map.getLayers()).
+      const grupos = [];
+      const vistos = new Set();
+      const visitar = (l) => {
+        if (!l || !isGroupLayer(l)) return;
+        const id = String(l.idLayer);
+        if (!vistos.has(id)) { vistos.add(id); grupos.push(l); }
+        let hijas = [];
+        try { hijas = l.getLayers ? l.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach(visitar);
+      };
+      capas.forEach(visitar);
+      if (!grupos.length) return;
+
+      // Si ya están todos plegados, el botón despliega; si no, pliega (es lo
+      // que promete el rótulo "Plegar grupos" cuando hay alguno abierto).
+      const plegados = grupos.filter(g => isGroupCollapsed(g)).length;
+      const contraer = plegados < grupos.length;
+      grupos.forEach((g) => { self._groupCollapsed[String(g.idLayer)] = contraer; });
+
+      if (typeof window.renderLayerList === 'function') window.renderLayerList();
+    };
+
     // ── Desplegable de opciones por capa ────────────────────────────────
-    // Abre/cierra el panel de opciones de una capa (por ahora transparencia).
+    // Abre/cierra el panel de opciones de una capa (transparencia, estilos).
     // Conserva en self._optionsOpen que capa tiene el panel abierto para no
     // cerrarlo al re-renderizar (p.ej. al alternar la visibilidad de otra).
     window.toggleLayerOptions = function (index) {
       self._optionsOpen = self._optionsOpen === index ? null : index;
+      if (self._optionsOpen === index) {
+        const layer = findLayerById(index);
+        if (layer && _esCapaWMS(layer) && layer.url && layer.name && !layer._wmsAvailableStyles) {
+          _estilosCapacidadesWMS(layer.url).then(function (porCapa) {
+            if (porCapa && porCapa[layer.name] && porCapa[layer.name].length > 1) {
+              layer._wmsAvailableStyles = porCapa[layer.name];
+              if (self._optionsOpen === index) {
+                renderLayerList();
+              }
+            }
+          }).catch(function () {});
+        }
+      }
       renderLayerList();
     };
 
@@ -2635,11 +3046,13 @@ class miPlugin_layerSwitcher {
     }
 
     /**
-     * BBox de cada capa del servicio según sus capacidades.
+     * Capacidades del servicio ya parseadas (bbox y estilos por capa). Se pide
+     * UNA sola vez por URL: todas las capas del mismo servicio comparten la
+     * misma promesa, en lugar de lanzar un GetCapabilities por cada consulta.
      * @param {string} url URL del servicio.
-     * @returns {Promise<Object|null>} { nombreCapa: [x0, y0, x1, y1] }
+     * @returns {Promise<{ bbox: Object, estilos: Object }|null>}
      */
-    function _bboxCapacidadesWMS(url) {
+    function _capacidadesWMS(url) {
       if (!_cacheCapacidadesWMS.has(url)) {
         _cacheCapacidadesWMS.set(url, _pedirCapacidadesWMS(url).catch(function () { return null; }));
       }
@@ -2647,9 +3060,31 @@ class miPlugin_layerSwitcher {
     }
 
     /**
+     * BBox de cada capa del servicio según sus capacidades.
+     * @param {string} url URL del servicio.
+     * @returns {Promise<Object|null>} { nombreCapa: [x0, y0, x1, y1] }
+     */
+    function _bboxCapacidadesWMS(url) {
+      return _capacidadesWMS(url).then(function (res) {
+        return res ? res.bbox : null;
+      });
+    }
+
+    /**
+     * Estilos declarados de cada capa del servicio según sus capacidades.
+     * @param {string} url URL del servicio.
+     * @returns {Promise<Object|null>} { nombreCapa: [{ id, name }, ...] }
+     */
+    function _estilosCapacidadesWMS(url) {
+      return _capacidadesWMS(url).then(function (res) {
+        return res ? res.estilos : null;
+      });
+    }
+
+    /**
      * Pide y parsea el GetCapabilities del servicio.
      * @param {string} url
-     * @returns {Promise<Object>}
+     * @returns {Promise<{ bbox: Object, estilos: Object }>}
      */
     function _pedirCapacidadesWMS(url) {
       const destino = _urlWMS(url, {
@@ -2662,13 +3097,29 @@ class miPlugin_layerSwitcher {
         .then(function (texto) {
           const doc = new DOMParser().parseFromString(texto, 'text/xml');
           const capas = doc.getElementsByTagNameNS('*', 'Layer');
-          const salida = {};
+          const salidaBbox = {};
+          const salidaEstilos = {};
           for (let i = 0; i < capas.length; i++) {
             const nombre = _textoHijoWMS(capas[i], 'Name');
             if (!nombre) continue;
-            salida[nombre] = _bboxDeNodoWMS(capas[i]);
+            salidaBbox[nombre] = _bboxDeNodoWMS(capas[i]);
+
+            // Estilos asociados al nodo Layer
+            const hijos = capas[i].childNodes || [];
+            const estilosNodo = [];
+            for (let j = 0; j < hijos.length; j++) {
+              const h = hijos[j];
+              if (h.nodeType === 1 && (h.localName || h.nodeName) === 'Style') {
+                const sName = _textoHijoWMS(h, 'Name');
+                const sTitle = _textoHijoWMS(h, 'Title') || sName;
+                if (sName) estilosNodo.push({ id: sName, name: sTitle || sName });
+              }
+            }
+            if (estilosNodo.length > 0) {
+              salidaEstilos[nombre] = estilosNodo;
+            }
           }
-          return salida;
+          return { bbox: salidaBbox, estilos: salidaEstilos };
         });
     }
 
@@ -3670,6 +4121,44 @@ class miPlugin_layerSwitcher {
           const val = sliderEl.parentElement.querySelector('.ls-option-value');
           if (val) val.textContent = pct + '%';
         }
+      }
+    };
+
+    // ── Selector de estilo de capa ───────────────────────────────────────
+    // Permite cambiar entre los estilos disponibles de una capa vectorial (array de
+    // styles) o ráster (WMS/WMTS con varios estilos ofrecidos o configurados).
+    window.setLayerStyle = function (index, styleId) {
+      const layer = findLayerById(index);
+      if (!layer) return;
+
+      const info = getLayerAvailableStyles(layer);
+      if (!info || !info.styles || info.styles.length === 0) return;
+
+      const item = info.styles.find(s => String(s.id) === String(styleId)) || info.styles[Number(styleId)] || info.styles[0];
+      if (!item) return;
+
+      layer._selectedStyleIndex = info.styles.indexOf(item);
+      layer._selectedStyleName = item.name;
+      layer._currentStyleId = item.id;
+
+      if (info.isVector) {
+        if (typeof layer.setStyle === 'function') {
+          try { layer.setStyle(item.styleObj); } catch (e) { console.warn('layerSwitcher: error en setStyle', e); }
+        }
+        reconstruirEntidadesCesioDiferido(layer);
+        try { if (typeof layer.redraw === 'function') layer.redraw(); } catch (e) {}
+        try { if (typeof layer.refresh === 'function') layer.refresh(); } catch (e) {}
+      } else if (info.isWms || typeof layer.setStyles === 'function') {
+        if (typeof layer.setStyles === 'function') {
+          try { layer.setStyles(item.id); } catch (e) { console.warn('layerSwitcher: error en setStyles', e); }
+        }
+      } else if (typeof layer.setStyle === 'function') {
+        try { layer.setStyle(item.styleObj || item.id); } catch (e) {}
+      }
+
+      const selectEl = document.querySelector('.ls-options-panel.open .ls-style-select');
+      if (selectEl && selectEl.value !== String(item.id)) {
+        selectEl.value = String(item.id);
       }
     };
 
@@ -5774,10 +6263,11 @@ class miPlugin_layerSwitcher {
     //    define este plugin; la clase en window.IDEE.plugin no se toca.
     const GLOBALES = [
       'renderLayerList', 'toggleLayerVisibility', 'toggleLayerOptions', 'toggleGroup',
+      'toggleAllLayersVisibility', 'toggleAllGroups',
       'startRenameLayer', '_renameLayerName', 'handleDragStart', 'handleDragOver',
       'handleDrop', 'handleDragEnd', 'deleteLayer', 'getLayerKind', 'setLayerOpacity',
-      'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo', 'openLayerFicha',
-      '_lsPickerLayers', 'setBBoxModo', 'setBBoxLimite', 'setBBoxPagina',
+      'setLayerStyle', 'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo',
+      'openLayerFicha', '_lsPickerLayers', 'setBBoxModo', 'setBBoxLimite', 'setBBoxPagina',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {

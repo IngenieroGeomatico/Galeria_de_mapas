@@ -153,6 +153,72 @@
   margin: 0;
 }
 
+/* ── Barra de acciones rápidas ───────────────────────────────────────
+   Dos botones-pastilla en la cabecera del selector: mostrar/ocultar todas
+   las capas y plegar/desplegar todos los grupos. Se queda pegada al borde
+   superior de la lista (position: sticky) para que siga a mano cuando hay
+   muchas capas y la zona de scroll se ha desplazado; los márgenes
+   negativos la pegan a los bordes del contenedor y el fondo tapa la lista
+   que pasa por debajo. */
+.overlay-layer-selector .ls-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  gap: 0.35em;
+  margin: -0.5em -0.5em 0.4em;
+  padding: 0.4em 0.5em;
+  background: #f9f9f9;
+  border-bottom: 1px solid #e6ebf2;
+  border-radius: 6px 6px 0 0;
+}
+
+.overlay-layer-selector .ls-tool {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 0.78em;
+  line-height: 1.2;
+  color: #33475b;
+  background: #ffffff;
+  border: 1px solid #dbe3ec;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.overlay-layer-selector .ls-tool:hover {
+  background: #eef4fb;
+  border-color: #b9cde3;
+  color: #0b62b0;
+}
+
+.overlay-layer-selector .ls-tool:active {
+  transform: translateY(1px);
+}
+
+.overlay-layer-selector .ls-tool:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.35);
+}
+
+.overlay-layer-selector .ls-tool svg {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+
+.overlay-layer-selector .ls-tool-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .overlay-layer-selector li {
   /* Elimina cualquier viñeta/marcador heredado (list-style) que Mapea o los
      estilos del navegador puedan inyectar a la izquierda de cada fila. */
@@ -356,7 +422,7 @@
 }
 
 .overlay-layer-selector .ls-options-panel.open {
-  max-height: 220px;
+  max-height: 280px;
   opacity: 1;
   margin-top: 0.15em;
   margin-bottom: 0.15em;
@@ -371,6 +437,36 @@
   border: 1px solid #e3e9f2;
   border-radius: 6px;
   padding: 6px 8px;
+}
+
+/* Fila de selector de estilo */
+.overlay-layer-selector .ls-option-row-style {
+  margin-top: 0.35em;
+}
+
+.overlay-layer-selector .ls-style-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 0.82em;
+  color: #333;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.overlay-layer-selector .ls-style-select:hover {
+  border-color: #94a3b8;
+}
+
+.overlay-layer-selector .ls-style-select:focus {
+  border-color: #0078d4;
+  box-shadow: 0 0 0 1px #0078d4;
 }
 
 .overlay-layer-selector .ls-option-label {
