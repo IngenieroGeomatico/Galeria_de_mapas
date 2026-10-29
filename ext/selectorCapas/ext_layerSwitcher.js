@@ -4293,8 +4293,12 @@ class miPlugin_layerSwitcher {
           </div>
           <div class="ls-ficha-body">
             <div class="ls-ficha-col">
-              <div class="ls-ficha-seccion-titulo">Parámetros de construcción</div>
-              ${parametrosHtml}
+              <div class="ls-ficha-seccion-titulo">Editar parámetros</div>
+              <div class="ls-ficha-editor-wrap"></div>
+              <details class="ls-ficha-detalle ls-ficha-params">
+                <summary>Parámetros de construcción</summary>
+                <div class="ls-ficha-params-cuerpo">${parametrosHtml}</div>
+              </details>
               ${barraObjetosHtml ? `<div class="ls-ficha-seccion-titulo" style="margin-top:14px">Objetos geográficos</div><div class="ls-ficha-objetos-wrap">${barraObjetosHtml}</div>` : ''}
             </div>
             <div class="ls-ficha-col">
@@ -4307,7 +4311,23 @@ class miPlugin_layerSwitcher {
       document.body.appendChild(overlay);
       requestAnimationFrame(() => { overlay.classList.add('ls-ficha--open'); });
 
+      let alEscapeCerrar = null;
       const cerrar = function () {
+        // Si se estaba pinchando o dibujando sobre el mapa, se sueltan los
+        // manejadores antes de desmontar el modal.
+        if (typeof _cancelarPickFicha === 'function') {
+          try { _cancelarPickFicha(); } catch (e) { /* nada */ }
+          _cancelarPickFicha = null;
+        }
+        if (alEscapeCerrar) {
+          try { document.removeEventListener('keydown', alEscapeCerrar); } catch (e) { /* nada */ }
+          alEscapeCerrar = null;
+        }
+        const editorAbierto = panel.querySelector('.ls-ficha-editor');
+        if (editorAbierto && editorAbierto._lsEscapeEditor) {
+          try { window.removeEventListener('keydown', editorAbierto._lsEscapeEditor, true); } catch (e) { /* nada */ }
+          editorAbierto._lsEscapeEditor = null;
+        }
         fichaVectorLayer = null;
         try { overlay.classList.remove('ls-ficha--open'); } catch (e) { /* nada */ }
         setTimeout(function () {
@@ -4319,10 +4339,32 @@ class miPlugin_layerSwitcher {
       window.cerrarFicha = cerrar;
       // Clic fuera de la caja y Escape: las dos cierran.
       overlay.addEventListener('mousedown', function (ev) { if (ev.target === overlay) cerrar(); });
-      document.addEventListener('keydown', function onKey(ev) {
+      alEscapeCerrar = function (ev) {
         if (ev.key !== 'Escape') return;
-        document.removeEventListener('keydown', onKey);
         cerrar();
+      };
+      document.addEventListener('keydown', alEscapeCerrar);
+
+      // El editor de parámetros se monta con la capa viva: al aplicar cambios
+      // que obligan a reconstruirla, la ficha se queda abierta apuntando a la
+      // capa nueva.
+      _montarEditorFicha(panel.querySelector('.ls-ficha-editor-wrap'), capa, overlay, function (nueva) {
+        fichaVectorLayer = nueva;
+        // La cabecera también apunta a la capa nueva: leyenda y tipo pueden
+        // haber cambiado en el propio editor.
+        const titulo = panel.querySelector('.ls-ficha-title');
+        if (titulo) titulo.textContent = nueva.legend || nueva.name || 'Sin nombre';
+        const tipo = panel.querySelector('.ls-ficha-tipo');
+        if (tipo) tipo.textContent = _tipoDeCapa(nueva);
+        // Si se ha cambiado la URL o el nombre del servicio, el documento que
+        // se está enseñando ya no es el suyo: se vuelve a pedir.
+        const doc = panel.querySelector('.ls-ficha-doc');
+        if (doc) {
+          const urlNueva = (typeof nueva.url !== 'undefined' && nueva.url) ? nueva.url : null;
+          _rellenarDocumento(doc, nueva, urlNueva).catch(function () {
+            doc.innerHTML = '<p class="ls-ficha-aviso">No se pudo leer el documento del servicio.</p>';
+          });
+        }
       });
 
       // El documento se trae aparte: puede tardar, y si no hay se dice.
@@ -4333,6 +4375,30 @@ class miPlugin_layerSwitcher {
       });
     };
 
+    /**
+     * Texto seguro (y escapado) de un valor para la tabla.
+     *
+     * Un LayerGroup guarda sus capas en `constructorParameters`, y esas capas
+     * apuntan al mapa: `JSON.stringify` revienta por estructura circular. En
+     * ese caso se resume el objeto en vez de romper la ficha.
+     */
+    function _textoDeValor(valor) {
+      if (valor === null) return 'null';
+      if (valor === undefined) return '—';
+      if (typeof valor !== 'object') return _escaparHtml(String(valor));
+      try {
+        return _escaparHtml(JSON.stringify(valor));
+      } catch (e) {
+        try {
+          if (Array.isArray(valor)) return _escaparHtml('[' + valor.length + ' elementos]');
+          const claves = Object.keys(valor);
+          return _escaparHtml('{' + claves.slice(0, 8).join(', ') + (claves.length > 8 ? ', …' : '') + '}');
+        } catch (e2) {
+          return '[objeto]';
+        }
+      }
+    }
+
     /** Tabla de los parámetros de construcción de la capa. */
     function _tablaDeParametros(construccion, opciones, vendor, url) {
       const filas = [];
@@ -4341,12 +4407,7 @@ class miPlugin_layerSwitcher {
         Object.keys(vendor).length ? { 'vendorOptions': vendor } : {});
       const claves = Object.keys(todo).filter(function (k) { return k !== 'options' && k !== 'vendorOptions' && k !== 'source'; });
       claves.forEach(function (clave) {
-        const valor = todo[clave];
-        let texto;
-        if (valor === null) texto = 'null';
-        else if (valor === undefined) texto = '—';
-        else if (typeof valor === 'object') texto = _escaparHtml(JSON.stringify(valor));
-        else texto = String(valor);
+        const texto = _textoDeValor(todo[clave]);
         filas.push(`<tr><th>${_escaparHtml(clave)}</th><td>${texto}</td></tr>`);
       });
       if (!filas.length) return '<p class="ls-ficha-aviso">La capa no guarda parámetros de construcción.</p>';
@@ -4356,10 +4417,7 @@ class miPlugin_layerSwitcher {
         const obj = todo[clave];
         if (!obj || !Object.keys(obj).length) return;
         const dentro = Object.keys(obj).map(function (k) {
-          const v = obj[k];
-          const texto = (v === undefined || v === null) ? '—'
-            : (typeof v === 'object' ? _escaparHtml(JSON.stringify(v)) : String(v));
-          return `<div class="ls-ficha-subfila"><b>${_escaparHtml(k)}</b> ${texto}</div>`;
+          return `<div class="ls-ficha-subfila"><b>${_escaparHtml(k)}</b> ${_textoDeValor(obj[k])}</div>`;
         }).join('');
         extra += `<details class="ls-ficha-detalle">
             <summary>${clave} (${Object.keys(obj).length})</summary>
@@ -4368,6 +4426,1190 @@ class miPlugin_layerSwitcher {
       });
 
       return `<table class="ls-ficha-tabla"><tbody>${filas.join('')}</tbody></table>${extra}`;
+    }
+
+    /* ── Editor de parámetros de la ficha ────────────────────────────────
+       La tabla de arriba enseña los parámetros en solo lectura; este bloque
+       los deja cambiar. Se aplican de dos maneras:
+
+         - Lo que la capa sabe cambiar en caliente (visibilidad y opacidad) se
+           aplica directamente, sin recrear nada.
+         - Lo que forma parte del constructor (URL, capas del servicio, nombre,
+           atribución, colocación de GLB/Imagen/IFC...) obliga a reconstruir la
+           capa: se crea la nueva, se sustituye a la vieja en su mismo grupo y
+           z, y se conserva el estilo elegido en el selector.
+
+       Los campos salen de `constructorParameters` (`userParameters` en los
+       servicios, `parameters` en los datos) filtrados por una lista blanca: lo
+       que no está en ella se sigue viendo en la tabla, pero no se toca (un
+       `source` ya consumido, un `vendorOptions` del servicio...).
+
+       La colocación (position/bbox) se reconoce por el contrato
+       getState/setState de ext/glbLayer, ext/imageLayer y ext/ifcLayer, y es
+       lo único que tiene interacción con el mapa: pinchar un punto, tomar la
+       vista actual o dibujar el rectángulo (solo 2D, como en el catálogo).
+    */
+
+    // Claves de constructorParameters que se pueden editar.
+    const CLAVES_EDITABLES = [
+      'url', 'name', 'legend', 'attribution', 'layers', 'styles', 'format',
+      'version', 'transparent', 'tiled', 'namespace', 'outputFormat', 'crs',
+      'maxFeatures', 'minZoom', 'maxZoom', 'tileGridMaxZoom'
+    ];
+
+    const ETIQUETAS_EDITOR = {
+      url: 'URL',
+      name: 'Nombre (capa del servicio)',
+      legend: 'Leyenda (lo que se ve)',
+      attribution: 'Atribución',
+      layers: 'Capas (separadas por comas)',
+      styles: 'Estilos (separados por comas)',
+      format: 'Formato',
+      version: 'Versión',
+      transparent: 'Fondo transparente',
+      tiled: 'Teselado',
+      namespace: 'Espacio de nombres',
+      outputFormat: 'Formato de salida',
+      crs: 'Sistema de referencia',
+      maxFeatures: 'Máximo de entidades',
+      minZoom: 'Zoom mínimo',
+      maxZoom: 'Zoom máximo',
+      tileGridMaxZoom: 'Zoom máximo de la rejilla'
+    };
+
+    const AYUDAS_EDITOR = {
+      url: 'Cambiar la URL vuelve a crear la capa contra el servicio nuevo.',
+      name: 'En WMS/WMTS es la capa publicada (LAYERS); en WFS, el typename.',
+      legend: 'Es la etiqueta del selector y el identificador que usan los plugins.'
+    };
+
+    /** Parámetros de construcción de una capa, en la forma en que se editan. */
+    function _parametrosDeCapa(capa) {
+      const cp = (capa && capa.constructorParameters) || {};
+      const base = Object.assign({}, cp.userParameters || cp.parameters || {});
+      // Las capas de extensión (GLB, Imagen, IFC) borran sus claves propias
+      // antes de llamar al constructor base, así que en
+      // `constructorParameters` no queda ni la url ni la colocación. La url se
+      // recupera de getState() para que se pueda editar y reconstruir; la
+      // colocación se lee aparte en `_estadoColocacion`.
+      if (capa && typeof capa.getState === 'function' && !base.url) {
+        try {
+          const estado = capa.getState();
+          if (estado && typeof estado === 'object' && typeof estado.url === 'string') {
+            base.url = estado.url;
+          }
+        } catch (e) { /* capa sin estado */ }
+      }
+      return {
+        base: base,
+        opciones: Object.assign({}, cp.options || {})
+      };
+    }
+
+    /**
+     * Estado de colocación de la capa, si lo tiene.
+     *
+     * GLB, Imagen e IFC heredan de Vector y exponen getState()/setState() con
+     * `position` y/o `bbox`: son los únicos parámetros que se pueden señalar
+     * sobre el mapa. Del estado se conservan SOLO las claves de colocación:
+     * getState() devuelve además `url`, `visible` y `opacity`, que ya se
+     * editan en su propio campo y no deben pisarse al aplicar.
+     */
+    const CLAVES_COLOCACION = [
+      'position', 'bbox', 'heading', 'pitch', 'roll', 'scale', 'heightOffset',
+      'ancho', 'alto', 'metrosPorPixel', 'clampToGround', 'baseAlSuelo',
+      'ajustarABbox'
+    ];
+
+    function _estadoColocacion(capa) {
+      if (!capa || typeof capa.getState !== 'function') return null;
+      let estado = null;
+      try { estado = capa.getState(); } catch (e) { return null; }
+      if (!estado || typeof estado !== 'object') return null;
+      if (!('position' in estado) && !('bbox' in estado)) return null;
+      const limpio = {};
+      CLAVES_COLOCACION.forEach(function (clave) {
+        if (clave in estado) limpio[clave] = estado[clave];
+      });
+      return limpio;
+    }
+
+    /** Campos editables de la capa, ya con su valor actual. */
+    function _camposEditorFicha(capa) {
+      const { base } = _parametrosDeCapa(capa);
+      const campos = [];
+
+      // 1. Del constructor: solo la lista blanca y solo valores simples. Un
+      //    objeto (el `attribution` de una TMS, un `source` de GeoJSON) no se
+      //    puede escribir en un campo de texto sin inventarse un formato.
+      CLAVES_EDITABLES.forEach(function (clave) {
+        if (!(clave in base)) return;
+        const valor = base[clave];
+        if (valor === undefined) return;
+        if (valor !== null && typeof valor === 'object' && !Array.isArray(valor)) return;
+        let tipo = 'texto';
+        if (typeof valor === 'boolean') tipo = 'casilla';
+        else if (typeof valor === 'number') tipo = 'numero';
+        const texto = Array.isArray(valor) ? valor.join(', ')
+          : (valor === null ? '' : valor);
+        campos.push({
+          clave: clave,
+          etiqueta: ETIQUETAS_EDITOR[clave] || clave,
+          tipo: tipo,
+          valor: texto,
+          ayuda: AYUDAS_EDITOR[clave] || ''
+        });
+      });
+
+      // 2. Presentación: lo que no siempre viaja en constructorParameters.
+      if (!('legend' in base)) {
+        campos.push({
+          clave: 'legend', etiqueta: ETIQUETAS_EDITOR.legend, tipo: 'texto',
+          valor: capa.legend || capa.name || '', ayuda: AYUDAS_EDITOR.legend
+        });
+      }
+      if (!('attribution' in base) && typeof capa.attribution === 'string') {
+        campos.push({
+          clave: 'attribution', etiqueta: ETIQUETAS_EDITOR.attribution,
+          tipo: 'texto', valor: capa.attribution
+        });
+      }
+
+      let opacidad = 100;
+      try {
+        if (typeof capa.getOpacity === 'function') opacidad = Math.round(Number(capa.getOpacity()) * 100);
+      } catch (e) { /* capa sin opacidad */ }
+      if (!isFinite(opacidad)) opacidad = 100;
+      campos.push({
+        clave: 'opacity', etiqueta: 'Opacidad (%)', tipo: 'numero',
+        valor: opacidad, min: 0, max: 100, paso: 1,
+        ayuda: 'Se aplica al momento, sin recrear la capa.'
+      });
+
+      let visible = true;
+      try { if (typeof capa.isVisible === 'function') visible = !!capa.isVisible(); } catch (e) { /* nada */ }
+      campos.push({ clave: 'visible', etiqueta: 'Visible', tipo: 'casilla', valor: visible });
+
+      return campos;
+    }
+
+    /** HTML de un campo del editor. */
+    function _campoEditorHtml(c) {
+      if (c.tipo === 'casilla') {
+        return `<label class="ls-ficha-campo ls-ficha-campo--casilla">
+            <input type="checkbox" data-campo="${_escaparHtml(c.clave)}"${c.valor ? ' checked' : ''}>
+            <span>${_escaparHtml(c.etiqueta)}</span>
+          </label>`;
+      }
+      const attrs = [
+        `data-campo="${_escaparHtml(c.clave)}"`,
+        'class="ls-ficha-input"',
+        c.tipo === 'numero' ? 'type="number"' : 'type="text"',
+        c.paso !== undefined ? `step="${c.paso}"` : '',
+        c.min !== undefined ? `min="${c.min}"` : '',
+        c.max !== undefined ? `max="${c.max}"` : '',
+        `value="${_escaparHtml(c.valor)}"`
+      ].filter(Boolean).join(' ');
+      return `<label class="ls-ficha-campo">
+          <span class="ls-ficha-campo-etiqueta">${_escaparHtml(c.etiqueta)}</span>
+          <input ${attrs}>
+          ${c.ayuda ? `<span class="ls-ficha-campo-ayuda">${_escaparHtml(c.ayuda)}</span>` : ''}
+        </label>`;
+    }
+
+    /** HTML del bloque de colocación (solo capas con getState/setState). */
+    function _htmlColocacion(estado) {
+      const tienePunto = ('position' in estado);
+      const tieneBbox = ('bbox' in estado);
+      const pos = (estado.position && typeof estado.position === 'object') ? estado.position : {};
+      const caja = Array.isArray(estado.bbox) ? estado.bbox : [];
+      // Sin posición y con rectángulo, se abre en rectángulo.
+      const modo = (!tienePunto && tieneBbox) ? 'bbox' : 'position';
+      const num = (v) => (v === null || v === undefined || !isFinite(Number(v))) ? '' : String(v);
+
+      let html = '<div class="ls-ficha-coloc" data-colocacion>';
+      html += '<div class="ls-ficha-coloc-modos" role="group" aria-label="Forma de colocar el recurso">';
+      if (tienePunto) {
+        html += `<button type="button" class="ls-ficha-coloc-modo${modo === 'position' ? ' ls-ficha-coloc-modo--activo' : ''}" data-modo="position">Punto</button>`;
+      }
+      if (tieneBbox) {
+        html += `<button type="button" class="ls-ficha-coloc-modo${modo === 'bbox' ? ' ls-ficha-coloc-modo--activo' : ''}" data-modo="bbox">Rectángulo</button>`;
+      }
+      html += '</div>';
+
+      if (tienePunto) {
+        html += `<div class="ls-ficha-coloc-grupo" data-grupo="position"${modo === 'position' ? '' : ' hidden'}>
+            <div class="ls-ficha-editor-rejilla">
+              <label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Longitud</span>
+                <input class="ls-ficha-input" type="number" step="any" data-coloc="lon" value="${num(pos.lon)}"></label>
+              <label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Latitud</span>
+                <input class="ls-ficha-input" type="number" step="any" data-coloc="lat" value="${num(pos.lat)}"></label>
+              <label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Cota (m)</span>
+                <input class="ls-ficha-input" type="number" step="1" data-coloc="height" value="${num(pos.height)}"></label>
+            </div>
+            <div class="ls-ficha-coloc-acciones">
+              <button type="button" class="ls-ficha-boton" data-accion="centro">Centro del mapa</button>
+              <button type="button" class="ls-ficha-boton" data-accion="pinchar">Pinchar en el mapa</button>
+            </div>
+          </div>`;
+      }
+
+      if (tieneBbox) {
+        html += `<div class="ls-ficha-coloc-grupo" data-grupo="bbox"${modo === 'bbox' ? '' : ' hidden'}>
+            <div class="ls-ficha-editor-rejilla">
+              <label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Oeste</span>
+                <input class="ls-ficha-input" type="number" step="any" data-coloc="oeste" value="${num(caja[0])}"></label>
+              <label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Sur</span>
+                <input class="ls-ficha-input" type="number" step="any" data-coloc="sur" value="${num(caja[1])}"></label>
+              <label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Este</span>
+                <input class="ls-ficha-input" type="number" step="any" data-coloc="este" value="${num(caja[2])}"></label>
+              <label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Norte</span>
+                <input class="ls-ficha-input" type="number" step="any" data-coloc="norte" value="${num(caja[3])}"></label>
+            </div>
+            <div class="ls-ficha-coloc-acciones">
+              <button type="button" class="ls-ficha-boton" data-accion="vista">Vista actual</button>
+              <button type="button" class="ls-ficha-boton" data-accion="dibujar">Dibujar rectángulo</button>
+            </div>
+          </div>`;
+      }
+
+      if ('heading' in estado) {
+        const giro = isFinite(Number(estado.heading)) ? Number(estado.heading) : 0;
+        html += `<div class="ls-ficha-coloc-giro">
+            <div class="ls-ficha-coloc-fila">
+              <span class="ls-ficha-campo-etiqueta">Giro (grados)</span>
+              <input class="ls-ficha-input ls-ficha-giro-numero" type="number" step="1" data-coloc="heading" value="${giro}">
+              <button type="button" class="ls-ficha-enlace" data-accion="giro-cero">0°</button>
+            </div>
+            <input class="ls-ficha-rango" type="range" min="-180" max="180" step="1" data-coloc="heading-rango" value="${Math.max(-180, Math.min(180, giro))}" aria-label="Giro del recurso en grados">
+          </div>`;
+      }
+
+      // Avanzado: solo los campos que la capa lleva de verdad.
+      const avanzados = [];
+      [['pitch', 'Inclinación (°)', '1'], ['roll', 'Alabeo (°)', '1'],
+        ['heightOffset', 'Cota sobre el terreno (m)', '1'],
+        ['ancho', 'Ancho (m)', '1'], ['alto', 'Alto (m)', '1'],
+        ['metrosPorPixel', 'Metros por píxel', '0.1']].forEach(function (def) {
+        if (!(def[0] in estado)) return;
+        const v = estado[def[0]];
+        avanzados.push(`<label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">${def[1]}</span>
+            <input class="ls-ficha-input" type="number" step="${def[2]}" data-coloc="${def[0]}" value="${num(v)}"></label>`);
+      });
+      // La escala llega como número en el constructor, pero getState la
+      // devuelve normalizada a objeto {x, y} (Imagen) o {x, y, z} (GLB).
+      if ('scale' in estado) {
+        const escala = estado.scale;
+        if (escala && typeof escala === 'object') {
+          ['x', 'y', 'z'].forEach(function (eje) {
+            if (!(eje in escala)) return;
+            avanzados.push(`<label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Escala ${eje.toUpperCase()}</span>
+                <input class="ls-ficha-input" type="number" step="0.1" data-coloc="escala-${eje}" value="${num(escala[eje])}"></label>`);
+          });
+        } else {
+          avanzados.push(`<label class="ls-ficha-campo"><span class="ls-ficha-campo-etiqueta">Escala</span>
+              <input class="ls-ficha-input" type="number" step="0.1" data-coloc="scale" value="${num(escala)}"></label>`);
+        }
+      }
+      ['clampToGround', 'baseAlSuelo', 'ajustarABbox'].forEach(function (clave) {
+        if (!(clave in estado)) return;
+        const etiqueta = clave === 'clampToGround' ? 'Apoyar en el terreno'
+          : (clave === 'baseAlSuelo' ? 'Apoyar la base del modelo' : 'Ajustar al rectángulo');
+        avanzados.push(`<label class="ls-ficha-campo ls-ficha-campo--casilla">
+            <input type="checkbox" data-coloc="${clave}"${estado[clave] ? ' checked' : ''}>
+            <span>${etiqueta}</span></label>`);
+      });
+      if (avanzados.length) {
+        html += `<details class="ls-ficha-detalle">
+            <summary>Orientación, escala y cota</summary>
+            <div class="ls-ficha-editor-rejilla">${avanzados.join('')}</div>
+          </details>`;
+      }
+
+      html += '</div>';
+      return { html: html, modo: modo };
+    }
+
+    /** Número de un campo de texto; vacío no es cero. */
+    function _numDeCampo(texto) {
+      const t = String(texto === null || texto === undefined ? '' : texto).trim().replace(',', '.');
+      if (t === '') return null;
+      const n = Number(t);
+      return isFinite(n) ? n : null;
+    }
+
+    /** ¿Son el mismo valor a efectos de formulario? */
+    function _mismoValor(a, b) {
+      const normal = (v) => {
+        if (v === null || v === undefined) return '';
+        if (Array.isArray(v)) return v.join(',');
+        if (typeof v === 'number') return String(v);
+        return String(v).trim();
+      };
+      return normal(a) === normal(b);
+    }
+
+    /** ¿Está el mapa en la implementación de Cesium? */
+    function _esCesium(mapa) {
+      try {
+        const impl = (mapa && typeof mapa.getMapImpl === 'function') ? mapa.getMapImpl() : null;
+        return !!(impl && impl.scene && impl.scene.camera && typeof window.Cesium !== 'undefined');
+      } catch (e) {
+        return false;
+      }
+    }
+
+    /** Centro de la vista en grados (en 2D hay que reproyectar). */
+    function _centroEnGrados() {
+      const mapa = self._map;
+      if (!mapa) return null;
+
+      // En 3D, la fachada devuelve el centro en grados (setCenter espera
+      // EPSG:4326) y lo mantiene al mover la cámara. Si no lo diera, se toma
+      // el punto del globo bajo el centro del lienzo.
+      if (_esCesium(mapa)) {
+        let centro = null;
+        try { centro = (typeof mapa.getCenter === 'function') ? mapa.getCenter() : null; } catch (e) { centro = null; }
+        if (centro && isFinite(centro.x) && isFinite(centro.y)
+          && Math.abs(centro.x) <= 180 && Math.abs(centro.y) <= 90) {
+          return [centro.x, centro.y];
+        }
+        const Cesium = window.Cesium;
+        let impl = null;
+        try { impl = mapa.getMapImpl(); } catch (e) { impl = null; }
+        const escena = impl && impl.scene;
+        if (Cesium && escena && escena.camera && escena.globe && escena.canvas) {
+          const lienzo = escena.canvas;
+          const ancho = lienzo.clientWidth || lienzo.width;
+          const alto = lienzo.clientHeight || lienzo.height;
+          if (ancho && alto) {
+            const posicion = new Cesium.Cartesian2(ancho / 2, alto / 2);
+            let cartesiano = null;
+            try {
+              const rayo = escena.camera.getPickRay(posicion);
+              if (rayo) cartesiano = escena.globe.pick(rayo, escena);
+            } catch (e) { cartesiano = null; }
+            if (!cartesiano) {
+              try { cartesiano = escena.camera.pickEllipsoid(posicion, escena.globe.ellipsoid); } catch (e) { cartesiano = null; }
+            }
+            if (cartesiano) {
+              try {
+                const c = escena.globe.ellipsoid.cartesianToCartographic(cartesiano);
+                const lon = Cesium.Math.toDegrees(c.longitude);
+                const lat = Cesium.Math.toDegrees(c.latitude);
+                if (isFinite(lon) && isFinite(lat)) return [lon, lat];
+              } catch (e) { /* sin centro */ }
+            }
+          }
+        }
+        return null;
+      }
+
+      if (typeof mapa.getCenter !== 'function') return null;
+      let centro = null;
+      try { centro = mapa.getCenter(); } catch (e) { return null; }
+      if (!centro || !isFinite(centro.x) || !isFinite(centro.y)) return null;
+      const IDEE = apiIdee();
+      if (!(IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function')) return null;
+      try {
+        const ll = IDEE.utils.reproject([centro.x, centro.y], 'EPSG:3857', 'EPSG:4326');
+        return (ll && isFinite(ll[0]) && isFinite(ll[1])) ? [ll[0], ll[1]] : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Rectángulo que se está viendo, en grados.
+     *
+     * En 2D sale de la vista de OpenLayers. En 3D se usa
+     * camera.computeViewRectangle(), que ya resuelve la cámara inclinada; si
+     * no da un rectángulo (vista que no toca el globo), se lanzan rayos por las
+     * esquinas del lienzo como respaldo.
+     */
+    function _vistaEnGrados() {
+      const mapa = self._map;
+      if (!mapa || typeof mapa.getMapImpl !== 'function') return null;
+      let impl = null;
+      try { impl = mapa.getMapImpl(); } catch (e) { return null; }
+      if (!impl) return null;
+
+      if (!impl.scene) {
+        const vista = (typeof impl.getView === 'function') ? impl.getView() : null;
+        const tam = (typeof impl.getSize === 'function') ? impl.getSize() : null;
+        if (!vista || typeof vista.calculateExtent !== 'function' || !tam) return null;
+        const IDEE = apiIdee();
+        if (!(IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function')) return null;
+        let caja = null;
+        try { caja = vista.calculateExtent(tam); } catch (e) { return null; }
+        if (!caja || caja.length < 4) return null;
+        try {
+          const a = IDEE.utils.reproject([caja[0], caja[1]], 'EPSG:3857', 'EPSG:4326');
+          const b = IDEE.utils.reproject([caja[2], caja[3]], 'EPSG:3857', 'EPSG:4326');
+          return [Math.min(a[0], b[0]), Math.min(a[1], b[1]),
+            Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+        } catch (e) {
+          return null;
+        }
+      }
+
+      const Cesium = window.Cesium;
+      const escena = impl.scene;
+      if (!Cesium || !escena || !escena.camera || !escena.globe) return null;
+      const elipsoide = escena.globe.ellipsoid;
+
+      // computeViewRectangle ya tiene en cuenta la inclinación de la cámara y
+      // devuelve el rectángulo sobre el globo en radianes.
+      if (typeof escena.camera.computeViewRectangle === 'function') {
+        try {
+          const rect = escena.camera.computeViewRectangle(elipsoide);
+          if (rect && isFinite(rect.west) && isFinite(rect.south)
+            && isFinite(rect.east) && isFinite(rect.north)) {
+            return [
+              Cesium.Math.toDegrees(rect.west), Cesium.Math.toDegrees(rect.south),
+              Cesium.Math.toDegrees(rect.east), Cesium.Math.toDegrees(rect.north)
+            ];
+          }
+        } catch (e) { /* se cae a los rayos de las esquinas */ }
+      }
+
+      const lienzo = escena.canvas;
+      if (!lienzo) return null;
+      const ancho = lienzo.clientWidth || lienzo.width;
+      const alto = lienzo.clientHeight || lienzo.height;
+      if (!ancho || !alto) return null;
+
+      const lons = [];
+      const lats = [];
+      [[0, 0], [ancho, 0], [ancho, alto], [0, alto]].forEach(function (px) {
+        let cartesiano = null;
+        try {
+          const posicion = new Cesium.Cartesian2(px[0], px[1]);
+          const rayo = escena.camera.getPickRay(posicion);
+          if (rayo) cartesiano = escena.globe.pick(rayo, escena);
+          if (!cartesiano) cartesiano = escena.camera.pickEllipsoid(posicion, elipsoide);
+        } catch (e) {
+          cartesiano = null;
+        }
+        if (!cartesiano) return;
+        try {
+          const cartografica = elipsoide.cartesianToCartographic(cartesiano);
+          lons.push(Cesium.Math.toDegrees(cartografica.longitude));
+          lats.push(Cesium.Math.toDegrees(cartografica.latitude));
+        } catch (e) { /* esquina perdida */ }
+      });
+      if (lons.length < 2) return null;
+      return [Math.min.apply(null, lons), Math.min.apply(null, lats),
+        Math.max.apply(null, lons), Math.max.apply(null, lats)];
+    }
+
+    /** Deja el modal translúcido para poder pinchar en el mapa que hay debajo. */
+    function _modoPick(overlay, activo) {
+      if (!overlay) return;
+      overlay.classList.toggle('ls-ficha--pick', !!activo);
+    }
+
+    /** Vuelve a poner el cursor normal en el lienzo del mapa. */
+    function _cursorMapa(activo) {
+      const mapa = self._map;
+      if (!mapa || typeof mapa.getMapImpl !== 'function') return;
+      let impl = null;
+      try { impl = mapa.getMapImpl(); } catch (e) { return; }
+      const lienzo = (impl && typeof impl.getViewport === 'function')
+        ? impl.getViewport()
+        : ((impl && impl.scene && impl.scene.canvas) ? impl.scene.canvas : null);
+      if (lienzo) lienzo.style.cursor = activo ? 'crosshair' : '';
+    }
+
+    /**
+     * Activa la captura de un clic sobre el mapa.
+     *
+     * @param {HTMLElement} overlay Modal de la ficha (se hace translúcido).
+     * @param {Function} alPunto Recibe (lon, lat).
+     * @returns {Function} Cancelador.
+     */
+    function _capturarPunto(overlay, alPunto) {
+      const mapa = self._map;
+      if (!mapa || typeof mapa.getMapImpl !== 'function') return null;
+      const cesium = _esCesium(mapa);
+      let impl = null;
+      try { impl = mapa.getMapImpl(); } catch (e) { return null; }
+      if (!impl) return null;
+
+      _modoPick(overlay, true);
+      _cursorMapa(true);
+
+      let soltar = function () { /* se rellena abajo */ };
+      let alEscape = null;
+      const terminar = function () {
+        if (alEscape) {
+          try { window.removeEventListener('keydown', alEscape, true); } catch (e) { /* nada */ }
+          alEscape = null;
+        }
+        _modoPick(overlay, false);
+        _cursorMapa(false);
+        try { soltar(); } catch (e) { /* ya suelto */ }
+      };
+
+      // Esc cancela la captura sin cerrar la ficha: va en captura y corta la
+      // propagación para que no llegue al manejador global del modal.
+      alEscape = function (ev) {
+        if (ev.key !== 'Escape') return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        terminar();
+      };
+      window.addEventListener('keydown', alEscape, true);
+
+      if (!cesium) {
+        const manejador = function (evt) {
+          terminar();
+          const coordenada = evt && evt.coordinate;
+          if (!coordenada) return;
+          const IDEE = apiIdee();
+          let ll = null;
+          try {
+            ll = (IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function')
+              ? IDEE.utils.reproject([coordenada[0], coordenada[1]], 'EPSG:3857', 'EPSG:4326')
+              : null;
+          } catch (e) { ll = null; }
+          if (!ll) return;
+          alPunto(ll[0], ll[1]);
+        };
+        try {
+          impl.once('singleclick', manejador);
+          soltar = function () { try { impl.un('singleclick', manejador); } catch (e) { /* nada */ } };
+        } catch (e) {
+          terminar();
+          return null;
+        }
+        return terminar;
+      }
+
+      const Cesium = window.Cesium;
+      const escena = impl.scene;
+      if (!Cesium || !escena || !escena.canvas) { terminar(); return null; }
+      let manejadorCesium = null;
+      try {
+        manejadorCesium = new Cesium.ScreenSpaceEventHandler(escena.canvas);
+        manejadorCesium.setInputAction(function (movimiento) {
+          const posicion = movimiento && movimiento.position;
+          if (!posicion) return;
+          let cartesiano = null;
+          try {
+            const rayo = escena.camera.getPickRay(posicion);
+            if (rayo) cartesiano = escena.globe.pick(rayo, escena);
+            if (!cartesiano) cartesiano = escena.camera.pickEllipsoid(posicion, escena.globe.ellipsoid);
+          } catch (e) {
+            cartesiano = null;
+          }
+          if (!cartesiano) return;
+          const cartografica = escena.globe.ellipsoid.cartesianToCartographic(cartesiano);
+          terminar();
+          alPunto(Cesium.Math.toDegrees(cartografica.longitude), Cesium.Math.toDegrees(cartografica.latitude));
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        soltar = function () { try { manejadorCesium.destroy(); } catch (e) { /* nada */ } };
+      } catch (e) {
+        terminar();
+        return null;
+      }
+      return terminar;
+    }
+
+    /**
+     * Activa el arrastre de un rectángulo sobre el mapa (solo 2D).
+     *
+     * La marquesina se cuelga del body y va en coordenadas de pantalla: así no
+     * hay que tocar el posicionamiento del viewport del mapa.
+     *
+     * @returns {Function|null} Cancelador, o null si no se puede dibujar.
+     */
+    function _capturarRectangulo(overlay, alBbox) {
+      const mapa = self._map;
+      if (!mapa || typeof mapa.getMapImpl !== 'function') return null;
+      if (_esCesium(mapa)) return null;
+      let impl = null;
+      try { impl = mapa.getMapImpl(); } catch (e) { return null; }
+      const viewport = (impl && typeof impl.getViewport === 'function') ? impl.getViewport() : null;
+      if (!impl || !viewport) return null;
+
+      _modoPick(overlay, true);
+      _cursorMapa(true);
+
+      const marco = document.createElement('div');
+      marco.className = 'ls-ficha-marco';
+      marco.hidden = true;
+      document.body.appendChild(marco);
+
+      let inicio = null;
+      let fin = null;
+      let cancelar = null;
+
+      const pintar = function () {
+        if (!inicio || !fin) return;
+        marco.style.left = Math.min(inicio.x, fin.x) + 'px';
+        marco.style.top = Math.min(inicio.y, fin.y) + 'px';
+        marco.style.width = Math.abs(fin.x - inicio.x) + 'px';
+        marco.style.height = Math.abs(fin.y - inicio.y) + 'px';
+      };
+
+      const alMover = function (ev) {
+        if (!inicio) return;
+        fin = { x: ev.clientX, y: ev.clientY };
+        pintar();
+      };
+
+      const soltar = function () {
+        window.removeEventListener('pointermove', alMover, true);
+        window.removeEventListener('pointerup', alSoltar, true);
+        window.removeEventListener('keydown', alEscape, true);
+      };
+
+      const limpiar = function () {
+        soltar();
+        _modoPick(overlay, false);
+        _cursorMapa(false);
+        if (marco.parentNode) marco.parentNode.removeChild(marco);
+      };
+
+      const alEscape = function (ev) {
+        if (ev.key !== 'Escape') return;
+        ev.stopPropagation();
+        limpiar();
+      };
+
+      const alSoltar = function (ev) {
+        if (!inicio) return;
+        fin = { x: ev.clientX, y: ev.clientY };
+        const anchoPx = Math.abs(fin.x - inicio.x);
+        const altoPx = Math.abs(fin.y - inicio.y);
+        const caja = viewport.getBoundingClientRect();
+        const p1 = [Math.min(inicio.x, fin.x) - caja.left, Math.min(inicio.y, fin.y) - caja.top];
+        const p2 = [Math.max(inicio.x, fin.x) - caja.left, Math.max(inicio.y, fin.y) - caja.top];
+        limpiar();
+        if (anchoPx < 6 || altoPx < 6) return;
+
+        let c1 = null;
+        let c2 = null;
+        try {
+          c1 = impl.getCoordinateFromPixel(p1);
+          c2 = impl.getCoordinateFromPixel(p2);
+        } catch (e) {
+          c1 = null;
+          c2 = null;
+        }
+        if (!c1 || !c2) return;
+        const IDEE = apiIdee();
+        let ll1 = null;
+        let ll2 = null;
+        try {
+          if (IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function') {
+            ll1 = IDEE.utils.reproject([c1[0], c1[1]], 'EPSG:3857', 'EPSG:4326');
+            ll2 = IDEE.utils.reproject([c2[0], c2[1]], 'EPSG:3857', 'EPSG:4326');
+          }
+        } catch (e) {
+          ll1 = null;
+          ll2 = null;
+        }
+        if (!ll1 || !ll2) return;
+        alBbox([
+          Math.min(ll1[0], ll2[0]), Math.min(ll1[1], ll2[1]),
+          Math.max(ll1[0], ll2[0]), Math.max(ll1[1], ll2[1])
+        ]);
+      };
+
+      const alPulsar = function (ev) {
+        if (ev.button !== 0) return;
+        // En captura: se corta antes de que OpenLayers empiece a arrastrar el mapa.
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+        inicio = { x: ev.clientX, y: ev.clientY };
+        fin = { x: ev.clientX, y: ev.clientY };
+        marco.hidden = false;
+        pintar();
+        window.addEventListener('pointermove', alMover, true);
+        window.addEventListener('pointerup', alSoltar, true);
+        window.addEventListener('keydown', alEscape, true);
+      };
+
+      viewport.addEventListener('pointerdown', alPulsar, true);
+      cancelar = function () {
+        viewport.removeEventListener('pointerdown', alPulsar, true);
+        limpiar();
+      };
+      return cancelar;
+    }
+
+    /** Sustituye una capa por otra en su mismo grupo y con su mismo z. */
+    function _sustituirCapa(capaVieja, capaNueva) {
+      const mapa = self._map;
+      if (!mapa) return false;
+
+      // Padre (grupo) de la capa, si está anidada.
+      const esGrupo = (l) => !!l && (l.type === 'LayerGroup' || l._type === 'LayerGroup' || typeof l.getLayers === 'function');
+      let padre = null;
+      const buscarPadre = function (lista) {
+        for (const l of lista) {
+          if (!esGrupo(l)) continue;
+          let hijas = [];
+          try { hijas = l.getLayers() || []; } catch (e) { hijas = []; }
+          if (hijas.indexOf(capaVieja) > -1) return l;
+          const dentro = buscarPadre(hijas);
+          if (dentro) return dentro;
+        }
+        return null;
+      };
+      try { padre = buscarPadre(mapa.getLayers() || []); } catch (e) { padre = null; }
+
+      const z = self._zReal(capaVieja);
+      let opacidad = null;
+      try { if (typeof capaVieja.getOpacity === 'function') opacidad = Number(capaVieja.getOpacity()); } catch (e) { opacidad = null; }
+      const estilo = (capaVieja._selectedStyleName !== undefined) ? capaVieja._selectedStyleName
+        : ((capaVieja._selectedStyleIndex !== undefined) ? capaVieja._selectedStyleIndex
+          : ((capaVieja._currentStyleId !== undefined) ? capaVieja._currentStyleId : undefined));
+
+      try {
+        if (padre && typeof padre.removeLayers === 'function') padre.removeLayers(capaVieja);
+        else if (typeof mapa.removeLayers === 'function') mapa.removeLayers(capaVieja);
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo quitar la capa vieja', e);
+      }
+
+      try {
+        if (padre && typeof padre.addLayers === 'function') padre.addLayers(capaNueva);
+        else mapa.addLayers(capaNueva);
+      } catch (e) {
+        // Si la nueva no entra, se devuelve la vieja a su sitio: mejor eso que
+        // dejar al usuario sin capa.
+        try {
+          if (padre && typeof padre.addLayers === 'function') padre.addLayers(capaVieja);
+          else mapa.addLayers(capaVieja);
+        } catch (e2) { /* nada más que hacer */ }
+        throw e;
+      }
+
+      if (z !== null && z !== undefined) {
+        try { self._escribirZ(capaNueva, z); } catch (e) { /* sin z */ }
+      }
+      if (opacidad !== null && isFinite(opacidad) && typeof capaNueva.setOpacity === 'function') {
+        try { capaNueva.setOpacity(opacidad); } catch (e) { /* sin opacidad */ }
+      }
+      if (estilo !== undefined && typeof window.setLayerStyle === 'function') {
+        try { window.setLayerStyle(capaNueva.idLayer, estilo); } catch (e) { /* estilo no válido */ }
+      }
+      return true;
+    }
+
+    /**
+     * Aplica los valores del formulario a la capa.
+     *
+     * @returns {{ok:boolean, capa:Object, recreada:boolean, mensaje:string}}
+     */
+    function _aplicarEditorFicha(capa, lectura) {
+      const valores = lectura.campos || {};
+      const { base, opciones } = _parametrosDeCapa(capa);
+
+      // 1. En caliente: opacidad y visibilidad no obligan a recrear nada.
+      if (typeof valores.opacity === 'number' && isFinite(valores.opacity)
+        && typeof capa.setOpacity === 'function') {
+        try { capa.setOpacity(Math.max(0, Math.min(100, valores.opacity)) / 100); } catch (e) { /* nada */ }
+      }
+      if (typeof valores.visible === 'boolean' && typeof capa.setVisible === 'function') {
+        try { capa.setVisible(valores.visible); } catch (e) { /* nada */ }
+      }
+
+      // 2. Lo del constructor: se compara con lo que hay para no recrear la
+      //    capa cuando solo se ha tocado la transparencia.
+      const params = Object.assign({}, base);
+      let cambia = false;
+      Object.keys(valores).forEach(function (clave) {
+        if (clave === 'opacity' || clave === 'visible') return;
+        const nuevo = valores[clave];
+        const actual = (clave in base) ? base[clave] : capa[clave];
+        if (_mismoValor(nuevo, actual)) return;
+        params[clave] = nuevo;
+        cambia = true;
+      });
+
+      const colocacion = lectura.colocacion;
+      if (colocacion) {
+        const anterior = _estadoColocacion(capa);
+        const cambiaColocacion = JSON.stringify(colocacion) !== JSON.stringify(anterior);
+        // La colocación se pasa SIEMPRE al constructor: las capas de extensión
+        // (GLB/Imagen/IFC) no la guardan en constructorParameters, así que si
+        // solo se cambia la leyenda habría que reconstruirla sin posición.
+        Object.keys(colocacion).forEach(function (clave) {
+          if (clave === 'visible' || clave === 'opacity') return;
+          params[clave] = colocacion[clave];
+        });
+        if (cambiaColocacion) cambia = true;
+      }
+
+      if (!cambia) return { ok: true, capa: capa, recreada: false, mensaje: 'Aplicado.' };
+
+      // La visibilidad y la opacidad van como estado, no como constructor: se
+      // reaplican después de crear la capa nueva.
+      delete params.visible;
+      delete params.opacity;
+
+      const Ctor = capa.constructor;
+      if (typeof Ctor !== 'function') {
+        return { ok: false, capa: capa, recreada: false, mensaje: 'Esta capa no se puede reconstruir.' };
+      }
+
+      let nueva = null;
+      try {
+        nueva = new Ctor(params, opciones);
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo reconstruir la capa', e);
+        return {
+          ok: false, capa: capa, recreada: false,
+          mensaje: 'No se ha podido reconstruir la capa: ' + (e && e.message ? e.message : e)
+        };
+      }
+
+      try {
+        _sustituirCapa(capa, nueva);
+      } catch (e) {
+        return {
+          ok: false, capa: capa, recreada: false,
+          mensaje: 'No se ha podido sustituir la capa en el mapa: ' + (e && e.message ? e.message : e)
+        };
+      }
+
+      // `setVisible` y `setOpacity` no viajan en el constructor de todas las
+      // capas: se reponen a mano con lo que había más lo que se acaba de tocar.
+      const visible = (typeof valores.visible === 'boolean') ? valores.visible
+        : (typeof capa.isVisible === 'function' ? !!capa.isVisible() : true);
+      if (typeof nueva.setVisible === 'function') {
+        try { nueva.setVisible(visible); } catch (e) { /* nada */ }
+      }
+      if (typeof valores.opacity === 'number' && isFinite(valores.opacity)
+        && typeof nueva.setOpacity === 'function') {
+        try { nueva.setOpacity(Math.max(0, Math.min(100, valores.opacity)) / 100); } catch (e) { /* nada */ }
+      }
+
+      return { ok: true, capa: nueva, recreada: true, mensaje: 'Aplicado: la capa se ha reconstruido.' };
+    }
+
+    /**
+     * Monta el editor dentro de la ficha.
+     *
+     * @param {HTMLElement} contenedor Hueco del formulario.
+     * @param {Object} capa Capa viva.
+     * @param {HTMLElement} overlay Modal (para el modo de pinchazo).
+     * @param {Function} alCambiar Recibe la capa nueva tras aplicar.
+     */
+    function _montarEditorFicha(contenedor, capa, overlay, alCambiar) {
+      if (!contenedor || !capa) return;
+
+      // Si se vuelve a montar el editor (tras aplicar o descartar), se retira
+      // el manejador de Escape del formulario anterior.
+      const anterior = contenedor.querySelector('.ls-ficha-editor');
+      if (anterior && anterior._lsEscapeEditor) {
+        try { window.removeEventListener('keydown', anterior._lsEscapeEditor, true); } catch (e) { /* nada */ }
+      }
+
+      if (capa.type === 'LayerGroup' || capa._type === 'LayerGroup' || typeof capa.getLayers === 'function') {
+        contenedor.innerHTML = '<p class="ls-ficha-aviso">Un grupo no tiene parámetros propios: edita los de cada capa que contiene.</p>';
+        return;
+      }
+
+      const campos = _camposEditorFicha(capa);
+      const { base } = _parametrosDeCapa(capa);
+      const estado = _estadoColocacion(capa);
+      const coloc = estado ? _htmlColocacion(estado) : null;
+
+      let html = '<form class="ls-ficha-editor" autocomplete="off" onsubmit="return false">';
+      html += `<div class="ls-ficha-editor-rejilla">${campos.map(_campoEditorHtml).join('')}</div>`;
+      if (coloc) {
+        html += '<div class="ls-ficha-seccion-titulo ls-ficha-seccion-titulo--sub">Colocación en el mapa</div>';
+        html += coloc.html;
+      }
+      html += `<div class="ls-ficha-editor-pie">
+          <button type="button" class="ls-ficha-boton ls-ficha-boton--primario" data-accion="aplicar">Aplicar cambios</button>
+          <button type="button" class="ls-ficha-boton" data-accion="restablecer">Descartar cambios</button>
+          <span class="ls-ficha-editor-estado" role="status"></span>
+        </div>`;
+      html += '</form>';
+      contenedor.innerHTML = html;
+
+      const form = contenedor.querySelector('.ls-ficha-editor');
+      const estadoEl = contenedor.querySelector('.ls-ficha-editor-estado');
+      if (coloc) form.setAttribute('data-modo-coloc', coloc.modo);
+
+      // Al cancelar una captura con Esc, el botón deja de estar resaltado. Va
+      // en captura sobre window y no usa stopPropagation: el manejador de la
+      // captura corta la propagación, pero los listeners del mismo destino
+      // siguen ejecutándose.
+      const alEscapeEditor = function (ev) {
+        if (ev.key !== 'Escape') return;
+        form.querySelectorAll('.ls-ficha-boton--activo').forEach(function (b) {
+          b.classList.remove('ls-ficha-boton--activo');
+        });
+      };
+      form._lsEscapeEditor = alEscapeEditor;
+      window.addEventListener('keydown', alEscapeEditor, true);
+
+      const decir = function (texto, clase) {
+        if (!estadoEl) return;
+        estadoEl.textContent = texto || '';
+        estadoEl.className = 'ls-ficha-editor-estado' + (clase ? ' ls-ficha-editor-estado--' + clase : '');
+      };
+
+      const soltarPick = function () {
+        if (typeof _cancelarPickFicha === 'function') {
+          try { _cancelarPickFicha(); } catch (e) { /* nada */ }
+          _cancelarPickFicha = null;
+        }
+        form.querySelectorAll('.ls-ficha-boton--activo').forEach(function (b) {
+          b.classList.remove('ls-ficha-boton--activo');
+        });
+      };
+
+      const ponerColoc = function (nombre, valor) {
+        const el = form.querySelector('[data-coloc="' + nombre + '"]');
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = !!valor;
+        else if (valor === null || valor === undefined || !isFinite(Number(valor))) el.value = '';
+        else el.value = String(valor);
+      };
+
+      const leerColoc = function () {
+        if (!coloc || !estado) return null;
+        const nuevo = JSON.parse(JSON.stringify(estado));
+        const modo = form.getAttribute('data-modo-coloc') || 'position';
+        const leer = function (nombre) {
+          const el = form.querySelector('[data-coloc="' + nombre + '"]');
+          if (!el) return undefined;
+          if (el.type === 'checkbox') return !!el.checked;
+          return _numDeCampo(el.value);
+        };
+        if ('position' in nuevo) {
+          const lon = leer('lon');
+          const lat = leer('lat');
+          const height = leer('height');
+          nuevo.position = (lon === null || lat === null) ? null : {
+            lon: lon, lat: lat, height: height === null ? 0 : height
+          };
+        }
+        if ('bbox' in nuevo) {
+          const o = leer('oeste');
+          const s = leer('sur');
+          const e = leer('este');
+          const n = leer('norte');
+          nuevo.bbox = (o === null || s === null || e === null || n === null) ? null : [o, s, e, n];
+        }
+        ['heading', 'pitch', 'roll', 'heightOffset', 'ancho', 'alto', 'metrosPorPixel']
+          .forEach(function (clave) {
+            if (!(clave in nuevo)) return;
+            const v = leer(clave);
+            if (v !== undefined && v !== null) nuevo[clave] = v;
+          });
+        // La escala puede venir como número o como objeto {x, y[, z]}.
+        if ('scale' in nuevo) {
+          if (nuevo.scale && typeof nuevo.scale === 'object') {
+            const escala = {};
+            ['x', 'y', 'z'].forEach(function (eje) {
+              if (!(eje in nuevo.scale)) return;
+              const v = leer('escala-' + eje);
+              escala[eje] = (v === null || v === undefined) ? nuevo.scale[eje] : v;
+            });
+            nuevo.scale = escala;
+          } else {
+            const v = leer('scale');
+            if (v !== null && v !== undefined) nuevo.scale = v;
+          }
+        }
+        ['clampToGround', 'baseAlSuelo', 'ajustarABbox'].forEach(function (clave) {
+          if (!(clave in nuevo)) return;
+          const v = leer(clave);
+          if (v !== undefined) nuevo[clave] = v;
+        });
+        // El modo elegido manda: si se está en punto, el rectángulo que hubiera
+        // se conserva pero no se exige, y al revés.
+        nuevo.__modo = modo;
+        return nuevo;
+      };
+
+      /** Validación mínima antes de tocar el mapa. */
+      const validarColoc = function (nuevo) {
+        if (!nuevo) return { ok: true, mensaje: '' };
+        const modo = nuevo.__modo || 'position';
+        if (modo === 'position' && ('position' in nuevo)) {
+          if (!nuevo.position) {
+            return { ok: false, mensaje: 'Escribe la longitud y la latitud, o usa «Centro del mapa» / «Pinchar en el mapa».' };
+          }
+          if (nuevo.position.lon < -180 || nuevo.position.lon > 180
+            || nuevo.position.lat < -90 || nuevo.position.lat > 90) {
+            return { ok: false, mensaje: 'La longitud va entre -180 y 180, y la latitud entre -90 y 90.' };
+          }
+        }
+        if (modo === 'bbox' && ('bbox' in nuevo)) {
+          const caja = nuevo.bbox;
+          if (!caja) return { ok: false, mensaje: 'Marca un rectángulo o escribe sus cuatro coordenadas.' };
+          if (caja[2] <= caja[0] || caja[3] <= caja[1]) {
+            return { ok: false, mensaje: 'El rectángulo está vacío: el este tiene que ser mayor que el oeste y el norte mayor que el sur.' };
+          }
+        }
+        return { ok: true, mensaje: '' };
+      };
+
+      /* --- Modos y acciones de mapa -------------------------------- */
+
+      form.querySelectorAll('.ls-ficha-coloc-modo').forEach(function (boton) {
+        boton.addEventListener('click', function () {
+          const modo = this.getAttribute('data-modo');
+          form.setAttribute('data-modo-coloc', modo);
+          form.querySelectorAll('.ls-ficha-coloc-modo').forEach(function (b) {
+            b.classList.toggle('ls-ficha-coloc-modo--activo', b === boton);
+          });
+          form.querySelectorAll('.ls-ficha-coloc-grupo').forEach(function (g) {
+            g.hidden = g.getAttribute('data-grupo') !== modo;
+          });
+          decir('');
+        });
+      });
+
+      form.addEventListener('click', function (ev) {
+        const boton = ev.target.closest ? ev.target.closest('[data-accion]') : null;
+        if (!boton || !form.contains(boton)) return;
+        const accion = boton.getAttribute('data-accion');
+
+        if (accion === 'centro') {
+          const centro = _centroEnGrados();
+          if (!centro) { decir('No se ha podido leer el centro del mapa.', 'error'); return; }
+          ponerColoc('lon', centro[0]);
+          ponerColoc('lat', centro[1]);
+          decir('Punto en el centro del mapa.');
+          return;
+        }
+
+        if (accion === 'vista') {
+          const caja = _vistaEnGrados();
+          if (!caja) {
+            decir(_esCesium(self._map)
+              ? 'En 3D la cámara va inclinada y no hay un rectángulo limpio: escribe las coordenadas.'
+              : 'No se ha podido leer la vista actual.', 'aviso');
+            return;
+          }
+          ponerColoc('oeste', caja[0]);
+          ponerColoc('sur', caja[1]);
+          ponerColoc('este', caja[2]);
+          ponerColoc('norte', caja[3]);
+          decir('Rectángulo de la vista actual tomado.');
+          return;
+        }
+
+        if (accion === 'pinchar') {
+          soltarPick();
+          const cancelar = _capturarPunto(overlay, function (lon, lat) {
+            ponerColoc('lon', lon);
+            ponerColoc('lat', lat);
+            decir('Punto tomado: ' + lon.toFixed(6) + ', ' + lat.toFixed(6) + '.');
+            _cancelarPickFicha = null;
+            if (boton) boton.classList.remove('ls-ficha-boton--activo');
+          });
+          if (!cancelar) { decir('No se ha podido activar el pinchazo en el mapa.', 'error'); return; }
+          _cancelarPickFicha = cancelar;
+          boton.classList.add('ls-ficha-boton--activo');
+          decir('Haz clic en el mapa. Esc para cancelar.');
+          return;
+        }
+
+        if (accion === 'dibujar') {
+          soltarPick();
+          if (_esCesium(self._map)) {
+            decir('En 3D no se puede dibujar el rectángulo: usa «Vista actual» o escribe las coordenadas.', 'aviso');
+            return;
+          }
+          const cancelar = _capturarRectangulo(overlay, function (caja) {
+            ponerColoc('oeste', caja[0]);
+            ponerColoc('sur', caja[1]);
+            ponerColoc('este', caja[2]);
+            ponerColoc('norte', caja[3]);
+            decir('Rectángulo tomado. Ajusta el giro si hace falta.');
+            _cancelarPickFicha = null;
+            if (boton) boton.classList.remove('ls-ficha-boton--activo');
+          });
+          if (!cancelar) { decir('No se ha podido activar el dibujo.', 'error'); return; }
+          _cancelarPickFicha = cancelar;
+          boton.classList.add('ls-ficha-boton--activo');
+          decir('Arrastra sobre el mapa para marcar el rectángulo. Esc para cancelar.');
+          return;
+        }
+
+        if (accion === 'giro-cero') {
+          ponerColoc('heading', 0);
+          ponerColoc('heading-rango', 0);
+          return;
+        }
+
+        if (accion === 'restablecer') {
+          soltarPick();
+          _montarEditorFicha(contenedor, capa, overlay, alCambiar);
+          return;
+        }
+
+        if (accion === 'aplicar') {
+          soltarPick();
+          const camposValores = {};
+          form.querySelectorAll('[data-campo]').forEach(function (el) {
+            const clave = el.getAttribute('data-campo');
+            if (el.type === 'checkbox') camposValores[clave] = !!el.checked;
+            else if (el.type === 'number') camposValores[clave] = _numDeCampo(el.value);
+            else camposValores[clave] = String(el.value).trim();
+          });
+          // Los arrays vuelven a ser arrays.
+          Object.keys(camposValores).forEach(function (clave) {
+            const original = (clave in base) ? base[clave] : null;
+            if (Array.isArray(original) && typeof camposValores[clave] === 'string') {
+              camposValores[clave] = camposValores[clave]
+                .split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s !== ''; });
+            }
+          });
+
+          const colocacion = leerColoc();
+          const revision = validarColoc(colocacion);
+          if (!revision.ok) { decir(revision.mensaje, 'error'); return; }
+
+          // `__modo` es solo del formulario: no es un parámetro de la capa.
+          if (colocacion) delete colocacion.__modo;
+
+          const resultado = _aplicarEditorFicha(capa, { campos: camposValores, colocacion: colocacion });
+          decir(resultado.mensaje, resultado.ok ? 'ok' : 'error');
+          if (!resultado.ok) return;
+
+          if (typeof window.renderLayerList === 'function') {
+            try { window.renderLayerList(); } catch (e) { /* nada */ }
+          }
+          if (resultado.recreada) {
+            if (typeof alCambiar === 'function') alCambiar(resultado.capa);
+            _montarEditorFicha(contenedor, resultado.capa, overlay, alCambiar);
+            // El formulario se acaba de reconstruir: el aviso se repone a mano.
+            const nuevoEstado = contenedor.querySelector('.ls-ficha-editor-estado');
+            if (nuevoEstado) {
+              nuevoEstado.textContent = resultado.mensaje;
+              nuevoEstado.className = 'ls-ficha-editor-estado ls-ficha-editor-estado--ok';
+            }
+          }
+          return;
+        }
+      });
+
+      // El número del giro y el rango se siguen el uno al otro.
+      const giroNum = form.querySelector('[data-coloc="heading"]');
+      const giroRango = form.querySelector('[data-coloc="heading-rango"]');
+      if (giroNum && giroRango) {
+        giroNum.addEventListener('input', function () {
+          const v = _numDeCampo(this.value);
+          giroRango.value = String(Math.max(-180, Math.min(180, v === null ? 0 : v)));
+        });
+        giroRango.addEventListener('input', function () {
+          giroNum.value = this.value;
+        });
+      }
     }
 
     /** Tipo legible de la capa, para la cabecera. */
@@ -5179,6 +6421,10 @@ class miPlugin_layerSwitcher {
     // (ext/bboxFeatures/bboxFeatures.js) a través de window.miBBoxFeatures.
     let sheetVectorLayer = null;
     let fichaVectorLayer = null;
+    // Cancelador de la captura de punto/rectángulo que pueda estar activa
+    // desde el editor de la ficha. Se guarda aquí para poder soltarla al
+    // cerrar el modal o al cambiar de acción.
+    let _cancelarPickFicha = null;
     let sheetReloadCleanup = null;
     let sheetReloadTimer = null;
 

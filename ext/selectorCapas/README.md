@@ -137,7 +137,7 @@ Es el gestor de las capas superpuestas del mapa (las capas base quedan fuera, la
 - **Grupos** (`IDEE.layer.LayerGroup`): nodos padre plegables, con subgrupos y el estado de colapso recordado entre re-renderizados; el nombre visible sale de `legend`, del `title` del constructor o de `name` (se descartan los nombres internos `layer_<n>`).
 - **Zoom a la capa**: encuadra la extensión de la capa o del grupo (unión de las extensiones de sus hijas). En 2D con `view.fit(...)`; en 3D con `camera.flyTo` y `Cesium.Rectangle.fromDegrees`. La extensión se busca en `getMaxExtent()`, en la rejilla de la fuente (GeoTIFF) y, en 3D, en `impl.getBoundingBox()`, descartando el «mundo entero» de relleno.
 - **Panel inferior (bottom sheet)** con la tabla de atributos de las capas vectoriales (con sincronía tabla ↔ mapa: pulsar una fila localiza y resalta el feature, y el clic en el mapa marca la fila) o con las estadísticas de las ráster. Las capas MapLibre/MVT abren además un selector de sub-capas.
-- **Ficha de la capa**: modal con los parámetros de construcción (`constructorParameters.userParameters` o `.parameters`, más `options` y `vendorOptions`, y la `url` resuelta) y con el documento del servicio (`getCapabilities()` en WMS/WMTS; `tileset.json` / `metadata.json` en servicios de teselas, validando que sea JSON y no binario).
+- **Ficha de la capa**: modal con un **editor de parámetros** (formulario y, en las capas de colocación, interacción con el mapa) y, plegados, los parámetros de construcción (`constructorParameters.userParameters` o `.parameters`, más `options` y `vendorOptions`, y la `url` resuelta) y el documento del servicio (`getCapabilities()` en WMS/WMTS; `tileset.json` / `metadata.json` en servicios de teselas, validando que sea JSON y no binario).
 - **Objetos geográficos (WFS y OGC API Features)**: en la **ventana de información** (la que abre la tabla de atributos) hay una barra sobre la tabla con el modo «Todas / La vista», el límite de objetos por página (25, 50, 100, 200, 500; 100 por defecto) y el paginado «‹ Página N ›», que se resuelve en el servidor. Es un control **prestado**: lo pinta el selector y lo ejecuta `ext/bboxFeatures/bboxFeatures.js` a través de `window.miBBoxFeatures` (si la extensión no está cargada, la barra no se pinta). La tabla se rehace sola cuando la capa termina de cargar (evento `load`).
 - **Filtro de capas listables**: quedan fuera las capas base, las marcadas con `displayInLayerSwitcher: false`, las de terreno y las internas autogeneradas (`layer_<n>`, salvo los grupos).
 - **Contrato de estado 2D/3D** completo (panel, desplegable abierto y grupos plegados), resolviendo por `legend` cuando el `idLayer` se regenera.
@@ -253,6 +253,35 @@ En el visualizador hay que registrar la extensión **antes** del selector (`mapa
 El panel del desplegable de opciones vuelve a tener `max-height: 220px` cuando está abierto: la fila de objetos geográficos ya no vive ahí.
 
 La tabla de atributos reconoce también las capas **OGC API Features** (`getLayerKind` incluye `ogcapifeatures` en `vectorTypes`); antes se trataban como ráster y no tenían ni tabla ni barra. Las columnas cuyos valores son objetos (por ejemplo la geometría que algunos servicios devuelven dentro de las propiedades) se omiten, para no llenar la tabla de `[object Object]`.
+
+## ✏️ Editor de parámetros de la ficha
+
+El botón de información de cada capa (`.ls-action-ficha`) abre un modal con un formulario editable. Arriba va el editor y debajo, dentro de un `<details>`, la tabla de parámetros en solo lectura (la de antes) y el documento del servicio.
+
+Los campos salen de `constructorParameters` (`userParameters` en servicios, `parameters` en datos) filtrados por la lista blanca `CLAVES_EDITABLES` (`url`, `name`, `legend`, `attribution`, `layers`, `styles`, `format`, `version`, `transparent`, `tiled`, `namespace`, `outputFormat`, `crs`, `maxFeatures`, `minZoom`, `maxZoom`, `tileGridMaxZoom`). Lo que no está en la lista se sigue viendo en la tabla, pero no se toca (un `source` ya consumido, los `vendorOptions` del servicio...). Siempre se ofrecen además `legend`, `attribution` (solo si es texto), `opacity` (%) y `visible`. Las capas de extensión (GLB, Imagen, IFC) borran sus claves propias antes de llamar al constructor base, así que la `url` se recupera de `getState()`.
+
+Se aplican de dos maneras:
+
+- **En caliente**, sin recrear nada: `opacity` y `visible` llaman a `setOpacity()`/`setVisible()`.
+- **Reconstruyendo la capa**: el resto de campos forma parte del constructor, así que se crea una instancia nueva con `new capa.constructor(params, opciones)` y se sustituye a la vieja **en su mismo grupo y con su mismo z** (`_sustituirCapa`), conservando la opacidad y el estilo elegido (`window.setLayerStyle`). Si la creación o la sustitución fallan, se deja la capa vieja donde estaba y se avisa en el propio formulario. Después se repinta la lista (`window.renderLayerList`) y el editor se vuelve a montar sobre la capa nueva, actualizando también la cabecera del modal.
+
+### Colocación con el mapa (GLB, Imagen e IFC)
+
+El bloque de colocación se genera solo si la capa cumple el contrato `getState()`/`setState()` y su estado trae `position` y/o `bbox`. De ese estado se conservan únicamente las claves de colocación (`position`, `bbox`, `heading`, `pitch`, `roll`, `scale`, `heightOffset`, `ancho`, `alto`, `metrosPorPixel`, `clampToGround`, `baseAlSuelo`, `ajustarABbox`): `url`, `visible` y `opacity` se editan en su propio campo y no deben pisarse al aplicar.
+
+| Acción | 2D (OpenLayers) | 3D (Cesium) |
+|---|---|---|
+| **Punto** | Longitud, latitud y cota | Igual |
+| **Centro del mapa** | Centro de la vista reproyectado a 4326 | `getCenter()` de la fachada (ya en grados) |
+| **Pinchar en el mapa** | `singleclick` del impl | `ScreenSpaceEventHandler` + rayos al globo |
+| **Rectángulo** | Oeste, sur, este y norte | Igual |
+| **Vista actual** | Extensión de la vista reproyectada | `camera.computeViewRectangle()` y, si falla, rayos en las esquinas |
+| **Dibujar rectángulo** | Marquesina con arrastre (`pointerdown` en captura para que el mapa no se mueva) | No se ofrece: avisa y pide coordenadas o «Vista actual» |
+| **Giro** | Número y deslizador −180°…180° sincronizados, botón `0°` | Igual |
+
+Mientras se pincha o se dibuja, el modal pasa a `ls-ficha--pick`: el overlay deja pasar el ratón al mapa (`pointer-events: none`), se aparta a la izquierda y el panel sigue siendo interactivo. `Esc` cancela la captura sin cerrar la ficha; el `Esc` que no está capturando sí cierra el modal. La marquesina (`.ls-ficha-marco`) se cuelga del `body` en coordenadas de pantalla y con `z-index` por encima del modal.
+
+Las ediciones de colocación **sí sobreviven al cambio 2D/3D**, porque `cambioImpl` reconstruye GLB/Imagen/IFC a partir de `getState()`. Las de URL, nombre o capas del servicio no: las capas se recrean desde `mapa()`.
 
 ## 🧩 Métodos públicos
 

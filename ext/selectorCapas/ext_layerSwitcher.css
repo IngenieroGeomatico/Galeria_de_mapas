@@ -780,6 +780,284 @@
   overflow: auto;
 }
 
+/* ── Editor de parámetros de la ficha ─────────────────────────────────
+   El formulario va arriba de la columna izquierda y la tabla de solo
+   lectura queda plegada debajo. Los controles son nativos a propósito:
+   el modal vive fuera del panel de la API y no hereda sus estilos. */
+
+.ls-ficha-editor-wrap {
+  margin-bottom: 12px;
+}
+
+.ls-ficha-editor {
+  margin: 0;
+}
+
+.ls-ficha-editor-rejilla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+@media (max-width: 560px) {
+  .ls-ficha-editor-rejilla { grid-template-columns: 1fr; }
+}
+
+.ls-ficha-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ls-ficha-campo--casilla {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+}
+
+.ls-ficha-campo-etiqueta {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ls-ficha-campo--casilla .ls-ficha-campo-etiqueta {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: #374151;
+}
+
+.ls-ficha-campo-ayuda {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #8a93a0;
+}
+
+.ls-ficha-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #111827;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  outline: none;
+  min-width: 0;
+}
+
+.ls-ficha-input:focus {
+  border-color: #0078d4;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.18);
+}
+
+.ls-ficha-campo--casilla input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #0078d4;
+  flex-shrink: 0;
+}
+
+.ls-ficha-boton {
+  appearance: none;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #1f2937;
+  background: #f1f3f6;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ls-ficha-boton:hover {
+  background: #e6e9ee;
+}
+
+.ls-ficha-boton--primario {
+  color: #fff;
+  background: #0078d4;
+  border-color: #0078d4;
+}
+
+.ls-ficha-boton--primario:hover {
+  background: #0067b8;
+}
+
+.ls-ficha-boton--activo {
+  color: #fff;
+  background: #0078d4;
+  border-color: #0078d4;
+}
+
+.ls-ficha-enlace {
+  appearance: none;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #0078d4;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.ls-ficha-rango {
+  width: 100%;
+  margin: 2px 0 0;
+  accent-color: #0078d4;
+}
+
+.ls-ficha-giro-numero {
+  width: 84px;
+}
+
+.ls-ficha-seccion-titulo--sub {
+  margin-top: 14px;
+}
+
+.ls-ficha-editor-pie {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #eef0f3;
+  /* El formulario puede ser más alto que el modal: el pie con «Aplicar»
+     se queda pegado abajo para no obligar a bajar hasta el final. */
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: #fff;
+}
+
+.ls-ficha-editor-estado {
+  font-size: 12px;
+  color: #6b7280;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ls-ficha-editor-estado--ok { color: #2e8b57; }
+.ls-ficha-editor-estado--error { color: #c0392b; }
+.ls-ficha-editor-estado--aviso { color: #b26a00; }
+
+/* Parámetros de construcción: plegados bajo el formulario. */
+.ls-ficha-params {
+  margin-top: 4px;
+}
+
+.ls-ficha-params-cuerpo {
+  margin-top: 8px;
+}
+
+/* ── Colocación (GLB / Imagen / IFC) ────────────────────────────────── */
+
+.ls-ficha-coloc {
+  margin-top: 2px;
+}
+
+.ls-ficha-coloc-modos {
+  display: inline-flex;
+  padding: 2px;
+  margin-bottom: 10px;
+  background: #f1f3f6;
+  border-radius: 8px;
+}
+
+.ls-ficha-coloc-modo {
+  appearance: none;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #4b5563;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ls-ficha-coloc-modo--activo {
+  color: #1a1a1a;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+}
+
+.ls-ficha-coloc-grupo[hidden] {
+  display: none;
+}
+
+.ls-ficha-coloc-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ls-ficha-coloc-giro {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #eef0f3;
+}
+
+.ls-ficha-coloc-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+/* Marco de la marquesina mientras se dibuja el rectángulo. Va colgado del
+   body y en coordenadas de pantalla, por eso el z-index tan alto. */
+.ls-ficha-marco {
+  position: fixed;
+  z-index: 2147483600;
+  pointer-events: none;
+  border: 2px dashed #0078d4;
+  background: rgba(0, 120, 212, 0.12);
+  border-radius: 2px;
+}
+
+/* Modo pinchazo: el modal deja pasar el ratón al mapa y se aparta a la
+   izquierda para no taparlo. El panel sigue siendo interactivo. */
+.ls-ficha-overlay.ls-ficha--pick {
+  background: transparent;
+  pointer-events: none;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.ls-ficha-overlay.ls-ficha--pick .ls-ficha {
+  pointer-events: auto;
+  width: min(460px, 100%);
+  max-height: 90vh;
+}
+
+.ls-ficha-overlay.ls-ficha--pick .ls-ficha-body {
+  grid-template-columns: 1fr;
+}
+
+/* En modo pinchazo el panel se atenúa un poco para no confundirse con el
+   mapa, pero sin dejar de leerse. */
+.ls-ficha-overlay.ls-ficha--pick .ls-ficha {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
+}
+
+
 /* ── Panel inferior (bottom sheet) de informacion / tabla de atributos ──
    Anclado a la parte baja de la pantalla, ocupa TODO el ancho y se despliega
    hacia arriba (tipo "sidenav" horizontal desde abajo). El mapa queda
