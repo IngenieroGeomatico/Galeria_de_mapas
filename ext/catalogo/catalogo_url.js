@@ -71,8 +71,48 @@
     MBTiles: 'MBTiles',
     GeoPackage: 'GeoPackage',
     OGCAPIFeatures: 'OGCAPIFeatures',
-    MapLibre: 'MapLibre'
+    MapLibre: 'MapLibre',
+    // Capas de las extensiones propias que la API no trae de serie. El catálogo
+    // carga sus JS al arrancar (ver EXTENSIONES_FORMATO en catalogo.js).
+    COPC: 'COPC',
+    PMTiles: 'PMTiles',
+    FlatGeobuf: 'FlatGeobuf',
+    GeoParquet: 'GeoParquet',
+    IFC: 'IFC',
+    // Recursos de las extensiones propias que NO son servicios: son ficheros
+    // sueltos sin georreferenciación, así que además del tipo hay que decir
+    // dónde van (posición o rectángulo). Ver ext/glbLayer y ext/imageLayer.
+    GLB: 'GLB',
+    Imagen: 'Imagen'
   };
+
+  /**
+   * Tipos que necesitan colocación (posición o rectángulo) para poder pintarse.
+   * El panel del catálogo enseña el formulario de colocación solo con estos.
+   */
+  const TIPOS_COLOCABLES = ['GLB', 'Imagen'];
+
+  /**
+   * Nombre del constructor de la API para cada tipo.
+   *
+   * La clave del tipo es la que se ve en la interfaz (`GLB`, `Imagen`), pero
+   * las clases se llaman `IDEE.layer.glb` e `IDEE.layer.image`. El resto de
+   * tipos coinciden, así que lo que no esté aquí se usa tal cual.
+   */
+  const CONSTRUCTORES = {
+    GLB: 'glb',
+    Imagen: 'image'
+  };
+
+  /** ¿Este tipo hay que colocarlo a mano en el mapa? */
+  function esColocable(tipo) {
+    return TIPOS_COLOCABLES.indexOf(String(tipo || '')) > -1;
+  }
+
+  /** Nombre de la clase de la API que construye un tipo. */
+  function nombreConstructor(tipo) {
+    return CONSTRUCTORES[tipo] || tipo;
+  }
 
   /** Etiquetas legibles de cada tipo, para los mensajes de la interfaz. */
   const ETIQUETAS = {
@@ -94,6 +134,13 @@
     GeoPackage: 'GeoPackage',
     OGCAPIFeatures: 'OGC API Features',
     MapLibre: 'Estilo MapLibre',
+    COPC: 'COPC (nube de puntos)',
+    PMTiles: 'PMTiles',
+    FlatGeobuf: 'FlatGeobuf',
+    GeoParquet: 'GeoParquet',
+    IFC: 'IFC / BIM',
+    GLB: 'GLB / glTF (modelo 3D)',
+    Imagen: 'Imagen suelta (PNG, JPEG, WebP)',
     desconocido: 'No se ha podido reconocer'
   };
 
@@ -139,6 +186,11 @@
     // --- 1. Ficheros: manda la extensión -------------------------------
     if (/\.mbtiles$/.test(ruta)) return TIPOS_API.MBTiles;
     if (/\.gpkg$/.test(ruta)) return TIPOS_API.GeoPackage;
+    if (/\.copc(\.laz)?$/.test(ruta)) return TIPOS_API.COPC;
+    if (/\.pmtiles$/.test(ruta)) return TIPOS_API.PMTiles;
+    if (/\.fgb$/.test(ruta)) return TIPOS_API.FlatGeobuf;
+    if (/\.(geo)?parquet$/.test(ruta)) return TIPOS_API.GeoParquet;
+    if (/\.ifc$/.test(ruta)) return TIPOS_API.IFC;
     if (/\.(tif|tiff)$/.test(ruta)) return TIPOS_API.GeoTIFF;
     if (/\.(kml|kmz)$/.test(ruta)) return TIPOS_API.KML;
     if (/\.gpx$/.test(ruta)) return TIPOS_API.GPX;
@@ -156,6 +208,14 @@
       if (/\{-y\}/.test(limpio)) return TIPOS_API.TMS;
       return TIPOS_API.XYZ;
     }
+
+    // --- 2 bis. Recursos que hay que colocar a mano --------------------
+    // Van DESPUÉS de las plantillas de teselas a propósito: una URL del tipo
+    // `.../{z}/{x}/{y}.png` es un XYZ, no una imagen suelta. Un `.glb` o una
+    // foto sin más no dicen dónde van: eso lo resuelve el formulario de
+    // colocación del catálogo.
+    if (/\.(glb|gltf)$/.test(ruta)) return TIPOS_API.GLB;
+    if (/\.(png|jpe?g|webp|gif|bmp)$/.test(ruta)) return TIPOS_API.Imagen;
 
     // --- 3. OGC API Features -------------------------------------------
     // Se reconoce por el camino /collections/<id>/items, que es como los
@@ -398,7 +458,9 @@
         tipo: tipoFinal,
         nombre: nombreDeUrl(limpio),
         capas: [{ id: limpio, nombre: nombreDeUrl(limpio) }],
-        aviso: 'Este tipo de servicio no publica una lista de capas: se cargará entera.'
+        aviso: esColocable(tipoFinal)
+          ? 'Este recurso no trae georreferenciación: hay que decir dónde va con el formulario de colocación (posición o rectángulo).'
+          : 'Este tipo de servicio no publica una lista de capas: se cargará entera.'
       };
     }
 
@@ -469,6 +531,11 @@
    * @param {string} opciones.tipo Tipo de capa.
    * @param {Array<string>} [opciones.capas] Nombres de capa del servicio.
    * @param {string} [opciones.nombre] Nombre que se quiere dar.
+   * @param {Object} [opciones.colocacion] Solo para GLB e Imagen: `position`,
+   *   `bbox`, `heading`, `scale`, `ancho`, `alto`... (ver ext/glbLayer y
+   *   ext/imageLayer). Sin esto la capa no tiene dónde pintarse.
+   * @param {Object} [opciones.parametros] Parámetros de usuario extra para la
+   *   capa (p. ej. `displayInLayerSwitcher: false` para una vista previa).
    * @param {Object} opciones.mapa
    * @returns {Array<Object>} Las capas añadidas (puede ser más de una).
    */
@@ -480,6 +547,9 @@
     const tipo = opciones.tipo || detectarTipo(url);
     const nombre = (opciones.nombre || '').trim();
     const pedidas = (opciones.capas && opciones.capas.length) ? opciones.capas : [url];
+    const clase = nombreConstructor(tipo);
+    const parametrosExtra = (opciones.parametros && typeof opciones.parametros === 'object')
+      ? opciones.parametros : {};
 
     if (!IDEE || !IDEE.layer) throw new Error('La API no está disponible.');
     if (typeof mapa.addLayers !== 'function') throw new Error('El mapa no está listo.');
@@ -487,7 +557,7 @@
     // Un tipo que la API no sabe construir (una colección STAC, un registro
     // de metadatos) se avisa en claro en vez de reventar con un
     // "IDEE.layer[x] is not a constructor" que no dice nada.
-    if (typeof IDEE.layer[tipo] !== 'function') {
+    if (typeof IDEE.layer[clase] !== 'function') {
       throw new Error('Una entrada de tipo ' + tipo +
         ' no se puede cargar como capa. Los tipos que la API construye son: ' +
         Object.keys(ETIQUETAS).filter(function (k) { return k !== 'desconocido'; }).join(', ') + '.');
@@ -524,6 +594,27 @@
             legend: leyenda,
             visible: true
           }, {});
+        case 'GLB':
+        case 'Imagen': {
+          // Estas capas no saben dónde van por sí mismas: los parámetros de
+          // colocación (posición o rectángulo, giro, escala, cota) son los que
+          // trae el formulario del catálogo. Se descartan los vacíos para no
+          // pisar los valores por defecto de la extensión con `undefined`.
+          const params = {
+            url: url,
+            name: nombreCapa,
+            legend: leyenda,
+            visible: true
+          };
+          const colocacion = opciones.colocacion && typeof opciones.colocacion === 'object'
+            ? opciones.colocacion : {};
+          Object.keys(colocacion).forEach(function (k) {
+            const v = colocacion[k];
+            if (v === undefined || v === null || v === '') return;
+            params[k] = v;
+          });
+          return new IDEE.layer[clase](params, Object.assign({}, parametrosExtra));
+        }
         default:
           // Tipos de fichero o teselas que se cargan por su URL.
           return new IDEE.layer[tipo]({
@@ -569,9 +660,12 @@
   window.CatalogoURL = {
     TIPOS: TIPOS_API,
     ETIQUETAS: ETIQUETAS,
+    TIPOS_COLOCABLES: TIPOS_COLOCABLES.slice(),
     httpDeS3: httpDeS3,
     urlEsLegible: urlEsLegible,
     detectarTipo: detectarTipo,
+    esColocable: esColocable,
+    nombreConstructor: nombreConstructor,
     leerCapas: leerCapas,
     urlCapabilities: urlCapabilities,
     pedir: pedir,

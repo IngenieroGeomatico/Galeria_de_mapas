@@ -1429,3 +1429,241 @@
 .m-panel.g-herramienta_catalogo.g-panel-en-barra > .m-panel-btn {
   display: none;
 }
+
+/* ====================================================================
+   Formulario de colocación (GLB e Imagen)
+   --------------------------------------------------------------------
+   Lo construye catalogo_colocacion.js. Vive dentro de .catalogo, así que
+   hereda la paleta --cat-*; la marquesina del dibujo se cuelga del body y
+   por eso lleva sus colores escritos.
+   ==================================================================== */
+.cat-coloc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+}
+
+.cat-coloc__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cat-coloc__titulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cat-fg);
+}
+
+.cat-coloc__etiqueta {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--cat-fondo-3);
+  color: var(--cat-fg-suave);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.cat-coloc__ayuda {
+  margin: 0;
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.cat-coloc__modos {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-3);
+}
+
+.cat-coloc__modo {
+  flex: 1 1 0;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cat-fg-suave);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.cat-coloc__modo:hover { color: var(--cat-fg); }
+
+.cat-coloc__modo--activo {
+  background: var(--cat-fondo);
+  color: var(--cat-fg);
+  box-shadow: var(--cat-sombra);
+}
+
+.cat-coloc__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cat-coloc__rejilla {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cat-coloc__rejilla .catalogo__campo-control {
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.cat-coloc__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cat-coloc__accion {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: 6px;
+  background: var(--cat-fondo);
+  color: var(--cat-fg-suave);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
+}
+
+.cat-coloc__accion:hover {
+  border-color: var(--cat-acento);
+  color: var(--cat-fg);
+}
+
+.cat-coloc__accion--activa {
+  border-color: var(--cat-acento);
+  background: var(--cat-fondo-3);
+  color: var(--cat-fg);
+}
+
+.cat-coloc__check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.cat-coloc__check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--cat-acento);
+  cursor: pointer;
+}
+
+.cat-coloc__giro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cat-coloc__fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cat-coloc__fila .catalogo__campo-etiqueta {
+  flex: 1 1 auto;
+}
+
+.cat-coloc__giro-numero {
+  width: 66px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: 6px;
+  background: var(--cat-fondo);
+  color: var(--cat-fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: right;
+  outline: none;
+}
+
+.cat-coloc__giro-numero:focus-visible {
+  border-color: var(--cat-acento);
+  box-shadow: var(--cat-foco);
+}
+
+.cat-coloc__rango {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--cat-acento);
+  cursor: pointer;
+}
+
+.cat-coloc__avanzado {
+  border-top: 1px dashed var(--cat-linea-fuerte);
+  padding-top: 8px;
+}
+
+.cat-coloc__avanzado > summary {
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.cat-coloc__avanzado > summary::-webkit-details-marker { display: none; }
+
+.cat-coloc__avanzado > summary::before {
+  content: '\25B8';
+  display: inline-block;
+  width: 12px;
+  transition: transform 0.16s ease;
+}
+
+.cat-coloc__avanzado[open] > summary::before { transform: rotate(90deg); }
+
+.cat-coloc__avanzado > * + * { margin-top: 8px; }
+
+.cat-coloc__estado {
+  margin: 0;
+  min-height: 14px;
+  color: var(--cat-fg-tenue);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.cat-coloc__estado--aviso { color: #8a6d1f; }
+.cat-coloc__estado--error { color: #b42318; }
+
+/* Marquesina del rectángulo: se cuelga del body y va en coordenadas de
+   pantalla, así no toca el posicionamiento del viewport del mapa. */
+.cat-coloc__marco {
+  position: fixed;
+  z-index: 9999;
+  border: 1px dashed #71a7d3;
+  background: rgba(113, 167, 211, 0.18);
+  pointer-events: none;
+}
+
+/* `hidden` no basta por sí solo: la regla de arriba fija display:flex y gana
+   a la hoja del navegador. */
+.cat-coloc__grupo[hidden] { display: none; }

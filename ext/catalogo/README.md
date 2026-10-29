@@ -15,8 +15,12 @@ Plugin con panel que ofrece los servicios ya escritos de varios catálogos (IDEE
 - **Detección de tipo por URL** con tabla ordenada (ficheros → plantillas de teselas → parámetros OGC → WMS por defecto) y lectura del documento de capacidades (WMS 1.1.1/1.3.0, WMTS, WFS 1.x/2.0) sin depender de prefijos de espacio de nombres.
 - **Aviso explícito de CORS**: los tipos que se cargan sin consultar nada se comprueban antes con `urlEsLegible()` (HEAD y, si falla, GET con `Range: bytes=0-0`).
 - **Comprobación de CORS/`s3://`**: las direcciones `s3://cubo/ruta` se reescriben a la forma HTTPS *virtual-hosted* de S3.
-- **Carga automática de los formatos que a la API de Cesium le faltan**: el propio plugin carga e inyecta `ext/MVTLayer/MVTLayer.js` y `ext/geotiffLayer/geotiffLayer.js` (rutas resueltas contra la del propio `catalogo.js`) y los registra en el mapa una sola vez por mapa (`WeakMap`).
-- **Contrato de estado 2D/3D** (`getState`/`setState`): conserva catálogo elegido, URL escrita, mensaje de estado, pestaña, sección de servicio, grupos abiertos, filtro, análisis pendiente y estado del panel.
+- **Carga automática de las extensiones de capa de `ext/`**: el propio plugin inyecta los JS que la API no trae y los registra en el mapa una sola vez por mapa (`WeakMap`). Son dos familias:
+  - **Plugins** (`miPlugin_MVTLayer`, `miPlugin_geotiffLayer`): se añaden con `map.addPlugin`.
+  - **Fachadas que se instalan solas** (`copcLayer`, `flatgeobufLayer`, `geoparquetLayer`, `ifcLayer`, `pmtilesLayer`, `glbLayer`, `imageLayer`): se comprueba que están y se les pide `instalar()` por si el bundle se recargó.
+  - Los *vendor* grandes (`copcesium`, `web-ifc`, `pmtiles`, `hyparquet`, el lector de FlatGeobuf) los pide cada extensión solo cuando hacen falta.
+- **Colocación de recursos no georreferenciados** (GLB e Imagen): formulario con punto (longitud, latitud, cota) o rectángulo, tomados del centro del mapa, pinchando en el mapa, de la vista actual o dibujando el rectángulo (solo 2D), más giro, inclinación, alabeo, escala, tamaño de la imagen y vista previa en el mapa.
+- **Contrato de estado 2D/3D** (`getState`/`setState`): conserva catálogo elegido, URL escrita, mensaje de estado, pestaña, sección de servicio, grupos abiertos, filtro, análisis pendiente, **la colocación del formulario** y estado del panel.
 - **Persistencia de la selección**: recuerda en `localStorage` el catálogo (`galeria_catalogo_seleccion`) y el tipo de servicio (`galeria_catalogo_seccion`).
 - **Paginación de 50 en 50** con paginador arriba y abajo y botón «Ver los N»; el filtro mira nombre y organismo, y solo la URL a partir de 6 caracteres.
 - **Icono como máscara** (`--g-plugin-icon-mask`) y colores por variables CSS (`color1/color2/color3`), sin colores escritos en la hoja.
@@ -29,6 +33,7 @@ Plugin con panel que ofrece los servicios ya escritos de varios catálogos (IDEE
 | `catalogo.js` | El plugin. Define `IDEE.catalog` (registro de tipos), las clases `CatalogoCustom`, `CatalogoRemoto`, `CatalogoSTAC`, `CatalogoOGCAPIRecords`, `CatalogoIDEE` y la clase `miPlugin_catalogo` (UI, análisis de URL, huellas STAC, paginación y contrato de estado). |
 | `catalogo_idee.js` | Cliente del catálogo de la IDEE (adaptación de `serviciosIDEE2QGIS`). Expone `window.CatalogoIDEE`: `SECCIONES`, `PAGINA_CATALOGO`, `urlSeccion()`, `listarSeccion()`, `pedir()` y `limpiarCache()`. |
 | `catalogo_url.js` | Detección del tipo de capa a partir de una URL, lectura del documento de capacidades y creación de la capa. Expone `window.CatalogoURL`. |
+| `catalogo_colocacion.js` | Formulario de colocación de los recursos que no traen georreferenciación (GLB e Imagen): punto o rectángulo, centro del mapa, clic en el mapa, vista actual, rectángulo dibujado, giro, escala y vista previa. Expone `window.CatalogoColocacion`. |
 | `catalogo_registro.js` | Catálogos dados de alta por el usuario (alta, baja, persistencia) y sus lectores `stac` / `ogcapi` / `json`, con la navegación y paginación de nodos STAC. Expone `window.CatalogoRegistro`. |
 | `catalogo.css` | Estilos del panel y del botón de la barra. Cromática por variables `--g-plugin-*` (inyectadas desde `color1/color2/color3`), icono por `--g-plugin-icon-mask`, y clases `catalogo__*` para el contenido. |
 | `datos/<seccion>.js` | Copias locales de las tablas del catálogo de la IDEE (`wms.js`, `wmts.js`, `xyz.js`, `mvt.js`, `wfs.js`, `wcs.js`, `ogcapi.js`), volcadas en `window.CatalogoIDEE_Datos[id]`. Se cargan con una etiqueta `<script>` para que funcionen también en `file://`. |
@@ -46,7 +51,7 @@ Plugin con panel que ofrece los servicios ya escritos de varios catálogos (IDEE
 <script src="../../ext/catalogo/catalogo.js" type="text/javascript"></script>
 ```
 
-Las dependencias de formato (`MVTLayer` y `geotiffLayer`) **no** hay que declararlas: `catalogo.js` las carga solo cuando hacen falta.
+Las dependencias de formato (`MVTLayer`, `geotiffLayer`, `copcLayer`, `flatgeobufLayer`, `geoparquetLayer`, `ifcLayer`, `pmtilesLayer`, `glbLayer`, `imageLayer`) **no** hay que declararlas: `catalogo.js` las carga solo cuando hacen falta, y `catalogo_colocacion.js` se autocarga igual (por eso el HTML sigue teniendo cuatro `<script>`).
 
 ## ⚙️ Parámetros de construcción
 
@@ -168,8 +173,11 @@ Catálogo de la IDEE, en modo `secciones`. Por defecto `id: 'idee'`, `nombre: 'C
 
 | Miembro | Descripción |
 |---|---|
-| `TIPOS` | Tipos que la API puede construir: `WMS`, `WMTS`, `WFS`, `WCS`, `XYZ`, `TMS`, `MVT`, `GeoJSON`, `KML`, `GPX`, `GML`, `CSV`, `SHP`, `GeoTIFF`, `MBTiles`, `GeoPackage`, `OGCAPIFeatures`, `MapLibre`. |
+| `TIPOS` | Tipos que la API puede construir: `WMS`, `WMTS`, `WFS`, `WCS`, `XYZ`, `TMS`, `MVT`, `GeoJSON`, `KML`, `GPX`, `GML`, `CSV`, `SHP`, `GeoTIFF`, `MBTiles`, `GeoPackage`, `OGCAPIFeatures`, `MapLibre`, y los de las extensiones: `COPC`, `PMTiles`, `FlatGeobuf`, `GeoParquet`, `IFC`, `GLB`, `Imagen`. |
 | `ETIQUETAS` | Etiquetas legibles de cada tipo (más `desconocido`). |
+| `TIPOS_COLOCABLES` | `['GLB', 'Imagen']`: los tipos que no traen georreferenciación y hay que colocar a mano. |
+| `esColocable(tipo)` | `true` si el tipo está en `TIPOS_COLOCABLES`. |
+| `nombreConstructor(tipo)` | Nombre de la capa en `IDEE.layer` para un tipo (`glb`, `image`, `COPC`…). |
 | `httpDeS3(url)` | Pasa `s3://cubo/ruta` a `https://cubo.s3.amazonaws.com/ruta`. |
 | `urlEsLegible(url)` | `Promise<boolean>`. Comprueba con HEAD y, si falla, GET con `Range: bytes=0-0` (10 s de tope). |
 | `detectarTipo(url)` | Devuelve un tipo de `TIPOS` o `'desconocido'`. |
@@ -177,7 +185,43 @@ Catálogo de la IDEE, en modo `secciones`. Por defecto `id: 'idee'`, `nombre: 'C
 | `urlCapabilities(url, tipo)` | Monta la URL de GetCapabilities respetando los parámetros ya presentes. |
 | `pedir(url)` / `parsearJson(texto, url)` | `fetch` directo y `JSON.parse` con mensajes de error legibles. |
 | `nombreDeUrl(url)` | Nombre deducido del final de la URL. |
-| `cargar({url, mapa, tipo, capas, nombre})` | Crea y añade las capas con `mapa.addLayers(capas)` y devuelve el array de capas creadas. Iguala el `wrapX` de las fuentes con `window.miWrapX` si está disponible. |
+| `cargar({url, mapa, tipo, capas, nombre, colocacion, parametros})` | Crea y añade las capas con `mapa.addLayers(capas)` y devuelve el array de capas creadas. `colocacion` es el objeto de `CatalogoColocacion.getValor()` (punto o bbox, giro, escala…); `parametros` son opciones extra del constructor (la vista previa pide `displayInLayerSwitcher:false`). Los valores vacíos se filtran para no pisar los defectos de la extensión. Iguala el `wrapX` de las fuentes con `window.miWrapX` si está disponible. |
+
+### `window.CatalogoColocacion`
+
+Formulario de colocación de GLB e Imagen. Se carga solo (`catalogo.js` inyecta el `<script>`) y solo aparece cuando el tipo analizado es colocable.
+
+| Miembro | Descripción |
+|---|---|
+| `crear(contenedor, opciones)` | Construye el formulario dentro de `contenedor` y devuelve un control. `opciones`: `{map, tipo, url, nombre, valor, onCambio, onAviso}`. |
+| `ESTADO_POR_DEFECTO` | Estado de partida (`modo:'position'`, `heading:0`, `scale:1`, `baseAlSuelo:true`, `clampToGround:true`…). |
+
+El control devuelto expone `getValor()`, `validar()`, `estado()`, `quitarVistaPrevia()`, `desactivarVistaPrevia()` y `destruir()`.
+
+| Método | Descripción |
+|---|---|
+| `getValor()` | Estado convertido a los parámetros de `ext/glbLayer` / `ext/imageLayer`: `{position:{lon,lat,height}}` o `{bbox, ajustarABbox, heightOffset}`, más `heading`, `pitch`, `roll`, `scale`, `clampToGround` y (en GLB) `baseAlSuelo`; en Imagen añade `ancho`, `alto` y `metrosPorPixel`. Devuelve `null` si falta la posición. |
+| `validar()` | `{ok, mensaje}`: el rectángulo tiene que ser una caja no vacía dentro de rango, y el punto tener longitud y latitud. |
+| `estado()` | Copia del estado serializable (es lo que el plugin guarda en `_analisis.colocacion`). |
+| `quitarVistaPrevia()` | Quita la capa de adelanto del mapa y cancela el temporizador pendiente. |
+| `desactivarVistaPrevia()` | Además desmarca la casilla, para que no vuelva a saltar al tocar cualquier campo. |
+| `destruir()` | Suelta los manejadores de mapa (`singleclick` de OL, `ScreenSpaceEventHandler` de Cesium, marquesina de dibujo), la vista previa y los nodos. |
+
+Cómo se rellena la posición:
+
+| Acción | 2D | 3D |
+|---|---|---|
+| `Centro del mapa` | centro de la vista, reproyectado de EPSG:3857 | centro de la vista, ya en grados |
+| `Pinchar en el mapa` | evento `singleclick` de OpenLayers | `LEFT_CLICK` con `globe.pick` (si el rayo no toca el globo se avisa) |
+| `Vista actual` | `view.calculateExtent(size)` | cuatro rayos por las esquinas del lienzo; si alguna se pierde, no hay rectángulo |
+| `Dibujar rectángulo` | marquesina por `pointerdown/move/up` en captura y `getCoordinateFromPixel` | no se ofrece: la cámara va inclinada y el arrastre no define un rectángulo limpio |
+
+El estado del formulario es serializable, así que el cambio 2D/3D lo conserva (ver más abajo):
+
+```
+{ modo, lon, lat, height, bbox, heading, pitch, roll, scale,
+  ancho, alto, metrosPorPixel, ajustarABbox, baseAlSuelo, clampToGround, vistaPrevia }
+```
 
 ### `window.CatalogoRegistro`
 
@@ -197,8 +241,8 @@ Catálogo de la IDEE, en modo `secciones`. Por defecto `id: 'idee'`, `nombre: 'C
 
 | Método | Contenido |
 |---|---|
-| `getState()` | `{ tipo, url, mensaje, pestana, seccion, grupos[], filtro, analisis, panelCollapsed }`. `analisis` va como `{url, tipo, nombre, capas[{id,nombre}], elegidas[], aviso}` o `null`, para no tener que volver a pedir el servicio tras el swap. `panelCollapsed` se lee de `this._panel._collapsed` y, si no, de la clase `collapsed` del elemento. |
-| `setState(state, map)` | Rehidrata el estado interno (acepta también catálogos del usuario, con id `usuario_*`, resolviéndolos por `CatalogoRegistro.porId`), aplica la pestaña y el estado abierto/plegado del panel y llama a `_sincronizarUI()` para volcar el estado a los elementos ya montados (selector, input de URL, buscador, lista y opciones de análisis). |
+| `getState()` | `{ tipo, url, mensaje, pestana, seccion, grupos[], filtro, analisis, panelCollapsed }`. `analisis` va como `{url, tipo, nombre, capas[{id,nombre}], elegidas[], aviso, colocacion}` o `null`, para no tener que volver a pedir el servicio tras el swap. `colocacion` es el estado del formulario (punto o rectángulo, giro, escala…) y se guarda tal cual; sin él, el cambio 2D/3D perdería la posición que el usuario acababa de marcar. `panelCollapsed` se lee de `this._panel._collapsed` y, si no, de la clase `collapsed` del elemento. |
+| `setState(state, map)` | Rehidrata el estado interno (acepta también catálogos del usuario, con id `usuario_*`, resolviéndolos por `CatalogoRegistro.porId`), aplica la pestaña y el estado abierto/plegado del panel y llama a `_sincronizarUI()` para volcar el estado a los elementos ya montados (selector, input de URL, buscador, lista y opciones de análisis, incluido el formulario de colocación, que se recrea con la colocación guardada). |
 
 ## ✅ Notas y limitaciones
 
@@ -211,3 +255,7 @@ Catálogo de la IDEE, en modo `secciones`. Por defecto `id: 'idee'`, `nombre: 'C
 - **En TR** la API mete el botón dentro del panel y la cabecera queda partida: el CSS lo recoloca (`catalogo--tr`) para que el panel se vea igual que los demás.
 - **`destroy()` es obligatorio**: quita la capa de huella (que si no se queda viva en el mapa sin panel desde el que quitarla), cierra el panel, suelta las referencias de UI y borra el globo, que vive en `document.body`.
 - **MVT y GeoTIFF en 3D**: el plugin registra `miPlugin_MVTLayer` y `miPlugin_geotiffLayer` en el mapa (no los crea el visualizador); los `idLayer` de las capas cargadas los regenera la API en cada swap, así que el estado guarda ids de catálogo, no de capa.
+- **GLB e Imagen no se pueden cargar a ciegas**: un `.glb` es una malla y una foto no guarda coordenadas, así que el plugin no los carga hasta que el formulario tiene una posición válida. Si el recurso viene de un servicio de un catálogo, el botón «Cargar» lleva a la pestaña «Añadir capa» con el formulario ya relleno en vez de añadir la capa sin colocar.
+- **La vista previa es una capa más, pero fuera del selector**: se crea con `displayInLayerSwitcher:false` y se retira sola al cargar la capa real (también se cancela el temporizador pendiente, para que no aparezca una segunda capa de adelanto encima de la definitiva).
+- **El rectángulo dibujado solo existe en 2D**: en Cesium la cámara mira inclinada, así que el arrastre no define un rectángulo; allí quedan «Vista actual» (por rayos en las esquinas) y las coordenadas a mano.
+- **El cambio 2D/3D reconstruye GLB, Imagen e IFC con su `getState()`**: las tres heredan de `IDEE.layer.Vector`, así que sin ese caso especial `cambioImpl` las convertiría a GeoJSON y el modelo se quedaría en su huella, con una leyenda `layer_1234`. `ext/cambioImpl/cambioImpl.js` las detecta por su marca (`_glb`, `_img`, `_ifc`) y las vuelve a crear con `url`, `name` y `legend`.

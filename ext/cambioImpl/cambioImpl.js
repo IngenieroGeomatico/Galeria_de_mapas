@@ -119,7 +119,18 @@ const EXTENSIONES_CAPAS_3D = [
     { ruta: 'quicklayers_cesium/quicklayers_cesium.js' },
     { ruta: 'maplibreLayer/maplibreLayer.js' },
     { ruta: 'geotiffLayer/geotiffLayer.js', plugin: 'miPlugin_geotiffLayer' },
-    { ruta: 'MVTLayer/MVTLayer.js', plugin: 'miPlugin_MVTLayer' }
+    { ruta: 'MVTLayer/MVTLayer.js', plugin: 'miPlugin_MVTLayer' },
+    // Capas de ext/ que la API no trae: fachadas que se instalan solas y se
+    // reinstalan cuando este plugin recarga el bundle. Las usa el catalogo
+    // (EXTENSIONES_FORMATO en ext/catalogo/catalogo.js) y cualquier
+    // visualizador que cargue ficheros de estos formatos.
+    { ruta: 'copcLayer/copcLayer.js' },
+    { ruta: 'flatgeobufLayer/flatgeobufLayer.js' },
+    { ruta: 'geoparquetLayer/geoparquetLayer.js' },
+    { ruta: 'ifcLayer/ifcLayer.js' },
+    { ruta: 'pmtilesLayer/pmtilesLayer.js' },
+    { ruta: 'glbLayer/glbLayer.js' },
+    { ruta: 'imageLayer/imageLayer.js' }
 ];
 
 // La base se resuelve desde este mismo fichero (ext/cambioImpl/), igual que
@@ -778,11 +789,124 @@ class miPlugin_cambioImpl {
         const porcAltZoom = 2.5
 
         /**
+         * Capas de ext/ que se reconstruyen desde su propio estado.
+         *
+         * GLB, Imagen e IFC heredan de `IDEE.layer.Vector`, asi que su `type`
+         * es "Vector" y sin esta tabla caerian en la rama de `toGeoJSON()`: el
+         * modelo se convertiria en su huella y se perderian la URL, la
+         * colocacion y la leyenda (la capa reaparecia como `layer_1234`).
+         *
+         * Cada extension marca sus instancias (`_glb`, `_img`, `_ifc`) y
+         * expone `getState()`/`setState()`; el constructor se resuelve por el
+         * nombre que la extension instala en `IDEE.layer`.
+         */
+        const CAPAS_CON_ESTADO = [
+            { marca: '_glb', constructor: 'glb', fachada: 'glbLayer' },
+            { marca: '_img', constructor: 'image', fachada: 'imageLayer' },
+            { marca: '_ifc', constructor: 'IFC', fachada: 'ifcLayer' }
+        ];
+
+        /**
+         * Devuelve la entrada de CAPAS_CON_ESTADO que corresponde a una capa,
+         * o null si la capa no se puede reconstruir por su estado.
+         */
+        function definicionRecreable(capa) {
+            if (!capa || typeof capa.getState !== 'function') return null;
+            for (var i = 0; i < CAPAS_CON_ESTADO.length; i++) {
+                if (capa[CAPAS_CON_ESTADO[i].marca] === true) return CAPAS_CON_ESTADO[i];
+            }
+            return null;
+        }
+
+        /** Lista de capas del mapa, esperando si la API la devuelve en diferido. */
+        async function listaDeCapas(map) {
+            try {
+                var lista = map.getLayers();
+                if (lista && typeof lista.then === 'function') lista = await lista;
+                return Array.isArray(lista) ? lista : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        /**
+         * Recrea una capa GLB/Imagen/IFC en el mapa nuevo.
+         *
+         * Se pasa el estado como parametros del constructor (para que la capa
+         * nazca ya georreferenciada) y despues `setState`, que solo rellena lo
+         * que falte. El nombre y la leyenda se conservan: son la identidad con
+         * la que el selector de capas y el resto de plugins la reconocen.
+         *
+         * @returns {Object|null} Capa nueva, o null si la extension no esta
+         *   instalada en este bundle (p. ej. el visualizador no la carga).
+         */
+        function recrearCapaConEstado(original, def) {
+            var IDEE = window.IDEE;
+            var Ctor = (IDEE && IDEE.layer) ? IDEE.layer[def.constructor] : null;
+            if (typeof Ctor !== 'function') {
+                // La fachada (window.glbLayer, window.imageLayer...) sobrevive
+                // al swap y sabe reinstalarse sobre el bundle nuevo; las
+                // extensiones ya lo hacen solas al oir cargar la API, pero por
+                // si ese evento se pierde se pide aqui una vez.
+                var fachada = window[def.fachada];
+                if (fachada && typeof fachada.instalar === 'function') {
+                    try { fachada.instalar(); } catch (e) { /* noop */ }
+                    IDEE = window.IDEE;
+                    Ctor = (IDEE && IDEE.layer) ? IDEE.layer[def.constructor] : null;
+                }
+            }
+            if (typeof Ctor !== 'function') {
+                console.warn('cambioImpl: IDEE.layer.' + def.constructor +
+                    ' no esta instalada; la capa ' + (original.legend || original.name) +
+                    ' no se puede reconstruir.');
+                return null;
+            }
+
+            var estado = null;
+            try { estado = original.getState(); } catch (e) { estado = null; }
+            if (!estado || !estado.url) return null;
+
+            var parametros = Object.assign({}, estado, {
+                name: original.name,
+                legend: original.legend,
+                visible: original.visible !== false
+            });
+            var nueva = new Ctor(parametros);
+            if (typeof nueva.setState === 'function') {
+                try { nueva.setState(estado); } catch (e) { /* noop */ }
+            }
+            return nueva;
+        }
+
+        /**
          * Transfiere capas de Overlaylayers a newMap.
          * Si addExtrusion es true, intentará añadir `extrudedHeight` a opciones de polígono.
          */
         async function transferOverlayLayers(newMap, Overlaylayers, { addExtrusion = false } = {}) {
             for (var i = 0; i < Overlaylayers.length; i++) {
+                // Antes de la rama de Vector: GLB, Imagen e IFC TAMBIEN son
+                // Vector, pero convertirlas a GeoJSON las destruye.
+                var recreable = definicionRecreable(Overlaylayers[i]);
+                if (recreable) {
+                    var listaNueva = await listaDeCapas(newMap);
+                    var yaEsta = listaNueva.some(function (l) {
+                        return l && l.legend === Overlaylayers[i].legend &&
+                            definicionRecreable(l) === recreable;
+                    });
+                    if (!yaEsta) {
+                        var recreada = recrearCapaConEstado(Overlaylayers[i], recreable);
+                        if (recreada) {
+                            try {
+                                await newMap.addLayers(recreada);
+                            } catch (error) {
+                                console.warn('cambioImpl: no se pudo anadir la capa ' +
+                                    (Overlaylayers[i].legend || Overlaylayers[i].name) + '.', error);
+                            }
+                        }
+                    }
+                    continue;
+                }
+
                 if (Overlaylayers[i].type == "Vector") {
                     var l_source = await Overlaylayers[i].toGeoJSON();
                     var l = await new IDEE.layer.GeoJSON({

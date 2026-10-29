@@ -104,14 +104,50 @@
     return '';
   })();
 
-  /** Plugins que traen las implementaciones que a la API le faltan. */
+  /**
+   * Extensiones que aportan las implementaciones o las capas que la API no
+   * trae de serie.
+   *
+   *  - `clase`: plugin `miPlugin_*`; se registra en el mapa con addPlugin.
+   *  - `global`: fachada que se instala sola (`window.<global>`) y se
+   *    reinstala cuando cambioImpl recarga el bundle. No se registra.
+   *
+   * Están TODAS las capas de ext/ que la API no construye: así una entrada de
+   * catálogo o una URL pegada puede usar cualquiera de ellas sin tocar el HTML
+   * del visualizador. Los scripts son pequeños y se piden una sola vez; los
+   * vendor grandes (copcesium, web-ifc, pmtiles...) los carga cada extensión
+   * solo cuando hacen falta.
+   */
   const EXTENSIONES_FORMATO = [
     { clase: 'miPlugin_MVTLayer', fichero: '../MVTLayer/MVTLayer.js' },
-    { clase: 'miPlugin_geotiffLayer', fichero: '../geotiffLayer/geotiffLayer.js' }
+    { clase: 'miPlugin_geotiffLayer', fichero: '../geotiffLayer/geotiffLayer.js' },
+    { global: 'copcLayer', fichero: '../copcLayer/copcLayer.js' },
+    { global: 'flatgeobufLayer', fichero: '../flatgeobufLayer/flatgeobufLayer.js' },
+    { global: 'geoparquetLayer', fichero: '../geoparquetLayer/geoparquetLayer.js' },
+    { global: 'ifcLayer', fichero: '../ifcLayer/ifcLayer.js' },
+    { global: 'pmtilesLayer', fichero: '../pmtilesLayer/pmtilesLayer.js' },
+    { global: 'glbLayer', fichero: '../glbLayer/glbLayer.js' },
+    { global: 'imageLayer', fichero: '../imageLayer/imageLayer.js' }
   ];
 
   /** Promesa de la carga, para no volver a pedir los scripts por cada mapa. */
   let _cargaFormatos = null;
+
+  /**
+   * ¿Está ya cargada una entrada de EXTENSIONES_FORMATO?
+   * @param {Object} e Entrada de la tabla.
+   * @returns {boolean}
+   */
+  function extensionCargada(e) {
+    if (e.clase) {
+      const IDEE = api();
+      return !!((window[e.clase] && typeof window[e.clase] === 'function') ||
+        (IDEE && IDEE.plugin && typeof IDEE.plugin[e.clase] === 'function'));
+    }
+    // Las fachadas dejan un objeto en window al ejecutarse. No se mira la capa
+    // (IDEE.layer.glb) porque tras un cambio 2D/3D el bundle es otro.
+    return !!(e.global && window[e.global]);
+  }
 
   /**
    * Carga los plugins de formato que falten y resuelve cuando están.
@@ -125,10 +161,8 @@
     if (_cargaFormatos) return _cargaFormatos;
 
     _cargaFormatos = new Promise(function (resolver) {
-      const IDEE = api();
       const faltan = EXTENSIONES_FORMATO.filter(function (e) {
-        return !((window[e.clase] && typeof window[e.clase] === 'function') ||
-                 (IDEE && IDEE.plugin && typeof IDEE.plugin[e.clase] === 'function'));
+        return !extensionCargada(e);
       });
       if (!faltan.length) { resolver(); return; }
 
@@ -140,7 +174,7 @@
         s.async = false;
         const fallo = function () {
           console.warn('catalogo: no se pudo cargar ' + e.fichero +
-            ', así que ese formato solo funciona en 2D.');
+            ', así que ese formato solo funciona si el visualizador ya lo trae.');
           if (--pendientes === 0) resolver();
         };
         s.onload = function () {
@@ -151,6 +185,38 @@
       });
     });
     return _cargaFormatos;
+  }
+
+  /** Promesa de la carga del formulario de colocación. */
+  let _cargaColocacion = null;
+
+  /**
+   * Carga catalogo_colocacion.js si no está ya.
+   *
+   * Va aparte del HTML del visualizador a propósito: el catálogo se integra
+   * con cuatro <script> y añadir un quinto obligaría a tocar todos los
+   * visualizadores. El módulo solo pinta el formulario de GLB e Imagen.
+   *
+   * @returns {Promise<void>}
+   */
+  function cargarModuloColocacion() {
+    if (window.CatalogoColocacion) return Promise.resolve();
+    if (_cargaColocacion) return _cargaColocacion;
+
+    _cargaColocacion = new Promise(function (resolver) {
+      const base = RUTA_PROPIA || document.baseURI;
+      const s = document.createElement('script');
+      s.src = new URL('catalogo_colocacion.js', base).href;
+      s.async = false;
+      s.onload = function () { resolver(); };
+      s.onerror = function () {
+        console.warn('catalogo: no se pudo cargar catalogo_colocacion.js; ' +
+          'GLB e Imagen se podrán cargar solo con una URL ya georreferenciada.');
+        resolver();
+      };
+      document.head.appendChild(s);
+    });
+    return _cargaColocacion;
   }
 
   /**
@@ -267,7 +333,12 @@
       mapa: mapa,
       tipo: tipo,
       capas: (opts.capas && opts.capas.length) ? opts.capas : null,
-      nombre: opts.nombre || ''
+      nombre: opts.nombre || '',
+      // GLB e Imagen no saben dónde van: el panel manda la colocación que ha
+      // rellenado el usuario (ver catalogo_colocacion.js).
+      colocacion: opts.colocacion,
+      // Parámetros de usuario extra (la vista previa pide no salir en el selector).
+      parametros: opts.parametros
     });
   }
 
@@ -1074,11 +1145,17 @@
     }
 
     /**
-     * Carga los plugins de MVT y GeoTIFF y los registra en el mapa.
+     * Carga las extensiones de capa y los plugins que traen las
+     * implementaciones que a la API le faltan.
      *
      * El registro va dentro del.then() a propósito: se llama a `map.addPlugin`
      * desde otro turno porque aquí la API está iterando sus plugins, y meter uno
      * más en mitad de la vuelta es pedir que se lo salte.
+     *
+     * Las entradas con `global` (COPC, FlatGeobuf, GeoParquet, IFC, PMTiles,
+     * GLB, Imagen) no son plugins: se instalan solas al cargarse y se
+     * reinstalan cuando cambioImpl recarga el bundle. Aquí solo se comprueba
+     * que están y se les pide `instalar()` por si acaso.
      *
      * @param {Object} map
      */
@@ -1090,6 +1167,20 @@
       cargarExtensionesDeFormato().then(function () {
         const IDEE = api();
         EXTENSIONES_FORMATO.forEach(function (e) {
+          if (!e.clase) {
+            const fachada = e.global ? window[e.global] : null;
+            if (!fachada) {
+              console.warn('catalogo: ' + e.fichero + ' no se ha cargado.');
+              return;
+            }
+            try {
+              if (typeof fachada.instalar === 'function') fachada.instalar();
+            } catch (err) {
+              console.warn('catalogo: no se pudo instalar ' + e.global + '.', err);
+            }
+            return;
+          }
+
           // Se mira primero en `window`: tras un cambio 2D/3D el bundle crea un
           // IDEE.plugin nuevo, pero el global directo persiste y el coordinador
           // de cambioImpl lo vuelve a colgar ahí (miPlugin_*).
@@ -1103,6 +1194,10 @@
           catch (err) { console.warn('catalogo: no se pudo registrar ' + e.clase + '.', err); }
         });
       });
+
+      // El formulario de colocación se pide en paralelo y no bloquea nada: si
+      // aún no está cuando se analiza una URL, _pintarOpciones lo reintenta.
+      cargarModuloColocacion();
     }
 
     /**
@@ -3613,6 +3708,19 @@ _vistaActualEnGrados() {
       });
     }
 
+    /**
+     * Suelta el formulario de colocación y su vista previa.
+     *
+     * Se llama al repintar las opciones (los nodos se van) y al desmontar el
+     * plugin. No toca `_analisis.colocacion`, que es el estado que sobrevive.
+     */
+    _destruirColocacion() {
+      const coloc = this._colocacion;
+      this._colocacion = null;
+      if (!coloc) return;
+      try { coloc.destruir(); } catch (e) { /* ya estaba suelto */ }
+    }
+
     /** Pinta el bloque de opciones de carga de la URL analizada. */
     _pintarOpciones() {
       const self = this;
@@ -3621,6 +3729,9 @@ _vistaActualEnGrados() {
       if (!cont || !info) return;
 
       const urlTool = window.CatalogoURL;
+      // La vista previa y los manejadores de mapa del formulario anterior
+      // apuntan a nodos que se van a borrar: se sueltan antes de repintar.
+      this._destruirColocacion();
       cont.innerHTML = '';
 
       const caja = document.createElement('div');
@@ -3650,6 +3761,9 @@ _vistaActualEnGrados() {
       }
       selTipo.addEventListener('change', function () {
         self._analisis.tipo = this.value;
+        // El formulario de colocación solo existe para GLB e Imagen: al
+        // cambiar de tipo hay que volver a pintar las opciones.
+        self._pintarOpciones();
       });
       filaTipo.appendChild(etiquetaTipo);
       filaTipo.appendChild(selTipo);
@@ -3670,6 +3784,43 @@ _vistaActualEnGrados() {
       filaNombre.appendChild(etiquetaNombre);
       filaNombre.appendChild(inputNombre);
       caja.appendChild(filaNombre);
+
+      // --- Colocación (solo GLB e Imagen) ----------------------------------
+      // Estos ficheros no dicen dónde van: el formulario pide el punto o el
+      // rectángulo, el giro y la escala. El estado se guarda en _analisis para
+      // que el cambio 2D/3D y los repintados no lo pierdan.
+      if (urlTool && typeof urlTool.esColocable === 'function' &&
+          urlTool.esColocable(info.tipo)) {
+        if (!info.colocacion || typeof info.colocacion !== 'object') {
+          info.colocacion = {};
+        }
+        if (!window.CatalogoColocacion) {
+          const espera = document.createElement('p');
+          espera.className = 'catalogo__aviso';
+          espera.textContent = 'Cargando el formulario de colocación…';
+          caja.appendChild(espera);
+          cargarModuloColocacion().then(function () {
+            if (self._analisis === info) self._pintarOpciones();
+          });
+        } else {
+          this._colocacion = window.CatalogoColocacion.crear(caja, {
+            map: this._map,
+            tipo: info.tipo,
+            url: info.url,
+            nombre: info.nombre,
+            valor: info.colocacion,
+            onCambio: function (estado) {
+              info.colocacion = estado;
+            },
+            onAviso: function (texto, clase) {
+              // Los mensajes de la colocación se quedan en el formulario; al
+              // cuadro de estado del catálogo solo van los errores, para no
+              // pisar el resultado de la carga.
+              if (texto && clase === 'error') self._decir(texto, 'error');
+            }
+          });
+        }
+      }
 
       // --- Capas del servicio ----------------------------------------------
       if (info.capas && info.capas.length) {
@@ -3820,6 +3971,23 @@ _vistaActualEnGrados() {
         this._decir('Elige al menos una capa del servicio.', 'aviso');
         return;
       }
+
+      // GLB e Imagen necesitan una colocación válida antes de tocar el mapa.
+      let colocacion = null;
+      if (this._colocacion) {
+        const revision = this._colocacion.validar();
+        if (!revision.ok) {
+          this._decir(revision.mensaje, 'aviso');
+          return;
+        }
+        colocacion = this._colocacion.getValor();
+        // La vista previa deja de tener sentido: la capa real va a ocupar su
+        // sitio y, si no se quita, quedarían dos iguales superpuestas. Se
+        // desactiva también la casilla para que no vuelva a saltar al tocar
+        // cualquier campo.
+        this._colocacion.desactivarVistaPrevia();
+      }
+
       this._decir('Cargando…');
       try {
         const tipoActual = this._catalogoActual();
@@ -3829,7 +3997,8 @@ _vistaActualEnGrados() {
         const capas = await tipoActual.cargarUrl(info.url, this._map, {
           tipo: info.tipo,
           capas: info.elegidas,
-          nombre: info.nombre
+          nombre: info.nombre,
+          colocacion: colocacion
         });
         const cuantas = (capas && capas.length) || 0;
         this._decir('Cargada' + (cuantas > 1 ? 's ' + cuantas + ' capas' : '') + ': ' + info.nombre);
@@ -3858,9 +4027,33 @@ _vistaActualEnGrados() {
     _cargarServicio(srv, sec) {
       const self = this;
       const urlTool = window.CatalogoURL;
-      const tipo = (sec && sec.tipo) || srv.tipo || (urlTool ? urlTool.detectarTipo(srv.url) : 'WMS');
+      const tipo = srv.tipo || (sec && sec.tipo) || (urlTool ? urlTool.detectarTipo(srv.url) : 'WMS');
 
       if (!urlTool) return;
+
+      // Un GLB o una imagen de un catálogo no se pueden cargar a ciegas: no
+      // traen georreferenciación. Se lleva a la pestaña de capa, que es donde
+      // está el formulario de colocación.
+      if (typeof urlTool.esColocable === 'function' && urlTool.esColocable(tipo)) {
+        const nombre = srv.nombre || urlTool.nombreDeUrl(srv.url);
+        this._urlIntroducida = srv.url;
+        if (this._urlInputEl) this._urlInputEl.value = srv.url;
+        this._analisis = {
+          url: srv.url,
+          tipo: tipo,
+          capas: [{ id: srv.url, nombre: nombre }],
+          elegidas: [srv.url],
+          nombre: nombre,
+          aviso: 'Este recurso no trae georreferenciación: colócalo antes de cargarlo.',
+          colocacion: {},
+          error: null
+        };
+        this._verPestana('capa');
+        this._pintarOpciones();
+        this._decir('«' + nombre + '» hay que colocarlo: elige dónde va en la pestaña de capa.', 'aviso');
+        return;
+      }
+
       this._decir('Leyendo el servicio «' + srv.nombre + '»…');
 
       urlTool.leerCapas(srv.url, tipo).then(async function (info) {
@@ -4150,7 +4343,12 @@ _vistaActualEnGrados() {
           nombre: this._analisis.nombre,
           capas: (this._analisis.capas || []).map(function (c) { return { id: c.id, nombre: c.nombre }; }),
           elegidas: (this._analisis.elegidas || []).slice(),
-          aviso: this._analisis.aviso || null
+          aviso: this._analisis.aviso || null,
+          // Colocación de GLB e Imagen: sin esto, el cambio 2D/3D perdería el
+          // punto o el rectángulo que el usuario acababa de marcar.
+          colocacion: this._analisis.colocacion
+            ? JSON.parse(JSON.stringify(this._analisis.colocacion))
+            : null
         } : null,
         panelCollapsed: panelCollapsed
       };
@@ -4187,6 +4385,8 @@ _vistaActualEnGrados() {
           capas: Array.isArray(state.analisis.capas) ? state.analisis.capas : [],
           elegidas: Array.isArray(state.analisis.elegidas) ? state.analisis.elegidas : [],
           aviso: state.analisis.aviso || null,
+          colocacion: (state.analisis.colocacion && typeof state.analisis.colocacion === 'object')
+            ? state.analisis.colocacion : null,
           error: null
         };
       }
@@ -4241,6 +4441,9 @@ _vistaActualEnGrados() {
 
     destroy() {
       this._destruirSupra();
+      // El formulario de colocación tiene manejadores en el mapa y una posible
+      // capa de vista previa: se sueltan antes de soltar el mapa.
+      this._destruirColocacion();
       // Antes de soltar el mapa: la huella es una capa viva y si no se quita
       // aquí se queda en el mapa sin ningún panel desde el que quitarla.
       this._quitarHuella();
