@@ -1,0 +1,45 @@
+/* =====================================================================
+   GEOPROCESOS · estilos de la página
+   ---------------------------------------------------------------------
+   El mapa ocupa toda la ventana y el plugin `ext/geoprocesos` se pinta
+   solo (su hoja la inyecta su propio JS). Aquí solo va lo imprescindible
+   de la página: el contenedor a pantalla completa y la capa de carga.
+   ===================================================================== */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#mapaID {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Capa de carga mientras arranca la API ────────────────────────────── */
+#cargaSVG {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffffcc;
+}
+
+#cargaSVG img {
+  display: block;
+  height: 30vh;
+  margin: auto;
+  position: sticky;
+  top: 30%;
+}
+
+/* ── Panel de la herramienta: color de marca ──────────────────────────── */
+/* El color de acento del plugin entra por el constructor (color2/color3);
+   lo de aquí es solo el fondo del botón cuando el panel está plegado. */
+.m-panel.g-herramienta_geoprocesos > button.m-panel-btn {
+  background-color: #2b6a9b !important;
+}

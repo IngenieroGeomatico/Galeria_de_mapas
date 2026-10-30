@@ -322,6 +322,9 @@
 
       this.position = o.position || 'TL';
       this.collapsible = (o.collapsible !== undefined) ? Boolean(o.collapsible) : true;
+      // Arranca plegado: la herramienta vive sobre el mapa y lo que interesa
+      // al entrar es ver el mapa, no un panel de 380 px.
+      this.collapsed = (o.collapsed !== undefined) ? Boolean(o.collapsed) : true;
       this.order = (o.order !== undefined && o.order !== null && !Number.isNaN(Number(o.order)))
         ? Number(o.order)
         : null;
@@ -521,6 +524,7 @@
 
       var panel = new IDEE.ui.Panel('tools_geoprocesos', {
         collapsible: this.collapsible,
+        collapsed: this.collapsed,
         className: 'g-herramienta_geoprocesos g-panel-lateral',
         collapsedButtonClass: 'm-tools',
         position: pos,
@@ -860,9 +864,10 @@
       if (!capa) return false;
       var t = String(capa.type || '');
       if (/GeoTIFF|GenericRaster/i.test(t)) return true;
-      // Las capas GeoTIFF de la API exponen el fichero en `options.blob` (la
-      // fachada no tiene un `blob` propio) y no tienen entidades.
-      return typeof capa.getFeatures !== 'function' && this._fuenteDeCapa(capa) !== null;
+      // Cualquier otra capa con un fichero ráster en `blob` (extensiones).
+      // No vale con que tenga `url`: un TMS o un WMS también la tienen y no
+      // son un fichero que se pueda abrir con geotiff.js.
+      return !!(capa.options && capa.options.blob);
     }
 
     /**
@@ -879,7 +884,7 @@
         var impl = (typeof capa.getImpl === 'function') ? capa.getImpl() : null;
         if (impl && impl.blob) return impl.blob;
       } catch (e) { /* sin implementación accesible */ }
-      if (capa.url) return capa.url;
+      if (capa.url && /GeoTIFF|GenericRaster/i.test(String(capa.type || ''))) return capa.url;
       return null;
     }
 
@@ -1880,16 +1885,17 @@
 
       if (features.length) {
         var nombre = 'GP ' + f.nombre + (salidas.length > 1 ? ' (' + features.length + ')' : '');
-        var capa = this._anadirCapaGeoJSON(features, nombre);
+        this._anadirCapaGeoJSON(features, nombre);
         var resumen = features.length + ' entidad' + (features.length === 1 ? '' : 'es') + ' en la capa «' + nombre + '».';
         if (textos.length) resumen += ' ' + textos.slice(0, 3).join(' | ') + (textos.length > 3 ? ' …' : '');
         this._estado(this._el.estado, resumen, 'ok');
-        if (capa) {
-          try {
-            var ext = capa.getFeaturesExtent && capa.getFeaturesExtent();
-            if (ext) this._map.setBbox(ext);
-          } catch (e) { /* la extensión no siempre está disponible */ }
-        }
+        // `capa.getFeaturesExtent()` devuelve la extensión MÁXIMA del mapa
+        // justo después de añadir la capa (medido), así que la caja se calcula
+        // aquí a partir de las propias entidades, que Turf devuelve en 4326.
+        try {
+          var caja = this._bboxDeFeatures(features);
+          if (caja) this._map.setBbox(caja);
+        } catch (e) { /* la vista no es imprescindible */ }
         return;
       }
 
@@ -1899,6 +1905,69 @@
       }
       var texto = textos.join('\n');
       this._estado(this._el.estado, texto.length > 600 ? texto.slice(0, 600) + '…' : texto, 'ok');
+    }
+
+    /**
+     * Extensión de una lista de entidades, en EPSG:3857, para encuadrarlas.
+     *
+     * Turf trabaja siempre en 4326, así que la caja se calcula ahí y se
+     * reproyecta a la proyección del mapa. Si la caja es degenerada (una
+     * sola entidad puntual) se abre un poco para no acabar en el zoom
+     * máximo sobre un punto.
+     *
+     * @param {Array<Object>} features Entidades GeoJSON en EPSG:4326.
+     * @returns {Array<number>|null} [minX, minY, maxX, maxY] en EPSG:3857.
+     */
+    _bboxDeFeatures(features) {
+      var minx = Infinity;
+      var miny = Infinity;
+      var maxx = -Infinity;
+      var maxy = -Infinity;
+
+      var recorrer = function (coords) {
+        if (!Array.isArray(coords) || !coords.length) return;
+        if (typeof coords[0] === 'number') {
+          var x = coords[0];
+          var y = coords[1];
+          if (!isFinite(x) || !isFinite(y)) return;
+          if (x < minx) minx = x;
+          if (y < miny) miny = y;
+          if (x > maxx) maxx = x;
+          if (y > maxy) maxy = y;
+          return;
+        }
+        coords.forEach(recorrer);
+      };
+
+      (features || []).forEach(function (f) {
+        if (f && f.geometry) recorrer(f.geometry.coordinates);
+      });
+      if (!isFinite(minx) || !isFinite(miny)) return null;
+
+      // Caja degenerada (un punto, o todos en la misma coordenada): se abre
+      // 0,02° (unos 2,2 km) alrededor para que el encuadre enseñe el entorno
+      // y no acabe en el zoom máximo sobre un punto.
+      var delta = 0.02;
+      if (maxx - minx < delta) {
+        var cx = (maxx + minx) / 2;
+        minx = cx - delta;
+        maxx = cx + delta;
+      }
+      if (maxy - miny < delta) {
+        var cy = (maxy + miny) / 2;
+        miny = cy - delta;
+        maxy = cy + delta;
+      }
+
+      var IDEE = api();
+      if (IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function') {
+        try {
+          var a = IDEE.utils.reproject([minx, miny], 'EPSG:4326', 'EPSG:3857');
+          var b = IDEE.utils.reproject([maxx, maxy], 'EPSG:4326', 'EPSG:3857');
+          if (a && b && isFinite(a[0]) && isFinite(b[0])) return [a[0], a[1], b[0], b[1]];
+        } catch (e) { /* se devuelve la caja tal cual */ }
+      }
+      return [minx, miny, maxx, maxy];
     }
 
     /**
