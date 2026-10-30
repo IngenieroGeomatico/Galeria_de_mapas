@@ -144,6 +144,62 @@
     return window.__gpEscritorPromesa;
   }
 
+  /**
+   * Rampa viridis (la de matplotlib) en anclas RGB.
+   *
+   * Sirve para pintar en el mapa los resultados de una sola banda. La capa
+   * `ol.source.GeoTIFF` de la API no estira bien un Float32 de una banda y lo
+   * deja negro, así que el ráster se coloriza solo para la capa: el GeoTIFF
+   * que se descarga conserva los valores originales.
+   */
+  var RAMPA_VIRIDIS = [
+    [68, 1, 84], [72, 26, 108], [71, 47, 125], [65, 68, 135], [57, 86, 140],
+    [49, 104, 142], [42, 120, 142], [35, 136, 142], [31, 152, 139], [34, 168, 132],
+    [44, 183, 121], [59, 197, 109], [84, 210, 94], [116, 221, 79], [153, 230, 60],
+    [191, 238, 42], [230, 244, 26], [253, 231, 37],
+  ];
+
+  /**
+   * Color de la rampa para un valor normalizado.
+   * @param {number} t 0 = mínimo, 1 = máximo.
+   * @returns {Array<number>} [R, G, B] de 0 a 255.
+   */
+  function colorRampa(t) {
+    var x = Math.max(0, Math.min(1, t)) * (RAMPA_VIRIDIS.length - 1);
+    var i = Math.floor(x);
+    var f = x - i;
+    var a = RAMPA_VIRIDIS[i];
+    var b = RAMPA_VIRIDIS[Math.min(i + 1, RAMPA_VIRIDIS.length - 1)];
+    return [
+      Math.round(a[0] + ((b[0] - a[0]) * f)),
+      Math.round(a[1] + ((b[1] - a[1]) * f)),
+      Math.round(a[2] + ((b[2] - a[2]) * f)),
+    ];
+  }
+
+  /** Gradiente CSS de la rampa, para la leyenda del resultado. */
+  function gradienteRampa() {
+    var paradas = RAMPA_VIRIDIS.map(function (c, i) {
+      var pct = Math.round((i / (RAMPA_VIRIDIS.length - 1)) * 100);
+      return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ') ' + pct + '%';
+    });
+    return 'linear-gradient(90deg, ' + paradas.join(', ') + ')';
+  }
+
+  /**
+   * Lee GDAL_NODATA del FileDirectory del TIFF.
+   * @param {Object} fd FileDirectory de geotiff.js.
+   * @returns {number|null} NaN para «nan», o null si no hay nodata.
+   */
+  function leerNodata(fd) {
+    var nodataTxt = fd && fd.GDAL_NODATA;
+    if (nodataTxt === undefined || nodataTxt === null) return null;
+    var limpio = String(nodataTxt).replace(/\0/g, '').trim();
+    if (/^nan$/i.test(limpio)) return NaN;
+    var nodata = Number(limpio);
+    return Number.isNaN(nodata) ? null : nodata;
+  }
+
   function cargarCatalogo() {
     if (Array.isArray(window.CATALOGO_TURF)) return Promise.resolve(window.CATALOGO_TURF);
     if (!window.__gpCatalogoPromesa) {
@@ -402,7 +458,9 @@
             + 'del tipo <code>(B4 - B3) / (B4 + B3)</code> y geoprocesos de gdal3.js '
             + '(reproyectar, recortar, redimensionar y convertir formato).</p>'
             + '<p>Los resultados se añaden al mapa como capa nueva y, en el caso de los ráster, '
-            + 'también se pueden descargar como GeoTIFF con sus valores.</p>'
+            + 'también se pueden descargar como GeoTIFF con sus valores. Si el resultado tiene una '
+            + 'sola banda (un índice, un umbral, una reclasificación), en el mapa se pinta con una '
+            + 'rampa de color; el fichero que se descarga conserva los valores originales.</p>'
             + '<p>La exportación vectorial usa los formatos de escritura de gdal3.js '
             + '(GeoJSON, KML, GeoPackage, Shapefile, GML…).</p>'
             + '</div>';
@@ -715,7 +773,8 @@
         '            <button type="button" class="gp-chip" data-exp="(B1 - B2) / (B1 + B2)">Índice</button>',
         '          </div>',
         '          <textarea class="gp-expresion" rows="2" spellcheck="false" placeholder="(B4 - B3) / (B4 + B3)"></textarea>',
-        '          <p class="gp-ayuda">B1 es la primera banda, B2 la segunda… <code>Math</code> está disponible.</p>',
+        '          <p class="gp-ayuda">B1 es la primera banda, B2 la segunda… <code>Math</code> está disponible. '
+          + 'Si el resultado tiene una sola banda, en el mapa se pinta con una rampa de color.</p>',
         '          <button type="button" class="gp-btn gp-btn--principal gp-calcular">Calcular y añadir al mapa</button>',
         '        </div>',
         '      </div>',
@@ -737,6 +796,10 @@
         '        <div class="gp-bloque">',
         '          <p class="gp-resumen"></p>',
         '          <button type="button" class="gp-btn gp-ras-descargar">Descargar GeoTIFF</button>',
+        '          <div class="gp-rampa gp-oculto">',
+        '            <div class="gp-rampa-barra"></div>',
+        '            <p class="gp-rampa-texto gp-ayuda"></p>',
+        '          </div>',
         '        </div>',
         '      </div>',
         '    </details>',
@@ -778,6 +841,9 @@
         rasResultado: qs('.gp-ras-resultado'),
         rasResumen: qs('.gp-resumen'),
         rasDescargar: qs('.gp-ras-descargar'),
+        rasRampa: qs('.gp-rampa'),
+        rasRampaBarra: qs('.gp-rampa-barra'),
+        rasRampaTexto: qs('.gp-rampa-texto'),
       };
 
       // Pestañas.
@@ -2796,13 +2862,7 @@
       try { resolucion = image.getResolution(); } catch (e) { resolucion = [0, 0, 0]; }
       try { bbox = image.getBoundingBox(); } catch (e) { bbox = null; }
 
-      var nodataTxt = fd.GDAL_NODATA;
-      var nodata = null;
-      if (nodataTxt !== undefined && nodataTxt !== null) {
-        var limpio = String(nodataTxt).replace(/\0/g, '').trim();
-        nodata = /^nan$/i.test(limpio) ? NaN : Number(limpio);
-        if (Number.isNaN(nodata) && !/^nan$/i.test(limpio)) nodata = null;
-      }
+      var nodata = leerNodata(fd);
 
       this._raster = {
         buffer: buffer,
@@ -2952,7 +3012,7 @@
 
         var nombre = 'GP cálculo ' + (this._contadorResultados = (this._contadorResultados || 0) + 1);
         this._mostrarResultadoRaster(buffer, nombre + '.tif', r.ancho + ' × ' + r.alto);
-        if (r.epsg) this._anadirRasterAlMapa(buffer, nombre);
+        if (r.epsg) await this._anadirRasterAlMapa(buffer, nombre);
         this._estado(estado, r.epsg
           ? 'Resultado calculado y añadido al mapa.'
           : 'Resultado calculado. El GeoTIFF de origen no tiene georreferenciación: no se puede añadir al mapa, solo descargar.', r.epsg ? 'ok' : 'info');
@@ -2974,6 +3034,9 @@
       var blob = new Blob([buffer], { type: 'image/tiff' });
       this._resultadoRaster = { blob: blob, nombre: nombreFichero };
       this._el.rasResumen.textContent = nombreFichero + (detalle ? ' · ' + detalle : '');
+      // La leyenda de la rampa solo vale para el resultado que se acaba de
+      // añadir al mapa; si el nuevo no se coloriza, se queda oculta.
+      if (this._el.rasRampa) this._el.rasRampa.classList.add('gp-oculto');
       this._el.rasResultado.classList.remove('gp-oculto');
       // Si el usuario había plegado la sección, se abre para que vea el
       // resultado recién generado.
@@ -2990,30 +3053,154 @@
     }
 
     /**
+     * Coloriza un GeoTIFF de una sola banda con la rampa viridis.
+     *
+     * Solo se usa para la capa del mapa: `ol.source.GeoTIFF` pinta negro un
+     * Float32 de una banda (aunque se le pida `normalize`), así que un índice,
+     * un umbral o una reclasificación no se verían. Se estira el rango de los
+     * píxeles válidos (sin NaN ni nodata) a 0–255 y se escribe un RGB de 8 bits
+     * con la georreferenciación del propio fichero, porque el resultado de
+     * gdal3.js no pasa por `_abrirRaster`. El GeoTIFF original no se toca: es
+     * el que se descarga.
+     *
+     * @param {ArrayBuffer} buffer GeoTIFF de origen.
+     * @returns {Promise<Object|null>} `{ buffer, minimo, maximo }` o null si no
+     *   procede (varias bandas, paleta, sin SRC o sin valores).
+     */
+    async _colorizarRaster(buffer) {
+      var GeoTIFF = await cargarGeoTIFF();
+      var tiff = await GeoTIFF.fromArrayBuffer(buffer);
+      var image = await tiff.getImage();
+      if (image.getSamplesPerPixel() !== 1) return null;
+
+      var fd = image.getFileDirectory() || {};
+      // Un TIFF con tabla de color ya trae su propia paleta: no se pisa.
+      if (fd.ColorMap) return null;
+
+      var ancho = image.getWidth();
+      var alto = image.getHeight();
+      var total = ancho * alto;
+      if (!(total > 0) || total > 16000000) return null;
+
+      var nodata = leerNodata(fd);
+      var rasters = await image.readRasters();
+      var datos = rasters[0];
+      if (!datos || datos.length !== total) return null;
+
+      // Rango real de los píxeles válidos: es lo que se estira a la rampa.
+      var minimo = Infinity;
+      var maximo = -Infinity;
+      for (var i = 0; i < total; i += 1) {
+        var v = datos[i];
+        if (!isFinite(v)) continue;
+        if (nodata !== null && !Number.isNaN(nodata) && v === nodata) continue;
+        if (v < minimo) minimo = v;
+        if (v > maximo) maximo = v;
+      }
+      if (!isFinite(minimo) || !isFinite(maximo)) return null;
+
+      var rango = maximo - minimo;
+      var rgb = new Uint8Array(total * 3);
+      for (var p = 0; p < total; p += 1) {
+        var val = datos[p];
+        var nulo = !isFinite(val)
+          || (nodata !== null && !Number.isNaN(nodata) && val === nodata);
+        var j = p * 3;
+        if (nulo) {
+          // Sin dato en blanco: sobre un fondo claro se lee como hueco.
+          rgb[j] = 255;
+          rgb[j + 1] = 255;
+          rgb[j + 2] = 255;
+        } else {
+          var c = colorRampa(rango > 0 ? (val - minimo) / rango : 0.5);
+          rgb[j] = c[0];
+          rgb[j + 1] = c[1];
+          rgb[j + 2] = c[2];
+        }
+      }
+
+      var geoKeys = {};
+      try { geoKeys = image.getGeoKeys() || {}; } catch (e) { geoKeys = {}; }
+      var epsg = geoKeys.ProjectedCSTypeGeoKey || geoKeys.GeographicTypeGeoKey || null;
+      if (!epsg) return null;
+
+      var origen = [0, 0, 0];
+      var resolucion = [0, 0, 0];
+      try { origen = image.getOrigin(); } catch (e) { origen = [0, 0, 0]; }
+      try { resolucion = image.getResolution(); } catch (e) { resolucion = [0, 0, 0]; }
+      if (!(Math.abs(resolucion[0]) > 0) || !(Math.abs(resolucion[1]) > 0)) return null;
+
+      var escritor = await cargarEscritorGeoTIFF();
+      return {
+        buffer: escritor.escribirGeoTIFFUInt8({
+          ancho: ancho,
+          alto: alto,
+          bandas: 3,
+          datos: rgb,
+          origenX: origen[0],
+          origenY: origen[1],
+          resX: Math.abs(resolucion[0]),
+          resY: Math.abs(resolucion[1]),
+          epsg: epsg,
+        }),
+        minimo: minimo,
+        maximo: maximo,
+      };
+    }
+
+    /**
      * Añade un GeoTIFF en memoria al mapa.
      *
      * `IDEE.layer.GeoTIFF` en 2D hace `fetch(this.blob)`, así que se le pasa una
-     * URL de objeto y no el Blob. `normalize: true` estira los valores al rango
-     * visible, que es lo que hace falta para un índice o un umbral.
+     * URL de objeto; en 3D la fachada de `ext/geotiffLayer` lee el Blob
+     * directamente. `normalize: true` estira los valores al rango visible, que es
+     * lo que hace falta para un índice o un umbral.
+     *
+     * Si el resultado tiene una sola banda se coloriza antes de crear la capa
+     * (ver `_colorizarRaster`) y se avisa en el bloque de resultado; el buffer
+     * que se descarga sigue siendo el original.
+     *
+     * @param {ArrayBuffer} buffer GeoTIFF.
+     * @param {string} nombre Nombre de la capa.
+     * @returns {Promise<Object|null>} Capa creada o null.
      */
-    _anadirRasterAlMapa(buffer, nombre) {
+    async _anadirRasterAlMapa(buffer, nombre) {
       var IDEE = api();
       if (!IDEE || !IDEE.layer || !IDEE.layer.GeoTIFF) {
         this._estado(this._el.rasEstado, 'La API no expone IDEE.layer.GeoTIFF en esta implementación.', 'error');
         return null;
       }
-      var url = URL.createObjectURL(new Blob([buffer], { type: 'image/tiff' }));
+
+      var paraMapa = buffer;
+      var rango = null;
+      try {
+        var colorizado = await this._colorizarRaster(buffer);
+        if (colorizado) {
+          paraMapa = colorizado.buffer;
+          rango = { minimo: colorizado.minimo, maximo: colorizado.maximo };
+        }
+      } catch (e) {
+        console.warn('[geoprocesos] no se ha podido colorizar el ráster', e);
+      }
+
+      var blob = new Blob([paraMapa], { type: 'image/tiff' });
+      var url = URL.createObjectURL(blob);
       this._urlsRaster.push(url);
       try {
-        var capa = new IDEE.layer.GeoTIFF({
-          blob: url,
+        var opciones = {
           name: nombre,
           legend: nombre,
           normalize: true,
-        });
+        };
+        // En 2D `IDEE.layer.GeoTIFF` hace `fetch(this.blob)` y necesita la URL;
+        // en 3D la fachada de `ext/geotiffLayer` llama a `this.blob.arrayBuffer()`
+        // y necesita el Blob de verdad.
+        opciones.blob = this._esCesium() ? blob : url;
+        var capa = new IDEE.layer.GeoTIFF(opciones);
         if (typeof this._map.addLayers === 'function') this._map.addLayers(capa);
         else this._map.addLayer(capa);
         this._capasResultado.push({ id: capa.idLayer, legend: nombre });
+        this._pintarLeyendaRampa(rango);
         this._refrescarCapas();
         return capa;
       } catch (e) {
@@ -3022,6 +3209,29 @@
           + (this._esCesium() ? ' en 3D (hace falta ext/geotiffLayer)' : '') + ': ' + (e && e.message ? e.message : e), 'error');
         return null;
       }
+    }
+
+    /**
+     * Muestra u oculta la leyenda de la rampa en el bloque de resultado.
+     * @param {Object|null} rango `{ minimo, maximo }` o null si no hay rampa.
+     */
+    _pintarLeyendaRampa(rango) {
+      var caja = this._el.rasRampa;
+      if (!caja) return;
+      if (!rango) {
+        caja.classList.add('gp-oculto');
+        return;
+      }
+      var fmt = function (v) {
+        return Number(v.toPrecision(4)).toLocaleString('es-ES', { maximumFractionDigits: 4 });
+      };
+      if (this._el.rasRampaBarra) this._el.rasRampaBarra.style.background = gradienteRampa();
+      if (this._el.rasRampaTexto) {
+        this._el.rasRampaTexto.textContent = 'Una banda: en el mapa se pinta con esta rampa, de '
+          + fmt(rango.minimo) + ' a ' + fmt(rango.maximo)
+          + '. El GeoTIFF descargado conserva los valores.';
+      }
+      caja.classList.remove('gp-oculto');
     }
 
     /* =================================================================== *
@@ -3189,7 +3399,7 @@
 
         if (extension === 'tif' || extension === 'tiff') {
           this._mostrarResultadoRaster(buffer, nombre.replace(/\s+/g, '_') + '.tif', 'gdal3.js · ' + op);
-          this._anadirRasterAlMapa(buffer, nombre);
+          await this._anadirRasterAlMapa(buffer, nombre);
           this._estado(estado, 'Geoproceso terminado y añadido al mapa.', 'ok');
         } else {
           descargarBlob(new Blob([buffer]), nombre.replace(/\s+/g, '_') + '.' + extension);

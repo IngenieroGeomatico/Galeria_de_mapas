@@ -554,6 +554,27 @@
   word-break: break-word;
 }
 
+/* Leyenda de la rampa de color de los resultados de una banda. El gradiente
+   lo pinta el JS desde la propia paleta, así que aquí solo va la forma. */
+.gp-rampa {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.gp-rampa-barra {
+  height: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 5px;
+}
+
+.gp-rampa-texto {
+  margin: 0;
+  font-size: 11px;
+  color: #3d4a55;
+}
+
 /* ====================================================================
    PANEL LATERAL (clase opt-in `g-panel-lateral`)
    --------------------------------------------------------------------
