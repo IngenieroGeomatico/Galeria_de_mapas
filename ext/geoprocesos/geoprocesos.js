@@ -339,6 +339,11 @@
       this._pestana = o.pestana || 'vector';
       this._fnNombre = o.funcion || 'buffer';
 
+      // Estado de las secciones plegables (data-seccion -> abierta) y bandera
+      // del arrastre del panel. Ambos se conservan en el cambio 2D/3D.
+      this._secciones = {};
+      this._arrastrable = false;
+
       // Catálogo, formulario y capas.
       this._catalogo = [];
       this._fn = null;
@@ -465,6 +470,8 @@
       return {
         pestana: this._pestana,
         funcion: this._fnNombre,
+        // Estado abierto/cerrado de cada sección plegable.
+        secciones: Object.assign({}, this._secciones),
         panelCollapsed: panelCollapsed,
       };
     }
@@ -476,6 +483,10 @@
           if (state.panelCollapsed && typeof this._panel.collapse === 'function') this._panel.collapse();
           else if (!state.panelCollapsed && typeof this._panel.open === 'function') this._panel.open();
         } catch (e) { /* el panel puede no estar montado todavía */ }
+      }
+      if (state.secciones && typeof state.secciones === 'object') {
+        this._secciones = Object.assign({}, this._secciones, state.secciones);
+        this._aplicarSecciones();
       }
       if (typeof state.pestana === 'string' && (state.pestana === 'vector' || state.pestana === 'raster')) {
         this._pestana = state.pestana;
@@ -540,10 +551,22 @@
       control.equals = function (other) { return other === this; };
 
       var self = this;
-      control.createView = function () { return self._crearVista(); };
+      control.createView = function () {
+        var vista = self._crearVista();
+        // La API inserta la vista en el panel después de este retorno: el
+        // arrastre se engancha en el siguiente turno, cuando la cabecera ya
+        // está en el DOM.
+        setTimeout(function () { self._hacerArrastrable(); }, 0);
+        return vista;
+      };
 
       panel.addControls(control);
       map.addPanels(panel);
+
+      // Si la API ya hubiera creado la vista (algunas versiones lo hacen en
+      // addControls), el enganche se hace igualmente: _hacerArrastrable es
+      // idempotente.
+      this._hacerArrastrable();
 
       try {
         var c1 = this.resolveColor(this.color1);
@@ -577,8 +600,12 @@
       cont.setAttribute('role', 'region');
       cont.setAttribute('aria-label', 'Geoprocesos');
 
+      // Cabecera y secciones siguen el protocolo del resto de paneles del
+      // repositorio: la barra de título es .m-herramienta-header (la engancha
+      // IDEE.utils.draggabillyPlugin desde addTo) y TODAS las secciones son
+      // <details class="gp-seccion"> plegables.
       cont.innerHTML = [
-        '<header class="m-herramienta-header gp-header"><span>Geoprocesos</span></header>',
+        '<header role="heading" aria-level="3" tabindex="0" id="m-herramienta-title-geoprocesos" class="m-herramienta-header gp-header"><span>Geoprocesos</span></header>',
         '<div class="m-herramienta-contents gp-body">',
         '  <div class="gp-tabs" role="tablist">',
         '    <button type="button" role="tab" class="gp-tab gp-tab--activa" data-tab="vector" aria-selected="true">Vector</button>',
@@ -588,64 +615,94 @@
         /* ---------------------------- VECTOR ---------------------------- */
         '  <section class="gp-panel" data-panel="vector" role="tabpanel">',
         '    <div class="gp-aviso gp-aviso-impl gp-oculto"></div>',
-        '    <div class="gp-bloque">',
-        '      <label class="gp-etiqueta" for="gp-funcion">Función de Turf</label>',
-        '      <input type="search" class="gp-buscador" placeholder="Buscar función…" aria-label="Buscar función de Turf">',
-        '      <select class="gp-select gp-funcion" id="gp-funcion"></select>',
-        '      <p class="gp-descripcion"></p>',
-        '    </div>',
-        '    <form class="gp-formulario" autocomplete="off"></form>',
+        '    <details class="gp-seccion" data-seccion="vector-funcion" open>',
+        '      <summary class="gp-seccion-titulo">Función de Turf</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <div class="gp-bloque">',
+        '          <label class="gp-etiqueta" for="gp-funcion">Función de Turf</label>',
+        '          <input type="search" class="gp-buscador" placeholder="Buscar función…" aria-label="Buscar función de Turf">',
+        '          <select class="gp-select gp-funcion" id="gp-funcion"></select>',
+        '          <p class="gp-descripcion"></p>',
+        '        </div>',
+        '      </div>',
+        '    </details>',
+        '    <details class="gp-seccion" data-seccion="vector-parametros" open>',
+        '      <summary class="gp-seccion-titulo">Parámetros</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <form class="gp-formulario" autocomplete="off"></form>',
+        '      </div>',
+        '    </details>',
         '    <div class="gp-acciones">',
         '      <button type="button" class="gp-btn gp-btn--principal gp-ejecutar">Ejecutar</button>',
         '      <button type="button" class="gp-btn gp-limpiar">Quitar resultados</button>',
         '    </div>',
         '    <div class="gp-estado gp-oculto" role="status" aria-live="polite"></div>',
-        '    <details class="gp-desplegable">',
-        '      <summary>Exportar capa vectorial</summary>',
-        '      <div class="gp-bloque">',
-        '        <label class="gp-etiqueta">Capa</label>',
-        '        <select class="gp-select gp-exp-capa"></select>',
-        '        <label class="gp-etiqueta">Formato (gdal3.js)</label>',
-        '        <select class="gp-select gp-exp-formato"></select>',
-        '        <button type="button" class="gp-btn gp-exp-btn">Exportar y descargar</button>',
-        '        <div class="gp-estado gp-exp-estado gp-oculto" role="status" aria-live="polite"></div>',
+        '    <details class="gp-seccion" data-seccion="vector-exportar">',
+        '      <summary class="gp-seccion-titulo">Exportar capa vectorial</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <div class="gp-bloque">',
+        '          <label class="gp-etiqueta">Capa</label>',
+        '          <select class="gp-select gp-exp-capa"></select>',
+        '          <label class="gp-etiqueta">Formato (gdal3.js)</label>',
+        '          <select class="gp-select gp-exp-formato"></select>',
+        '          <button type="button" class="gp-btn gp-exp-btn">Exportar y descargar</button>',
+        '          <div class="gp-estado gp-exp-estado gp-oculto" role="status" aria-live="polite"></div>',
+        '        </div>',
         '      </div>',
         '    </details>',
         '  </section>',
 
         /* ---------------------------- RÁSTER ---------------------------- */
         '  <section class="gp-panel gp-oculto" data-panel="raster" role="tabpanel">',
-        '    <div class="gp-bloque">',
-        '      <label class="gp-etiqueta" for="gp-ras-fuente">Fuente ráster (GeoTIFF)</label>',
-        '      <select class="gp-select gp-ras-fuente" id="gp-ras-fuente"></select>',
-        '      <label class="gp-etiqueta">…o un fichero local</label>',
-        '      <input type="file" class="gp-ras-file" accept=".tif,.tiff,image/tiff">',
-        '    </div>',
-        '    <dl class="gp-meta gp-ras-meta gp-oculto"></dl>',
-        '    <div class="gp-bloque gp-oculto gp-ras-calc">',
-        '      <h4 class="gp-subtitulo">Calculadora de bandas</h4>',
-        '      <div class="gp-presets">',
-        '        <button type="button" class="gp-chip" data-exp="(B4 - B3) / (B4 + B3)">NDVI</button>',
-        '        <button type="button" class="gp-chip" data-exp="(B2 - B4) / (B2 + B4)">NDWI</button>',
-        '        <button type="button" class="gp-chip" data-exp="B1 > 0 ? 1 : 0">Umbral</button>',
-        '        <button type="button" class="gp-chip" data-exp="B1 * 0.0001">Escala</button>',
-        '        <button type="button" class="gp-chip" data-exp="(B1 - B2) / (B1 + B2)">Índice</button>',
+        '    <details class="gp-seccion" data-seccion="raster-fuente" open>',
+        '      <summary class="gp-seccion-titulo">Fuente ráster (GeoTIFF)</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <div class="gp-bloque">',
+        '          <label class="gp-etiqueta" for="gp-ras-fuente">Capa GeoTIFF del mapa</label>',
+        '          <select class="gp-select gp-ras-fuente" id="gp-ras-fuente"></select>',
+        '          <label class="gp-etiqueta">…o un fichero local</label>',
+        '          <input type="file" class="gp-ras-file" accept=".tif,.tiff,image/tiff">',
+        '        </div>',
+        '        <dl class="gp-meta gp-ras-meta gp-oculto"></dl>',
         '      </div>',
-        '      <textarea class="gp-expresion" rows="2" spellcheck="false" placeholder="(B4 - B3) / (B4 + B3)"></textarea>',
-        '      <p class="gp-ayuda">B1 es la primera banda, B2 la segunda… <code>Math</code> está disponible.</p>',
-        '      <button type="button" class="gp-btn gp-btn--principal gp-calcular">Calcular y añadir al mapa</button>',
-        '    </div>',
-        '    <div class="gp-bloque gp-oculto gp-ras-gdal">',
-        '      <h4 class="gp-subtitulo">Geoprocesos ráster (gdal3.js)</h4>',
-        '      <select class="gp-select gp-ras-op"></select>',
-        '      <div class="gp-ras-params"></div>',
-        '      <button type="button" class="gp-btn gp-ras-ejecutar">Ejecutar</button>',
-        '    </div>',
+        '    </details>',
+        '    <details class="gp-seccion gp-oculto gp-ras-calc" data-seccion="raster-calculadora" open>',
+        '      <summary class="gp-seccion-titulo">Calculadora de bandas</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <div class="gp-bloque">',
+        '          <div class="gp-presets">',
+        '            <button type="button" class="gp-chip" data-exp="(B4 - B3) / (B4 + B3)">NDVI</button>',
+        '            <button type="button" class="gp-chip" data-exp="(B2 - B4) / (B2 + B4)">NDWI</button>',
+        '            <button type="button" class="gp-chip" data-exp="B1 > 0 ? 1 : 0">Umbral</button>',
+        '            <button type="button" class="gp-chip" data-exp="B1 * 0.0001">Escala</button>',
+        '            <button type="button" class="gp-chip" data-exp="(B1 - B2) / (B1 + B2)">Índice</button>',
+        '          </div>',
+        '          <textarea class="gp-expresion" rows="2" spellcheck="false" placeholder="(B4 - B3) / (B4 + B3)"></textarea>',
+        '          <p class="gp-ayuda">B1 es la primera banda, B2 la segunda… <code>Math</code> está disponible.</p>',
+        '          <button type="button" class="gp-btn gp-btn--principal gp-calcular">Calcular y añadir al mapa</button>',
+        '        </div>',
+        '      </div>',
+        '    </details>',
+        '    <details class="gp-seccion gp-oculto gp-ras-gdal" data-seccion="raster-gdal" open>',
+        '      <summary class="gp-seccion-titulo">Geoprocesos ráster (gdal3.js)</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <div class="gp-bloque">',
+        '          <select class="gp-select gp-ras-op"></select>',
+        '          <div class="gp-ras-params"></div>',
+        '          <button type="button" class="gp-btn gp-ras-ejecutar">Ejecutar</button>',
+        '        </div>',
+        '      </div>',
+        '    </details>',
         '    <div class="gp-estado gp-ras-estado gp-oculto" role="status" aria-live="polite"></div>',
-        '    <div class="gp-resultado gp-ras-resultado gp-oculto">',
-        '      <p class="gp-resumen"></p>',
-        '      <button type="button" class="gp-btn gp-ras-descargar">Descargar GeoTIFF</button>',
-        '    </div>',
+        '    <details class="gp-seccion gp-oculto gp-ras-resultado" data-seccion="raster-resultado" open>',
+        '      <summary class="gp-seccion-titulo">Resultado</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <div class="gp-bloque">',
+        '          <p class="gp-resumen"></p>',
+        '          <button type="button" class="gp-btn gp-ras-descargar">Descargar GeoTIFF</button>',
+        '        </div>',
+        '      </div>',
+        '    </details>',
         '  </section>',
         '</div>',
       ].join('\n');
@@ -721,16 +778,26 @@
       this._el.rasEjecutar.addEventListener('click', function () { self._ejecutarGdalRaster(); });
       this._el.rasDescargar.addEventListener('click', function () { self._descargarResultadoRaster(); });
 
-      // La exportación necesita GDAL (28 MB): se empieza a cargar al abrir el
-      // desplegable, no al montar el plugin, para no castigar al que solo
-      // quiere un buffer.
-      var detalles = cont.querySelector('.gp-desplegable');
+      // La exportación necesita GDAL (28 MB): se empieza a cargar al abrir la
+      // sección, no al montar el plugin, para no castigar al que solo quiere
+      // un buffer.
+      var detalles = cont.querySelector('[data-seccion="vector-exportar"]');
       this._el.expDetalles = detalles;
       if (detalles) {
         detalles.addEventListener('toggle', function () {
           if (detalles.open) self._cargarDriversVector();
         });
       }
+
+      // Secciones plegables: se recuerda su estado para conservarlo en el
+      // cambio 2D/3D (getState/setState) y se reaplica el que hubiera.
+      Array.prototype.forEach.call(cont.querySelectorAll('.gp-seccion[data-seccion]'), function (det) {
+        var clave = det.getAttribute('data-seccion');
+        det.addEventListener('toggle', function () {
+          if (clave) self._secciones[clave] = det.open;
+        });
+      });
+      this._aplicarSecciones();
 
       this._cambiarPestana(this._pestana);
       this._actualizarAvisoImpl();
@@ -742,6 +809,9 @@
     _cambiarPestana(nombre) {
       if (nombre !== 'vector' && nombre !== 'raster') return;
       this._pestana = nombre;
+      // La vista puede no estar creada todavía (setState llega antes de que la
+      // API construya el control); _crearVista vuelve a llamar aquí al final.
+      if (!this._el.tabs) return;
       var self = this;
       Array.prototype.forEach.call(this._el.tabs, function (t) {
         var activa = t.getAttribute('data-tab') === nombre;
@@ -760,6 +830,46 @@
         else this._refrescarCapas();
       }
       void self;
+    }
+
+    /**
+     * Reaplica el estado guardado de las secciones plegables.
+     *
+     * Se llama al construir la vista (para recuperar lo que haya en
+     * `this._secciones`) y desde `setState` tras el cambio 2D/3D. Las secciones
+     * sin estado guardado se quedan como las deje el HTML (`open` o cerradas).
+     */
+    _aplicarSecciones() {
+      if (!this._raiz) return;
+      var self = this;
+      Array.prototype.forEach.call(this._raiz.querySelectorAll('.gp-seccion[data-seccion]'), function (det) {
+        var clave = det.getAttribute('data-seccion');
+        if (clave && self._secciones[clave] !== undefined) det.open = !!self._secciones[clave];
+      });
+    }
+
+    /**
+     * Engancha el arrastre del panel a su barra de título.
+     *
+     * El protocolo del repositorio es el de baseLayer/catalogo:
+     * `IDEE.utils.draggabillyPlugin(panel, selectorDeLaCabecera)`. Se difiere
+     * al siguiente turno porque la API inserta en el DOM la vista que devuelve
+     * `control.createView()` DESPUÉS de que esta función retorne.
+     */
+    _hacerArrastrable() {
+      var IDEE = api();
+      if (!this._panel || !IDEE || !IDEE.utils || typeof IDEE.utils.draggabillyPlugin !== 'function') return;
+      var cabecera = document.getElementById('m-herramienta-title-geoprocesos');
+      if (!cabecera) return;
+      // Si la vista se recrea, el panel ya está enganchado: no se duplica.
+      if (this._arrastrable) return;
+      this._arrastrable = true;
+      try {
+        IDEE.utils.draggabillyPlugin(this._panel, '#m-herramienta-title-geoprocesos');
+      } catch (e) {
+        this._arrastrable = false;
+        console.warn(this.name + ': no se pudo hacer arrastrable la barra de título.', e);
+      }
     }
 
     /** Detecta Cesium sin depender del bundle cargado. */
@@ -2284,6 +2394,9 @@
       this._resultadoRaster = { blob: blob, nombre: nombreFichero };
       this._el.rasResumen.textContent = nombreFichero + (detalle ? ' · ' + detalle : '');
       this._el.rasResultado.classList.remove('gp-oculto');
+      // Si el usuario había plegado la sección, se abre para que vea el
+      // resultado recién generado.
+      this._el.rasResultado.open = true;
     }
 
     /** Descarga el último resultado ráster. */

@@ -53,19 +53,47 @@
   display: flex;
   flex-direction: column;
   width: 380px;
+  /* El panel lateral de la API es un contenedor flex absoluto que se ajusta a
+     su contenido (min-content): sin este mínimo, el ancho cambiaba al pasar de
+     la pestaña Vector (select de funciones con textos largos) a Ráster. */
+  min-width: 380px;
   max-width: 100%;
   box-sizing: border-box;
 }
 
+@media (max-width: 480px) {
+  .gp-container {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Cabecera del panel: MISMO patrón que el resto de plugins del repositorio
+   (ver ext/catalogo/catalogo.css o ext/CalidadAireMadridTiempoReal). Es la
+   barra de título ARRASTRABLE: la engancha IDEE.utils.draggabillyPlugin desde
+   addTo, por eso lleva `cursor: move`. Los colores entran por las variables
+   del constructor (color1 fondo, color2 borde, color3 texto). */
 .gp-header {
-  font-weight: 600;
-  font-size: 14px;
-  padding: 8px 12px;
-  background-color: #f5f5f5;
-  border-bottom: 1px solid #e0e0e0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: block;
+  height: 40px;
+  line-height: 40px;
+  padding: 0 5px;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: move;
+  font-size: 15px;
+  font-weight: 700;
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+/* Panel abierto (opened) = estado activo: entran los colores "-active". */
+.m-areas > div.m-area > div.m-panel.g-herramienta_geoprocesos.opened .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
+  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
 .gp-body {
@@ -77,6 +105,13 @@
   box-sizing: border-box;
   max-height: calc(100vh - 140px);
   overflow: auto;
+}
+
+/* Cada pestaña apila sus secciones plegables con la misma separación. */
+.gp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .gp-oculto {
@@ -146,13 +181,6 @@
   font-size: 11px;
   line-height: 1.35;
   color: #6b7885;
-}
-
-.gp-subtitulo {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-  color: #2c3842;
 }
 
 .gp-aviso {
@@ -385,38 +413,56 @@
   border-color: #f2e6b3;
 }
 
-/* ── Exportación (details) ────────────────────────────────────────────── */
-.gp-desplegable {
+/* ── Secciones plegables (todas las del panel) ────────────────────────── */
+/* Cada bloque del plugin es un <details class="gp-seccion"> con su
+   <summary>. Es el mismo patrón visual en las dos pestañas. */
+.gp-seccion {
   border: 1px solid #e0e6eb;
   border-radius: 4px;
   background-color: #fafbfc;
 }
 
-.gp-desplegable > summary {
+.gp-seccion > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 8px;
   font-size: 12px;
-  font-weight: 600;
-  color: #3d4a55;
+  font-weight: 700;
+  color: #2c3842;
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
 
-.gp-desplegable > summary::-webkit-details-marker {
+.gp-seccion > summary::-webkit-details-marker {
   display: none;
 }
 
-.gp-desplegable > summary:before {
-  content: '▸';
-  display: inline-block;
-  width: 12px;
-  color: #6b7885;
+/* Triángulo del desplegable: cerrado apunta a la derecha, abierto abajo. */
+.gp-seccion > summary:before {
+  content: '';
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 5px solid #6b7885;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
 }
 
-.gp-desplegable[open] > summary:before {
-  content: '▾';
+.gp-seccion[open] > summary:before {
+  transform: rotate(90deg);
 }
 
-.gp-desplegable > .gp-bloque {
+.gp-seccion > summary:hover {
+  color: #1f2a33;
+}
+
+.gp-seccion > .gp-seccion-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 0 8px 8px;
 }
 
@@ -477,16 +523,6 @@
   border: 1px solid #c9d2da;
   border-radius: 4px;
   resize: vertical;
-}
-
-.gp-resultado {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 8px;
-  background-color: #f6f8fa;
-  border: 1px solid #e3e8ec;
-  border-radius: 4px;
 }
 
 .gp-resumen {
