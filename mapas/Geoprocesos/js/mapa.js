@@ -72,10 +72,15 @@ function mapa() {
 
   // La herramienta, en la esquina superior izquierda: las capas y sus
   // grupos viven en la derecha y la escala/atribuciones abajo.
+  // Colores del panel (color1 = fondo, color2 = borde/acento, color3 = icono y
+  // texto), en naranja como el resto de la barra de herramientas del mapa.
   mapajs.addPlugin(new M.plugin.miPlugin_geoprocesos({
     position: 'TL',
     collapsed: true,
     collapsible: true,
+    color1: { active: '#ffffff', deactive: 'orangered' },
+    color2: { active: 'orangered', deactive: '#ffffff' },
+    color3: { active: 'orangered', deactive: '#ffffff' },
   }));
 
   if (SVGCarga) SVGCarga.hidden = true;

@@ -310,6 +310,21 @@
    * =================================================================== */
 
   class miPlugin_geoprocesos {
+    /**
+     * @param {Object} [options] Opciones del plugin.
+     * @param {string} [options.position='TL'] Esquina del panel (TL, TR, BL, BR).
+     * @param {boolean} [options.collapsible=true] Permite plegar el panel.
+     * @param {boolean} [options.collapsed=true] Arranca plegado.
+     * @param {number|null} [options.order=null] Orden CSS del panel dentro del área.
+     * @param {Object|string} [options.color1] Fondo del botón y de la cabecera
+     *   ({ active, deactive } o un color único). Por defecto blanco abierto y
+     *   naranja cerrado, como el resto de plugins del repositorio.
+     * @param {Object|string} [options.color2] Borde y color de acento (botones
+     *   principales, pestaña activa, foco). Por defecto naranja.
+     * @param {Object|string} [options.color3] Icono y texto de la cabecera. Por
+     *   defecto naranja.
+     * @param {string} [options.icon] SVG en línea o URL del icono del botón.
+     */
     constructor(options) {
       var o = options || {};
       this.name = 'miPlugin_geoprocesos';
@@ -329,9 +344,12 @@
         ? Number(o.order)
         : null;
 
+      // Colores del panel con el mismo esquema que el resto de plugins
+      // (color1 = fondo, color2 = borde/acento, color3 = icono y texto), pero
+      // en naranja como el resto de la barra de herramientas del visualizador.
       this.color1 = (o.color1 !== undefined) ? o.color1 : { active: '#ffffff', deactive: 'orangered' };
-      this.color2 = (o.color2 !== undefined) ? o.color2 : { active: '#71A7D3', deactive: '#ffffff' };
-      this.color3 = (o.color3 !== undefined) ? o.color3 : { active: '#71A7D3', deactive: '#ffffff' };
+      this.color2 = (o.color2 !== undefined) ? o.color2 : { active: 'orangered', deactive: '#ffffff' };
+      this.color3 = (o.color3 !== undefined) ? o.color3 : { active: 'orangered', deactive: '#ffffff' };
       this.icon = o.icon || o.icono || o.svg || null;
 
       // Pestaña activa y función de Turf elegida (es lo único que se conserva

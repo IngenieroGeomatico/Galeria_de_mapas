@@ -45,7 +45,7 @@
 }
 
 .g-herramienta_geoprocesos.opened .m-tools:before {
-  background-color: var(--g-plugin-icon-color-active, #71A7D3);
+  background-color: var(--g-plugin-icon-color-active, orangered);
 }
 
 /* ── Estructura de la vista ───────────────────────────────────────────── */
@@ -92,8 +92,23 @@
 /* Panel abierto (opened) = estado activo: entran los colores "-active". */
 .m-areas > div.m-area > div.m-panel.g-herramienta_geoprocesos.opened .m-herramienta-header {
   background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
-  color: var(--g-plugin-icon-color-active, #71A7D3) !important;
-  border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
+  color: var(--g-plugin-icon-color-active, orangered) !important;
+  border-color: var(--g-plugin-border-color-active, orangered) !important;
+}
+
+/* Botón del panel (cerrado) y flecha de plegado (abierto). Sin estas reglas
+   el botón se queda con el azul de la API y no obedece a color1/color2/color3;
+   es el mismo patrón que usan baseLayer, catalogo y la plantilla. */
+.m-areas > div.m-area > div.m-panel.g-herramienta_geoprocesos > button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color, orangered) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+.m-areas > div.m-area > div.m-panel.g-herramienta_geoprocesos.opened > button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-border-color-active, orangered) !important;
+  border-color: var(--g-plugin-border-color-active, orangered) !important;
 }
 
 .gp-body {
@@ -146,7 +161,7 @@
 .gp-tab--activa {
   color: #1f2a33;
   background-color: #ffffff;
-  box-shadow: inset 0 -2px 0 var(--g-plugin-border-color-active, #71A7D3);
+  box-shadow: inset 0 -2px 0 var(--g-plugin-border-color-active, orangered);
 }
 
 /* ── Bloques, etiquetas y ayudas ──────────────────────────────────────── */
@@ -219,9 +234,9 @@
 .gp-select:focus,
 .gp-textarea:focus,
 .gp-buscador:focus {
-  outline: 2px solid var(--g-plugin-border-color-active, #71A7D3);
+  outline: 2px solid var(--g-plugin-border-color-active, orangered);
   outline-offset: 0;
-  border-color: var(--g-plugin-border-color-active, #71A7D3);
+  border-color: var(--g-plugin-border-color-active, orangered);
 }
 
 .gp-buscador {
@@ -362,13 +377,13 @@
 
 .gp-btn--principal {
   color: #ffffff;
-  background-color: var(--g-plugin-border-color-active, #71A7D3);
-  border-color: var(--g-plugin-border-color-active, #71A7D3);
+  background-color: var(--g-plugin-border-color-active, orangered);
+  border-color: var(--g-plugin-border-color-active, orangered);
 }
 
 .gp-btn--principal:hover:not(:disabled) {
   filter: brightness(0.93);
-  background-color: var(--g-plugin-border-color-active, #71A7D3);
+  background-color: var(--g-plugin-border-color-active, orangered);
 }
 
 .gp-btn--mini {
