@@ -591,6 +591,33 @@
   color: #2e8b57;
 }
 
+/* Segunda fila del desplegable: mover en la pila, duplicar, recargar y
+   aislar. Se separa con una línea discontinua porque son acciones de otro
+   orden que las de arriba (que miran la capa, no la mueven). */
+.overlay-layer-selector .ls-actions-row-gestion {
+  margin-top: 0.25em;
+  padding-top: 0.4em;
+  border-top: 1px dashed rgba(0, 0, 0, 0.12);
+  flex-wrap: wrap;
+}
+
+.overlay-layer-selector .ls-action-frente:hover,
+.overlay-layer-selector .ls-action-fondo:hover,
+.overlay-layer-selector .ls-action-duplicar:hover,
+.overlay-layer-selector .ls-action-recargar:hover,
+.overlay-layer-selector .ls-action-aislar:hover {
+  background: #eef6fd;
+  color: #0078d4;
+}
+
+/* Capa aislada: el botón se queda marcado mientras dura el aislamiento, para
+   que se vea que hay un estado que deshacer y no un botón que "no hace nada". */
+.overlay-layer-selector .ls-action-activo,
+.overlay-layer-selector .ls-action-activo:hover {
+  color: #0078d4;
+  background: #eef6fd;
+}
+
 /* ── Modal de la ficha de una capa ────────────────────────────────────
    Centrado, con el mapa detras y sin interactividad: a diferencia del panel
    inferior, esto bloquea el raton y hay que cerrarlo para seguir. */
@@ -1193,6 +1220,72 @@
 
 .ls-sheet-close:hover {
   background: rgba(0, 0, 0, 0.08);
+}
+
+/* Acciones de copiado de la ventana de información (URL y código). Van en el
+   header, a la izquierda del botón de cerrar: son de la capa que se está
+   mirando y no deben competir con el título. */
+.ls-sheet-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  flex-shrink: 0;
+}
+
+.ls-sheet-copiar-grupo {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.ls-sheet-copiar {
+  appearance: none;
+  padding: 4px 9px;
+  font-size: 0.78em;
+  font-family: inherit;
+  font-weight: 600;
+  color: #1f2937;
+  background: #f1f3f6;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ls-sheet-copiar:hover {
+  background: #e6e9ee;
+}
+
+/* En pantallas estrechas las acciones de copiado bajan a una segunda línea:
+   el selector de capas y el título necesitan el ancho completo o el título se
+   queda en unas pocas letras (medido a 360 px: 85 px de los 360). */
+@media (max-width: 480px) {
+  .ls-sheet-header {
+    flex-wrap: wrap;
+    row-gap: 0.4em;
+  }
+
+  .ls-sheet-header-left {
+    flex: 1 1 100%;
+  }
+
+  .ls-sheet-header-right {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* Confirmación en el propio botón: dice que se ha copiado sin abrir nada. */
+.ls-sheet-copiar.ls-copiado {
+  color: #fff;
+  background: #2e8b57;
+  border-color: #2e8b57;
+}
+
+.ls-sheet-copiar.ls-copiado-error {
+  color: #fff;
+  background: #d9534f;
+  border-color: #d9534f;
 }
 
 .ls-sheet-body {

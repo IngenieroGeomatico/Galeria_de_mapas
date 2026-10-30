@@ -797,6 +797,19 @@ class miPlugin_layerSwitcher {
       };
       try { (this._map.getLayers() || []).forEach(visitarGrupos); } catch (e) { /* sin capas */ }
     }
+    // Capa aislada ("solo esta"). La visibilidad de las capas ya viaja en
+    // `layerStates`, así que aquí solo hace falta la marca y el estado previo:
+    // sin ella, el botón de aislar volvía a ofrecer "aislar" en la instancia
+    // nueva (aunque el mapa se viera igual) y el "dejar de aislar" se perdía.
+    let aislada = null;
+    if (this._aislada && this._aislada.ident) {
+      aislada = {
+        ident: this._aislada.ident,
+        previo: Array.isArray(this._aislada.previo)
+          ? this._aislada.previo.filter((p) => p && p.ident).map((p) => ({ ident: p.ident, visible: !!p.visible }))
+          : [],
+      };
+    }
     return {
       panelCollapsed,
       optionsOpen: idAtOpen,
@@ -804,6 +817,7 @@ class miPlugin_layerSwitcher {
       groupCollapsed: groupCollapsedCopy,
       groupCollapsedLegends,
       radioVisibleLegend,
+      aislada,
       ordenZ,
       layerStates,
       groupStates,
@@ -1025,6 +1039,24 @@ class miPlugin_layerSwitcher {
         this._capasGrupoRadio(mapRef).forEach((c) => {
           try { c.setVisible(c === elegida); } catch (e) { /* capa sin visibilidad */ }
         });
+      }
+    }
+
+    // Restaurar la marca de "capa aislada". La visibilidad ya la ha devuelto
+    // `layerStates` (las demás siguen apagadas), así que aquí solo se recupera
+    // el interruptor para que el botón ofrezca deshacer el aislamiento y se
+    // pueda devolver el estado previo a la instancia nueva.
+    this._aislada = null;
+    if (state.aislada && state.aislada.ident) {
+      const capaAislada = this._findLayerByLegendInMap(mapRef, state.aislada.ident);
+      if (capaAislada) {
+        this._aislada = {
+          index: capaAislada.idLayer,
+          ident: state.aislada.ident,
+          previo: Array.isArray(state.aislada.previo)
+            ? state.aislada.previo.filter((p) => p && p.ident)
+            : [],
+        };
       }
     }
 
@@ -1871,6 +1903,20 @@ class miPlugin_layerSwitcher {
                 </div>`;
       }
 
+      // ── Segunda fila: mover, copiar y recargar ──────────────────────
+      // Va aparte de la primera (zoom, renombrar, tabla, ficha, borrar) para
+      // no amontonar nueve iconos en una sola línea, y porque son otra cosa:
+      // las de arriba miran la capa, estas la mueven en la pila, la copian o
+      // le vuelven a pedir los datos al servicio.
+      //
+      // "Aislar" solo se ofrece en hojas. Un grupo no tiene un estado de
+      // visibilidad propio que aislar (lo que se enciende y apaga son sus
+      // hijas), así que en un grupo el botón sobra.
+      const aisladaActiva = !!(self._aislada && String(self._aislada.index) === String(index));
+      const isolateBtnHtml = node.isGroup
+        ? ''
+        : `<button type="button" class="ls-action ls-action-aislar${aisladaActiva ? ' ls-action-activo' : ''}" data-id="${index}" title="${aisladaActiva ? 'Dejar de aislar: devolver la visibilidad anterior' : 'Aislar: dejar solo esta capa visible'}" onclick="isolateLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="22" y1="12" x2="17" y2="12"></line><line x1="7" y1="12" x2="2" y2="12"></line><line x1="12" y1="7" x2="12" y2="2"></line><line x1="12" y1="22" x2="12" y2="17"></line></svg></button>`;
+
       const optionsPanel = `
               <div class="ls-options-panel ${optionsOpen ? 'open' : ''}">
                 <div class="ls-option-row">
@@ -1885,6 +1931,13 @@ class miPlugin_layerSwitcher {
                   ${tableBtnHtml}
                   <button type="button" class="ls-action ls-action-ficha" data-id="${index}" title="Información de la capa: cómo está construida y su documento de servicio" onclick="openLayerFicha('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="11" x2="12" y2="16"></line><circle cx="12" cy="7.6" r="0.4" fill="currentColor"></circle></svg></button>
                   <button type="button" class="ls-action ls-action-delete" data-id="${index}" title="Eliminar la capa del mapa" onclick="deleteLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
+                </div>
+                <div class="ls-actions-row ls-actions-row-gestion">
+                  <button type="button" class="ls-action ls-action-frente" data-id="${index}" title="Traer al frente (encima de las demás)" onclick="layerToFront('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14"></path><path d="m18 13-6-6-6 6"></path><path d="M12 7v14"></path></svg></button>
+                  <button type="button" class="ls-action ls-action-fondo" data-id="${index}" title="Enviar al fondo (debajo de las demás)" onclick="layerToBack('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"></path><path d="m6 11 6 6 6-6"></path><path d="M19 21H5"></path></svg></button>
+                  <button type="button" class="ls-action ls-action-duplicar" data-id="${index}" title="Duplicar la capa" onclick="duplicateLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+                  <button type="button" class="ls-action ls-action-recargar" data-id="${index}" title="Recargar la capa (vuelve a pedir los datos al servicio)" onclick="reloadLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M3 21v-5h5"></path></svg></button>
+                  ${isolateBtnHtml}
                 </div>
               </div>`;
 
@@ -2762,6 +2815,453 @@ class miPlugin_layerSwitcher {
         console.warn('layerSwitcher: no se pudo borrar la capa', e);
       }
     };
+
+    // ── Orden de apilado: al frente / al fondo ─────────────────────────
+    // Mueve una capa (o un grupo entero, con sus hijas) al extremo de la pila
+    // sin inventar z-index nuevos: se PERMUTAN los que ya tienen las capas
+    // que participan en el orden. Es el mismo criterio que `_restaurarOrdenZ`,
+    // y por la misma razón: así no se invade el rango de las capas que no
+    // gestiona el selector ni se generan valores negativos. En Cesium un
+    // z-index es la posición dentro de `imageryLayers`, y la API la aplica
+    // sacando la capa y volviéndola a insertar en ese índice: un número
+    // negativo o fuera de rango no es un orden, es un error.
+    window.layerToFront = function (index) { _moverCapaAlExtremo(index, true); };
+    window.layerToBack = function (index) { _moverCapaAlExtremo(index, false); };
+
+    /**
+     * Lleva una capa al principio o al final de la pila de capas.
+     * @param {string} index idLayer de la capa o grupo.
+     * @param {boolean} alFrente true = encima de todas; false = debajo.
+     */
+    function _moverCapaAlExtremo(index, alFrente) {
+      const capa = findLayerById(index);
+      if (!capa || !map) return;
+      // Un grupo no tiene z propio: lo que se mueve son sus hojas.
+      const hojas = _hojasDeCapa(capa);
+      if (!hojas.length) {
+        _avisar('Esta capa no participa en el orden de apilado.');
+        return;
+      }
+      // Capas que sí están en la pila (las vectoriales y las de terreno se
+      // quedan fuera: en Cesium su setZIndex reindexa todos los dataSources).
+      const conZ = self._capasConZ(map).filter((l) => {
+        const z = self._zReal(l);
+        return typeof z === 'number' && isFinite(z);
+      });
+      const bloque = hojas.filter((l) => conZ.indexOf(l) >= 0);
+      if (!bloque.length) {
+        _avisar('Esta capa no participa en el orden de apilado.');
+        return;
+      }
+      // Las capas base no salen en el selector, pero sí están en la pila: sin
+      // separarlas, "enviar al fondo" dejaba la capa DEBAJO del mapa base y
+      // desaparecía. "Al fondo" es el fondo de las superpuestas, no el de las
+      // bases.
+      const esBase = (l) => {
+        try {
+          if (l && l.isBase === true) return true;
+          const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
+          return !!(impl && impl.isBase === true);
+        } catch (e) { return false; }
+      };
+      const bases = conZ.filter((l) => esBase(l) && bloque.indexOf(l) < 0)
+        .sort((a, b) => self._zReal(a) - self._zReal(b));
+      const ordenadas = conZ.slice().sort((a, b) => self._zReal(a) - self._zReal(b));
+      const resto = ordenadas.filter((l) => bloque.indexOf(l) < 0);
+      const valores = conZ.map((l) => self._zReal(l)).sort((a, b) => a - b);
+      // Dentro del bloque se conserva el orden relativo que ya tenían.
+      bloque.sort((a, b) => self._zReal(a) - self._zReal(b));
+      const nuevoOrden = alFrente
+        ? resto.concat(bloque)
+        : bases.concat(bloque, resto.filter((l) => bases.indexOf(l) < 0));
+      nuevoOrden.forEach((l, i) => {
+        if (typeof valores[i] === 'number') self._escribirZ(l, valores[i]);
+      });
+      renderLayerList();
+    }
+
+    /**
+     * Hojas de una capa: ella misma si no es grupo, o todas sus descendientes
+     * si lo es (los grupos no se apilan por sí solos).
+     * @param {Object} capa
+     * @returns {Array<Object>}
+     */
+    function _hojasDeCapa(capa) {
+      if (!capa) return [];
+      if (!isGroupLayer(capa)) return [capa];
+      const salida = [];
+      const visitar = (g) => {
+        let hijas = [];
+        try { hijas = g.getLayers ? g.getLayers() : []; } catch (e) { hijas = []; }
+        hijas.forEach((h) => {
+          if (!h) return;
+          if (isGroupLayer(h)) visitar(h);
+          else salida.push(h);
+        });
+      };
+      visitar(capa);
+      return salida;
+    }
+
+    // ── Duplicar capa ─────────────────────────────────────────────────
+    // `clone()` copia la capa pero CONSERVA el idLayer (medido en 2D con WMS
+    // y GeoJSON), y `addLayers` con un idLayer repetido no añade: quita la
+    // capa vieja y deja la nueva en su sitio, así que la original
+    // desaparecía. Por eso al clon se le da un id propio con `setId()`.
+    //
+    // El `name` NO se toca: en WMS y WMTS es la capa que se pide al servicio
+    // (el parámetro LAYERS) y cambiarlo rompe las peticiones (medido: pedir
+    // "name_copia" devuelve una capa inexistente). Lo que sí cambia es la
+    // `legend`, que es el identificador estable del selector y el nombre que
+    // se ve.
+    window.duplicateLayer = function (index) {
+      const capa = findLayerById(index);
+      if (!capa || !map) return;
+      try {
+        if (typeof capa.clone !== 'function') {
+          _avisar('Esta capa no se puede duplicar.');
+          return;
+        }
+        const clon = capa.clone();
+        if (!clon) {
+          _avisar('Esta capa no se puede duplicar.');
+          return;
+        }
+        const idNuevo = 'copia_' + Date.now() + '_' + String(capa.type || 'capa');
+        if (typeof clon.setId === 'function') {
+          try { clon.setId(idNuevo); } catch (e) { /* se queda con el id de la original */ }
+        }
+
+        // La leyenda es única: es el identificador con el que getState/setState
+        // reencuentra la capa tras el cambio 2D/3D y el nombre que se ve.
+        const base = String(capa.legend || capa.name || 'Capa');
+        let leyenda = base + ' (copia)';
+        let n = 2;
+        while (self._findLayerByLegendInMap(map, leyenda)) {
+          leyenda = base + ' (copia ' + n + ')';
+          n += 1;
+        }
+        clon.legend = leyenda;
+
+        // Donde vive la original: una capa se añade SOLO a su contenedor
+        // (el mapa o su grupo), nunca a los dos, o se duplica el registro OL.
+        const grupo = findParentGroup(capa);
+        if (grupo && typeof grupo.addLayers === 'function') grupo.addLayers(clon);
+        else map.addLayers([clon]);
+
+        // La copia nace justo encima de la original, para que se vea dónde ha
+        // ido a parar sin tener que buscarla en la lista.
+        _ponerEncimaDe(clon, capa);
+
+        renderLayerList();
+        _avisar('Capa duplicada como «' + leyenda + '».');
+      } catch (e) {
+        console.warn('layerSwitcher: no se pudo duplicar la capa', e);
+        _avisar('No se ha podido duplicar la capa.');
+      }
+    };
+
+    /**
+     * Coloca `nueva` justo por encima de `original`: abre un hueco subiendo un
+     * puesto a las que estaban por encima y le da el z libre.
+     * @param {Object} nueva
+     * @param {Object} original
+     */
+    function _ponerEncimaDe(nueva, original) {
+      const zOriginal = self._zReal(original);
+      if (typeof zOriginal !== 'number' || !isFinite(zOriginal)) return;
+      self._capasConZ(map).forEach((l) => {
+        if (l === nueva) return;
+        const z = self._zReal(l);
+        if (typeof z === 'number' && isFinite(z) && z > zOriginal) self._escribirZ(l, z + 1);
+      });
+      self._escribirZ(nueva, zOriginal + 1);
+    }
+
+    // ── Recargar capa ─────────────────────────────────────────────────
+    // Vuelve a pedir los datos al servicio. Sirve para un WMS/WMTS que se ha
+    // quedado con una tesela vieja, para un GeoJSON que ha cambiado en el
+    // servidor y, en general, después de tocar parámetros en la ficha.
+    window.reloadLayer = function (index) {
+      const capa = findLayerById(index);
+      if (!capa) return;
+      if (typeof capa.refresh !== 'function') {
+        _avisar('Esta capa no admite recarga.');
+        return;
+      }
+      try {
+        capa.refresh();
+      } catch (e) {
+        try {
+          capa.refresh(map);
+        } catch (e2) {
+          console.warn('layerSwitcher: no se pudo recargar la capa', e2);
+          _avisar('No se ha podido recargar la capa.');
+          return;
+        }
+      }
+      renderLayerList();
+    };
+
+    // ── Aislar capa ───────────────────────────────────────────────────
+    // Deja encendida solo la capa elegida y apaga el resto, guardando cómo
+    // estaban para poder devolverlo. Es un interruptor: el segundo clic sobre
+    // la capa aislada deshace el aislamiento.
+    //
+    // Se apagan las capas, no los grupos: apagar un grupo entero se lleva por
+    // delante las hijas que luego haya que devolver una a una, y el estado
+    // previo se vuelve ambiguo. A los grupos que CONTIENEN la capa sí se les
+    // enciende el ojo, porque si no la capa aislada seguiría sin verse.
+    window.isolateLayer = function (index) {
+      const capa = findLayerById(index);
+      if (!capa || !map) return;
+
+      // Segundo clic sobre la capa aislada: se devuelve la visibilidad previa.
+      if (self._aislada && String(self._aislada.index) === String(index)) {
+        _desaislar();
+        renderLayerList();
+        return;
+      }
+      // Si había otra aislada, primero se deshace: no se encadenan estados.
+      if (self._aislada) _desaislar();
+
+      const previo = [];
+      const guardar = (c) => {
+        const ident = self._identificadorDe(c);
+        if (!ident) return;
+        let visible = true;
+        try { if (typeof c.isVisible === 'function') visible = !!c.isVisible(); } catch (e) { /* sin visibilidad */ }
+        previo.push({ ident: ident, visible: visible });
+      };
+
+      // Grupos que la contienen: se guardan y se encienden después.
+      const padres = [];
+      let padre = findParentGroup(capa);
+      while (padre && padres.indexOf(padre) < 0) {
+        padres.push(padre);
+        padre = findParentGroup(padre);
+      }
+      padres.forEach(guardar);
+
+      self._capasConEstado(map).forEach((c) => {
+        if (!c || c === capa) return;
+        if (c.isBase === true || c.displayInLayerSwitcher === false) return;
+        guardar(c);
+        try { if (typeof c.setVisible === 'function') c.setVisible(false); } catch (e) { /* nada */ }
+      });
+
+      padres.forEach((g) => {
+        try { if (typeof g.setVisible === 'function') g.setVisible(true); } catch (e) { /* nada */ }
+      });
+      try { if (typeof capa.setVisible === 'function') capa.setVisible(true); } catch (e) { /* nada */ }
+
+      self._aislada = { index: index, ident: self._identificadorDe(capa), previo: previo };
+      renderLayerList();
+    };
+
+    /** Devuelve la visibilidad que había antes de aislar. */
+    function _desaislar() {
+      const estado = self._aislada;
+      self._aislada = null;
+      if (!estado) return;
+      (estado.previo || []).forEach((p) => {
+        if (!p || !p.ident) return;
+        const c = self._findLayerByLegendInMap(map, p.ident);
+        if (!c || typeof c.setVisible !== 'function') return;
+        try { c.setVisible(!!p.visible); } catch (e) { /* nada */ }
+      });
+    }
+
+    // ── Copiar la URL y el código de la capa ──────────────────────────
+    // Estas dos viven en la ventana de información (la hoja de la tabla de
+    // atributos / estadísticas) y no en el desplegable de la fila: allí es
+    // donde se mira cómo está hecha la capa, y el botón no se pierde entre
+    // los demás.
+    window.copyLayerUrl = function (index, boton) {
+      const capa = findLayerById(index);
+      if (!capa) return;
+      const url = _urlDeCapa(capa);
+      if (!url) {
+        _confirmarEnBoton(boton, 'Sin URL', false);
+        _avisar('Esta capa no tiene URL: sus datos van dentro de la propia capa.');
+        return;
+      }
+      _copiarTexto(url).then(function (ok) {
+        _confirmarEnBoton(boton, ok ? 'Copiada' : 'Error', ok);
+      });
+    };
+
+    window.copyLayerCode = function (index, boton) {
+      const capa = findLayerById(index);
+      if (!capa) return;
+      _copiarTexto(_codigoDeCapa(capa)).then(function (ok) {
+        _confirmarEnBoton(boton, ok ? 'Copiado' : 'Error', ok);
+      });
+    };
+
+    /** URL del servicio de la capa, o null si sus datos van dentro. */
+    function _urlDeCapa(capa) {
+      if (!capa) return null;
+      try {
+        if (capa.url !== undefined && capa.url !== null && String(capa.url).trim() !== '') {
+          return String(capa.url);
+        }
+      } catch (e) { /* capa sin url */ }
+      const cp = capa.constructorParameters || {};
+      const params = cp.userParameters || cp.parameters || {};
+      if (params && params.url) return String(params.url);
+      return null;
+    }
+
+    // Tamaño máximo de una fuente en línea que se copia dentro del código.
+    // Por encima se sustituye por un aviso: un GeoJSON de miles de objetos
+    // pegado en el portapapeles no ayuda a nadie.
+    const LIMITE_FUENTE_CODIGO = 40000;
+
+    /**
+     * Reconstruye el código de creación de la capa a partir de los parámetros
+     * que la API guardó al construirla (`constructorParameters`).
+     *
+     * OJO con las claves: las capas de servicio (WMS, WMTS, TMS, GeoTIFF...)
+     * los guardan en `userParameters` y las de datos (GeoJSON, MVT...) en
+     * `parameters` (medido). Se leen las dos, como en la ficha.
+     *
+     * @param {Object} capa
+     * @returns {string} Código listo para pegar en el `mapa.js` del visualizador.
+     */
+    function _codigoDeCapa(capa) {
+      const tipo = String(capa.type || 'Layer');
+      const cp = capa.constructorParameters || {};
+      const params = cp.userParameters || cp.parameters || {};
+      const opciones = cp.options || {};
+      const vendor = cp.vendorOptions || {};
+      const notas = [];
+
+      const limpios = _parametrosParaCodigo(params, notas);
+      const partes = [_jsObjeto(limpios)];
+      const opcionesLimpias = _parametrosParaCodigo(opciones, notas);
+      if (Object.keys(opcionesLimpias).length) partes.push(_jsObjeto(opcionesLimpias));
+      const vendorLimpio = _parametrosParaCodigo(vendor, notas);
+      if (Object.keys(vendorLimpio).length) partes.push(_jsObjeto(vendorLimpio));
+
+      if (typeof M !== 'undefined' && M.layer && typeof M.layer[tipo] !== 'function') {
+        notas.unshift('La API no expone M.layer.' + tipo + ': ajusta la clase del constructor.');
+      }
+
+      const lineas = [
+        'const capa = new M.layer.' + tipo + '(' + partes.join(', ') + ');',
+        'mapajs.addLayers([capa]);',
+      ];
+      if (notas.length) {
+        lineas.push('');
+        notas.forEach((n) => lineas.push('// ' + n));
+      }
+      return lineas.join('\n');
+    }
+
+    /**
+     * Copia los parámetros quitando lo que no se puede escribir como código:
+     * funciones y fuentes en línea demasiado grandes.
+     * @param {Object} obj
+     * @param {Array<string>} notas Se rellena con lo que se ha omitido.
+     * @returns {Object}
+     */
+    function _parametrosParaCodigo(obj, notas) {
+      const salida = {};
+      if (!obj || typeof obj !== 'object') return salida;
+      Object.keys(obj).forEach((k) => {
+        const v = obj[k];
+        if (v === undefined) return;
+        if (typeof v === 'function') {
+          notas.push('El parámetro "' + k + '" era una función y se ha omitido.');
+          return;
+        }
+        if (k === 'source' && v && typeof v === 'object') {
+          let texto = '';
+          try { texto = JSON.stringify(v); } catch (e) { texto = ''; }
+          if (texto.length > LIMITE_FUENTE_CODIGO) {
+            salida[k] = null;
+            const cuantos = (v.features && v.features.length) ? v.features.length : '?';
+            notas.push('La fuente va en línea (' + cuantos + ' objetos) y se ha omitido por tamaño: pon ahí tu URL o tu objeto GeoJSON.');
+          } else {
+            salida[k] = v;
+          }
+          return;
+        }
+        salida[k] = v;
+      });
+      return salida;
+    }
+
+    /**
+     * Objeto a literal JavaScript con sangría. `JSON.stringify` vale tal cual
+     * para los valores que guarda la API (texto, número, booleano, null,
+     * objeto, array); las referencias circulares se marcan en vez de romper.
+     */
+    function _jsObjeto(obj) {
+      try {
+        const visto = new WeakSet();
+        return JSON.stringify(obj, function (k, v) {
+          if (typeof v === 'object' && v !== null) {
+            if (visto.has(v)) return '[circular]';
+            visto.add(v);
+          }
+          if (typeof v === 'function') return undefined;
+          return v;
+        }, 2);
+      } catch (e) {
+        return '{}';
+      }
+    }
+
+    /**
+     * Copia texto al portapapeles. `navigator.clipboard` solo existe en
+     * contextos seguros (https o localhost); en el resto se cae al
+     * `textarea` + `execCommand`, que los navegadores siguen aceptando.
+     * @param {string} texto
+     * @returns {Promise<boolean>} true si se ha copiado.
+     */
+    function _copiarTexto(texto) {
+      return new Promise(function (resolver) {
+        const porFallback = function () {
+          let ok = false;
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = texto;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '-1000px';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+          } catch (e) {
+            ok = false;
+          }
+          resolver(ok);
+        };
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(texto).then(function () { resolver(true); }, porFallback);
+        } else {
+          porFallback();
+        }
+      });
+    }
+
+    /** Rótulo temporal en el botón que ha copiado ("Copiado", "Error"...). */
+    function _confirmarEnBoton(boton, texto, ok) {
+      if (!boton) return;
+      if (!boton.dataset.rotuloOriginal) boton.dataset.rotuloOriginal = boton.textContent;
+      boton.textContent = texto;
+      boton.classList.toggle('ls-copiado', ok === true);
+      boton.classList.toggle('ls-copiado-error', ok === false);
+      setTimeout(function () {
+        boton.textContent = boton.dataset.rotuloOriginal;
+        boton.classList.remove('ls-copiado');
+        boton.classList.remove('ls-copiado-error');
+      }, 1400);
+    }
 
     // ── Zoom a la capa ────────────────────────────────────────────────
     // Encuadra la vista sobre lo que ocupa la capa. Funciona con grupos
@@ -4221,6 +4721,20 @@ class miPlugin_layerSwitcher {
              ${selectableLayers.map(L => `<option value="${L.idLayer}" ${String(L.idLayer) === String(currentIndex) ? 'selected' : ''}>${L.legend || L.name || 'Sin nombre'}</option>`).join('')}
            </select>`
         : '';
+      // Copiar URL y código: van aquí, en la ventana de información, porque es
+      // donde se mira cómo está hecha la capa y de dónde salen sus datos. Solo
+      // aparecen cuando la hoja sabe de qué capa habla (`currentIndex`), que es
+      // el caso de `openLayerInfo`; una hoja sin capa no tiene nada que copiar.
+      let copiarHtml = '';
+      if (currentIndex !== undefined && currentIndex !== null) {
+        const capaHoja = findLayerById(currentIndex);
+        if (capaHoja) {
+          copiarHtml = `<div class="ls-sheet-copiar-grupo">
+              <button type="button" class="ls-sheet-copiar" title="Copiar la URL del servicio" onclick="copyLayerUrl('${capaHoja.idLayer}', this)">URL</button>
+              <button type="button" class="ls-sheet-copiar" title="Copiar el código de creación de la capa" onclick="copyLayerCode('${capaHoja.idLayer}', this)">Código</button>
+            </div>`;
+        }
+      }
       panel.innerHTML =
         `<div class="ls-sheet__handle" title="Arrastra para cambiar la altura del panel"></div>
          <div class="ls-sheet-header">
@@ -4228,7 +4742,10 @@ class miPlugin_layerSwitcher {
              ${pickerHtml}
              <span class="ls-sheet-title"></span>
            </div>
-           <button type="button" class="ls-sheet-close" title="Cerrar" onclick="closeSheet()">✕</button>
+           <div class="ls-sheet-header-right">
+             ${copiarHtml}
+             <button type="button" class="ls-sheet-close" title="Cerrar" onclick="closeSheet()">✕</button>
+           </div>
          </div>
          <div class="ls-sheet-body"></div>`;
       panel.querySelector('.ls-sheet-title').textContent = title;
@@ -7514,6 +8031,8 @@ class miPlugin_layerSwitcher {
       'handleDrop', 'handleDragEnd', 'deleteLayer', 'getLayerKind', 'setLayerOpacity',
       'setLayerStyle', 'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo',
       'openLayerFicha', '_lsPickerLayers', 'setBBoxModo', 'setBBoxLimite', 'setBBoxPagina',
+      'layerToFront', 'layerToBack', 'duplicateLayer', 'reloadLayer', 'isolateLayer',
+      'copyLayerUrl', 'copyLayerCode',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {
@@ -7526,6 +8045,7 @@ class miPlugin_layerSwitcher {
 
     this._optionsOpen = null;
     this._groupCollapsed = {};
+    this._aislada = null;
   }
 }
 
