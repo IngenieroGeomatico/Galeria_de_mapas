@@ -481,6 +481,13 @@
   padding: 0 8px 8px;
 }
 
+/* Las tres formas de elegir la fuente ráster (capa, fichero, servicio WMS) se
+   separan con una línea fina para que se lean como alternativas. */
+.gp-ras-servicio-bloque {
+  border-top: 1px dashed #dfe4e9;
+  padding-top: 8px;
+}
+
 /* ── Ráster ───────────────────────────────────────────────────────────── */
 .gp-meta {
   display: grid;

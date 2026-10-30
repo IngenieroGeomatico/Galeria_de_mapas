@@ -88,10 +88,26 @@ function mapa() {
 }
 
 /**
- * Añade las capas vectoriales de ejemplo al mapa.
+ * Añade las capas de ejemplo al mapa: el servicio WMS del MDT (del que la
+ * pestaña Ráster puede capturar un GeoTIFF) y tres capas vectoriales con una
+ * sola geometría cada una.
  * @param {Object} mapajs Mapa de la API.
  */
 function anadirCapasEjemplo(mapajs) {
+  // ── Servicio WMS: MDT, para la pestaña Ráster ───────────────────────
+  // Va el PRIMERO para quedar por debajo de las capas de ejemplo: si se
+  // enciende en el selector de capas, no las tapa. No es un GeoTIFF, pero el
+  // plugin sabe pedirle un GeoTIFF del encuadre actual con GetMap
+  // (`image/geotiff` o `image/tiff`) y abrirlo como fuente.
+  mapajs.addLayers(new M.layer.WMS({
+    url: 'https://servicios.idee.es/wms-inspire/mdt',
+    name: 'EL.ElevationGridCoverage',
+    legend: 'MDT (WMS)',
+    tiled: false,
+    visibility: false,
+    attribution: '© IGN',
+  }, { displayInLayerSwitcher: true }, {}));
+
   // ── Polígonos: distritos de Madrid (GeoJSON local del repositorio) ──
   mapajs.addLayers(new M.layer.GeoJSON({
     name: 'DistritosMadrid',

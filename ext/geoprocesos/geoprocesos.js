@@ -12,8 +12,10 @@
                  las capas vectoriales del mapa y el modo de entrega: la capa
                  completa, todas las entidades o solo la primera.
 
-     · Ráster  — calculadora de bandas sobre GeoTIFF (expresión con B1, B2…,
-                 presets NDVI/NDWI/umbral/escala) y geoprocesos con gdal3.js
+     · Ráster  — fuente GeoTIFF (capa del mapa, fichero local o captura de un
+                 servicio WMS con el encuadre actual), calculadora de bandas
+                 sobre GeoTIFF (expresión con B1, B2…, presets
+                 NDVI/NDWI/umbral/escala) y geoprocesos con gdal3.js
                  (reproyectar, recortar, redimensionar, convertir formato).
 
    LIBRERÍAS (se cargan BAJO DEMANDA, la primera vez que se usan):
@@ -673,13 +675,28 @@
         /* ---------------------------- RÁSTER ---------------------------- */
         '  <section class="gp-panel gp-oculto" data-panel="raster" role="tabpanel">',
         '    <details class="gp-seccion" data-seccion="raster-fuente" open>',
-        '      <summary class="gp-seccion-titulo">Fuente ráster (GeoTIFF)</summary>',
+        '      <summary class="gp-seccion-titulo">Fuente ráster (GeoTIFF o servicio WMS)</summary>',
         '      <div class="gp-seccion-cuerpo">',
         '        <div class="gp-bloque">',
         '          <label class="gp-etiqueta" for="gp-ras-fuente">Capa GeoTIFF del mapa</label>',
         '          <select class="gp-select gp-ras-fuente" id="gp-ras-fuente"></select>',
         '          <label class="gp-etiqueta">…o un fichero local</label>',
         '          <input type="file" class="gp-ras-file" accept=".tif,.tiff,image/tiff">',
+        '        </div>',
+        '        <div class="gp-bloque gp-ras-servicio-bloque">',
+        '          <label class="gp-etiqueta" for="gp-ras-servicio">…o capturar un servicio WMS del mapa</label>',
+        '          <select class="gp-select gp-ras-servicio" id="gp-ras-servicio"></select>',
+        '          <label class="gp-etiqueta" for="gp-ras-tamano">Tamaño de la captura (lado mayor)</label>',
+        '          <select class="gp-select gp-ras-tamano" id="gp-ras-tamano">',
+        '            <option value="1024">1024 px</option>',
+        '            <option value="2048">2048 px</option>',
+        '            <option value="512">512 px</option>',
+        '          </select>',
+        '          <button type="button" class="gp-btn gp-ras-capturar">Capturar la vista como GeoTIFF</button>',
+        '          <p class="gp-ayuda">Pide al servicio un GeoTIFF del encuadre actual (GetMap en EPSG:3857, '
+          + 'con vuelta a EPSG:4326 si el servicio no admite Web Mercator) y lo abre como fuente para '
+          + 'calcular, geoprocesar y descargar. Son los píxeles que pinta el servicio, no los datos '
+          + 'originales: para valores reales hace falta un WCS o el GeoTIFF de descarga del proveedor.</p>',
         '        </div>',
         '        <dl class="gp-meta gp-ras-meta gp-oculto"></dl>',
         '      </div>',
@@ -744,6 +761,9 @@
         expEstado: qs('.gp-exp-estado'),
         rasFuente: qs('.gp-ras-fuente'),
         rasFile: qs('.gp-ras-file'),
+        rasServicio: qs('.gp-ras-servicio'),
+        rasTamano: qs('.gp-ras-tamano'),
+        rasCapturar: qs('.gp-ras-capturar'),
         rasMeta: qs('.gp-ras-meta'),
         rasCalc: qs('.gp-ras-calc'),
         expresion: qs('.gp-expresion'),
@@ -785,6 +805,7 @@
         if (f) self._el.rasFuente.value = '';
         self._cargarFuenteRaster();
       });
+      this._el.rasCapturar.addEventListener('click', function () { self._capturarServicioRaster(); });
       Array.prototype.forEach.call(cont.querySelectorAll('.gp-chip'), function (chip) {
         chip.addEventListener('click', function () {
           self._el.expresion.value = chip.getAttribute('data-exp') || '';
@@ -938,6 +959,23 @@
       }, this);
       if (previoRas && this._capaPorId(previoRas)) selRas.value = previoRas;
 
+      // Servicios WMS: no son un fichero GeoTIFF, pero el plugin puede pedirles
+      // un GeoTIFF del encuadre actual y usarlo como fuente.
+      var selServ = this._el.rasServicio;
+      if (selServ) {
+        var servicios = this._capasServicioRaster();
+        var previoServ = selServ.value;
+        selServ.innerHTML = '';
+        selServ.appendChild(opcion('', servicios.length
+          ? '— elige un servicio WMS —'
+          : '— el mapa no tiene capas WMS —'));
+        servicios.forEach(function (c) {
+          selServ.appendChild(opcion(this._idCapa(c), this._nombreCapa(c)));
+        }, this);
+        if (previoServ && this._capaPorId(previoServ)) selServ.value = previoServ;
+        if (this._el.rasCapturar) this._el.rasCapturar.disabled = !servicios.length;
+      }
+
       // Si el formulario ya estaba pintado, se repintan sus desplegables de capa.
       if (this._fn && this._el.formulario) this._renderFormulario(this._fn);
     }
@@ -996,6 +1034,35 @@
       // No vale con que tenga `url`: un TMS o un WMS también la tienen y no
       // son un fichero que se pueda abrir con geotiff.js.
       return !!(capa.options && capa.options.blob);
+    }
+
+    /**
+     * Capas WMS del mapa. No se abren como fichero, pero sí se les puede
+     * pedir un GeoTIFF del encuadre actual con GetMap (ver
+     * `_capturarServicioRaster`).
+     * @returns {Array<Object>} Capas WMS.
+     */
+    _capasServicioRaster() {
+      var out = [];
+      var self = this;
+      var recorrer = function (l) {
+        if (!l) return;
+        var esGrupo = (l.type === 'LayerGroup' || l._type === 'LayerGroup') && typeof l.getLayers === 'function';
+        if (esGrupo && typeof l.getFeatures !== 'function') {
+          (l.getLayers() || []).forEach(recorrer);
+          return;
+        }
+        if (self._esServicioRaster(l)) out.push(l);
+      };
+      try { (this._map.getLayers() || []).forEach(recorrer); } catch (e) { /* mapa no listo */ }
+      return out.filter(function (l) {
+        return String(l.name || '') !== '__draw__' && String(l.legend || '') !== '__draw__';
+      });
+    }
+
+    /** ¿Es un servicio del que se puede pedir un GeoTIFF con GetMap? */
+    _esServicioRaster(capa) {
+      return !!(capa && /^WMS$/i.test(String(capa.type || '')));
     }
 
     /**
@@ -2177,6 +2244,8 @@
         this._mostrarBloquesRaster(false);
         return;
       }
+      // Si se elige un GeoTIFF, la captura WMS deja de ser la fuente.
+      if (this._el.rasServicio) this._el.rasServicio.value = '';
       var token = (this._tokenRaster = (this._tokenRaster || 0) + 1);
       try {
         this._estado(this._el.rasEstado, 'Abriendo el GeoTIFF…', 'cargando');
@@ -2209,6 +2278,308 @@
       var respuesta = await fetch(String(fuente));
       if (!respuesta.ok) throw new Error('HTTP ' + respuesta.status + ' al descargar el GeoTIFF.');
       return respuesta.arrayBuffer();
+    }
+
+    /* =================================================================== *
+     * 6 bis. SERVICIOS WMS · captura de la vista como GeoTIFF
+     * =================================================================== */
+
+    /**
+     * Extensión de la vista actual, en EPSG:3857.
+     *
+     * En 2D sale de la vista de OpenLayers; en 3D, del rectángulo que ve la
+     * cámara de Cesium (que viene en radianes 4326 y se reproyecta). Si no hay
+     * forma de leerla, se calcula alrededor del centro con la resolución del
+     * zoom, que es lo que hace un mapa de 1024 × 768.
+     *
+     * @returns {{bbox: Array<number>, ancho: number, alto: number}}
+     */
+    _bboxVista() {
+      var impl = null;
+      try { impl = this._map.getMapImpl(); } catch (e) { impl = null; }
+
+      // 2D (OpenLayers): la vista ya está en 3857.
+      if (impl && typeof impl.getView === 'function' && typeof impl.getSize === 'function') {
+        try {
+          var tam = impl.getSize();
+          var ext = impl.getView().calculateExtent(tam);
+          if (ext && ext.length === 4 && ext.every(function (v) { return isFinite(v); })
+            && ext[2] > ext[0] && ext[3] > ext[1]) {
+            return { bbox: [ext[0], ext[1], ext[2], ext[3]], ancho: tam[0], alto: tam[1] };
+          }
+        } catch (e) { /* sigue con el respaldo */ }
+      }
+
+      // 3D (Cesium): `computeViewRectangle` devuelve radianes en 4326.
+      if (impl && impl.scene && impl.scene.camera && typeof Cesium !== 'undefined') {
+        try {
+          var rect = impl.scene.camera.computeViewRectangle();
+          if (rect) {
+            var IDEE = api();
+            var oeste = Cesium.Math.toDegrees(rect.west);
+            var sur = Cesium.Math.toDegrees(rect.south);
+            var este = Cesium.Math.toDegrees(rect.east);
+            var norte = Cesium.Math.toDegrees(rect.north);
+            var sw = IDEE.utils.reproject([oeste, sur], 'EPSG:4326', 'EPSG:3857');
+            var ne = IDEE.utils.reproject([este, norte], 'EPSG:4326', 'EPSG:3857');
+            var bbox = [sw[0], sw[1], ne[0], ne[1]];
+            // Una cámara mirando al horizonte abarca medio mundo: no sirve.
+            if (bbox.every(function (v) { return isFinite(v); })
+              && (bbox[2] - bbox[0]) < 4e7 && (bbox[3] - bbox[1]) < 4e7) {
+              var lienzo = impl.scene.canvas;
+              return {
+                bbox: bbox,
+                ancho: (lienzo && lienzo.clientWidth) || 1024,
+                alto: (lienzo && lienzo.clientHeight) || 768,
+              };
+            }
+          }
+        } catch (e) { /* sigue con el respaldo */ }
+      }
+
+      // Respaldo: centro y zoom del mapa, como si fuera una pantalla 1024 × 768.
+      var centro = { x: 0, y: 0 };
+      try { centro = this._map.getCenter() || centro; } catch (e) { /* sin centro */ }
+      var zoom = 10;
+      try { zoom = Number(this._map.getZoom()); } catch (e) { zoom = 10; }
+      if (!isFinite(zoom)) zoom = 10;
+      var resolucion = 156543.03392804097 / Math.pow(2, zoom);
+      var ancho = 1024;
+      var alto = 768;
+      return {
+        bbox: [
+          centro.x - (ancho * resolucion) / 2,
+          centro.y - (alto * resolucion) / 2,
+          centro.x + (ancho * resolucion) / 2,
+          centro.y + (alto * resolucion) / 2,
+        ],
+        ancho: ancho,
+        alto: alto,
+      };
+    }
+
+    /**
+     * Pide al servicio WMS un GeoTIFF del encuadre actual y lo abre como
+     * fuente ráster: a partir de ahí se puede calcular, geoprocesar con
+     * gdal3.js y descargar como cualquier otro GeoTIFF.
+     *
+     * Lo que se obtiene son los píxeles que el servicio pinta (colorizado),
+     * no los datos originales: para valores reales hace falta un WCS o el
+     * GeoTIFF de descarga del proveedor.
+     */
+    async _capturarServicioRaster() {
+      var estado = this._el.rasEstado;
+      var id = this._el.rasServicio ? this._el.rasServicio.value : '';
+      if (!id) {
+        this._estado(estado, 'Elige un servicio WMS de la lista.', 'error');
+        return;
+      }
+      var capa = this._capaPorId(id);
+      if (!capa) {
+        this._estado(estado, 'No se encuentra la capa WMS seleccionada.', 'error');
+        return;
+      }
+
+      // La captura sustituye a la fuente anterior: se limpia el GeoTIFF elegido
+      // y el fichero local para que la interfaz no muestre dos fuentes a la vez.
+      if (this._el.rasFuente) this._el.rasFuente.value = '';
+      if (this._el.rasFile) this._el.rasFile.value = '';
+      this._ficheroRaster = null;
+
+      var boton = this._el.rasCapturar;
+      var token = (this._tokenRaster = (this._tokenRaster || 0) + 1);
+      if (boton) boton.disabled = true;
+      try {
+        var vista = this._bboxVista();
+        var lado = Number(this._el.rasTamano && this._el.rasTamano.value) || 1024;
+        // Se mantiene la proporción de la pantalla y se limita el lado mayor.
+        var aspecto = vista.ancho / vista.alto;
+        var ancho = aspecto >= 1 ? lado : Math.max(1, Math.round(lado * aspecto));
+        var alto = aspecto >= 1 ? Math.max(1, Math.round(lado / aspecto)) : lado;
+
+        this._estado(estado, 'Pidiendo el GeoTIFF al servicio (' + ancho + ' × ' + alto + ')…', 'cargando');
+        var respuesta = await this._getMapServicio(capa, vista.bbox, ancho, alto);
+        if (token !== this._tokenRaster) return;
+
+        await this._abrirRaster(respuesta.buffer);
+        if (token !== this._tokenRaster) return;
+
+        // La georreferenciación buena es la que se ha pedido: si el servicio no
+        // escribe GeoKeys, el fichero se queda sin SRC y no se puede ni añadir
+        // al mapa ni reproyectar.
+        this._completarGeoRaster(respuesta.bbox, respuesta.epsg);
+        this._pintarMeta();
+        this._mostrarBloquesRaster(true);
+
+        // La fuente capturada ya es un fichero descargable de por sí.
+        var nombre = 'GP captura ' + (this._contadorResultados = (this._contadorResultados || 0) + 1);
+        this._mostrarResultadoRaster(respuesta.buffer, nombre + '.tif',
+          ancho + ' × ' + alto + ' · ' + respuesta.formato);
+        this._estado(estado, 'Captura lista: ' + ancho + ' × ' + alto + ' px de «'
+          + this._nombreCapa(capa) + '» (' + respuesta.formato + ').', 'ok');
+      } catch (e) {
+        if (token !== this._tokenRaster) return;
+        console.error('[geoprocesos] captura WMS', e);
+        this._estado(estado, 'No se ha podido capturar el servicio: ' + (e && e.message ? e.message : e), 'error');
+      } finally {
+        if (boton) boton.disabled = false;
+      }
+    }
+
+    /**
+     * GetMap de un servicio WMS con el bbox pedido.
+     *
+     * Se usa WMS 1.1.1 a propósito: en 1.1.1 el bbox va siempre en el orden
+     * x,y, mientras que en 1.3.0 EPSG:4326 se pide en lat,lon y es una fuente
+     * de errores silenciosos. Se prueban los formatos que sí devuelven datos
+     * (image/geotiff y image/tiff; un PNG solo daría una imagen sin valores) y,
+     * si el servicio no admite Web Mercator, se reintenta en EPSG:4326.
+     *
+     * @param {Object} capa Capa WMS de la API.
+     * @param {Array<number>} bbox3857 Encuadre en EPSG:3857.
+     * @param {number} ancho Ancho en píxeles.
+     * @param {number} alto Alto en píxeles.
+     * @returns {Promise<{buffer: ArrayBuffer, formato: string, epsg: number, bbox: Array<number>}>}
+     */
+    async _getMapServicio(capa, bbox3857, ancho, alto) {
+      var partes = this._separarUrlWms(capa.url);
+      var base = partes.base;
+      var capas = Array.isArray(capa.name) ? capa.name.join(',') : String(capa.name || '');
+      if (!base || !capas) {
+        throw new Error('la capa no expone la URL o el nombre de capa del servicio');
+      }
+      var estilos = (capa.options && capa.options.styles) ? String(capa.options.styles) : String(capa.styles || '');
+      var extra = partes.extra.map(function (p) { return '&' + p; }).join('');
+
+      var intentos = [{ epsg: 3857, bbox: bbox3857.slice() }];
+      var bbox4326 = this._a4326(bbox3857);
+      if (bbox4326) intentos.push({ epsg: 4326, bbox: bbox4326 });
+
+      var formatos = ['image/geotiff', 'image/tiff'];
+      var ultimoError = null;
+      for (var i = 0; i < intentos.length; i += 1) {
+        for (var f = 0; f < formatos.length; f += 1) {
+          var url = base + '?service=WMS&version=1.1.1&request=GetMap'
+            + '&layers=' + encodeURIComponent(capas)
+            + '&styles=' + encodeURIComponent(estilos)
+            + '&srs=EPSG:' + intentos[i].epsg
+            + '&bbox=' + intentos[i].bbox.map(function (v) { return Number(v).toFixed(6); }).join(',')
+            + '&width=' + ancho + '&height=' + alto
+            + '&format=' + encodeURIComponent(formatos[f])
+            + extra;
+          var respuesta;
+          try {
+            respuesta = await fetch(url);
+          } catch (e) {
+            throw new Error('el servicio no admite peticiones desde el navegador (CORS): ' + base);
+          }
+          var buffer = await respuesta.arrayBuffer();
+          if (this._esTiff(buffer)) {
+            return { buffer: buffer, formato: formatos[f], epsg: intentos[i].epsg, bbox: intentos[i].bbox };
+          }
+          ultimoError = (await this._mensajeExcepcion(respuesta, buffer))
+            || ('HTTP ' + respuesta.status + ' con «' + (respuesta.headers.get('content-type') || 'sin tipo') + '»');
+          // Si el servicio no admite el SRC, no tiene sentido probar más
+          // formatos con ese mismo SRC.
+          if (/srs|projection|crs|proyecci/i.test(String(ultimoError))) break;
+        }
+      }
+      throw new Error(ultimoError || 'el servicio no ha devuelto ningún GeoTIFF');
+    }
+
+    /**
+     * Separa la URL de un WMS de los parámetros que ya traiga.
+     *
+     * No vale `split('?')[0]`: hay servicios que cuelgan de un parámetro
+     * (`?map=/ruta/al/mapfile`) o de un token, y perderlo deja la petición sin
+     * servicio. Se descartan solo los parámetros de GetMap que se van a volver
+     * a escribir.
+     *
+     * @param {string} url URL de la capa.
+     * @returns {{base: string, extra: Array<string>}} URL sin consulta y
+     *   parámetros que hay que conservar.
+     */
+    _separarUrlWms(url) {
+      var trozos = String(url || '').split('?');
+      var base = trozos[0];
+      var extra = [];
+      if (trozos.length > 1) {
+        var sobra = ['service', 'version', 'request', 'layers', 'styles', 'srs', 'crs',
+          'bbox', 'width', 'height', 'format', 'transparent', 'exceptions'];
+        trozos.slice(1).join('?').split('&').forEach(function (par) {
+          if (!par) return;
+          var clave = par.split('=')[0].toLowerCase();
+          if (sobra.indexOf(clave) === -1) extra.push(par);
+        });
+      }
+      return { base: base, extra: extra };
+    }
+
+    /** ¿Los bytes empiezan como un TIFF (II*\0 o MM\0*)? */
+    _esTiff(buffer) {
+      if (!buffer || buffer.byteLength < 4) return false;
+      var b = new Uint8Array(buffer, 0, 4);
+      return (b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2a && b[3] === 0x00)
+        || (b[0] === 0x4d && b[1] === 0x4d && b[2] === 0x00 && b[3] === 0x2a);
+    }
+
+    /**
+     * Texto de un ServiceExceptionReport del WMS, si la respuesta es XML.
+     * Los WMS devuelven el error con HTTP 200, así que no basta con `ok`.
+     * @returns {Promise<string|null>}
+     */
+    async _mensajeExcepcion(respuesta, buffer) {
+      var tipo = String(respuesta.headers.get('content-type') || '');
+      if (!/xml|text/i.test(tipo)) return null;
+      try {
+        var bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 4000));
+        var texto = new TextDecoder('utf-8').decode(bytes);
+        var coincidencia = texto.match(/<ServiceException[^>]*>([\s\S]*?)<\/ServiceException>/i);
+        var mensaje = (coincidencia ? coincidencia[1] : texto)
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return mensaje ? mensaje.slice(0, 300) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Bbox de 3857 a 4326 (esquina SW y NE), para los servicios que no
+     * admiten Web Mercator.
+     * @param {Array<number>} bbox Encuadre en 3857.
+     * @returns {Array<number>|null}
+     */
+    _a4326(bbox) {
+      var IDEE = api();
+      if (!IDEE || !IDEE.utils || typeof IDEE.utils.reproject !== 'function') return null;
+      try {
+        var sw = IDEE.utils.reproject([bbox[0], bbox[1]], 'EPSG:3857', 'EPSG:4326');
+        var ne = IDEE.utils.reproject([bbox[2], bbox[3]], 'EPSG:3857', 'EPSG:4326');
+        if (!sw || !ne || !isFinite(sw[0]) || !isFinite(ne[1])) return null;
+        return [sw[0], sw[1], ne[0], ne[1]];
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Fija la georreferenciación del ráster capturado con el bbox que se pidió.
+     * Es más fiable que la que traiga el fichero: hay servicios (IGNBaseTodo)
+     * que escriben ModelTransformation en vez de ModelTiepoint + PixelScale.
+     * @param {Array<number>} bbox Encuadre del GetMap, en el SRC pedido.
+     * @param {number} epsg SRC del bbox.
+     */
+    _completarGeoRaster(bbox, epsg) {
+      var r = this._raster;
+      if (!r || !bbox) return;
+      r.origenX = bbox[0];
+      r.origenY = bbox[3];
+      r.resX = (bbox[2] - bbox[0]) / r.ancho;
+      r.resY = (bbox[3] - bbox[1]) / r.alto;
+      r.bbox = bbox.slice();
+      if (!r.epsg) r.epsg = epsg;
     }
 
     /**
