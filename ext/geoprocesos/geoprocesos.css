@@ -133,6 +133,14 @@
   display: none !important;
 }
 
+/* Aviso de la pestaña Ráster mientras no haya ningún GeoTIFF cargado. */
+.gp-ras-sin-fuente {
+  padding: 8px;
+  background-color: #f7f9fb;
+  border: 1px dashed #c9d2da;
+  border-radius: 6px;
+}
+
 /* ── Pestañas ─────────────────────────────────────────────────────────── */
 .gp-tabs {
   display: flex;

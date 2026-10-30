@@ -449,7 +449,7 @@
         title: 'Geoprocesos',
         content: new Promise(function (resolve) {
           var html = '<div>'
-            + '<p>Herramienta de análisis con dos pestañas.</p>'
+            + '<p>Herramienta de análisis con cuatro pestañas.</p>'
             + '<p><strong>Vector</strong>: elige cualquiera de las funciones de Turf 7.0.0; '
             + 'el formulario se construye con los parámetros de la función. Cuando un parámetro '
             + 'pide una capa puedes pasar la capa completa, todas las entidades (la función se '
@@ -457,12 +457,14 @@
             + '<p><strong>Ráster</strong>: calculadora de bandas sobre GeoTIFF con expresiones '
             + 'del tipo <code>(B4 - B3) / (B4 + B3)</code> y geoprocesos de gdal3.js '
             + '(reproyectar, recortar, redimensionar y convertir formato).</p>'
+            + '<p><strong>Importar</strong>: elige la fuente ráster, ya sea una capa GeoTIFF del '
+            + 'mapa, un fichero local o una captura de un servicio WMS o TMS del mapa.</p>'
+            + '<p><strong>Exportar</strong>: descarga una capa vectorial en los formatos de escritura '
+            + 'de gdal3.js (GeoJSON, KML, GeoPackage, Shapefile, GML…) y el último GeoTIFF generado.</p>'
             + '<p>Los resultados se añaden al mapa como capa nueva y, en el caso de los ráster, '
             + 'también se pueden descargar como GeoTIFF con sus valores. Si el resultado tiene una '
             + 'sola banda (un índice, un umbral, una reclasificación), en el mapa se pinta con una '
             + 'rampa de color; el fichero que se descarga conserva los valores originales.</p>'
-            + '<p>La exportación vectorial usa los formatos de escritura de gdal3.js '
-            + '(GeoJSON, KML, GeoPackage, Shapefile, GML…).</p>'
             + '</div>';
           if (IDEE && IDEE.utils && typeof IDEE.utils.stringToHtml === 'function') {
             try { html = IDEE.utils.stringToHtml(html); } catch (e) { /* se queda el HTML tal cual */ }
@@ -567,7 +569,8 @@
         this._secciones = Object.assign({}, this._secciones, state.secciones);
         this._aplicarSecciones();
       }
-      if (typeof state.pestana === 'string' && (state.pestana === 'vector' || state.pestana === 'raster')) {
+      if (typeof state.pestana === 'string'
+        && ['vector', 'raster', 'importar', 'exportar'].indexOf(state.pestana) >= 0) {
         this._pestana = state.pestana;
         this._cambiarPestana(state.pestana);
       }
@@ -690,6 +693,8 @@
         '  <div class="gp-tabs" role="tablist">',
         '    <button type="button" role="tab" class="gp-tab gp-tab--activa" data-tab="vector" aria-selected="true">Vector</button>',
         '    <button type="button" role="tab" class="gp-tab" data-tab="raster" aria-selected="false">Ráster</button>',
+        '    <button type="button" role="tab" class="gp-tab" data-tab="importar" aria-selected="false">Importar</button>',
+        '    <button type="button" role="tab" class="gp-tab" data-tab="exportar" aria-selected="false">Exportar</button>',
         '  </div>',
 
         /* ---------------------------- VECTOR ---------------------------- */
@@ -717,50 +722,15 @@
         '      <button type="button" class="gp-btn gp-limpiar">Quitar resultados</button>',
         '    </div>',
         '    <div class="gp-estado gp-oculto" role="status" aria-live="polite"></div>',
-        '    <details class="gp-seccion" data-seccion="vector-exportar">',
-        '      <summary class="gp-seccion-titulo">Exportar capa vectorial</summary>',
-        '      <div class="gp-seccion-cuerpo">',
-        '        <div class="gp-bloque">',
-        '          <label class="gp-etiqueta">Capa</label>',
-        '          <select class="gp-select gp-exp-capa"></select>',
-        '          <label class="gp-etiqueta">Formato (gdal3.js)</label>',
-        '          <select class="gp-select gp-exp-formato"></select>',
-        '          <button type="button" class="gp-btn gp-exp-btn">Exportar y descargar</button>',
-        '          <div class="gp-estado gp-exp-estado gp-oculto" role="status" aria-live="polite"></div>',
-        '        </div>',
-        '      </div>',
-        '    </details>',
         '  </section>',
 
         /* ---------------------------- RÁSTER ---------------------------- */
         '  <section class="gp-panel gp-oculto" data-panel="raster" role="tabpanel">',
-        '    <details class="gp-seccion" data-seccion="raster-fuente" open>',
-        '      <summary class="gp-seccion-titulo">Fuente ráster (GeoTIFF, WMS o TMS)</summary>',
-        '      <div class="gp-seccion-cuerpo">',
-        '        <div class="gp-bloque">',
-        '          <label class="gp-etiqueta" for="gp-ras-fuente">Capa GeoTIFF del mapa</label>',
-        '          <select class="gp-select gp-ras-fuente" id="gp-ras-fuente"></select>',
-        '          <label class="gp-etiqueta">…o un fichero local</label>',
-        '          <input type="file" class="gp-ras-file" accept=".tif,.tiff,image/tiff">',
-        '        </div>',
-        '        <div class="gp-bloque gp-ras-servicio-bloque">',
-        '          <label class="gp-etiqueta" for="gp-ras-servicio">…o capturar un servicio del mapa (WMS o TMS)</label>',
-        '          <select class="gp-select gp-ras-servicio" id="gp-ras-servicio"></select>',
-        '          <label class="gp-etiqueta" for="gp-ras-tamano">Tamaño de la captura (lado mayor)</label>',
-        '          <select class="gp-select gp-ras-tamano" id="gp-ras-tamano">',
-        '            <option value="1024">1024 px</option>',
-        '            <option value="2048">2048 px</option>',
-        '            <option value="512">512 px</option>',
-        '          </select>',
-        '          <button type="button" class="gp-btn gp-ras-capturar">Capturar la vista como GeoTIFF</button>',
-        '          <p class="gp-ayuda">Pide al servicio el encuadre actual: GetMap a un WMS (en EPSG:3857, '
-          + 'con vuelta a EPSG:4326 si no admite Web Mercator) o mosaico de teselas a un TMS. Lo abre '
-          + 'como fuente para calcular, geoprocesar y descargar. Son los píxeles que pinta el servicio, '
-          + 'no los datos originales: para valores reales hace falta un WCS o el GeoTIFF del proveedor.</p>',
-        '        </div>',
-        '        <dl class="gp-meta gp-ras-meta gp-oculto"></dl>',
-        '      </div>',
-        '    </details>',
+        '    <div class="gp-bloque gp-ras-sin-fuente">',
+        '      <p class="gp-ayuda">No hay ninguna fuente ráster cargada. En la pestaña <strong>Importar</strong> '
+          + 'puedes elegir una capa GeoTIFF del mapa, abrir un fichero o capturar un servicio WMS o TMS.</p>',
+        '      <button type="button" class="gp-btn gp-btn--mini gp-ir-importar">Ir a Importar</button>',
+        '    </div>',
         '    <details class="gp-seccion gp-oculto gp-ras-calc" data-seccion="raster-calculadora" open>',
         '      <summary class="gp-seccion-titulo">Calculadora de bandas</summary>',
         '      <div class="gp-seccion-cuerpo">',
@@ -790,8 +760,58 @@
         '      </div>',
         '    </details>',
         '    <div class="gp-estado gp-ras-estado gp-oculto" role="status" aria-live="polite"></div>',
+        '  </section>',
+
+        /* --------------------------- IMPORTAR --------------------------- */
+        '  <section class="gp-panel gp-oculto" data-panel="importar" role="tabpanel">',
+        '    <details class="gp-seccion" data-seccion="raster-fuente" open>',
+        '      <summary class="gp-seccion-titulo">Importar ráster (GeoTIFF, WMS o TMS)</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <div class="gp-bloque">',
+        '          <label class="gp-etiqueta" for="gp-ras-fuente">Capa GeoTIFF del mapa</label>',
+        '          <select class="gp-select gp-ras-fuente" id="gp-ras-fuente"></select>',
+        '          <label class="gp-etiqueta">…o un fichero local</label>',
+        '          <input type="file" class="gp-ras-file" accept=".tif,.tiff,image/tiff">',
+        '        </div>',
+        '        <div class="gp-bloque gp-ras-servicio-bloque">',
+        '          <label class="gp-etiqueta" for="gp-ras-servicio">…o capturar un servicio del mapa (WMS o TMS)</label>',
+        '          <select class="gp-select gp-ras-servicio" id="gp-ras-servicio"></select>',
+        '          <label class="gp-etiqueta" for="gp-ras-tamano">Tamaño de la captura (lado mayor)</label>',
+        '          <select class="gp-select gp-ras-tamano" id="gp-ras-tamano">',
+        '            <option value="1024">1024 px</option>',
+        '            <option value="2048">2048 px</option>',
+        '            <option value="512">512 px</option>',
+        '          </select>',
+        '          <button type="button" class="gp-btn gp-ras-capturar">Capturar la vista como GeoTIFF</button>',
+        '          <p class="gp-ayuda">Pide al servicio el encuadre actual: GetMap a un WMS (en EPSG:3857, '
+          + 'con vuelta a EPSG:4326 si no admite Web Mercator) o mosaico de teselas a un TMS. Lo deja '
+          + 'cargado para calcular y geoprocesar en la pestaña Ráster y descargarlo desde Exportar. Son '
+          + 'los píxeles que pinta el servicio, no los datos originales: para valores reales hace falta '
+          + 'un WCS o el GeoTIFF del proveedor.</p>',
+        '        </div>',
+        '        <dl class="gp-meta gp-ras-meta gp-oculto"></dl>',
+        '      </div>',
+        '    </details>',
+        '    <div class="gp-estado gp-ras-estado-importar gp-oculto" role="status" aria-live="polite"></div>',
+        '  </section>',
+
+        /* --------------------------- EXPORTAR --------------------------- */
+        '  <section class="gp-panel gp-oculto" data-panel="exportar" role="tabpanel">',
+        '    <details class="gp-seccion" data-seccion="vector-exportar" open>',
+        '      <summary class="gp-seccion-titulo">Exportar capa vectorial</summary>',
+        '      <div class="gp-seccion-cuerpo">',
+        '        <div class="gp-bloque">',
+        '          <label class="gp-etiqueta">Capa</label>',
+        '          <select class="gp-select gp-exp-capa"></select>',
+        '          <label class="gp-etiqueta">Formato (gdal3.js)</label>',
+        '          <select class="gp-select gp-exp-formato"></select>',
+        '          <button type="button" class="gp-btn gp-exp-btn">Exportar y descargar</button>',
+        '          <div class="gp-estado gp-exp-estado gp-oculto" role="status" aria-live="polite"></div>',
+        '        </div>',
+        '      </div>',
+        '    </details>',
         '    <details class="gp-seccion gp-oculto gp-ras-resultado" data-seccion="raster-resultado" open>',
-        '      <summary class="gp-seccion-titulo">Resultado</summary>',
+        '      <summary class="gp-seccion-titulo">Resultado ráster (GeoTIFF)</summary>',
         '      <div class="gp-seccion-cuerpo">',
         '        <div class="gp-bloque">',
         '          <p class="gp-resumen"></p>',
@@ -830,6 +850,8 @@
         rasTamano: qs('.gp-ras-tamano'),
         rasCapturar: qs('.gp-ras-capturar'),
         rasMeta: qs('.gp-ras-meta'),
+        rasSinFuente: qs('.gp-ras-sin-fuente'),
+        rasEstadoImportar: qs('.gp-ras-estado-importar'),
         rasCalc: qs('.gp-ras-calc'),
         expresion: qs('.gp-expresion'),
         calcular: qs('.gp-calcular'),
@@ -850,6 +872,11 @@
       Array.prototype.forEach.call(this._el.tabs, function (tab) {
         tab.addEventListener('click', function () { self._cambiarPestana(tab.getAttribute('data-tab')); });
       });
+      // Atajo de la pestaña Ráster cuando todavía no hay fuente cargada.
+      var irImportar = qs('.gp-ir-importar');
+      if (irImportar) {
+        irImportar.addEventListener('click', function () { self._cambiarPestana('importar'); });
+      }
 
       // Vector.
       this._el.buscador.addEventListener('input', function () {
@@ -914,7 +941,7 @@
     }
 
     _cambiarPestana(nombre) {
-      if (nombre !== 'vector' && nombre !== 'raster') return;
+      if (['vector', 'raster', 'importar', 'exportar'].indexOf(nombre) < 0) return;
       this._pestana = nombre;
       // La vista puede no estar creada todavía (setState llega antes de que la
       // API construya el control); _crearVista vuelve a llamar aquí al final.
@@ -934,10 +961,14 @@
       }
       if (nombre === 'raster') {
         if (!this._el.rasOp.options.length) this._inicializarRaster();
-        else this._refrescarCapas();
-        // La capa base del mapa puede aparecer después de montar el plugin:
-        // se vuelve a mirar al abrir la pestaña para que sea seleccionable.
-        this._refrescarServicios();
+        this._refrescarCapas();
+        // El aviso de «sin fuente» depende solo de si hay un GeoTIFF abierto.
+        if (this._el.rasSinFuente) this._el.rasSinFuente.classList.toggle('gp-oculto', !!this._raster);
+      }
+      if (nombre === 'importar' || nombre === 'exportar') {
+        // Las listas de capas y de servicios se rehacen al entrar: el mapa
+        // puede haber ganado capas desde la última vez que se abrió la pestaña.
+        this._refrescarCapas();
       }
       void self;
     }
@@ -987,7 +1018,7 @@
      *
      * Los fondos del mapa (la capa base) se crean al aplicar la configuración,
      * que puede ser después de montar el plugin: sin esto, la primera vez que
-     * se abre la pestaña Ráster el desplegable puede no tener todavía el TMS
+     * se abre la pestaña Importar el desplegable puede no tener todavía el TMS
      * de la capa base.
      */
     _vigilarAperturaPanel() {
@@ -1021,7 +1052,7 @@
       if (this._esCesium()) {
         this._el.avisoImpl.textContent = 'Estás en 3D (Cesium). Los geoprocesos vectoriales leen las entidades '
           + 'con getFeatures(), que en Cesium devuelve vacío: cambia a 2D para procesar capas vectoriales. '
-          + 'La pestaña ráster funciona igual.';
+          + 'Las pestañas Importar y Ráster funcionan igual.';
         this._el.avisoImpl.classList.remove('gp-oculto');
         this._el.ejecutar.disabled = true;
       } else {
@@ -1065,7 +1096,7 @@
      *
      * Va aparte de `_refrescarCapas` porque el mapa puede ganar la capa base
      * después de montar el plugin (los fondos se crean al aplicar la
-     * configuración del mapa) y la pestaña Ráster tiene que verla sin esperar a
+     * configuración del mapa) y la pestaña Importar tiene que verla sin esperar a
      * que cambie nada más.
      */
     _refrescarServicios() {
@@ -2331,7 +2362,7 @@
     }
 
     /* =================================================================== *
-     * 6. PESTAÑA RÁSTER · LECTURA DEL GEOTIFF
+     * 6. PESTAÑA IMPORTAR · LECTURA DEL GEOTIFF
      * =================================================================== */
 
     _inicializarRaster() {
@@ -2357,7 +2388,7 @@
       if (this._el.rasServicio) this._el.rasServicio.value = '';
       var token = (this._tokenRaster = (this._tokenRaster || 0) + 1);
       try {
-        this._estado(this._el.rasEstado, 'Abriendo el GeoTIFF…', 'cargando');
+        this._estado(this._el.rasEstadoImportar, 'Abriendo el GeoTIFF…', 'cargando');
         var fuente = fichero;
         if (!fuente) {
           var capa = this._capaPorId(id);
@@ -2371,13 +2402,13 @@
         if (token !== this._tokenRaster) return;
         this._pintarMeta();
         this._mostrarBloquesRaster(true);
-        this._estado(this._el.rasEstado, '', '');
+        this._estado(this._el.rasEstadoImportar, '', '');
       } catch (e) {
         console.error('[geoprocesos] ráster', e);
         this._raster = null;
         this._pintarMeta();
         this._mostrarBloquesRaster(false);
-        this._estado(this._el.rasEstado, 'No se ha podido abrir el GeoTIFF: ' + (e && e.message ? e.message : e), 'error');
+        this._estado(this._el.rasEstadoImportar, 'No se ha podido abrir el GeoTIFF: ' + (e && e.message ? e.message : e), 'error');
       }
     }
 
@@ -2390,7 +2421,7 @@
     }
 
     /* =================================================================== *
-     * 6 bis. SERVICIOS WMS · captura de la vista como GeoTIFF
+     * 6 bis. PESTAÑA IMPORTAR · SERVICIOS WMS · captura de la vista como GeoTIFF
      * =================================================================== */
 
     /**
@@ -2477,7 +2508,7 @@
      * GeoTIFF de descarga del proveedor.
      */
     async _capturarServicioRaster() {
-      var estado = this._el.rasEstado;
+      var estado = this._el.rasEstadoImportar;
       // Antes de leer la selección se rehace la lista: así entra la capa base
       // aunque el mapa la haya creado después de abrir el panel.
       this._refrescarServicios();
@@ -2535,7 +2566,8 @@
         this._mostrarResultadoRaster(respuesta.buffer, nombre + '.tif',
           tamano + ' · ' + respuesta.formato);
         this._estado(estado, 'Captura lista: ' + tamano + ' px de «'
-          + this._nombreCapa(capa) + '» (' + respuesta.formato + ').', 'ok');
+          + this._nombreCapa(capa) + '» (' + respuesta.formato + '). El fichero se descarga desde '
+          + 'la pestaña Exportar.', 'ok');
       } catch (e) {
         if (token !== this._tokenRaster) return;
         console.error('[geoprocesos] captura de servicio', e);
@@ -2681,7 +2713,7 @@
             fallos += 1;
           }
         }
-        this._estado(this._el.rasEstado, 'Descargando teselas… '
+        this._estado(this._el.rasEstadoImportar, 'Descargando teselas… '
           + Math.round(((y - minY + 1) / filas) * 100) + ' %', 'cargando');
       }
       if (fallos >= total) {
@@ -2923,6 +2955,8 @@
     _mostrarBloquesRaster(visible) {
       this._el.rasCalc.classList.toggle('gp-oculto', !visible);
       this._el.rasGdal.classList.toggle('gp-oculto', !visible);
+      // El aviso de «sin fuente» solo se enseña mientras no haya GeoTIFF.
+      if (this._el.rasSinFuente) this._el.rasSinFuente.classList.toggle('gp-oculto', !!visible);
       // Al cambiar de fuente, el resultado anterior ya no corresponde.
       this._el.rasResultado.classList.add('gp-oculto');
     }
@@ -3414,7 +3448,7 @@
     }
 
     /* =================================================================== *
-     * 9. EXPORTACIÓN VECTORIAL CON GDAL3.JS
+     * 9. PESTAÑA EXPORTAR · EXPORTACIÓN VECTORIAL CON GDAL3.JS
      * =================================================================== */
 
     /**
