@@ -602,6 +602,8 @@
 }
 
 .overlay-layer-selector .ls-action-frente:hover,
+.overlay-layer-selector .ls-action-subir:hover,
+.overlay-layer-selector .ls-action-bajar:hover,
 .overlay-layer-selector .ls-action-fondo:hover,
 .overlay-layer-selector .ls-action-duplicar:hover,
 .overlay-layer-selector .ls-action-recargar:hover,

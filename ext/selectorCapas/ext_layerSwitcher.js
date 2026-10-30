@@ -1934,6 +1934,8 @@ class miPlugin_layerSwitcher {
                 </div>
                 <div class="ls-actions-row ls-actions-row-gestion">
                   <button type="button" class="ls-action ls-action-frente" data-id="${index}" title="Traer al frente (encima de las demás)" onclick="layerToFront('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14"></path><path d="m18 13-6-6-6 6"></path><path d="M12 7v14"></path></svg></button>
+                  <button type="button" class="ls-action ls-action-subir" data-id="${index}" title="Subir una posición" onclick="layerUp('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></button>
+                  <button type="button" class="ls-action ls-action-bajar" data-id="${index}" title="Bajar una posición" onclick="layerDown('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></button>
                   <button type="button" class="ls-action ls-action-fondo" data-id="${index}" title="Enviar al fondo (debajo de las demás)" onclick="layerToBack('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17V3"></path><path d="m6 11 6 6 6-6"></path><path d="M19 21H5"></path></svg></button>
                   <button type="button" class="ls-action ls-action-duplicar" data-id="${index}" title="Duplicar la capa" onclick="duplicateLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
                   <button type="button" class="ls-action ls-action-recargar" data-id="${index}" title="Recargar la capa (vuelve a pedir los datos al servicio)" onclick="reloadLayer('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M3 21v-5h5"></path></svg></button>
@@ -2827,6 +2829,8 @@ class miPlugin_layerSwitcher {
     // negativo o fuera de rango no es un orden, es un error.
     window.layerToFront = function (index) { _moverCapaAlExtremo(index, true); };
     window.layerToBack = function (index) { _moverCapaAlExtremo(index, false); };
+    window.layerUp = function (index) { _moverCapaUnPaso(index, true); };
+    window.layerDown = function (index) { _moverCapaUnPaso(index, false); };
 
     /**
      * Lleva una capa al principio o al final de la pila de capas.
@@ -2857,14 +2861,7 @@ class miPlugin_layerSwitcher {
       // separarlas, "enviar al fondo" dejaba la capa DEBAJO del mapa base y
       // desaparecía. "Al fondo" es el fondo de las superpuestas, no el de las
       // bases.
-      const esBase = (l) => {
-        try {
-          if (l && l.isBase === true) return true;
-          const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
-          return !!(impl && impl.isBase === true);
-        } catch (e) { return false; }
-      };
-      const bases = conZ.filter((l) => esBase(l) && bloque.indexOf(l) < 0)
+      const bases = conZ.filter((l) => _esCapaBase(l) && bloque.indexOf(l) < 0)
         .sort((a, b) => self._zReal(a) - self._zReal(b));
       const ordenadas = conZ.slice().sort((a, b) => self._zReal(a) - self._zReal(b));
       const resto = ordenadas.filter((l) => bloque.indexOf(l) < 0);
@@ -2878,6 +2875,111 @@ class miPlugin_layerSwitcher {
         if (typeof valores[i] === 'number') self._escribirZ(l, valores[i]);
       });
       renderLayerList();
+    }
+
+    /**
+     * Lleva una capa (o un grupo) UNA posición hacia arriba o hacia abajo en
+     * la pila, permutando su z-index con el de la capa vecina. Es el paso
+     * corto de "al frente" y "al fondo": permite afinar el orden sin mandar
+     * la capa a un extremo y volver a colocarla.
+     *
+     * Igual que ellos, no inventa z-index: intercambia los que ya hay. Y
+     * tampoco atraviesa el mapa base al bajar, para que la capa no se quede
+     * detrás del fondo y desaparezca.
+     *
+     * @param {string} index idLayer de la capa o grupo.
+     * @param {boolean} arriba true = una posición hacia arriba (se dibuja
+     *   encima de la capa que tenía justo encima); false = hacia abajo.
+     */
+    function _moverCapaUnPaso(index, arriba) {
+      const capa = findLayerById(index);
+      if (!capa || !map) return;
+      const hojas = _hojasDeCapa(capa);
+      if (!hojas.length) {
+        _avisar('Esta capa no participa en el orden de apilado.');
+        return;
+      }
+      const conZ = self._capasConZ(map).filter((l) => {
+        const z = self._zReal(l);
+        return typeof z === 'number' && isFinite(z);
+      });
+      const bloque = hojas.filter((l) => conZ.indexOf(l) >= 0);
+      if (!bloque.length) {
+        _avisar('Esta capa no participa en el orden de apilado.');
+        return;
+      }
+
+      // Las hojas de un grupo se mueven desde el lado hacia el que van: si se
+      // hiciera al revés, la primera pisaría el hueco de la siguiente y el
+      // bloque se desharía en vez de desplazarse entero.
+      bloque.sort((a, b) => self._zReal(a) - self._zReal(b));
+      const enOrden = arriba ? bloque.slice().reverse() : bloque;
+      let movida = false;
+
+      enOrden.forEach((hoja) => {
+        const z = self._zReal(hoja);
+        if (typeof z !== 'number' || !isFinite(z)) return;
+        const vecino = _vecinoEnLaPila(hoja, arriba, bloque);
+        if (!vecino) return;
+        // Al bajar no se atraviesa el mapa base: el fondo es el de las
+        // superpuestas, igual que en layerToBack.
+        if (!arriba && _esCapaBase(vecino)) return;
+        const zVecino = self._zReal(vecino);
+        if (typeof zVecino !== 'number' || !isFinite(zVecino)) return;
+        self._escribirZ(hoja, zVecino);
+        self._escribirZ(vecino, z);
+        movida = true;
+      });
+
+      if (!movida) {
+        _avisar(arriba
+          ? 'La capa ya está arriba del todo.'
+          : 'La capa ya está en el fondo de las superpuestas.');
+        return;
+      }
+      renderLayerList();
+    }
+
+    /**
+     * Capa vecina en la pila, en la dirección pedida, que no sea del propio
+     * bloque (las hojas de un grupo no se cuentan como vecinas entre sí).
+     * @param {Object} hoja
+     * @param {boolean} arriba
+     * @param {Array<Object>} bloque
+     * @returns {Object|null}
+     */
+    function _vecinoEnLaPila(hoja, arriba, bloque) {
+      const z = self._zReal(hoja);
+      if (typeof z !== 'number' || !isFinite(z)) return null;
+      const candidatas = self._capasConZ(map)
+        .filter((l) => l && l !== hoja && bloque.indexOf(l) < 0)
+        .filter((l) => {
+          const zl = self._zReal(l);
+          return typeof zl === 'number' && isFinite(zl);
+        })
+        .sort((a, b) => self._zReal(a) - self._zReal(b));
+      if (arriba) {
+        // La primera con z mayor es la que está justo encima.
+        return candidatas.find((l) => self._zReal(l) > z) || null;
+      }
+      // La última con z menor es la que está justo debajo.
+      const debajo = candidatas.filter((l) => self._zReal(l) < z);
+      return debajo.length ? debajo[debajo.length - 1] : null;
+    }
+
+    /**
+     * true si la capa es un mapa base. Las bases no salen en el selector, pero
+     * sí están en la pila de capas, así que hay que reconocerlas para no
+     * colocar nada por debajo de ellas.
+     * @param {Object} l
+     * @returns {boolean}
+     */
+    function _esCapaBase(l) {
+      try {
+        if (l && l.isBase === true) return true;
+        const impl = (l && typeof l.getImpl === 'function') ? l.getImpl() : null;
+        return !!(impl && impl.isBase === true);
+      } catch (e) { return false; }
     }
 
     /**
@@ -8031,7 +8133,7 @@ class miPlugin_layerSwitcher {
       'handleDrop', 'handleDragEnd', 'deleteLayer', 'getLayerKind', 'setLayerOpacity',
       'setLayerStyle', 'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo',
       'openLayerFicha', '_lsPickerLayers', 'setBBoxModo', 'setBBoxLimite', 'setBBoxPagina',
-      'layerToFront', 'layerToBack', 'duplicateLayer', 'reloadLayer', 'isolateLayer',
+      'layerToFront', 'layerToBack', 'layerUp', 'layerDown', 'duplicateLayer', 'reloadLayer', 'isolateLayer',
       'copyLayerUrl', 'copyLayerCode',
       '__lsDragId', '__lsDragHandleArmed'
     ];
