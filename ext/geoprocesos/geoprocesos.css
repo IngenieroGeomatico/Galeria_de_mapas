@@ -1,0 +1,574 @@
+/* =====================================================================
+   GEOPROCESOS · API-IDEE / API-CNIG
+   =====================================================================
+
+   Hoja de estilos del plugin `ext/geoprocesos`. Todas las clases van con el
+   prefijo `gp-` para no chocar con la API ni con otros plugins.
+
+   Los colores de acento NO se escriben aquí: entran por el constructor del
+   plugin y se aplican como variables CSS en el panel
+
+       --g-plugin-bg-color / --g-plugin-bg-color-active
+       --g-plugin-border-color / --g-plugin-border-color-active
+       --g-plugin-icon-color / --g-plugin-icon-color-active
+
+   Lo que hay detrás de cada `var(...)` es solo el valor de respaldo, para que
+   la hoja se vea bien aunque el plugin se monte sin colores.
+   ===================================================================== */
+
+/* ── Contenedor del panel en la barra de herramientas ─────────────────── */
+.g-herramienta_geoprocesos {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  color: #333333;
+}
+
+/* ── Icono del botón (panel plegado) ──────────────────────────────────── */
+/* Es una máscara: solo cuenta el alfa del SVG, así que el dibujo se pinta
+   con el color del plugin. El SVG por defecto es un globo terráqueo con una
+   rejilla, que es lo que mejor resume "geoprocesos" sin depender de la
+   fuente de iconos de la API (que no tiene ninguno de análisis). */
+.g-herramienta_geoprocesos .m-tools:before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: var(--g-plugin-icon-mask, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18'/></svg>"));
+  mask-image: var(--g-plugin-icon-mask, url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18'/></svg>"));
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.g-herramienta_geoprocesos.opened .m-tools:before {
+  background-color: var(--g-plugin-icon-color-active, #71A7D3);
+}
+
+/* ── Estructura de la vista ───────────────────────────────────────────── */
+.gp-container {
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.gp-header {
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gp-body {
+  padding: 10px 12px 12px;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+}
+
+.gp-oculto {
+  display: none !important;
+}
+
+/* ── Pestañas ─────────────────────────────────────────────────────────── */
+.gp-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #d7dde3;
+}
+
+.gp-tab {
+  flex: 1 1 0;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #55606a;
+  background-color: #f2f4f6;
+  border: 1px solid #d7dde3;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+}
+
+.gp-tab:hover {
+  background-color: #e9edf1;
+}
+
+.gp-tab--activa {
+  color: #1f2a33;
+  background-color: #ffffff;
+  box-shadow: inset 0 -2px 0 var(--g-plugin-border-color-active, #71A7D3);
+}
+
+/* ── Bloques, etiquetas y ayudas ──────────────────────────────────────── */
+.gp-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gp-etiqueta {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3d4a55;
+  margin: 0;
+}
+
+.gp-etiqueta--sub {
+  font-weight: 500;
+  font-size: 11px;
+  color: #5a6773;
+}
+
+.gp-descripcion {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #5a6773;
+}
+
+.gp-ayuda {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #6b7885;
+}
+
+.gp-subtitulo {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2c3842;
+}
+
+.gp-aviso {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #7a4b00;
+  background-color: #fff6e5;
+  border: 1px solid #f0d9a8;
+  border-radius: 4px;
+}
+
+.gp-aviso-impl {
+  color: #7a4b00;
+  background-color: #fff6e5;
+  border-color: #f0d9a8;
+}
+
+/* ── Controles ────────────────────────────────────────────────────────── */
+.gp-input,
+.gp-select,
+.gp-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 12px;
+  color: #26323c;
+  background-color: #ffffff;
+  border: 1px solid #c9d2da;
+  border-radius: 4px;
+}
+
+.gp-input:focus,
+.gp-select:focus,
+.gp-textarea:focus,
+.gp-buscador:focus {
+  outline: 2px solid var(--g-plugin-border-color-active, #71A7D3);
+  outline-offset: 0;
+  border-color: var(--g-plugin-border-color-active, #71A7D3);
+}
+
+.gp-buscador {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 7px;
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid #d7dde3;
+  border-radius: 4px;
+  background-color: #fbfcfd;
+}
+
+.gp-select--modo {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #5a6773;
+}
+
+.gp-select--multiple {
+  min-height: 76px;
+}
+
+.gp-textarea {
+  resize: vertical;
+  min-height: 44px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.gp-ras-file {
+  max-width: 100%;
+  font-size: 11px;
+}
+
+.gp-fila {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.gp-fila > .gp-input {
+  min-width: 0;
+}
+
+.gp-fila--bbox {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.gp-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #3d4a55;
+  cursor: pointer;
+}
+
+.gp-check input {
+  margin: 0;
+}
+
+/* ── Formulario generado ──────────────────────────────────────────────── */
+.gp-formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gp-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #e3e8ec;
+}
+
+.gp-campo:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.gp-opciones {
+  margin: 0;
+  padding: 6px 8px 8px;
+  border: 1px solid #e0e6eb;
+  border-radius: 4px;
+  background-color: #fafbfc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gp-opciones > legend {
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #5a6773;
+}
+
+.gp-subcampo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* ── Botones ──────────────────────────────────────────────────────────── */
+.gp-acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2c3842;
+  background-color: #f2f4f6;
+  border: 1px solid #c9d2da;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.gp-btn:hover:not(:disabled) {
+  background-color: #e9edf1;
+}
+
+.gp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gp-btn--principal {
+  color: #ffffff;
+  background-color: var(--g-plugin-border-color-active, #71A7D3);
+  border-color: var(--g-plugin-border-color-active, #71A7D3);
+}
+
+.gp-btn--principal:hover:not(:disabled) {
+  filter: brightness(0.93);
+  background-color: var(--g-plugin-border-color-active, #71A7D3);
+}
+
+.gp-btn--mini {
+  align-self: flex-start;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ── Estados ──────────────────────────────────────────────────────────── */
+.gp-estado {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-line;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.gp-estado--info {
+  color: #1f4b6e;
+  background-color: #eef6fc;
+  border-color: #cfe4f5;
+}
+
+.gp-estado--ok {
+  color: #1e5b32;
+  background-color: #eefaf1;
+  border-color: #cbead5;
+}
+
+.gp-estado--error {
+  color: #7a1f1f;
+  background-color: #fdeeee;
+  border-color: #f3cfcf;
+}
+
+.gp-estado--cargando {
+  color: #4a3b00;
+  background-color: #fffbe6;
+  border-color: #f2e6b3;
+}
+
+/* ── Exportación (details) ────────────────────────────────────────────── */
+.gp-desplegable {
+  border: 1px solid #e0e6eb;
+  border-radius: 4px;
+  background-color: #fafbfc;
+}
+
+.gp-desplegable > summary {
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3d4a55;
+  cursor: pointer;
+  list-style: none;
+}
+
+.gp-desplegable > summary::-webkit-details-marker {
+  display: none;
+}
+
+.gp-desplegable > summary:before {
+  content: '▸';
+  display: inline-block;
+  width: 12px;
+  color: #6b7885;
+}
+
+.gp-desplegable[open] > summary:before {
+  content: '▾';
+}
+
+.gp-desplegable > .gp-bloque {
+  padding: 0 8px 8px;
+}
+
+/* ── Ráster ───────────────────────────────────────────────────────────── */
+.gp-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  background-color: #f6f8fa;
+  border: 1px solid #e3e8ec;
+  border-radius: 4px;
+}
+
+.gp-meta dt {
+  font-weight: 600;
+  color: #5a6773;
+}
+
+.gp-meta dd {
+  margin: 0;
+  color: #26323c;
+  word-break: break-word;
+}
+
+.gp-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gp-chip {
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #3d4a55;
+  background-color: #eef2f6;
+  border: 1px solid #d7dde3;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.gp-chip:hover {
+  background-color: #e2e9ef;
+  border-color: #c9d2da;
+}
+
+.gp-expresion {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #26323c;
+  border: 1px solid #c9d2da;
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.gp-resultado {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  background-color: #f6f8fa;
+  border: 1px solid #e3e8ec;
+  border-radius: 4px;
+}
+
+.gp-resumen {
+  margin: 0;
+  font-size: 11px;
+  color: #3d4a55;
+  word-break: break-word;
+}
+
+/* ====================================================================
+   PANEL LATERAL (clase opt-in `g-panel-lateral`)
+   --------------------------------------------------------------------
+   Copiado de ext/plantilla_plugin/plantilla_plugin.css: la API apila los
+   paneles de cada esquina en un flex column y, al abrir uno, crece a lo
+   alto y empuja a los demás. Con esta clase el panel abierto se queda en
+   40x40 (solo el botón) y `.m-panel-controls` sale de flujo al lado.
+
+   El selector es genérico y está repetido en la hoja de cada plugin: entre
+   hojas con el mismo selector gana la última que se carga, así que este
+   bloque tiene que seguir siendo idéntico al de la plantilla.
+   ==================================================================== */
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  background-color: transparent !important;
+  overflow: visible !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  z-index: 2;
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  left: 0 !important;
+  right: auto !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  right: 0 !important;
+  left: auto !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  position: absolute !important;
+  top: 0 !important;
+  z-index: 1;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  left: 100% !important;
+  right: auto !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  right: 100% !important;
+  left: auto !important;
+}
+
+.m-areas > .m-area.m-bottom > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  bottom: 0 !important;
+  top: auto !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
+  position: static !important;
+}
+
+@media (max-width: 768px) {
+  .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+    max-width: calc(100vw - 60px);
+  }
+
+  .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
+    max-width: 100%;
+  }
+}
