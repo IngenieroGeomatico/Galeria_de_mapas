@@ -1,5 +1,5 @@
 /* =====================================================================
-   ESCRITOR DE GEOTIFF FLOAT32 · API-IDEE / API-CNIG
+   ESCRITOR DE GEOTIFF · API-IDEE / API-CNIG
    =====================================================================
 
    POR QUÉ EXISTE ESTE FICHERO
@@ -18,11 +18,14 @@
    el buffer se queda corto y el fichero sale truncado y corrupto. Está
    pensado solo para datos de 8 bits.
 
-   Así que aquí se escribe un TIFF mínimo, little-endian, de UNA banda
-   Float32 sin compresión, con las etiquetas de georreferenciación
-   (ModelPixelScale + ModelTiepoint) y las GeoKeys del SRC. Es el mismo
-   formato que produce `gdal_translate -of GTiff -ot Float32`, y se lee
-   sin problemas con geotiff.js, con OpenLayers y con GDAL.
+   Así que aquí se escribe un TIFF mínimo, little-endian, sin compresión,
+   con las etiquetas de georreferenciación (ModelPixelScale +
+   ModelTiepoint) y las GeoKeys del SRC. Es el mismo formato que produce
+   `gdal_translate -of GTiff`, y se lee sin problemas con geotiff.js, con
+   OpenLayers y con GDAL. Hay dos variantes:
+
+       escribirGeoTIFFFloat32  una banda Float32 (resultados calculados)
+       escribirGeoTIFFUInt8    1–4 bandas de 8 bits (capturas de servicios)
 
    ESTRUCTURA DEL FICHERO
 
@@ -61,9 +64,19 @@
          nodata: 'nan',
        });
 
+       const rgb = escribirGeoTIFFUInt8({
+         ancho: 1024, alto: 768, bandas: 3,
+         datos: new Uint8Array(1024 * 768 * 3),  // R,G,B entrelazados
+         origenX: -1000, origenY: 5000, resX: 10, resY: 10, epsg: 3857,
+       });
+
    `datos` va en el orden de filas de arriba abajo, que es el de
    `readRasters` de geotiff.js y el de `ModelTiepoint` con escala
    positiva en Y.
+
+   `escribirGeoTIFFFloat32` es para los resultados de la calculadora (valores
+   reales) y `escribirGeoTIFFUInt8` para las capturas de servicios (píxeles
+   de 8 bits, RGB o escala de grises).
    ===================================================================== */
 
 (function () {
@@ -129,6 +142,84 @@
       salida.push(c[0], c[1], c[2], c[3]);
     });
     return salida;
+  }
+
+  /**
+   * Serializa un TIFF little-endian con las etiquetas dadas y un único strip
+   * de píxeles sin compresión.
+   *
+   * El llamante solo tiene que montar `entradas` (en orden ascendente de tag,
+   * con la 273 vacía) y pasar los bytes de píxeles ya empaquetados.
+   *
+   * @param {Array<Object>} entradas Etiquetas del IFD.
+   * @param {Uint8Array} pixeles Bytes del strip de píxeles.
+   * @returns {ArrayBuffer} Fichero TIFF.
+   */
+  function serializarTiff(entradas, pixeles) {
+    var n = entradas.length;
+    var tamIFD = 2 + (n * 12) + 4;
+
+    // Primera pasada: tamaño de cada bloque y offsets de los que no caben
+    // en los 4 bytes del campo de valor.
+    var cursor = 8 + tamIFD;
+    cursor += (8 - (cursor % 8)) % 8;
+
+    entradas.forEach(function (e) {
+      var tam = e.bytes ? e.bytes.length : e.cuenta * TAM_TIPO[e.tipo];
+      e.tam = tam;
+      if (tam > 4) {
+        cursor += (8 - (cursor % 8)) % 8;
+        e.offset = cursor;
+        cursor += tam;
+        if (cursor % 2 !== 0) cursor += 1; // alineación a palabra
+      }
+    });
+
+    // Los píxeles van al final, alineados a 4 bytes.
+    var offsetPixeles = cursor + ((4 - (cursor % 4)) % 4);
+    entradas.forEach(function (e) {
+      if (e.tag === 273) e.valores = [offsetPixeles]; // StripOffsets
+    });
+
+    var total = offsetPixeles + pixeles.byteLength;
+    var buffer = new ArrayBuffer(total);
+    var vista = new DataView(buffer);
+    var bytes = new Uint8Array(buffer);
+
+    // Cabecera: 'II' (little-endian), 42 y offset de la primera IFD.
+    bytes[0] = 0x49;
+    bytes[1] = 0x49;
+    vista.setUint16(2, 42, true);
+    vista.setUint32(4, 8, true);
+
+    // IFD.
+    vista.setUint16(8, n, true);
+    var p = 10;
+    entradas.forEach(function (e) {
+      vista.setUint16(p, e.tag, true);
+      vista.setUint16(p + 2, e.tipo, true);
+      vista.setUint32(p + 4, e.cuenta, true);
+      if (e.tam <= 4) {
+        // Los valores cortos van en línea, alineados a la izquierda.
+        var tmp = new DataView(new ArrayBuffer(4));
+        escribirValores(tmp, 0, e);
+        for (var k = 0; k < 4; k += 1) bytes[p + 8 + k] = tmp.getUint8(k);
+      } else {
+        vista.setUint32(p + 8, e.offset, true);
+      }
+      p += 12;
+    });
+    vista.setUint32(p, 0, true); // no hay más IFDs
+
+    // Bloques de datos.
+    entradas.forEach(function (e) {
+      if (e.tam > 4) escribirValores(vista, e.offset, e);
+    });
+
+    // Píxeles: se copian los bytes tal cual.
+    bytes.set(pixeles, offsetPixeles);
+
+    return buffer;
   }
 
   /**
@@ -205,73 +296,97 @@
       { tag: 42113, tipo: TIFF_ASCII, cuenta: nodataBytes.length, bytes: nodataBytes },
     ];
 
-    var n = entradas.length;
-    var tamIFD = 2 + (n * 12) + 4;
-
-    // Primera pasada: tamaño de cada bloque y offsets de los que no caben
-    // en los 4 bytes del campo de valor.
-    var cursor = 8 + tamIFD;
-    cursor += (8 - (cursor % 8)) % 8;
-
-    entradas.forEach(function (e) {
-      var tam = e.bytes ? e.bytes.length : e.cuenta * TAM_TIPO[e.tipo];
-      e.tam = tam;
-      if (tam > 4) {
-        cursor += (8 - (cursor % 8)) % 8;
-        e.offset = cursor;
-        cursor += tam;
-        if (cursor % 2 !== 0) cursor += 1; // alineación a palabra
-      }
-    });
-
-    // Los píxeles van al final, alineados a 4 bytes (Float32).
-    var offsetPixeles = cursor + ((4 - (cursor % 4)) % 4);
-    entradas[5].valores = [offsetPixeles]; // StripOffsets (tag 273)
-
-    var total = offsetPixeles + (ancho * alto * 4);
-    var buffer = new ArrayBuffer(total);
-    var vista = new DataView(buffer);
-    var bytes = new Uint8Array(buffer);
-
-    // Cabecera: 'II' (little-endian), 42 y offset de la primera IFD.
-    bytes[0] = 0x49;
-    bytes[1] = 0x49;
-    vista.setUint16(2, 42, true);
-    vista.setUint32(4, 8, true);
-
-    // IFD.
-    vista.setUint16(8, n, true);
-    var p = 10;
-    entradas.forEach(function (e) {
-      vista.setUint16(p, e.tag, true);
-      vista.setUint16(p + 2, e.tipo, true);
-      vista.setUint32(p + 4, e.cuenta, true);
-      if (e.tam <= 4) {
-        // Los valores cortos van en línea, alineados a la izquierda.
-        var tmp = new DataView(new ArrayBuffer(4));
-        escribirValores(tmp, 0, e);
-        for (var k = 0; k < 4; k += 1) bytes[p + 8 + k] = tmp.getUint8(k);
-      } else {
-        vista.setUint32(p + 8, e.offset, true);
-      }
-      p += 12;
-    });
-    vista.setUint32(p, 0, true); // no hay más IFDs
-
-    // Bloques de datos.
-    entradas.forEach(function (e) {
-      if (e.tam > 4) escribirValores(vista, e.offset, e);
-    });
-
     // Píxeles: se copian los bytes tal cual (la plataforma es little-endian,
     // igual que la cabecera que se acaba de escribir).
     var pixeles = new Uint8Array(datos.buffer, datos.byteOffset, datos.byteLength);
-    bytes.set(pixeles, offsetPixeles);
+    return serializarTiff(entradas, pixeles);
+  }
 
-    return buffer;
+  /**
+   * Construye un GeoTIFF de 8 bits y 1–4 bandas con georreferenciación.
+   *
+   * Es el que se usa para las capturas de servicios: un WMS o un TMS devuelve
+   * píxeles de 8 bits (RGB), no medidas, y pasarlos por Float32 solo
+   * engordaría el fichero. `datos` va entrelazado por píxel (R,G,B[,A]).
+   *
+   * @param {Object} o Opciones.
+   * @param {number} o.ancho Ancho en píxeles.
+   * @param {number} o.alto Alto en píxeles.
+   * @param {Uint8Array} o.datos Píxeles entrelazados, en orden de filas.
+   * @param {number} o.origenX X de la esquina superior izquierda.
+   * @param {number} o.origenY Y de la esquina superior izquierda.
+   * @param {number} o.resX Tamaño de píxel en X (positivo).
+   * @param {number} o.resY Tamaño de píxel en Y (positivo).
+   * @param {number} [o.bandas=3] Número de bandas (1 a 4).
+   * @param {number} [o.epsg=4326] Código EPSG del fichero.
+   * @param {number} [o.fotometrico] PhotometricInterpretation (por defecto 2
+   *   para 3–4 bandas y 1 para 1 banda).
+   * @returns {ArrayBuffer} Fichero GeoTIFF listo para un Blob.
+   */
+  function escribirGeoTIFFUInt8(o) {
+    var ancho = Math.round(o.ancho);
+    var alto = Math.round(o.alto);
+    var bandas = Math.max(1, Math.min(4, Math.round(o.bandas || 3)));
+    var datos = o.datos;
+
+    if (!(ancho > 0) || !(alto > 0)) {
+      throw new Error('escribirGeoTIFFUInt8: dimensiones no válidas');
+    }
+    if (!datos || datos.length !== ancho * alto * bandas) {
+      throw new Error('escribirGeoTIFFUInt8: el número de píxeles no cuadra con las dimensiones');
+    }
+
+    var epsg = Number(o.epsg) || 4326;
+    var proyectado = epsg !== 4326 && epsg !== 4258 && epsg !== 4269;
+    var directorio = directorioGeoKeys(epsg, proyectado);
+    var fotometrico = o.fotometrico || (bandas >= 3 ? 2 : 1);
+
+    var bits = [];
+    var formato = [];
+    for (var i = 0; i < bandas; i += 1) {
+      bits.push(8);
+      formato.push(1); // 1 = entero sin signo
+    }
+
+    var entradas = [
+      { tag: 256, tipo: TIFF_LONG, cuenta: 1, valores: [ancho] },
+      { tag: 257, tipo: TIFF_LONG, cuenta: 1, valores: [alto] },
+      { tag: 258, tipo: TIFF_SHORT, cuenta: bandas, valores: bits },
+      { tag: 259, tipo: TIFF_SHORT, cuenta: 1, valores: [1] },
+      { tag: 262, tipo: TIFF_SHORT, cuenta: 1, valores: [fotometrico] },
+      { tag: 273, tipo: TIFF_LONG, cuenta: 1, valores: [0] },
+      { tag: 277, tipo: TIFF_SHORT, cuenta: 1, valores: [bandas] },
+      { tag: 278, tipo: TIFF_LONG, cuenta: 1, valores: [alto] },
+      { tag: 279, tipo: TIFF_LONG, cuenta: 1, valores: [ancho * alto * bandas] },
+      { tag: 284, tipo: TIFF_SHORT, cuenta: 1, valores: [1] },
+      { tag: 339, tipo: TIFF_SHORT, cuenta: bandas, valores: formato },
+      {
+        tag: 33550,
+        tipo: TIFF_DOUBLE,
+        cuenta: 3,
+        valores: [Math.abs(o.resX), Math.abs(o.resY), 0],
+      },
+      {
+        tag: 33922,
+        tipo: TIFF_DOUBLE,
+        cuenta: 6,
+        valores: [0, 0, 0, o.origenX, o.origenY, 0],
+      },
+      {
+        tag: 34735,
+        tipo: TIFF_SHORT,
+        cuenta: directorio.length,
+        valores: directorio,
+      },
+    ];
+
+    return serializarTiff(entradas, datos);
   }
 
   // Exposición global: el plugin lo carga bajo demanda y lo usa desde ahí.
   // No se toca ningún espacio de nombres de la API.
-  window.GeoprocesosGeoTIFF = { escribirGeoTIFFFloat32: escribirGeoTIFFFloat32 };
+  window.GeoprocesosGeoTIFF = {
+    escribirGeoTIFFFloat32: escribirGeoTIFFFloat32,
+    escribirGeoTIFFUInt8: escribirGeoTIFFUInt8,
+  };
 })();

@@ -13,7 +13,8 @@
                  completa, todas las entidades o solo la primera.
 
      · Ráster  — fuente GeoTIFF (capa del mapa, fichero local o captura de un
-                 servicio WMS con el encuadre actual), calculadora de bandas
+                 servicio del mapa con el encuadre actual: GetMap a un WMS o
+                 mosaico de teselas de un TMS/XYZ), calculadora de bandas
                  sobre GeoTIFF (expresión con B1, B2…, presets
                  NDVI/NDWI/umbral/escala) y geoprocesos con gdal3.js
                  (reproyectar, recortar, redimensionar, convertir formato).
@@ -587,6 +588,7 @@
       // addControls), el enganche se hace igualmente: _hacerArrastrable es
       // idempotente.
       this._hacerArrastrable();
+      setTimeout(function () { self._vigilarAperturaPanel(); }, 0);
 
       try {
         var c1 = this.resolveColor(this.color1);
@@ -675,7 +677,7 @@
         /* ---------------------------- RÁSTER ---------------------------- */
         '  <section class="gp-panel gp-oculto" data-panel="raster" role="tabpanel">',
         '    <details class="gp-seccion" data-seccion="raster-fuente" open>',
-        '      <summary class="gp-seccion-titulo">Fuente ráster (GeoTIFF o servicio WMS)</summary>',
+        '      <summary class="gp-seccion-titulo">Fuente ráster (GeoTIFF, WMS o TMS)</summary>',
         '      <div class="gp-seccion-cuerpo">',
         '        <div class="gp-bloque">',
         '          <label class="gp-etiqueta" for="gp-ras-fuente">Capa GeoTIFF del mapa</label>',
@@ -684,7 +686,7 @@
         '          <input type="file" class="gp-ras-file" accept=".tif,.tiff,image/tiff">',
         '        </div>',
         '        <div class="gp-bloque gp-ras-servicio-bloque">',
-        '          <label class="gp-etiqueta" for="gp-ras-servicio">…o capturar un servicio WMS del mapa</label>',
+        '          <label class="gp-etiqueta" for="gp-ras-servicio">…o capturar un servicio del mapa (WMS o TMS)</label>',
         '          <select class="gp-select gp-ras-servicio" id="gp-ras-servicio"></select>',
         '          <label class="gp-etiqueta" for="gp-ras-tamano">Tamaño de la captura (lado mayor)</label>',
         '          <select class="gp-select gp-ras-tamano" id="gp-ras-tamano">',
@@ -693,10 +695,10 @@
         '            <option value="512">512 px</option>',
         '          </select>',
         '          <button type="button" class="gp-btn gp-ras-capturar">Capturar la vista como GeoTIFF</button>',
-        '          <p class="gp-ayuda">Pide al servicio un GeoTIFF del encuadre actual (GetMap en EPSG:3857, '
-          + 'con vuelta a EPSG:4326 si el servicio no admite Web Mercator) y lo abre como fuente para '
-          + 'calcular, geoprocesar y descargar. Son los píxeles que pinta el servicio, no los datos '
-          + 'originales: para valores reales hace falta un WCS o el GeoTIFF de descarga del proveedor.</p>',
+        '          <p class="gp-ayuda">Pide al servicio el encuadre actual: GetMap a un WMS (en EPSG:3857, '
+          + 'con vuelta a EPSG:4326 si no admite Web Mercator) o mosaico de teselas a un TMS. Lo abre '
+          + 'como fuente para calcular, geoprocesar y descargar. Son los píxeles que pinta el servicio, '
+          + 'no los datos originales: para valores reales hace falta un WCS o el GeoTIFF del proveedor.</p>',
         '        </div>',
         '        <dl class="gp-meta gp-ras-meta gp-oculto"></dl>',
         '      </div>',
@@ -867,6 +869,9 @@
       if (nombre === 'raster') {
         if (!this._el.rasOp.options.length) this._inicializarRaster();
         else this._refrescarCapas();
+        // La capa base del mapa puede aparecer después de montar el plugin:
+        // se vuelve a mirar al abrir la pestaña para que sea seleccionable.
+        this._refrescarServicios();
       }
       void self;
     }
@@ -909,6 +914,30 @@
         this._arrastrable = false;
         console.warn(this.name + ': no se pudo hacer arrastrable la barra de título.', e);
       }
+    }
+
+    /**
+     * Rehace la lista de servicios WMS/TMS al abrir el panel.
+     *
+     * Los fondos del mapa (la capa base) se crean al aplicar la configuración,
+     * que puede ser después de montar el plugin: sin esto, la primera vez que
+     * se abre la pestaña Ráster el desplegable puede no tener todavía el TMS
+     * de la capa base.
+     */
+    _vigilarAperturaPanel() {
+      if (this._escuchaPanel) return;
+      var panelEl = (this._panel && typeof this._panel.getElement === 'function')
+        ? this._panel.getElement()
+        : document.querySelector('.m-panel.g-herramienta_geoprocesos');
+      if (!panelEl) return;
+      this._escuchaPanel = true;
+      var self = this;
+      panelEl.addEventListener('click', function (evt) {
+        var destino = evt.target;
+        if (destino && typeof destino.closest === 'function' && destino.closest('.m-panel-btn')) {
+          self._refrescarServicios();
+        }
+      });
     }
 
     /** Detecta Cesium sin depender del bundle cargado. */
@@ -959,25 +988,34 @@
       }, this);
       if (previoRas && this._capaPorId(previoRas)) selRas.value = previoRas;
 
-      // Servicios WMS: no son un fichero GeoTIFF, pero el plugin puede pedirles
-      // un GeoTIFF del encuadre actual y usarlo como fuente.
-      var selServ = this._el.rasServicio;
-      if (selServ) {
-        var servicios = this._capasServicioRaster();
-        var previoServ = selServ.value;
-        selServ.innerHTML = '';
-        selServ.appendChild(opcion('', servicios.length
-          ? '— elige un servicio WMS —'
-          : '— el mapa no tiene capas WMS —'));
-        servicios.forEach(function (c) {
-          selServ.appendChild(opcion(this._idCapa(c), this._nombreCapa(c)));
-        }, this);
-        if (previoServ && this._capaPorId(previoServ)) selServ.value = previoServ;
-        if (this._el.rasCapturar) this._el.rasCapturar.disabled = !servicios.length;
-      }
+      this._refrescarServicios();
 
       // Si el formulario ya estaba pintado, se repintan sus desplegables de capa.
       if (this._fn && this._el.formulario) this._renderFormulario(this._fn);
+    }
+
+    /**
+     * Rehace solo el desplegable de servicios WMS/TMS.
+     *
+     * Va aparte de `_refrescarCapas` porque el mapa puede ganar la capa base
+     * después de montar el plugin (los fondos se crean al aplicar la
+     * configuración del mapa) y la pestaña Ráster tiene que verla sin esperar a
+     * que cambie nada más.
+     */
+    _refrescarServicios() {
+      var selServ = this._el && this._el.rasServicio;
+      if (!selServ) return;
+      var servicios = this._capasServicioRaster();
+      var previoServ = selServ.value;
+      selServ.innerHTML = '';
+      selServ.appendChild(opcion('', servicios.length
+        ? '— elige un servicio WMS o TMS —'
+        : '— el mapa no tiene capas WMS ni TMS —'));
+      servicios.forEach(function (c) {
+        selServ.appendChild(opcion(this._idCapa(c), this._nombreCapa(c)));
+      }, this);
+      if (previoServ && this._capaPorId(previoServ)) selServ.value = previoServ;
+      if (this._el.rasCapturar) this._el.rasCapturar.disabled = !servicios.length;
     }
 
     /* ---------------------------------------------------------------- *
@@ -1037,10 +1075,10 @@
     }
 
     /**
-     * Capas WMS del mapa. No se abren como fichero, pero sí se les puede
-     * pedir un GeoTIFF del encuadre actual con GetMap (ver
-     * `_capturarServicioRaster`).
-     * @returns {Array<Object>} Capas WMS.
+     * Capas de servicio ráster del mapa. No se abren como fichero, pero sí se
+     * les puede pedir un GeoTIFF del encuadre actual: GetMap a un WMS
+     * (`_getMapServicio`) o mosaico de teselas a un TMS (`_capturarTms`).
+     * @returns {Array<Object>} Capas WMS/TMS.
      */
     _capasServicioRaster() {
       var out = [];
@@ -1060,9 +1098,14 @@
       });
     }
 
-    /** ¿Es un servicio del que se puede pedir un GeoTIFF con GetMap? */
+    /** ¿Es un servicio del que se puede obtener un GeoTIFF del encuadre? */
     _esServicioRaster(capa) {
-      return !!(capa && /^WMS$/i.test(String(capa.type || '')));
+      return !!(capa && /^(WMS|TMS|XYZ)$/i.test(String(capa.type || '')));
+    }
+
+    /** ¿Se resuelve con mosaico de teselas (TMS/XYZ) y no con GetMap? */
+    _esServicioTeselado(capa) {
+      return !!(capa && /^(TMS|XYZ)$/i.test(String(capa.type || '')));
     }
 
     /**
@@ -2369,14 +2412,17 @@
      */
     async _capturarServicioRaster() {
       var estado = this._el.rasEstado;
+      // Antes de leer la selección se rehace la lista: así entra la capa base
+      // aunque el mapa la haya creado después de abrir el panel.
+      this._refrescarServicios();
       var id = this._el.rasServicio ? this._el.rasServicio.value : '';
       if (!id) {
-        this._estado(estado, 'Elige un servicio WMS de la lista.', 'error');
+        this._estado(estado, 'Elige un servicio WMS o TMS de la lista.', 'error');
         return;
       }
       var capa = this._capaPorId(id);
       if (!capa) {
-        this._estado(estado, 'No se encuentra la capa WMS seleccionada.', 'error');
+        this._estado(estado, 'No se encuentra el servicio seleccionado.', 'error');
         return;
       }
 
@@ -2397,8 +2443,14 @@
         var ancho = aspecto >= 1 ? lado : Math.max(1, Math.round(lado * aspecto));
         var alto = aspecto >= 1 ? Math.max(1, Math.round(lado / aspecto)) : lado;
 
-        this._estado(estado, 'Pidiendo el GeoTIFF al servicio (' + ancho + ' × ' + alto + ')…', 'cargando');
-        var respuesta = await this._getMapServicio(capa, vista.bbox, ancho, alto);
+        var respuesta;
+        if (this._esServicioTeselado(capa)) {
+          this._estado(estado, 'Descargando las teselas de la vista…', 'cargando');
+          respuesta = await this._capturarTms(capa, vista, lado);
+        } else {
+          this._estado(estado, 'Pidiendo el GeoTIFF al servicio (' + ancho + ' × ' + alto + ')…', 'cargando');
+          respuesta = await this._getMapServicio(capa, vista.bbox, ancho, alto);
+        }
         if (token !== this._tokenRaster) return;
 
         await this._abrirRaster(respuesta.buffer);
@@ -2413,13 +2465,14 @@
 
         // La fuente capturada ya es un fichero descargable de por sí.
         var nombre = 'GP captura ' + (this._contadorResultados = (this._contadorResultados || 0) + 1);
+        var tamano = this._raster.ancho + ' × ' + this._raster.alto;
         this._mostrarResultadoRaster(respuesta.buffer, nombre + '.tif',
-          ancho + ' × ' + alto + ' · ' + respuesta.formato);
-        this._estado(estado, 'Captura lista: ' + ancho + ' × ' + alto + ' px de «'
+          tamano + ' · ' + respuesta.formato);
+        this._estado(estado, 'Captura lista: ' + tamano + ' px de «'
           + this._nombreCapa(capa) + '» (' + respuesta.formato + ').', 'ok');
       } catch (e) {
         if (token !== this._tokenRaster) return;
-        console.error('[geoprocesos] captura WMS', e);
+        console.error('[geoprocesos] captura de servicio', e);
         this._estado(estado, 'No se ha podido capturar el servicio: ' + (e && e.message ? e.message : e), 'error');
       } finally {
         if (boton) boton.disabled = false;
@@ -2488,12 +2541,151 @@
     }
 
     /**
+     * Captura un TMS/XYZ de la vista: descarga las teselas del encuadre, las
+     * pega en un lienzo, recorta al bbox y escribe un GeoTIFF RGB de 8 bits.
+     *
+     * Un TMS no tiene GetMap, así que el encuadre se consigue juntando las
+     * teselas del nivel de zoom que dé el tamaño pedido. Se descargan como
+     * blob (no con `<img>`) para que el lienzo no quede contaminado y se
+     * puedan leer los píxeles.
+     *
+     * @param {Object} capa Capa TMS/XYZ.
+     * @param {{bbox: Array<number>, ancho: number, alto: number}} vista Encuadre.
+     * @param {number} lado Lado mayor del fichero, en píxeles.
+     * @returns {Promise<{buffer: ArrayBuffer, formato: string, epsg: number, bbox: Array<number>}>}
+     */
+    async _capturarTms(capa, vista, lado) {
+      var plantilla = String(capa.url || '');
+      if (!/\{z\}/.test(plantilla) || !/\{x\}/.test(plantilla)) {
+        throw new Error('la URL de la capa no es una plantilla XYZ/TMS ({z}/{x}/{y})');
+      }
+      var EXTENTE = 20037508.342789244;
+      var LADO = 256;
+      var RES0 = (2 * EXTENTE) / LADO;
+      var bbox = vista.bbox;
+
+      // Nivel de zoom a partir de la resolución que se quiere en el fichero,
+      // sin pasarse del máximo que anuncie la capa (los TMS del IGN suelen
+      // terminar en 17–20).
+      var resObjetivo = Math.max(bbox[2] - bbox[0], bbox[3] - bbox[1]) / lado;
+      var zMax = Number((capa.options && capa.options.tileGridMaxZoom) || capa.tileGridMaxZoom);
+      if (!isFinite(zMax) || zMax <= 0) zMax = 22;
+      var z = Math.round(Math.log(RES0 / resObjetivo) / Math.LN2);
+      z = Math.max(0, Math.min(zMax, z));
+
+      var n, res, minX, maxX, minY, maxY, total;
+      for (;;) {
+        n = Math.pow(2, z);
+        res = RES0 / n;
+        minX = Math.max(0, Math.floor((bbox[0] + EXTENTE) / (res * LADO)));
+        maxX = Math.min(n - 1, Math.floor((bbox[2] + EXTENTE) / (res * LADO)));
+        minY = Math.max(0, Math.floor((EXTENTE - bbox[3]) / (res * LADO)));
+        maxY = Math.min(n - 1, Math.floor((EXTENTE - bbox[1]) / (res * LADO)));
+        total = (maxX - minX + 1) * (maxY - minY + 1);
+        if (total <= 64 || z === 0) break;
+        z -= 1;
+      }
+      if (minX > maxX || minY > maxY) {
+        throw new Error('el encuadre queda fuera de la cobertura del servicio');
+      }
+
+      var columnas = maxX - minX + 1;
+      var filas = maxY - minY + 1;
+      var lienzo = document.createElement('canvas');
+      lienzo.width = columnas * LADO;
+      lienzo.height = filas * LADO;
+      var contexto = lienzo.getContext('2d');
+      if (!contexto) throw new Error('el navegador no ha dado un lienzo 2D');
+
+      var fallos = 0;
+      for (var y = minY; y <= maxY; y += 1) {
+        for (var x = minX; x <= maxX; x += 1) {
+          var url = plantilla
+            .replace(/\{z\}/g, z)
+            .replace(/\{x\}/g, x)
+            .replace(/\{-y\}/g, (n - 1 - y))
+            .replace(/\{y\}/g, y);
+          try {
+            var respuesta = await fetch(url);
+            if (!respuesta.ok) { fallos += 1; continue; }
+            var mapa = await createImageBitmap(await respuesta.blob());
+            contexto.drawImage(mapa, (x - minX) * LADO, (y - minY) * LADO, LADO, LADO);
+            if (typeof mapa.close === 'function') mapa.close();
+          } catch (e) {
+            fallos += 1;
+          }
+        }
+        this._estado(this._el.rasEstado, 'Descargando teselas… '
+          + Math.round(((y - minY + 1) / filas) * 100) + ' %', 'cargando');
+      }
+      if (fallos >= total) {
+        throw new Error('no se ha podido descargar ninguna tesela (CORS, cobertura o URL)');
+      }
+
+      // Recorte al encuadre pedido y paso a RGB: las teselas transparentes se
+      // funden sobre blanco para que no salgan negras. El tamaño final es el
+      // que pidió el usuario (lado mayor), aunque las teselas se hayan
+      // descargado a la resolución nativa del nivel elegido.
+      var x0 = -EXTENTE + (minX * res * LADO);
+      var y1 = EXTENTE - (minY * res * LADO);
+      var anchoNativo = Math.max(1, Math.round((bbox[2] - bbox[0]) / res));
+      var altoNativo = Math.max(1, Math.round((bbox[3] - bbox[1]) / res));
+      var aspecto = vista.ancho / vista.alto;
+      var anchoPx = aspecto >= 1 ? lado : Math.max(1, Math.round(lado * aspecto));
+      var altoPx = aspecto >= 1 ? Math.max(1, Math.round(lado / aspecto)) : lado;
+      var recorte = document.createElement('canvas');
+      recorte.width = anchoPx;
+      recorte.height = altoPx;
+      var ctx2 = recorte.getContext('2d');
+      ctx2.fillStyle = '#ffffff';
+      ctx2.fillRect(0, 0, anchoPx, altoPx);
+      ctx2.drawImage(
+        lienzo,
+        (bbox[0] - x0) / res,
+        (y1 - bbox[3]) / res,
+        anchoNativo,
+        altoNativo,
+        0, 0, anchoPx, altoPx
+      );
+      var rgba = ctx2.getImageData(0, 0, anchoPx, altoPx).data;
+
+      var rgb = new Uint8Array(anchoPx * altoPx * 3);
+      for (var i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+        var alfa = rgba[i + 3] / 255;
+        var blanco = 255 * (1 - alfa);
+        rgb[j] = Math.round(rgba[i] * alfa + blanco);
+        rgb[j + 1] = Math.round(rgba[i + 1] * alfa + blanco);
+        rgb[j + 2] = Math.round(rgba[i + 2] * alfa + blanco);
+      }
+
+      var escritor = await cargarEscritorGeoTIFF();
+      var buffer = escritor.escribirGeoTIFFUInt8({
+        ancho: anchoPx,
+        alto: altoPx,
+        bandas: 3,
+        datos: rgb,
+        origenX: bbox[0],
+        origenY: bbox[3],
+        resX: (bbox[2] - bbox[0]) / anchoPx,
+        resY: (bbox[3] - bbox[1]) / altoPx,
+        epsg: 3857,
+      });
+
+      return {
+        buffer: buffer,
+        formato: 'mosaico TMS z' + z + ' · ' + columnas + ' × ' + filas + ' teselas',
+        epsg: 3857,
+        bbox: bbox.slice(),
+      };
+    }
+
+    /**
      * Separa la URL de un WMS de los parámetros que ya traiga.
      *
-     * No vale `split('?')[0]`: hay servicios que cuelgan de un parámetro
-     * (`?map=/ruta/al/mapfile`) o de un token, y perderlo deja la petición sin
-     * servicio. Se descartan solo los parámetros de GetMap que se van a volver
-     * a escribir.
+     * No vale `split('?')[0]` a secas: hay servicios que cuelgan de un
+     * parámetro (`?map=/ruta/al/mapfile`) o de un token, y perderlo deja la
+     * petición sin servicio. Se descartan solo los parámetros de GetMap que se
+     * van a volver a escribir.
      *
      * @param {string} url URL de la capa.
      * @returns {{base: string, extra: Array<string>}} URL sin consulta y
