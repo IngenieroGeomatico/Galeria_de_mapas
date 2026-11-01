@@ -2820,7 +2820,7 @@ class miPlugin_layerSwitcher {
             try { parentGroup.removeLayers(layer); } catch (e) { /* defensivo */ }
           }
         }
-        if (layer && layer.type === 'Alphanumeric') {
+        if (layer && (layer.type === 'Alphanumeric' || layer.type === 'BigQuery')) {
           try { layer.destroy(); } catch (e) { /* noop */ }
         } else {
           map.removeLayers(layer);

@@ -1518,12 +1518,19 @@
           const AL = window.AlphanumericLayer;
           if (!AL) throw new Error('Falta ext/alphanumericLayer/alphanumericLayer.js');
           AL.instalar();
-          const capa = new AL({
+          const Clase = (window.BigQueryLayer) ? window.BigQueryLayer : AL;
+          const capa = new Clase({
             name: meta.nombre,
             legend: meta.nombre,
             records: objetos,
+            sql: sql,
+            proyecto: meta.proyecto,
+            dataset: meta.dataset,
+            tabla: meta.tabla,
+            limite: meta.limite,
             latField: meta.latField || null,
             lonField: meta.lonField || null,
+            geometryField: meta.geometryField || null,
             source: {
               type: 'bigquery',
               proyecto: meta.proyecto,

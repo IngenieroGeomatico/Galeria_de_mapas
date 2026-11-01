@@ -50,7 +50,102 @@
 (function () {
   'use strict';
 
-  /** Contador para ids estables dentro de la sesión. */
+  /**
+   * Convierte un texto WKT en un objeto GeoJSON.
+   * Soporta POINT, LINESTRING, POLYGON, MULTIPOINT, MULTILINESTRING,
+   * MULTIPOLYGON y GEOMETRYCOLLECTION. Devuelve null si no se reconoce.
+   * @param {string} wkt Texto WKT.
+   * @returns {Object|null}
+   */
+  function wktAGeoJSON(wkt) {
+    if (!wkt || typeof wkt !== 'string') return null;
+    const t = wkt.trim();
+    // Normaliza espacios.
+    const m = /^([A-Z]+)(Z|M|ZM)?\s*\((.*)\)\s*$/i.exec(t);
+    if (!m) return null;
+    const tipo = m[1].toUpperCase();
+    const cuerpo = m[3];
+    function parsearPunto(s) {
+      const partes = s.trim().split(/\s+/);
+      if (partes.length < 2) return null;
+      const x = Number(partes[0]);
+      const y = Number(partes[1]);
+      if (!isFinite(x) || !isFinite(y)) return null;
+      return [x, y];
+    }
+    function parsearLista(s, nivel) {
+      // Devuelve array de puntos [x,y].
+      const pts = [];
+      // Separa por comas de primer nivel.
+      let prof = 0;
+      let actual = '';
+      const trozos = [];
+      for (let i = 0; i < s.length; i++) {
+        const c = s[i];
+        if (c === '(') { prof++; actual += c; }
+        else if (c === ')') { prof--; actual += c; }
+        else if (c === ',' && prof === 0) { trozos.push(actual); actual = ''; }
+        else { actual += c; }
+      }
+      if (actual.trim()) trozos.push(actual);
+      return trozos.map(function (x) { return x.trim(); }).filter(Boolean);
+    }
+
+    if (tipo === 'POINT') {
+      const p = parsearPunto(cuerpo);
+      return p ? { type: 'Point', coordinates: p } : null;
+    }
+    if (tipo === 'LINESTRING') {
+      const coords = parsearLista(cuerpo, 0).map(parsearPunto).filter(Boolean);
+      return coords.length >= 2 ? { type: 'LineString', coordinates: coords } : null;
+    }
+    if (tipo === 'POLYGON') {
+      const anillos = parsearLista(cuerpo, 0);
+      const coords = anillos.map(function (a) {
+        // a viene como "(...)" -> quitamos paréntesis externos
+        const inner = a.trim().replace(/^\(/, '').replace(/\)$/, '');
+        return parsearLista(inner, 0).map(parsearPunto).filter(Boolean);
+      });
+      return { type: 'Polygon', coordinates: coords };
+    }
+    if (tipo === 'MULTIPOINT') {
+      const coords = parsearLista(cuerpo, 0).map(function (a) {
+        const inner = a.trim().replace(/^\(/, '').replace(/\)$/, '');
+        return parsearPunto(inner);
+      }).filter(Boolean);
+      return { type: 'MultiPoint', coordinates: coords };
+    }
+    if (tipo === 'MULTILINESTRING') {
+      const lineas = parsearLista(cuerpo, 0);
+      const coords = lineas.map(function (a) {
+        const inner = a.trim().replace(/^\(/, '').replace(/\)$/, '');
+        return parsearLista(inner, 0).map(parsearPunto).filter(Boolean);
+      });
+      return { type: 'MultiLineString', coordinates: coords };
+    }
+    if (tipo === 'MULTIPOLYGON') {
+      const pols = parsearLista(cuerpo, 0);
+      const coords = pols.map(function (a) {
+        const inner = a.trim().replace(/^\(/, '').replace(/\)$/, '');
+        const anillos = parsearLista(inner, 0);
+        return anillos.map(function (b) {
+          const binner = b.trim().replace(/^\(/, '').replace(/\)$/, '');
+          return parsearLista(binner, 0).map(parsearPunto).filter(Boolean);
+        });
+      });
+      return { type: 'MultiPolygon', coordinates: coords };
+    }
+    return null;
+  }
+
+  /**
+   * Devuelve true si el valor parece un texto WKT.
+   * @param {*} v Valor.
+   * @returns {boolean}
+   */
+  function esWKT(v) {
+    return typeof v === 'string' && /^\s*(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*\(/i.test(v);
+  }
   let contador = 0;
 
   /**
@@ -397,6 +492,9 @@
       this._idField = o.idField || null;
       this._latField = o.latField || null;
       this._lonField = o.lonField || null;
+      this._xField = o.xField || null;
+      this._yField = o.yField || null;
+      this._wktField = o.wktField || null;
       this._geometryField = o.geometryField || null;
       this._source = o.source || null;
       this._metadata = o.metadata || {};
@@ -614,6 +712,9 @@
      * @param {Object} campos
      * @param {string} [campos.latField] Campo de latitud (EPSG:4326).
      * @param {string} [campos.lonField] Campo de longitud (EPSG:4326).
+     * @param {string} [campos.xField] Campo X (longitud).
+     * @param {string} [campos.yField] Campo Y (latitud).
+     * @param {string} [campos.wktField] Campo con geometría en WKT.
      * @param {string} [campos.geometryField] Campo con geometría GeoJSON.
      * @returns {AlphanumericLayer}
      */
@@ -621,6 +722,9 @@
       const c = campos || {};
       if (c.latField !== undefined) this._latField = c.latField || null;
       if (c.lonField !== undefined) this._lonField = c.lonField || null;
+      if (c.xField !== undefined) this._xField = c.xField || null;
+      if (c.yField !== undefined) this._yField = c.yField || null;
+      if (c.wktField !== undefined) this._wktField = c.wktField || null;
       if (c.geometryField !== undefined) this._geometryField = c.geometryField || null;
       return this;
     }
@@ -641,6 +745,147 @@
         latField: lat || null,
         lonField: lon || null,
       };
+    }
+
+    /**
+     * Detecta automáticamente las columnas que pueden convertirse en
+     * geometría: GeoJSON, WKT, lat/lon y X/Y.
+     * @returns {{geometryField: string|null, wktField: string|null, latField: string|null, lonField: string|null, xField: string|null, yField: string|null}}
+     */
+    detectarCamposGeo() {
+      const nombres = this.getFieldNames();
+      const registros = this.getRecords();
+      let geometryField = null;
+      let wktField = null;
+      // GeoJSON: un campo cuyo valor parsea como GeoJSON.
+      nombres.forEach(function (n) {
+        if (geometryField) return;
+        for (let i = 0; i < Math.min(registros.length, 5); i++) {
+          const v = registros[i] && registros[i][n];
+          if (typeof v === 'string' && v.trim().charAt(0) === '{') {
+            try {
+              const g = JSON.parse(v);
+              if (g && typeof g.type === 'string') { geometryField = n; return; }
+            } catch (e) { /* noop */ }
+          }
+        }
+      });
+      // WKT: un campo cuyo valor parece WKT.
+      if (!geometryField) {
+        nombres.forEach(function (n) {
+          if (wktField) return;
+          for (let i = 0; i < Math.min(registros.length, 5); i++) {
+            const v = registros[i] && registros[i][n];
+            if (esWKT(v)) { wktField = n; return; }
+          }
+        });
+      }
+      const latLon = this.detectarCamposLatLon();
+      // X/Y por nombre.
+      const x = nombres.filter(function (n) { return /^(x|coordx|coord_x|longitud_x)$/i.test(n); })[0];
+      const y = nombres.filter(function (n) { return /^(y|coordy|coord_y|latitud_y)$/i.test(n); })[0];
+      return {
+        geometryField: geometryField,
+        wktField: wktField,
+        latField: latLon.latField,
+        lonField: latLon.lonField,
+        xField: x || null,
+        yField: y || null,
+      };
+    }
+
+    /**
+     * Añade un campo calculado `__idee_geojson` a los registros a partir
+     * de las columnas X/Y (coordenadas en el CRS indicado, por defecto
+     * EPSG:4326). Devuelve this para encadenar.
+     * @param {string} xField Campo X (longitud).
+     * @param {string} yField Campo Y (latitud).
+     * @param {Object} [opciones]
+     * @param {string} [opciones.crs] CRS de las coordenadas (por defecto EPSG:4326).
+     * @returns {AlphanumericLayer}
+     */
+    anadirGeometriaDesdeXY(xField, yField, opciones) {
+      const o = opciones || {};
+      this._xField = xField || this._xField;
+      this._yField = yField || this._yField;
+      const xf = this._xField;
+      const yf = this._yField;
+      if (!xf || !yf) return this;
+      this._records.forEach(function (r) {
+        const x = Number(r[xf]);
+        const y = Number(r[yf]);
+        if (isFinite(x) && isFinite(y) && Math.abs(x) <= 180 && Math.abs(y) <= 90) {
+          r.__idee_geojson = JSON.stringify({ type: 'Point', coordinates: [x, y] });
+        }
+      });
+      if (!this._geometryField) this._geometryField = '__idee_geojson';
+      this._fields = inferirCampos(this._records);
+      return this;
+    }
+
+    /**
+     * Añade un campo calculado `__idee_geojson` a partir de un campo WKT.
+     * @param {string} campo Campo con texto WKT.
+     * @returns {AlphanumericLayer}
+     */
+    anadirGeometriaDesdeWKT(campo) {
+      if (!campo) return this;
+      this._wktField = campo;
+      this._records.forEach(function (r) {
+        const g = wktAGeoJSON(r[campo]);
+        if (g) r.__idee_geojson = JSON.stringify(g);
+      });
+      if (!this._geometryField) this._geometryField = '__idee_geojson';
+      this._fields = inferirCampos(this._records);
+      return this;
+    }
+
+    /**
+     * Añade un campo calculado `__idee_geojson` a partir de un campo que
+     * ya contiene GeoJSON (lo normaliza si viene como objeto).
+     * @param {string} campo Campo con GeoJSON.
+     * @returns {AlphanumericLayer}
+     */
+    anadirGeometriaDesdeGeoJSON(campo) {
+      if (!campo) return this;
+      this._records.forEach(function (r) {
+        const g = normalizarGeometria(r[campo]);
+        if (g) r.__idee_geojson = JSON.stringify(g);
+      });
+      if (!this._geometryField) this._geometryField = '__idee_geojson';
+      this._fields = inferirCampos(this._records);
+      return this;
+    }
+
+    /**
+     * Convierte uno o varios campos en geometría, según el formato indicado.
+     * @param {string} formato 'xy' | 'wkt' | 'geojson' | 'auto'
+     * @param {Object} [opciones]
+     * @param {string} [opciones.xField] Campo X (para 'xy').
+     * @param {string} [opciones.yField] Campo Y (para 'xy').
+     * @param {string} [opciones.field] Campo origen (para 'wkt'/'geojson').
+     * @returns {AlphanumericLayer}
+     */
+    convertirCampoAGeometria(formato, opciones) {
+      const o = opciones || {};
+      if (formato === 'xy') {
+        return this.anadirGeometriaDesdeXY(o.xField, o.yField);
+      }
+      if (formato === 'wkt') {
+        return this.anadirGeometriaDesdeWKT(o.field);
+      }
+      if (formato === 'geojson') {
+        return this.anadirGeometriaDesdeGeoJSON(o.field);
+      }
+      if (formato === 'auto') {
+        const det = this.detectarCamposGeo();
+        if (det.geometryField) return this.anadirGeometriaDesdeGeoJSON(det.geometryField);
+        if (det.wktField) return this.anadirGeometriaDesdeWKT(det.wktField);
+        if (det.xField && det.yField) return this.anadirGeometriaDesdeXY(det.xField, det.yField);
+        if (det.latField && det.lonField) return this.anadirGeometriaDesdeXY(det.lonField, det.latField);
+        return this;
+      }
+      return this;
     }
 
     /**
@@ -680,13 +925,22 @@
     toGeoJSON(opciones) {
       const o = opciones || {};
       const campoGeo = o.geometryField || this._geometryField || '__idee_geojson';
-      const campoLat = o.latField || this._latField;
-      const campoLon = o.lonField || this._lonField;
+      const campoLat = o.latField || this._latField || o.yField || this._yField || null;
+      const campoLon = o.lonField || this._lonField || o.xField || this._xField || null;
+      const campoWKT = o.wktField || this._wktField || null;
       const idField = o.idField || this._idField;
       const features = [];
 
       this._records.forEach(function (r) {
         let geometria = normalizarGeometria(r[campoGeo]);
+        // WKT: se parsea a GeoJSON.
+        if (!geometria && campoWKT && r[campoWKT]) {
+          geometria = wktAGeoJSON(r[campoWKT]);
+        }
+        // Si el campo indicado es un string WKT, también se intenta.
+        if (!geometria && r[campoGeo] && esWKT(r[campoGeo])) {
+          geometria = wktAGeoJSON(r[campoGeo]);
+        }
         if (!geometria && campoLat && campoLon) {
           const lat = Number(r[campoLat]);
           const lon = Number(r[campoLon]);
@@ -944,9 +1198,10 @@
       const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase();
       return fetch(url).then(function (r) {
         if (!r.ok) throw new Error('No se pudo descargar ' + url + ' (HTTP ' + r.status + ')');
-        if (ext === 'xlsx' || ext === 'xlsm') return r.arrayBuffer().then(function (b) { return AlphanumericLayer.fromXLSX(b, o); });
+        if (ext === 'xlsx' || ext === 'xlsm' || ext === 'ods') return r.arrayBuffer().then(function (b) { return AlphanumericLayer.fromXLSX(b, o); });
         return r.text().then(function (t) {
           if (ext === 'json' || ext === 'geojson') return AlphanumericLayer.fromJSON(t, o);
+          if (ext === 'tsv' || ext === 'txt') return AlphanumericLayer.fromCSV(t, Object.assign({}, o, { separator: '\\t' }));
           return AlphanumericLayer.fromCSV(t, o);
         });
       });
@@ -988,8 +1243,115 @@
   }
 
   // -------------------------------------------------------------------
-  // Instalación en la API
+  // IDEE.layer.BigQuery: capa alfanumérica con origen BigQuery
   // -------------------------------------------------------------------
+  // Una capa alfanumérica cuyos registros vienen de BigQuery. Además de
+  // los datos, guarda la sentencia SQL y los parámetros de conexión, y
+  // ofrece `ejecutarSQL(sql, token)` para volver a consultar (con una SQL
+  // nueva o la misma) y actualizar los registros.
+  class BigQueryLayer extends AlphanumericLayer {
+    constructor(options) {
+      const o = options || {};
+      super(Object.assign({}, o, {
+        source: Object.assign({ type: 'bigquery' }, o.source || {}),
+      }));
+      this.type = 'BigQuery';
+      this.sql = o.sql || '';
+      this.proyecto = o.proyecto || '';
+      this.dataset = o.dataset || '';
+      this.tabla = o.tabla || '';
+      this.limite = Math.max(1, Math.min(Number(o.limite) || 10000, 100000));
+      this.latField = o.latField || this._latField || null;
+      this.lonField = o.lonField || this._lonField || null;
+      this.geometryField = o.geometryField || this._geometryField || null;
+      if (this.latField) this._latField = this.latField;
+      if (this.lonField) this._lonField = this.lonField;
+      if (this.geometryField) this._geometryField = this.geometryField;
+    }
+
+    getSQL() { return this.sql; }
+    setSQL(sql) { this.sql = sql || ''; return this; }
+
+    /**
+     * Ejecuta una sentencia SQL contra BigQuery y actualiza los registros
+     * de la capa. Necesita un token de acceso válido.
+     * @param {string} [sql] SQL a ejecutar (por defecto la guardada).
+     * @param {string} [token] Token de acceso de Google.
+     * @param {Object} [opciones] { maxResults, geometryField }
+     * @returns {Promise<BigQueryLayer>}
+     */
+    ejecutarSQL(sql, token, opciones) {
+      const self = this;
+      const o = opciones || {};
+      const sqlFinal = sql || this.sql;
+      if (!sqlFinal) return Promise.reject(new Error('Falta la sentencia SQL'));
+      if (!token) return Promise.reject(new Error('Falta el token de acceso de Google'));
+      if (!this.proyecto) return Promise.reject(new Error('Falta el proyecto de BigQuery'));
+
+      const cuerpo = {
+        query: sqlFinal,
+        useLegacySql: false,
+        maxResults: o.maxResults || this.limite,
+        timeoutMs: 10000,
+      };
+      return fetch('https://bigquery.googleapis.com/bigquery/v2/projects/'
+        + encodeURIComponent(this.proyecto) + '/queries', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+      }).then(function (r) {
+        return r.text().then(function (texto) {
+          let j = null;
+          try { j = texto ? JSON.parse(texto) : null; } catch (e) { j = null; }
+          if (!r.ok) {
+            const msg = (j && j.error && (j.error.message || j.error.status)) || ('HTTP ' + r.status);
+            throw new Error(msg);
+          }
+          return j;
+        });
+      }).then(function (res) {
+        // Convierte las filas al formato { f: [{v}] } -> objetos.
+        const campos = (res.schema && res.schema.fields) || [];
+        const filas = (res.rows || []).map(function (row) {
+          const obj = {};
+          const celdas = (row && row.f) || [];
+          campos.forEach(function (campo, i) {
+            let v = celdas[i] ? celdas[i].v : null;
+            if (campo.type === 'INTEGER' || campo.type === 'INT64' || campo.type === 'FLOAT' || campo.type === 'FLOAT64') {
+              if (v !== null && v !== undefined) v = Number(v);
+            }
+            obj[campo.name] = v;
+          });
+          return obj;
+        });
+        // Actualiza los registros y campos de la capa.
+        self._records = filas.map(function (r) { return Object.assign({}, r); });
+        self._fields = campos.length ? campos.map(function (c) { return { name: c.name, type: (c.type || 'string').toLowerCase() }; }) : inferirCampos(self._records);
+        self.sql = sqlFinal;
+        // Geometría: si hay campo GeoJSON o lat/lon, se deja preparado.
+        if (o.geometryField) self._geometryField = o.geometryField;
+        if (o.latField) self._latField = o.latField;
+        if (o.lonField) self._lonField = o.lonField;
+        return self;
+      });
+    }
+  }
+
+  // Instalación de BigQueryLayer
+  function instalarBigQueryLayer() {
+    const A = (window.IDEE || window.M);
+    if (!A) return false;
+    if (!A.layer) A.layer = {};
+    A.layer.BigQuery = BigQueryLayer;
+    A.layer.bigQuery = BigQueryLayer;
+    return true;
+  }
+  BigQueryLayer.instalar = instalarBigQueryLayer;
+  instalarBigQueryLayer();
+  let intentosBQ = 0;
+  const temporizadorBQ = setInterval(function () {
+    if (instalarBigQueryLayer() || ++intentosBQ > 200) clearInterval(temporizadorBQ);
+  }, 10);
 
   /**
    * Instala la clase en `IDEE.layer` / `M.layer`. Es idempotente y hay que
@@ -1019,13 +1381,18 @@
   // Exposición triple (window + IDEE + M).
   if (typeof window !== 'undefined') {
     window.AlphanumericLayer = AlphanumericLayer;
+    window.BigQueryLayer = BigQueryLayer;
     window.IDEE = window.IDEE || {};
     window.IDEE.layer = window.IDEE.layer || {};
     window.IDEE.layer.Alphanumeric = AlphanumericLayer;
     window.IDEE.layer.alphanumeric = AlphanumericLayer;
+    window.IDEE.layer.BigQuery = BigQueryLayer;
+    window.IDEE.layer.bigQuery = BigQueryLayer;
     window.M = window.M || {};
     window.M.layer = window.M.layer || {};
     window.M.layer.Alphanumeric = AlphanumericLayer;
     window.M.layer.alphanumeric = AlphanumericLayer;
+    window.M.layer.BigQuery = BigQueryLayer;
+    window.M.layer.bigQuery = BigQueryLayer;
   }
 })();
