@@ -1,0 +1,533 @@
+/* =====================================================================
+   BIGQUERY — API-IDEE / API-CNIG
+   =====================================================================
+
+   Hoja de estilos del plugin `ext/bigqueryLayer`. Todas las clases van con
+   el prefijo `bq-` para no chocar con la API ni con otros plugins.
+
+   Los colores de acento NO se escriben aquí: entran por el constructor del
+   plugin (color1/color2/color3) y se aplican como variables CSS en el panel
+
+       --g-plugin-bg-color / --g-plugin-bg-color-active
+       --g-plugin-border-color / --g-plugin-border-color-active
+       --g-plugin-icon-color / --g-plugin-icon-color-active
+
+   Lo que hay detrás de cada `var(...)` es solo el valor de respaldo, para
+   que la hoja se vea bien aunque el plugin se monte sin colores.
+   ===================================================================== */
+
+/* ---- Contenedor del panel en la barra de herramientas ---------------- */
+.g-herramienta_bigquery {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  color: #333333;
+}
+
+/* ---- Icono del botón (panel plegado) --------------------------------- */
+/* Glifo de la fuente de la API: `g-cartografia-lista` (\e92c). Es una
+   lista de registros, que es lo que devuelve una tabla de BigQuery. Se pinta
+   con `content` para que el trazo sea exactamente el de la API y para no
+   poner una clase `g-cartografia-*` en un botón propio (el panel la
+   interpretaría como la flecha de plegado). */
+.g-herramienta_bigquery .m-tools:before {
+  content: '\e92c';
+  font-family: g-cartografia;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--g-plugin-icon-color, #ffffff);
+}
+
+.g-herramienta_bigquery.opened .m-tools:before {
+  color: var(--g-plugin-icon-color-active, #1a73e8);
+}
+
+/* ---- Cabecera del panel ---------------------------------------------- */
+/* Misma cabecera que el resto de plugins del repositorio (ver
+   ext/geoprocesos): barra de título ARRASTRABLE, que engancha
+   IDEE.utils.draggabillyPlugin desde addTo; de ahí `cursor: move`. */
+.bq-header {
+  display: block;
+  height: 40px;
+  line-height: 40px;
+  padding: 0 5px;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: move;
+  font-size: 15px;
+  font-weight: 700;
+  background-color: var(--g-plugin-bg-color, #1a73e8) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+.m-areas > div.m-area > div.m-panel.g-herramienta_bigquery.opened .m-herramienta-header {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-icon-color-active, #1a73e8) !important;
+  border-color: var(--g-plugin-border-color-active, #1a73e8) !important;
+}
+
+/* Botón del panel (cerrado) y flecha de plegado (abierto). Sin estas reglas
+   el botón se queda con el azul de la API y no obedece a color1/color2/color3. */
+.m-areas > div.m-area > div.m-panel.g-herramienta_bigquery > button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color, #1a73e8) !important;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
+  border-color: var(--g-plugin-border-color, #ffffff) !important;
+}
+
+.m-areas > div.m-area > div.m-panel.g-herramienta_bigquery.opened > button.m-panel-btn {
+  background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
+  color: var(--g-plugin-border-color-active, #1a73e8) !important;
+  border-color: var(--g-plugin-border-color-active, #1a73e8) !important;
+}
+
+/* ---- Cuerpo ---------------------------------------------------------- */
+.bq-container {
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  /* El panel lateral de la API es un contenedor flex absoluto que se ajusta
+     a su contenido (min-content): sin este mínimo, el ancho cambiaba al
+     pasar de una sección con textos largos a otra corta. */
+  min-width: 360px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* `hidden` tiene que ganar a los `display: flex` de los bloques: el atributo
+   del navegador vale `display: none` pero cualquier display del autor lo
+   pisa. Es el mismo detalle que con #cargaSVG en el visualizador. */
+.bq-container [hidden] {
+  display: none !important;
+}
+
+@media (max-width: 480px) {
+  .bq-container {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.bq-body {
+  padding: 10px 12px 12px;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+}
+
+/* ---- Bloques y etiquetas --------------------------------------------- */
+.bq-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e6eaee;
+}
+
+.bq-bloque:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.bq-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3d4a55;
+  margin: 0;
+}
+
+.bq-label-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3d4a55;
+}
+
+.bq-subtitulo {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #55606a;
+}
+
+.bq-fila {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.bq-fila-botones {
+  flex-wrap: wrap;
+}
+
+.bq-fila-limite {
+  justify-content: space-between;
+}
+
+/* ---- Controles de formulario ----------------------------------------- */
+.bq-input,
+.bq-select,
+.bq-textarea {
+  font: inherit;
+  font-size: 12px;
+  color: #1f2a33;
+  background-color: #ffffff;
+  border: 1px solid #c9d2da;
+  border-radius: 4px;
+  padding: 5px 6px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.bq-input:focus,
+.bq-select:focus,
+.bq-textarea:focus {
+  outline: 2px solid var(--g-plugin-border-color-active, #1a73e8);
+  outline-offset: -1px;
+}
+
+.bq-input-num {
+  width: 96px;
+}
+
+.bq-select-lista {
+  height: auto;
+  padding: 2px;
+}
+
+.bq-select-lista option {
+  padding: 3px 4px;
+}
+
+.bq-textarea {
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  min-height: 84px;
+}
+
+.bq-file {
+  font: inherit;
+  font-size: 11px;
+  width: 100%;
+}
+
+.bq-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #3d4a55;
+  cursor: pointer;
+}
+
+.bq-check input {
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+}
+
+.bq-check code {
+  font-size: 11px;
+  background-color: #f2f4f6;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+/* ---- Botones --------------------------------------------------------- */
+.bq-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #33404b;
+  background-color: #f2f4f6;
+  border: 1px solid #c9d2da;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.bq-btn:hover {
+  background-color: #e9edf1;
+}
+
+.bq-btn:focus-visible {
+  outline: 2px solid var(--g-plugin-border-color-active, #1a73e8);
+  outline-offset: 1px;
+}
+
+.bq-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.bq-btn-primario {
+  color: #ffffff;
+  background-color: var(--g-plugin-border-color-active, #1a73e8);
+  border-color: var(--g-plugin-border-color-active, #1a73e8);
+}
+
+.bq-btn-primario:hover {
+  filter: brightness(0.92);
+}
+
+.bq-btn-ancho {
+  width: 100%;
+}
+
+.bq-btn-plegable {
+  text-align: left;
+  position: relative;
+  padding-right: 26px;
+}
+
+/* Flecha del bloque plegable: glifo de la API (flecha-abajo, \e905). */
+.bq-btn-plegable::after {
+  content: '\e905';
+  font-family: g-cartografia;
+  font-size: 12px;
+  line-height: 1;
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b7883;
+}
+
+.bq-plegable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bq-plegable[hidden] {
+  display: none;
+}
+
+/* ---- Estados --------------------------------------------------------- */
+.bq-estado {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #5a6773;
+  min-height: 0;
+}
+
+.bq-estado:empty {
+  display: none;
+}
+
+.bq-estado-info {
+  color: #3d4a55;
+}
+
+.bq-estado-ok {
+  color: #1e7b3c;
+}
+
+.bq-estado-aviso {
+  color: #9a6200;
+}
+
+.bq-estado-error {
+  color: #b3261e;
+}
+
+.bq-aviso {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #5a6773;
+  background-color: #f7f9fb;
+  border: 1px dashed #c9d2da;
+  border-radius: 4px;
+  padding: 6px;
+}
+
+/* ---- Ficha de la tabla ----------------------------------------------- */
+.bq-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bq-detalle:empty {
+  display: none;
+}
+
+.bq-ref {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  color: #1f2a33;
+  overflow-wrap: anywhere;
+}
+
+.bq-meta {
+  margin: 0;
+  font-size: 11px;
+  color: #5a6773;
+}
+
+.bq-campos {
+  font-size: 11px;
+}
+
+.bq-campos summary {
+  cursor: pointer;
+  color: #33404b;
+  font-weight: 600;
+}
+
+.bq-campos ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  max-height: 150px;
+  overflow: auto;
+  border: 1px solid #e6eaee;
+  border-radius: 4px;
+}
+
+.bq-campos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px;
+  border-bottom: 1px solid #f2f4f6;
+}
+
+.bq-campos li:last-child {
+  border-bottom: none;
+}
+
+.bq-campo-nombre {
+  overflow-wrap: anywhere;
+}
+
+.bq-campo-tipo {
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 10px;
+  color: #6b7883;
+}
+
+/* ---- Lista de capas cargadas ----------------------------------------- */
+.bq-capas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bq-capa {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  background-color: #f7f9fb;
+  border: 1px solid #e6eaee;
+  border-radius: 4px;
+}
+
+.bq-capa-tipo {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #ffffff;
+  background-color: var(--g-plugin-border-color-active, #1a73e8);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.bq-capa-nombre {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f2a33;
+}
+
+.bq-capa-filas {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: #5a6773;
+}
+
+/* Papelera: glifo de la API (cancelar, \e912). */
+.bq-capa-quitar {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: #6b7883;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.bq-capa-quitar::before {
+  content: '\e912';
+  font-family: g-cartografia;
+}
+
+.bq-capa-quitar:hover {
+  color: #b3261e;
+  border-color: #e6c3c0;
+  background-color: #fdf3f2;
+}
+
+.bq-vacio {
+  margin: 0;
+  font-size: 11px;
+  color: #6b7883;
+  font-style: italic;
+}
+
+.bq-vacio[hidden] {
+  display: none;
+}
+
+/* ---- Ayuda ----------------------------------------------------------- */
+.bq-ayuda {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #33404b;
+}
+
+.bq-ayuda p,
+.bq-ayuda ol {
+  margin: 0 0 8px;
+}
+
+.bq-ayuda ol {
+  padding-left: 18px;
+}
+
+.bq-ayuda code {
+  font-size: 11px;
+  background-color: #f2f4f6;
+  border-radius: 3px;
+  padding: 0 3px;
+}

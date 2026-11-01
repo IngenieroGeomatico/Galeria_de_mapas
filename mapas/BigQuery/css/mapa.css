@@ -1,0 +1,43 @@
+/* =====================================================================
+   BIGQUERY — estilos de la página
+   ---------------------------------------------------------------------
+   El mapa ocupa toda la ventana y el plugin `ext/bigqueryLayer` se pinta
+   con su propia hoja (`ext/bigqueryLayer/bigqueryLayer.css`). Aquí solo va
+   lo imprescindible de la página: el contenedor a pantalla completa y la
+   capa de carga.
+   ===================================================================== */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#mapaID {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Capa de carga mientras arranca la API --------------------------- */
+#cargaSVG {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffffcc;
+}
+
+#cargaSVG[hidden] {
+  display: none;
+}
+
+#cargaSVG img {
+  display: block;
+  height: 30vh;
+  margin: auto;
+  position: sticky;
+  top: 30%;
+}
