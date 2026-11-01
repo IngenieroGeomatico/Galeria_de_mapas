@@ -1,0 +1,87 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+#mapaID {
+  width: 100%;
+  height: 100%;
+}
+
+#cargaSVG {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffffcc;
+}
+
+#cargaSVG[hidden] {
+  display: none;
+}
+
+#cargaSVG img {
+  display: block;
+  height: 30vh;
+  margin: auto;
+  position: sticky;
+  top: 30%;
+}
+
+.panel-alfanumerico {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+  width: 360px;
+  max-height: calc(100vh - 24px);
+  background-color: #ffffff;
+  border: 1px solid #c9d2da;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  overflow: auto;
+  font-size: 12px;
+}
+
+.panel-alfanumerico header {
+  padding: 8px 10px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #ffffff;
+  background-color: #1a73e8;
+  border-radius: 6px 6px 0 0;
+}
+
+#tablaAlfanumerica {
+  padding: 8px 10px;
+}
+
+#tablaAlfanumerica table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+#tablaAlfanumerica th,
+#tablaAlfanumerica td {
+  padding: 3px 5px;
+  border-bottom: 1px solid #e6eaee;
+  text-align: left;
+  white-space: nowrap;
+}
+
+#tablaAlfanumerica th {
+  font-weight: 700;
+  color: #3d4a55;
+  background-color: #f2f4f6;
+}
+
+#tablaAlfanumerica .alf-vacio {
+  color: #6b7883;
+  font-style: italic;
+}

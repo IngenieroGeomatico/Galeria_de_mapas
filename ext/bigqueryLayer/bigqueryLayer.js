@@ -477,9 +477,76 @@
    * @param {Object} meta { geometryField, latField, lonField, idField }
    * @returns {Object}
    */
+  /**
+   * Detecta columnas de geometría en los resultados de una consulta.
+   * Busca campos cuyo valor sea GeoJSON válido, campos con nombre de
+   * geometría y pares lat/lon.
+   * @param {Array<Object>} objetos Filas devueltas por BigQuery.
+   * @returns {{geoField: string|null, latField: string|null, lonField: string|null, candidatos: Array<string>}}
+   */
+  function detectarCamposGeoEnResultados(objetos) {
+    const resultado = { geoField: null, latField: null, lonField: null, candidatos: [] };
+    if (!Array.isArray(objetos) || !objetos.length) return resultado;
+    const campos = Object.keys(objetos[0]);
+    const nombresGeo = /^(geojson|geometry|geom|the_geom|shape|geo|location|coordinates|coord|wkt|wkb|st_asgeojson)$/i;
+    const nombresLat = /^(lat|latitud|latitude|y)$/i;
+    const nombresLon = /^(lon|lng|long|longitud|longitude|x)$/i;
+    const geoJsonCampos = [];
+    campos.forEach(function (c) {
+      let esGeo = false;
+      for (let i = 0; i < Math.min(objetos.length, 5); i++) {
+        const v = objetos[i][c];
+        if (typeof v === 'string' && v.trim().charAt(0) === '{') {
+          try {
+            const g = JSON.parse(v);
+            if (g && typeof g.type === 'string' && /^(Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection|Feature|FeatureCollection)$/i.test(g.type)) {
+              esGeo = true; break;
+            }
+          } catch (e) { /* no es GeoJSON */ }
+        }
+        if (v && typeof v === 'object' && typeof v.type === 'string' && /^(Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection)$/i.test(v.type)) {
+          esGeo = true; break;
+        }
+      }
+      if (esGeo) geoJsonCampos.push(c);
+    });
+    const nombreGeoCampos = campos.filter(function (c) { return nombresGeo.test(c); });
+    const candidatosSet = new Set();
+    geoJsonCampos.forEach(function (c) { candidatosSet.add(c); });
+    nombreGeoCampos.forEach(function (c) { candidatosSet.add(c); });
+    resultado.candidatos = Array.from(candidatosSet);
+    if (geoJsonCampos.length) resultado.geoField = geoJsonCampos[0];
+    else if (nombreGeoCampos.length) resultado.geoField = nombreGeoCampos[0];
+    const lat = campos.filter(function (c) { return nombresLat.test(c); })[0];
+    const lon = campos.filter(function (c) { return nombresLon.test(c); })[0];
+    if (lat && lon) { resultado.latField = lat; resultado.lonField = lon; }
+    if (!resultado.latField) {
+      campos.forEach(function (c1) {
+        campos.forEach(function (c2) {
+          if (c1 === c2 || resultado.latField) return;
+          let okLat = true, okLon = true, n = 0;
+          for (let i = 0; i < Math.min(objetos.length, 10); i++) {
+            const v1 = Number(objetos[i][c1]);
+            const v2 = Number(objetos[i][c2]);
+            if (!isFinite(v1) || !isFinite(v2)) { okLat = false; okLon = false; break; }
+            if (Math.abs(v1) > 90) okLat = false;
+            if (Math.abs(v2) > 180) okLon = false;
+            n++;
+          }
+          if (n > 0 && okLat && okLon) { resultado.latField = c1; resultado.lonField = c2; }
+        });
+      });
+    }
+    return resultado;
+  }
+
   function construirFeatureCollection(objetos, meta) {
     const m = meta || {};
-    const campoGeo = m.geometryField || '__idee_geojson';
+    let campoGeo = m.geometryField || null;
+    if (!campoGeo) {
+      const det = detectarCamposGeoEnResultados(objetos);
+      campoGeo = det.geoField || '__idee_geojson';
+    }
     const features = [];
     objetos.forEach(function (o) {
       let geom = null;
@@ -869,6 +936,7 @@
         + '      <textarea class="bq-textarea" rows="5" spellcheck="false" data-campo="sql" '
         + '        placeholder="SELECT * FROM `proyecto.dataset.tabla` LIMIT 1000"></textarea>'
         + '      <div class="bq-fila bq-fila-botones">'
+        + '        <button type="button" class="bq-btn" data-accion="generar-sql">Generar desde tabla</button>'
         + '        <button type="button" class="bq-btn" data-accion="estimar-sql">Estimar</button>'
         + '        <button type="button" class="bq-btn bq-btn-primario" data-accion="ejecutar-sql">'
         + '          Ejecutar y cargar'
@@ -962,6 +1030,10 @@
         const b = el.root.querySelector('[data-bloque="sql"]');
         b.hidden = !b.hidden;
       });
+      const btnGenerar = el.root.querySelector('[data-accion="generar-sql"]');
+      if (btnGenerar) {
+        btnGenerar.addEventListener('click', function () { self._generarSqlDesdeTabla(); });
+      }
       el.sql.addEventListener('input', function () { self._sql = el.sql.value; });
       el.root.querySelector('[data-accion="toggle-local"]').addEventListener('click', function () {
         const b = el.root.querySelector('[data-bloque="local"]');
@@ -982,7 +1054,7 @@
           dataset: null,
           tabla: null,
           limite: self.limite,
-          geometryField: '__idee_geojson',
+          geometryField: null,
           tipo: 'auto',
         });
       });
@@ -1228,24 +1300,80 @@
       });
       html += '</ul></details>';
 
-      if (geo.geoField) {
-        html += '<label class="bq-check"><input type="checkbox" data-campo="usarGeo" checked> '
-          + 'Cargar la geometría <code>' + geo.geoField + '</code> (GEOGRAPHY)</label>';
-      }
+      const opcionesGeo = [];
+      opcionesGeo.push('<option value="">Ninguno (solo datos)</option>');
+      campos.forEach(function (c) {
+        const esGeo = c.type === 'GEOGRAPHY';
+        const esGeoJson = /geojson|geometry|geom|the_geom|shape|geo|location|coordinates/i.test(c.name);
+        const etiqueta = esGeo ? (c.name + ' (GEOGRAPHY)') : (esGeoJson ? (c.name + ' (GeoJSON)') : c.name);
+        opcionesGeo.push('<option value="campo:' + c.name + '">' + etiqueta + '</option>');
+      });
       if (geo.latField && geo.lonField) {
-        html += '<label class="bq-check"><input type="checkbox" data-campo="usarLatLon"'
-          + (geo.geoField ? '' : ' checked') + '> '
-          + 'Usar lat/lon <code>' + geo.latField + ', ' + geo.lonField + '</code></label>';
+        opcionesGeo.push('<option value="latlon:' + geo.latField + ',' + geo.lonField + '">'
+          + geo.latField + ' + ' + geo.lonField + ' (lat/lon)</option>');
+      }
+      const valorPorDefecto = geo.geoField
+        ? ('campo:' + geo.geoField)
+        : (geo.latField && geo.lonField ? ('latlon:' + geo.latField + ',' + geo.lonField) : '');
+      html += '<label class="bq-label" for="bq-campo-geo">Campo de geometría</label>';
+      html += '<select class="bq-select" data-campo="campoGeo">';
+      opcionesGeo.forEach(function (o) { html += o; });
+      html += '</select>';
+      cont.innerHTML = html;
+      const selectGeo = cont.querySelector('[data-campo="campoGeo"]');
+      if (selectGeo && valorPorDefecto) {
+        selectGeo.value = valorPorDefecto;
+        if (selectGeo.value !== valorPorDefecto) {
+          const opt = document.createElement('option');
+          opt.value = valorPorDefecto;
+          opt.textContent = valorPorDefecto;
+          selectGeo.appendChild(opt);
+          selectGeo.value = valorPorDefecto;
+        }
       }
       if (!geo.geoField && !(geo.latField && geo.lonField)) {
-        html += '<p class="bq-aviso">Sin geometría: se cargará como capa alfanumérica.</p>';
+        const aviso = document.createElement('p');
+        aviso.className = 'bq-aviso';
+        aviso.textContent = 'Sin geometría detectada: se cargará como capa alfanumérica.';
+        cont.appendChild(aviso);
       }
-      cont.innerHTML = html;
     }
 
     /**
      * Estima el coste de la selección actual.
      */
+    /**
+     * Genera una sentencia SQL a partir de la tabla seleccionada, con
+     * ST_ASGEOJSON sobre la columna GEOGRAPHY si la hay, y la coloca en
+     * el editor para que el usuario la edite y ejecute. Permite crear
+     * sentencias SQL para la capa con la geometría que se quiera.
+     */
+    _generarSqlDesdeTabla() {
+      const t = this._tablaDetalle;
+      if (!t) {
+        this._setEstado(this._el.estadoCosteSql, 'Selecciona una tabla primero', 'error');
+        return;
+      }
+      const geo = detectarColumnasGeo(t.schema);
+      const selectGeo = this._el.detalle.querySelector('[data-campo="campoGeo"]');
+      const seleccion = selectGeo ? selectGeo.value : '';
+      let geoField = null;
+      if (seleccion.startsWith('campo:')) {
+        const nombre = seleccion.slice(6);
+        if (geo.geoField === nombre) geoField = nombre;
+      }
+      const limite = Math.max(1, Math.min(Number(this._el.limite.value) || this.limite, 100000));
+      const sql = construirSQL(this._proyecto, this._dataset, this._tabla, t.schema, {
+        limit: limite,
+        geoField: geoField,
+      });
+      this._el.sql.value = sql;
+      this._sql = sql;
+      const bloque = this._el.root.querySelector('[data-bloque="sql"]');
+      if (bloque) bloque.hidden = false;
+      this._setEstado(this._el.estadoCosteSql, 'SQL generada. Puedes editarla y ejecutar.', 'ok');
+    }
+
     _estimarSeleccion() {
       const t = this._tablaDetalle;
       if (!t) {
@@ -1253,10 +1381,16 @@
         return;
       }
       const geo = detectarColumnasGeo(t.schema);
-      const usarGeo = this._el.detalle.querySelector('[data-campo="usarGeo"]');
+      const selectGeo = this._el.detalle.querySelector('[data-campo="campoGeo"]');
+      const seleccion = selectGeo ? selectGeo.value : '';
+      let geoField = null;
+      if (seleccion.startsWith('campo:')) {
+        const nombre = seleccion.slice(6);
+        if (geo.geoField === nombre) geoField = nombre;
+      }
       const sql = construirSQL(this._proyecto, this._dataset, this._tabla, t.schema, {
         limit: this._el.limite.value,
-        geoField: usarGeo && usarGeo.checked ? geo.geoField : null,
+        geoField: geoField,
       });
       this._estimar(sql, this._el.estadoCoste);
     }
@@ -1294,15 +1428,27 @@
         return;
       }
       const geo = detectarColumnasGeo(t.schema);
-      const chkGeo = this._el.detalle.querySelector('[data-campo="usarGeo"]');
-      const chkLatLon = this._el.detalle.querySelector('[data-campo="usarLatLon"]');
-      const usarGeo = !!(chkGeo && chkGeo.checked && geo.geoField);
-      const usarLatLon = !!(chkLatLon && chkLatLon.checked && geo.latField && geo.lonField);
+      const selectGeo = this._el.detalle.querySelector('[data-campo="campoGeo"]');
+      const seleccion = selectGeo ? selectGeo.value : '';
+      let usarGeo = false;
+      let campoGeoSeleccionado = null;
+      let usarLatLon = false;
+      let latSel = null, lonSel = null;
+      if (seleccion.startsWith('campo:')) {
+        campoGeoSeleccionado = seleccion.slice(6);
+        usarGeo = !!campoGeoSeleccionado;
+      } else if (seleccion.startsWith('latlon:')) {
+        const partes = seleccion.slice(7).split(',');
+        latSel = partes[0]; lonSel = partes[1];
+        usarLatLon = !!(latSel && lonSel);
+      }
       const limite = Math.max(1, Math.min(Number(this._el.limite.value) || this.limite, 100000));
 
+      // Si se eligió un campo GEOGRAPHY, se convierte con ST_ASGEOJSON en el SQL.
+      const geoFieldParaSql = (usarGeo && geo.geoField === campoGeoSeleccionado) ? campoGeoSeleccionado : null;
       const sql = construirSQL(this._proyecto, this._dataset, this._tabla, t.schema, {
         limit: limite,
-        geoField: usarGeo ? geo.geoField : null,
+        geoField: geoFieldParaSql,
       });
 
       this._ejecutarYcargar(sql, {
@@ -1311,9 +1457,9 @@
         dataset: this._dataset,
         tabla: this._tabla,
         limite: limite,
-        latField: usarLatLon ? geo.latField : null,
-        lonField: usarLatLon ? geo.lonField : null,
-        geometryField: usarGeo ? '__idee_geojson' : null,
+        latField: usarLatLon ? latSel : null,
+        lonField: usarLatLon ? lonSel : null,
+        geometryField: usarGeo ? (geoFieldParaSql ? '__idee_geojson' : campoGeoSeleccionado) : null,
         tipo: (usarGeo || usarLatLon) ? 'geojson' : 'alphanumeric',
       });
     }
@@ -1346,8 +1492,14 @@
 
         let tipo = meta.tipo;
         if (tipo === 'auto') {
-          const tieneGeo = objetos.some(function (o) { return !!o.__idee_geojson; });
+          const det = detectarCamposGeoEnResultados(objetos);
+          const tieneGeo = !!(det.geoField || det.latField);
           tipo = tieneGeo ? 'geojson' : 'alphanumeric';
+          if (tieneGeo && !meta.geometryField) {
+            meta.geometryField = det.geoField || null;
+            if (!meta.latField && det.latField) meta.latField = det.latField;
+            if (!meta.lonField && det.lonField) meta.lonField = det.lonField;
+          }
         }
 
         if (tipo === 'geojson') {
@@ -1622,6 +1774,7 @@
       construirSQL: construirSQL,
       detectarColumnasGeo: detectarColumnasGeo,
       construirFeatureCollection: construirFeatureCollection,
+      detectarCamposGeoEnResultados: detectarCamposGeoEnResultados,
       formatearBytes: formatearBytes,
       formatearNumero: formatearNumero,
       estadoAuth: function () { return { valido: tokenValido(), expira: auth.expira }; },

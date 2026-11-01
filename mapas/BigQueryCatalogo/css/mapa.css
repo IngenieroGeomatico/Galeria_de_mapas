@@ -1,0 +1,33 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#mapaID {
+  width: 100%;
+  height: 100%;
+}
+
+#cargaSVG {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffffcc;
+}
+
+#cargaSVG[hidden] {
+  display: none;
+}
+
+#cargaSVG img {
+  display: block;
+  height: 30vh;
+  margin: auto;
+  position: sticky;
+  top: 30%;
+}
