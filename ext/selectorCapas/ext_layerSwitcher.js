@@ -1324,7 +1324,17 @@ class miPlugin_layerSwitcher {
           return true;
         } catch (e) { return true; }
       });
-      return sortLayersByZDesc(result);
+      // Capas alfanumericas: datos tabulares sin geometria. No tienen z-index
+      // ni renderizado en el mapa, pero se listan en el selector como capas de
+      // datos para que el usuario pueda verlas, renombrarlas y borrarlas.
+      let alfanumericas = [];
+      try {
+        if (typeof map.getAlphanumericLayers === 'function') {
+          alfanumericas = map.getAlphanumericLayers() || [];
+        }
+      } catch (e) { alfanumericas = []; }
+      const combinado = result.concat(alfanumericas);
+      return sortLayersByZDesc(combinado);
     };
 
     // Construye el arbol de capas del selector: los grupos (LayerGroup) se
@@ -2810,7 +2820,11 @@ class miPlugin_layerSwitcher {
             try { parentGroup.removeLayers(layer); } catch (e) { /* defensivo */ }
           }
         }
-        map.removeLayers(layer);
+        if (layer && layer.type === 'Alphanumeric') {
+          try { layer.destroy(); } catch (e) { /* noop */ }
+        } else {
+          map.removeLayers(layer);
+        }
         closeSheet();
         renderLayerList();
       } catch (e) {

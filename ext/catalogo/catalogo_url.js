@@ -83,7 +83,8 @@
     // sueltos sin georreferenciación, así que además del tipo hay que decir
     // dónde van (posición o rectángulo). Ver ext/glbLayer y ext/imageLayer.
     GLB: 'GLB',
-    Imagen: 'Imagen'
+    Imagen: 'Imagen',
+    Alphanumeric: 'Alphanumeric'
   };
 
   /**
@@ -141,6 +142,7 @@
     IFC: 'IFC / BIM',
     GLB: 'GLB / glTF (modelo 3D)',
     Imagen: 'Imagen suelta (PNG, JPEG, WebP)',
+    Alphanumeric: 'Datos (CSV, JSON, XLSX)',
     desconocido: 'No se ha podido reconocer'
   };
 
@@ -195,9 +197,10 @@
     if (/\.(kml|kmz)$/.test(ruta)) return TIPOS_API.KML;
     if (/\.gpx$/.test(ruta)) return TIPOS_API.GPX;
     if (/\.gml$/.test(ruta)) return TIPOS_API.GML;
-    if (/\.csv$/.test(ruta)) return TIPOS_API.CSV;
+    if (/\.(csv|xlsx|xlsm)$/.test(ruta)) return TIPOS_API.Alphanumeric;
     if (/\.(shp|zip)$/.test(ruta)) return TIPOS_API.SHP;
     if (/\.geojson$/.test(ruta)) return TIPOS_API.GeoJSON;
+    if (/\.json$/.test(ruta)) return TIPOS_API.Alphanumeric;
 
     // --- 2. Plantillas de teselas --------------------------------------
     // La API de la IDEE escribe el TMS con {-y} (eje invertido) y el XYZ con
@@ -550,6 +553,31 @@
     const clase = nombreConstructor(tipo);
     const parametrosExtra = (opciones.parametros && typeof opciones.parametros === 'object')
       ? opciones.parametros : {};
+
+    // Capa alfanumérica: datos tabulares sin geometría. Se crea con
+    // IDEE.layer.Alphanumeric y se registra en el mapa con addTo(), no
+    // con addLayers() (no es una capa del impl de OpenLayers/Cesium).
+    if (tipo === 'Alphanumeric') {
+      const asegurarAlphanumeric = function () {
+        if (window.AlphanumericLayer) return Promise.resolve(window.AlphanumericLayer);
+        return new Promise(function (resolve, reject) {
+          const s = document.createElement('script');
+          s.src = '../../ext/alphanumericLayer/alphanumericLayer.js';
+          s.onload = function () { resolve(window.AlphanumericLayer); };
+          s.onerror = function () { reject(new Error('No se pudo cargar ext/alphanumericLayer/alphanumericLayer.js')); };
+          document.head.appendChild(s);
+        });
+      };
+      return asegurarAlphanumeric().then(function (AL) {
+        if (!AL) throw new Error('Falta ext/alphanumericLayer/alphanumericLayer.js');
+        AL.instalar();
+        return AL.fromURL(url, { name: nombre || url.split('/').pop() });
+      }).then(function (c) {
+        c.addTo(mapa);
+        return [c];
+      });
+    }
+
 
     if (!IDEE || !IDEE.layer) throw new Error('La API no está disponible.');
     if (typeof mapa.addLayers !== 'function') throw new Error('El mapa no está listo.');

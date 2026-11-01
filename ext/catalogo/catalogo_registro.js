@@ -247,11 +247,11 @@
    */
   const ASSETS_CARGABLES = [
     { tipo: 'OGCAPIFeatures', mime: /^application\/geo\+json$/ },
+    { tipo: 'Alphanumeric', mime: /^text\/csv$/ },
+    { tipo: 'Alphanumeric', mime: /application\/json/ },
     { tipo: 'GeoJSON', mime: /^application\/geo\+json$/ },
-    { tipo: 'XYZ', mime: /tilejson|vnd\.mapbox-vector-tile/i },
     { tipo: 'MVT', mime: /application\/vnd\.mapbox-vector-tile/i },
     { tipo: 'GeoTIFF', mime: /image\/tiff/i },
-    { tipo: 'CSV', mime: /^text\/csv$/ },
     { tipo: 'KML', mime: /vnd\.google-earth\.kml/i },
     { tipo: 'GML', mime: /^application\/gml\+xml$/ }
   ];

@@ -387,6 +387,9 @@
       this.name = o.name || ('Datos ' + contador);
       this.legend = o.legend || this.name;
       this.id = o.id || ('ALPHANUMERIC_' + Date.now() + '_' + contador);
+      this.idLayer = this.id;
+      this.isBase = false;
+      this.displayInLayerSwitcher = true;
       this._records = normalizarRegistros(o.records || o.data || []);
       this._fields = Array.isArray(o.fields) && o.fields.length
         ? o.fields.map(function (f) { return { name: f.name, type: f.type || 'string' }; })
@@ -491,11 +494,42 @@
     }
 
     /**
+     * Implementación nativa: una capa alfanumérica no tiene impl en
+     * OpenLayers ni en Cesium (no se pinta en el mapa). Devuelve null para
+     * que los selectores de capas la traten como capa de datos.
+     * @returns {null}
+     */
+    getImpl() {
+      return null;
+    }
+
+    /**
+     * z-index: no aplica (no se pinta). Se devuelve null para que los
+     * selectores la ordenen al final.
+     * @returns {null}
+     */
+    getZIndex() {
+      return null;
+    }
+
+    /**
+     * No-op: una capa alfanumérica no se pinta, no tiene z-index.
+     * @returns {AlphanumericLayer}
+     */
+    setZIndex() {
+      return this;
+    }
+
+    /**
      * Una capa sin geometría no tiene extensión en el mapa.
      * @returns {null}
      */
-    getMaxExtent() {
-      return null;
+    getOpacity() {
+      return 1;
+    }
+
+    setOpacity() {
+      return this;
     }
 
     /**
