@@ -602,3 +602,66 @@
 .m-areas > .m-area.m-right > .m-panel.opened.g-herramienta_bigquery > button.m-panel-btn {
   border-radius: 0 6px 6px 0 !important;
 }
+
+
+/* ---- Ayuda para obtener el Client ID -------------------------------- */
+.bq-ayuda-clientid {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #5a6773;
+  border: 1px solid #e6eaee;
+  border-radius: 4px;
+  padding: 4px 8px;
+  background-color: #f7f9fb;
+}
+
+.bq-ayuda-clientid summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #33404b;
+  list-style: none;
+}
+
+.bq-ayuda-clientid summary::-webkit-details-marker {
+  display: none;
+}
+
+.bq-ayuda-clientid summary::before {
+  content: '\25B6';
+  font-size: 9px;
+  margin-right: 6px;
+  color: #6b7883;
+}
+
+.bq-ayuda-clientid[open] summary::before {
+  content: '\25BC';
+}
+
+.bq-pasos {
+  margin: 6px 0 4px;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+
+.bq-pasos li {
+  margin-bottom: 4px;
+}
+
+.bq-pasos code {
+  font-size: 10px;
+  background-color: #ffffff;
+  border: 1px solid #e6eaee;
+  border-radius: 3px;
+  padding: 0 3px;
+  word-break: break-all;
+}
+
+.bq-pasos a {
+  color: #1a73e8;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.bq-pasos a:hover {
+  text-decoration: underline;
+}
