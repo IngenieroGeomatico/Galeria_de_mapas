@@ -550,8 +550,7 @@
   }
 }
 
-
-/* ---- Aire horizontal del panel abierto y border-radius del boton de plegado ---- */
+/* ---- Aire horizontal del panel abierto y border-radius del boton de plegado (aplicado a todos los plugins) ---- */
 .m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
   transform: translateX(16px);
 }
