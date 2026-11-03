@@ -555,9 +555,11 @@
 
 /* ---- Mas aire entre el panel abierto y los botones colapsados -------- */
 .m-areas > .m-area > .m-panel.g-herramienta_bigquery.opened {
-  margin-top: 8px !important;
+  margin-left: 8px !important;
+  margin-right: 8px !important;
 }
 
 .bq-container {
-  margin-top: 4px;
+  margin-left: 4px;
+  margin-right: 4px;
 }
