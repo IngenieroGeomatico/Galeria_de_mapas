@@ -30,7 +30,7 @@
    poner una clase `g-cartografia-*` en un botón propio (el panel la
    interpretaría como la flecha de plegado). */
 .g-herramienta_bigquery .m-tools:before {
-  content: '\e92c';
+  content: '\e933';
   font-family: g-cartografia !important;
   font-style: normal;
   font-weight: 400;
