@@ -31,12 +31,15 @@
    interpretaría como la flecha de plegado). */
 .g-herramienta_bigquery .m-tools:before {
   content: '\e92c';
-  font-family: g-cartografia;
+  font-family: g-cartografia !important;
   font-style: normal;
   font-weight: 400;
   font-size: 20px;
-  line-height: 1;
-  color: var(--g-plugin-icon-color, #ffffff);
+  line-height: 40px;
+  display: inline-block;
+  width: 40px;
+  text-align: center;
+  color: var(--g-plugin-icon-color, #ffffff) !important;
 }
 
 .g-herramienta_bigquery.opened .m-tools:before {
