@@ -3747,31 +3747,46 @@ _vistaActualEnGrados() {
         btn.type = 'button';
         btn.className = 'catalogo__url-boton';
         btn.textContent = 'Abrir BigQuery';
-        btn.addEventListener('click', function () {
-          // Si el plugin BigQuery está en el mapa, abre su panel.
+        btn.addEventListener('click', async function () {
           const mapa = self._mapa;
-          let plugin = null;
+          // Asegura que el plugin BigQuery esta cargado y registrado en el mapa.
           try {
-            const plugins = (mapa && typeof mapa.getPlugins === 'function') ? mapa.getPlugins() : [];
-            plugin = plugins.filter(function (p) { return p && p.name === 'miPlugin_bigqueryLayer'; })[0] || null;
-          } catch (e) { plugin = null; }
-          if (plugin) {
-            const panel = document.querySelector('.m-panel.g-herrimpse_bigquery');
-            if (panel && !panel.classList.contains('opened')) {
-              const btnPanel = panel.querySelector('button.m-panel-btn');
-              if (btnPanel) btnPanel.click();
+            if (!window.miPlugin_bigqueryLayer) {
+              await new Promise(function (resolve, reject) {
+                const s = document.createElement('script');
+                s.src = '../../ext/bigqueryLayer/bigqueryLayer.js';
+                s.onload = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
+              });
             }
-            self._decir('Panel de BigQuery abierto.', 'ok');
-          } else {
-            self._decir('Añade el plugin miPlugin_bigqueryLayer al mapa para usar BigQuery.', 'aviso');
+            if (window.AlphanumericLayer && typeof window.AlphanumericLayer.instalar === 'function') {
+              window.AlphanumericLayer.instalar();
+            }
+            if (window.miPlugin_bigqueryLayer && mapa && typeof mapa.addPlugin === 'function') {
+              const plugins = (typeof mapa.getPlugins === 'function') ? mapa.getPlugins() : [];
+              const yaEsta = plugins.some(function (p) { return p && p.name === 'miPlugin_bigqueryLayer'; });
+              if (!yaEsta) {
+                mapa.addPlugin(new window.miPlugin_bigqueryLayer({ position: 'TL', collapsible: true }));
+              }
+            }
+          } catch (e) {
+            self._decir('No se pudo cargar el plugin BigQuery: ' + (e && e.message ? e.message : e), 'error');
+            return;
           }
+          const panel = document.querySelector('.m-panel.g-herrimpse_bigquery');
+          if (panel && !panel.classList.contains('opened')) {
+            const btnPanel = panel.querySelector('button.m-panel-btn');
+            if (btnPanel) btnPanel.click();
+          }
+          self._decir('Panel de BigQuery abierto.', 'ok');
         });
         bloque.appendChild(btn);
 
         const nota = document.createElement('p');
         nota.className = 'catalogo__aviso';
         nota.style.fontSize = '11px';
-        nota.textContent = 'Tip: añade el plugin BigQuery al mapa y usa su panel para conectar, listar y cargar tablas.';
+        nota.textContent = 'El plugin BigQuery se carga automaticamente al pulsar el boton.';
         bloque.appendChild(nota);
 
         cont.appendChild(bloque);
