@@ -30,20 +30,23 @@
    poner una clase `g-cartografia-*` en un botón propio (el panel la
    interpretaría como la flecha de plegado). */
 .g-herramienta_bigquery .m-tools:before {
-  content: '\e933';
-  font-family: g-cartografia !important;
-  font-style: normal;
-  font-weight: 400;
-  font-size: 20px;
-  line-height: 40px;
+  content: '';
   display: inline-block;
-  width: 40px;
-  text-align: center;
-  color: var(--g-plugin-icon-color, #ffffff) !important;
+  width: 20px;
+  height: 20px;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: url('../../img/iconos/continents.svg');
+  mask-image: url('../../img/iconos/continents.svg');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
 .g-herramienta_bigquery.opened .m-tools:before {
-  color: var(--g-plugin-icon-color-active, #1a73e8);
+  background-color: var(--g-plugin-icon-color-active, #1a73e8);
 }
 
 /* ---- Cabecera del panel ---------------------------------------------- */
