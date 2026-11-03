@@ -35,8 +35,8 @@
   width: 20px;
   height: 20px;
   background-color: var(--g-plugin-icon-color, #ffffff);
-  -webkit-mask-image: url('../../img/iconos/continents.svg');
-  mask-image: url('../../img/iconos/continents.svg');
+  -webkit-mask-image: url('../../img/iconos/world-map.svg');
+  mask-image: url('../../img/iconos/world-map.svg');
   -webkit-mask-size: contain;
   mask-size: contain;
   -webkit-mask-repeat: no-repeat;
