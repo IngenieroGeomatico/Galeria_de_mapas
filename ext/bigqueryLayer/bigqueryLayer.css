@@ -554,9 +554,12 @@
 }
 
 /* ---- Mas aire entre el panel abierto y los botones colapsados -------- */
-.m-areas > .m-area > .m-panel.g-herramienta_bigquery.opened {
-  margin-left: 16px !important;
-  margin-right: 16px !important;
+.m-areas > .m-area.m-left > .m-panel.g-herramienta_bigquery.opened {
+  transform: translateX(16px);
+}
+
+.m-areas > .m-area.m-right > .m-panel.g-herramienta_bigquery.opened {
+  transform: translateX(-16px);
 }
 
 .bq-container {
