@@ -521,6 +521,12 @@
       try {
         map.fire('alphanumeric:added', [this]);
       } catch (e) { /* la API antigua puede no tener fire */ }
+      // Avisa al selector de capas para que se repinte.
+      try {
+        if (typeof window !== 'undefined' && typeof window.renderLayerList === 'function') {
+          window.renderLayerList();
+        }
+      } catch (e) { /* el selector puede no estar montado */ }
       return this;
     }
 
@@ -538,6 +544,11 @@
         } catch (e) { /* noop */ }
       }
       this._map = null;
+      try {
+        if (typeof window !== 'undefined' && typeof window.renderLayerList === 'function') {
+          window.renderLayerList();
+        }
+      } catch (e) { /* noop */ }
       return this;
     }
 
