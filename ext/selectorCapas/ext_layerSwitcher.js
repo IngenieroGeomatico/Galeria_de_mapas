@@ -1196,6 +1196,13 @@ class miPlugin_layerSwitcher {
         }) || null;
       } catch (e) { found = null; }
       if (found) return found;
+      // Capas alfanuméricas: viven fuera de map.getLayers(), en su propio registro.
+      try {
+        if (typeof map.getAlphanumericLayers === 'function') {
+          const alfa = (map.getAlphanumericLayers() || []).find(l => String(l.idLayer || l.id) === String(index));
+          if (alfa) return alfa;
+        }
+      } catch (e) { /* noop */ }
       const stack = [];
       try { map.getLayers().forEach(l => { if (isGroupLayer(l)) stack.push(l); }); } catch (e) { /* sin grupos */ }
       while (stack.length) {
@@ -4594,6 +4601,7 @@ class miPlugin_layerSwitcher {
         try { typeName = String((layer.getImpl() && layer.getImpl().type) || ''); } catch (e) { /* ignorar */ }
       }
       const t = typeName.toLowerCase();
+      if (t === 'alphanumeric' || t === 'bigquery') return 'alfanumerico';
       const vectorTypes = ['geojson', 'wfs', 'vector', 'geojsonparser', 'feature', 'mvt', 'kml', 'csv', 'datoselevacion', 'mapbox', 'maplibre', 'ogcapifeatures'];
       return vectorTypes.includes(t) ? 'vector' : 'raster';
     };
@@ -8030,7 +8038,51 @@ class miPlugin_layerSwitcher {
       closeSheet();
       // Capas seleccionables para el dropdown del header (asincrono).
       const finish = (selectableLayers) => {
-        if (kind === 'vector') {
+        if (kind === 'alfanumerico') {
+          // Capa de datos tabulares sin geometría: se muestra su tabla de
+          // registros en lugar de la tabla de atributos vectorial.
+          sheetCtx = null;
+          const campos = (typeof layer.getFieldNames === 'function') ? layer.getFieldNames() : [];
+          const registros = (typeof layer.getRecords === 'function') ? layer.getRecords() : [];
+          let html = '<div style="padding:8px;">';
+          html += '<p style="margin:0 0 8px;font-size:12px;color:#555;">'
+            + registros.length + ' registros · ' + campos.length + ' campos</p>';
+          if (registros.length && campos.length) {
+            html += '<div style="overflow:auto;max-height:60vh;"><table class="ls-sheet-table" style="width:100%;border-collapse:collapse;font-size:11px;">';
+            html += '<thead><tr>';
+            campos.forEach(function (c) { html += '<th style="text-align:left;padding:3px 5px;border-bottom:1px solid #ddd;background:#f2f4f6;">' + c + '</th>'; });
+            html += '</tr></thead><tbody>';
+            registros.forEach(function (r) {
+              html += '<tr>';
+              campos.forEach(function (c) {
+                const v = (r && r[c] !== undefined && r[c] !== null) ? r[c] : '';
+                html += '<td style="padding:3px 5px;border-bottom:1px solid #eee;">' + String(v) + '</td>';
+              });
+              html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+          } else {
+            html += '<p style="color:#6b7883;font-style:italic;">La capa no tiene registros.</p>';
+          }
+          // Opción de asignar geometría a la capa.
+          html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee;">';
+          html += '<p style="margin:0 0 4px;font-weight:700;font-size:12px;">Asignar geometría a la capa</p>';
+          html += '<select id="ls-alfa-geo" style="width:100%;font-size:12px;padding:4px;" onchange="window._alfaAsignarGeo && window._alfaAsignarGeo(' + index + ', this.value)">';
+          html += '<option value="">Ninguna</option>';
+          campos.forEach(function (c) {
+            html += '<option value="geojson:' + c + '">GeoJSON: ' + c + '</option>';
+            html += '<option value="wkt:' + c + '">WKT: ' + c + '</option>';
+          });
+          // lat/lon
+          const det = (typeof layer.detectarCamposGeo === 'function') ? layer.detectarCamposGeo() : null;
+          if (det && det.latField && det.lonField) {
+            html += '<option value="xy:' + det.lonField + ',' + det.latField + '">X/Y: ' + det.lonField + ' + ' + det.latField + '</option>';
+          }
+          html += '</select>';
+          html += '</div>';
+          html += '</div>';
+          openSheet(`Datos �� ${layerName}`, html, false, selectableLayers, index);
+        } else if (kind === 'vector') {
           // Las capas MapLibre (BTN) y las MVT no tienen una fuente OL
           // enumerable: se abre el panel y se instala un dropdown secundario con
           // sus sub-capas (source-layers del estilo en MapLibre, capas internas
@@ -8067,6 +8119,25 @@ class miPlugin_layerSwitcher {
           finish(vectorLayers);
         });
       }
+    };
+
+    // Asigna geometría a una capa alfanumérica desde el modal de información.
+    window._alfaAsignarGeo = function (index, valor) {
+      const layer = findLayerById(index);
+      if (!layer || typeof layer.convertirCampoAGeometria !== 'function') return;
+      if (!valor) return;
+      const partes = valor.split(':');
+      const formato = partes[0];
+      const resto = partes.slice(1).join(':');
+      if (formato === 'geojson') {
+        layer.convertirCampoAGeometria('geojson', { field: resto });
+      } else if (formato === 'wkt') {
+        layer.convertirCampoAGeometria('wkt', { field: resto });
+      } else if (formato === 'xy') {
+        const xy = resto.split(',');
+        layer.convertirCampoAGeometria('xy', { xField: xy[0], yField: xy[1] });
+      }
+      try { if (typeof window.renderLayerList === 'function') window.renderLayerList(); } catch (e) {}
     };
 
     // Update the list whenever a layer is added to the map
