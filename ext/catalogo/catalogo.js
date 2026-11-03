@@ -219,6 +219,40 @@
     return _cargaColocacion;
   }
 
+  /** Promesa de la carga del formulario de BigQuery. */
+  let _cargaBigQuery = null;
+
+  /**
+   * Carga catalogo_bigquery.js si no está ya.
+   *
+   * Igual que el formulario de colocación, va aparte del HTML del
+   * visualizador: el catálogo no debe obligar a añadir más <script> ni a
+   * montar el plugin miPlugin_bigqueryLayer. El formulario vive dentro de
+   * la pestaña "Añadir capa".
+   *
+   * @returns {Promise<void>}
+   */
+  function cargarModuloBigQuery() {
+    if (window.CatalogoBigQuery) return Promise.resolve();
+    if (_cargaBigQuery) return _cargaBigQuery;
+
+    _cargaBigQuery = new Promise(function (resolver) {
+      const base = RUTA_PROPIA || document.baseURI;
+      const s = document.createElement('script');
+      s.src = new URL('catalogo_bigquery.js', base).href;
+      s.async = false;
+      s.onload = function () { resolver(); };
+      s.onerror = function () {
+        console.warn('catalogo: no se pudo cargar catalogo_bigquery.js; ' +
+          'las URL de BigQuery no podrán cargar tablas desde el catálogo.');
+        _cargaBigQuery = null;
+        resolver();
+      };
+      document.head.appendChild(s);
+    });
+    return _cargaBigQuery;
+  }
+
   /**
    * Envuelve contenido suelto de un SVG en un `<svg>` de 24x24, que es la medida
    * en la que vienen dibujados casi todos los iconos.
@@ -1025,6 +1059,11 @@
       // aparte de _cacheStac porque crece al leer más, no al navegar.
       this._paginacionStac = {};
       this._analisis = null;
+      // Formulario de BigQuery embebido (solo cuando la URL es de BigQuery).
+      // El estado se conserva aparte para poder rehidratarlo tras el cambio
+      // 2D/3D, cuando el panel se reconstruye entero.
+      this._bigquery = null;
+      this._bigqueryEstado = null;
 
       // Referencias a la interfaz (se rellenan en _construirUI).
       this._gestorEl = null;
@@ -3708,6 +3747,14 @@ _vistaActualEnGrados() {
       });
     }
 
+    /** Suelta el formulario de BigQuery y su estado DOM. */
+    _destruirBigQuery() {
+      if (this._bigquery && typeof this._bigquery.destroy === 'function') {
+        try { this._bigquery.destroy(); } catch (e) { /* ya estaba suelto */ }
+      }
+      this._bigquery = null;
+    }
+
     /**
      * Suelta el formulario de colocación y su vista previa.
      *
@@ -3732,51 +3779,48 @@ _vistaActualEnGrados() {
       // La vista previa y los manejadores de mapa del formulario anterior
       // apuntan a nodos que se van a borrar: se sueltan antes de repintar.
       this._destruirColocacion();
+      // El formulario de BigQuery de la URL anterior se suelta antes de borrar
+      // sus nodos. Su estado se guarda para rehidratarlo si se vuelve a
+      // analizar la misma URL (o tras el cambio 2D/3D).
+      const estadoBigQuery = this._bigquery
+        ? this._bigquery.getState()
+        : this._bigqueryEstado;
+      this._destruirBigQuery();
       cont.innerHTML = '';
 
-      // --- BigQuery: se carga y abre el plugin BigQuery ---------------------
+      // --- BigQuery: formulario embebido -----------------------------------
+      // No se abre el panel de miPlugin_bigqueryLayer: el formulario de
+      // conexión, listado y carga se monta aquí mismo, dentro del catálogo.
       if (info && info.tipo === 'BigQuery') {
         const bloque = document.createElement('div');
         bloque.className = 'catalogo__opciones';
-        const titulo = document.createElement('p');
-        titulo.className = 'catalogo__aviso';
-        titulo.textContent = 'BigQuery: conectando...';
-        bloque.appendChild(titulo);
         cont.appendChild(bloque);
 
-        (async function () {
-          const mapa = self._mapa;
-          try {
-            if (!window.miPlugin_bigqueryLayer) {
-              await new Promise(function (resolve, reject) {
-                const s = document.createElement('script');
-                s.src = '../../ext/bigqueryLayer/bigqueryLayer.js';
-                s.onload = resolve;
-                s.onerror = reject;
-                document.head.appendChild(s);
-              });
-            }
-            if (window.AlphanumericLayer && typeof window.AlphanumericLayer.instalar === 'function') {
-              window.AlphanumericLayer.instalar();
-            }
-            if (window.miPlugin_bigqueryLayer && mapa && typeof mapa.addPlugin === 'function') {
-              const plugins = (typeof mapa.getPlugins === 'function') ? mapa.getPlugins() : [];
-              const yaEsta = plugins.some(function (p) { return p && p.name === 'miPlugin_bigqueryLayer'; });
-              if (!yaEsta) {
-                mapa.addPlugin(new window.miPlugin_bigqueryLayer({ position: 'TL', collapsible: true }));
-              }
-            }
-            const panel = document.querySelector('.m-panel.g-herrimpse_bigquery');
-            if (panel && !panel.classList.contains('opened')) {
-              const btnPanel = panel.querySelector('button.m-panel-btn');
-              if (btnPanel) btnPanel.click();
-            }
-            titulo.textContent = 'Panel de BigQuery abierto. Usa el panel para conectar, listar y cargar tablas.';
-          } catch (e) {
-            titulo.textContent = 'No se pudo cargar BigQuery: ' + (e && e.message ? e.message : e);
-            titulo.className = 'catalogo__aviso catalogo__aviso--error';
+        const estado = estadoBigQuery;
+        this._bigqueryEstado = null;
+
+        cargarModuloBigQuery().then(function () {
+          // Si mientras cargaba el módulo se repintó o se analizó otra URL, el
+          // bloque ya no está en el documento: no se monta nada.
+          if (self._analisis !== info || !bloque.isConnected) return;
+          if (!window.CatalogoBigQuery) {
+            bloque.innerHTML = '';
+            const fallo = document.createElement('p');
+            fallo.className = 'catalogo__aviso catalogo__aviso--error';
+            fallo.textContent = 'No se pudo cargar el formulario de BigQuery.';
+            bloque.appendChild(fallo);
+            return;
           }
-        })();
+          self._bigquery = window.CatalogoBigQuery.crear(bloque, {
+            map: self._map,
+            url: info.url,
+            clientId: (estado && estado.clientId) || '',
+            estado: estado,
+            onAviso: function (texto, clase) {
+              self._decir(texto, clase || '');
+            }
+          });
+        });
         return;
       }
 
@@ -4396,6 +4440,7 @@ _vistaActualEnGrados() {
             ? JSON.parse(JSON.stringify(this._analisis.colocacion))
             : null
         } : null,
+        bigquery: this._bigquery ? this._bigquery.getState() : (this._bigqueryEstado || null),
         panelCollapsed: panelCollapsed
       };
     }
@@ -4435,6 +4480,9 @@ _vistaActualEnGrados() {
             ? state.analisis.colocacion : null,
           error: null
         };
+      }
+      if (state.bigquery && typeof state.bigquery === 'object') {
+        this._bigqueryEstado = state.bigquery;
       }
       if (state.pestana && this._pestanas[state.pestana]) {
         this._verPestana(state.pestana);
@@ -4487,6 +4535,7 @@ _vistaActualEnGrados() {
 
     destroy() {
       this._destruirSupra();
+      this._destruirBigQuery();
       // El formulario de colocación tiene manejadores en el mapa y una posible
       // capa de vista previa: se sueltan antes de soltar el mapa.
       this._destruirColocacion();
@@ -4499,6 +4548,7 @@ _vistaActualEnGrados() {
       this._panel = null;
       this._control = null;
       this._map = null;
+      this._bigqueryEstado = null;
       this._estadoEl = null;
       // Las referencias a la interfaz se sueltan todas: el panel se va con el
       // DOM y dejarlas puestas daría acceso a nodos huérfanos.

@@ -1761,3 +1761,320 @@
 .m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
   border-radius: 0 6px 6px 0 !important;
 }
+
+
+/* ====================================================================
+   FORMULARIO DE BIGQUERY (embebido en "Añadir capa")
+   --------------------------------------------------------------------
+   El formulario no vive en un panel aparte: se monta dentro del catálogo
+   cuando la URL analizada es de BigQuery. Usa los neutros del plugin y el
+   color de marca para la acción principal.
+   ==================================================================== */
+
+.catalogo__bq {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* El atributo hidden de la API no basta: las reglas display:flex de este
+   formulario lo pisarían y los bloques "ocultos" seguirían viéndose. */
+.catalogo__bq [hidden] {
+  display: none !important;
+}
+
+.catalogo__bq-intro {
+  margin: 0;
+  color: var(--cat-fg-suave);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.catalogo__bq-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+}
+
+.catalogo__bq-label {
+  color: var(--cat-fg-suave);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.catalogo__bq-label-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cat-fg-suave);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.g-herramienta_catalogo .catalogo .catalogo__bq-input,
+.g-herramienta_catalogo .catalogo .catalogo__bq-select,
+.g-herramienta_catalogo .catalogo .catalogo__bq-textarea {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  color: var(--cat-fg);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.g-herramienta_catalogo .catalogo .catalogo__bq-input:focus-visible,
+.g-herramienta_catalogo .catalogo .catalogo__bq-select:focus-visible,
+.g-herramienta_catalogo .catalogo .catalogo__bq-textarea:focus-visible {
+  border-color: var(--cat-acento);
+  box-shadow: var(--cat-foco);
+}
+
+.g-herramienta_catalogo .catalogo .catalogo__bq-input--num {
+  width: 90px;
+  min-height: 30px;
+}
+
+.g-herramienta_catalogo .catalogo .catalogo__bq-textarea {
+  min-height: 96px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.catalogo__bq-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.catalogo__bq-fila--botones {
+  align-items: stretch;
+}
+
+.catalogo__bq-fila--botones .catalogo__bq-btn {
+  flex: 1 1 auto;
+}
+
+.catalogo__bq-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--cat-linea-fuerte);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+  color: var(--cat-fg);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.16s ease, filter 0.16s ease, transform 0.12s ease;
+}
+
+.catalogo__bq-btn:hover { background: var(--cat-fondo-3); }
+.catalogo__bq-btn:active { transform: scale(0.98); }
+
+.catalogo__bq-btn--primario {
+  border-color: transparent;
+  background: var(--cat-marca);
+  color: var(--cat-marca-fg);
+}
+
+.catalogo__bq-btn--primario:hover { filter: brightness(0.94); }
+
+.catalogo__bq-btn--ancho {
+  width: 100%;
+  min-height: 34px;
+}
+
+.catalogo__bq-btn--plegable {
+  width: 100%;
+  text-align: left;
+}
+
+.catalogo__bq-plegable {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.catalogo__bq-tablas {
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo);
+  overscroll-behavior: contain;
+}
+
+.catalogo__bq-tabla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--cat-linea);
+  color: var(--cat-fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.catalogo__bq-tabla:last-child { border-bottom: none; }
+.catalogo__bq-tabla:hover { background: var(--cat-fondo-2); }
+
+.catalogo__bq-tabla input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--cat-acento);
+  cursor: pointer;
+}
+
+.catalogo__bq-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.catalogo__bq-ref {
+  margin: 0;
+  overflow: hidden;
+  color: var(--cat-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogo__bq-meta {
+  margin: 0;
+  color: var(--cat-fg-tenue);
+  font-size: 10.5px;
+}
+
+.catalogo__bq-campos {
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+  padding: 6px 8px;
+}
+
+.catalogo__bq-campos summary {
+  cursor: pointer;
+  color: var(--cat-fg-suave);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.catalogo__bq-campos ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.catalogo__bq-campos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px dotted var(--cat-linea);
+  font-size: 10.5px;
+}
+
+.catalogo__bq-campos li:last-child { border-bottom: none; }
+
+.catalogo__bq-campo-nombre {
+  color: var(--cat-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogo__bq-campo-tipo {
+  flex: 0 0 auto;
+  color: var(--cat-fg-tenue);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.catalogo__bq-estado {
+  min-height: 0;
+  margin: 0;
+  color: var(--cat-fg-suave);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.catalogo__bq-estado--ok { color: #1e7a3c; }
+.catalogo__bq-estado--aviso { color: #8a5a00; }
+.catalogo__bq-estado--error { color: #b3261e; }
+.catalogo__bq-estado--info { color: var(--cat-fg-suave); }
+
+.catalogo__bq-aviso {
+  margin: 0;
+  color: var(--cat-fg-tenue);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.catalogo__bq-vacio {
+  margin: 0;
+  padding: 10px;
+  color: var(--cat-fg-tenue);
+  font-size: 11px;
+  text-align: center;
+}
+
+.catalogo__bq-ayuda {
+  margin-top: 2px;
+  padding: 5px 8px;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+  color: var(--cat-fg-suave);
+  font-size: 10.5px;
+}
+
+.catalogo__bq-ayuda summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--cat-fg-suave);
+}
+
+.catalogo__bq-pasos {
+  margin: 6px 0 4px;
+  padding-left: 16px;
+  line-height: 1.45;
+}
+
+.catalogo__bq-pasos li { margin-bottom: 4px; }
+
+.catalogo__bq-pasos code {
+  display: inline-block;
+  padding: 0 3px;
+  border: 1px solid var(--cat-linea);
+  border-radius: 3px;
+  background: var(--cat-fondo);
+  font-size: 9.5px;
+  word-break: break-all;
+}
+
+.catalogo__bq-pasos a {
+  color: var(--cat-acento);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.catalogo__bq-pasos a:hover { text-decoration: underline; }

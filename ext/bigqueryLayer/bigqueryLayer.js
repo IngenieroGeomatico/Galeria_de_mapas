@@ -1783,6 +1783,11 @@
 
     // Utilidades puras, útiles para depurar y para pruebas.
     window.BigQueryUtil = {
+      conectar: conectar,
+      desconectar: desconectar,
+      tokenValido: tokenValido,
+      leerClientId: leerClientId,
+      guardarClientId: guardarClientId,
       listarProyectos: listarProyectos,
       listarDatasets: listarDatasets,
       listarTablas: listarTablas,

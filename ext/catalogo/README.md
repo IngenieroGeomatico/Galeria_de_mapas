@@ -34,6 +34,7 @@ Plugin con panel que ofrece los servicios ya escritos de varios catálogos (IDEE
 | `catalogo_idee.js` | Cliente del catálogo de la IDEE (adaptación de `serviciosIDEE2QGIS`). Expone `window.CatalogoIDEE`: `SECCIONES`, `PAGINA_CATALOGO`, `urlSeccion()`, `listarSeccion()`, `pedir()` y `limpiarCache()`. |
 | `catalogo_url.js` | Detección del tipo de capa a partir de una URL, lectura del documento de capacidades y creación de la capa. Expone `window.CatalogoURL`. |
 | `catalogo_colocacion.js` | Formulario de colocación de los recursos que no traen georreferenciación (GLB e Imagen): punto o rectángulo, centro del mapa, clic en el mapa, vista actual, rectángulo dibujado, giro, escala y vista previa. Expone `window.CatalogoColocacion`. |
+| `catalogo_bigquery.js` | Formulario de BigQuery embebido en la pestaña «Añadir capa»: login con Google, listado de proyectos/datasets/tablas, selección de geometría, estimación de coste y carga como GeoJSON o capa alfanumérica. Expone `window.CatalogoBigQuery`. |
 | `catalogo_registro.js` | Catálogos dados de alta por el usuario (alta, baja, persistencia) y sus lectores `stac` / `ogcapi` / `json`, con la navegación y paginación de nodos STAC. Expone `window.CatalogoRegistro`. |
 | `catalogo.css` | Estilos del panel y del botón de la barra. Cromática por variables `--g-plugin-*` (inyectadas desde `color1/color2/color3`), icono por `--g-plugin-icon-mask`, y clases `catalogo__*` para el contenido. |
 | `datos/<seccion>.js` | Copias locales de las tablas del catálogo de la IDEE (`wms.js`, `wmts.js`, `xyz.js`, `mvt.js`, `wfs.js`, `wcs.js`, `ogcapi.js`), volcadas en `window.CatalogoIDEE_Datos[id]`. Se cargan con una etiqueta `<script>` para que funcionen también en `file://`. |
@@ -51,7 +52,7 @@ Plugin con panel que ofrece los servicios ya escritos de varios catálogos (IDEE
 <script src="../../ext/catalogo/catalogo.js" type="text/javascript"></script>
 ```
 
-Las dependencias de formato (`MVTLayer`, `geotiffLayer`, `copcLayer`, `flatgeobufLayer`, `geoparquetLayer`, `ifcLayer`, `pmtilesLayer`, `glbLayer`, `imageLayer`) **no** hay que declararlas: `catalogo.js` las carga solo cuando hacen falta, y `catalogo_colocacion.js` se autocarga igual (por eso el HTML sigue teniendo cuatro `<script>`).
+Las dependencias de formato (`MVTLayer`, `geotiffLayer`, `copcLayer`, `flatgeobufLayer`, `geoparquetLayer`, `ifcLayer`, `pmtilesLayer`, `glbLayer`, `imageLayer`) **no** hay que declararlas: `catalogo.js` las carga solo cuando hacen falta, y `catalogo_colocacion.js` y `catalogo_bigquery.js` se autocargan igual (por eso el HTML sigue teniendo cuatro `<script>`).
 
 ## ⚙️ Parámetros de construcción
 
