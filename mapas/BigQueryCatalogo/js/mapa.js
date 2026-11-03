@@ -101,53 +101,6 @@ function mapa() {
   mapajs.addPlugin(new M.plugin.miPlugin_baseLayer({ rows: 1 }));
   mapajs.addPlugin(new M.plugin.miPlugin_layerSwitcher());
 
-  // Catálogo de servicios y capas.
-  const catalogos = [
-    new IDEE.catalog.IDEE(),
-    new IDEE.catalog.STAC({
-      nombre: 'STAC (Earth Search)',
-      descripcion: 'Catálogo STAC de imágenes de satélite',
-      url: 'https://earth-search.aws.element84.com/v1/collections'
-    }),
-    new IDEE.catalog.OGCAPIRecords({
-      nombre: 'Catálogo de ejemplo (cubeWerx)',
-      descripcion: 'Registros de metadatos en un OGC API Records',
-      url: 'https://test.cubewerx.com/cubewerx/cubeserv/default/ogcapi/catalogues/collections?f=json'
-    }),
-    new IDEE.catalog.custom({
-      nombre: 'Servicios personalizados',
-      descripcion: 'Catálogo de ejemplo declarado desde mapa.js.',
-      nodos: [
-        {
-          nombre: 'Ráster',
-          servicios: [
-            { nombre: 'Callejero (WMS)', url: 'https://www.ign.es/wms-inspire/ign-base', descripcion: 'Callejero y toponimia de España' },
-            { nombre: 'Ortofoto PNOA (WMS)', url: 'https://www.ign.es/wms-inspire/pnoa-ma', descripcion: 'Ortofotos del Plan Nacional' }
-          ]
-        },
-        {
-          nombre: 'Organismo',
-          nodos: [
-            {
-              nombre: 'Servicios base',
-              servicios: [
-                { nombre: 'Base de España', url: 'https://tms-ign-base.idee.es/1.0.0/IGNBaseTodo/{z}/{x}/{-y}.jpeg' }
-              ]
-            }
-          ]
-        }
-      ]
-    })
-  ];
-
-  const catalogoPlugin = new IDEE.plugin.miPlugin_catalogo({
-    position: 'TR',
-    order: 2,
-    icon: '../../img/iconos/collect.svg',
-    catalogos: catalogos
-  });
-  mapajs.addPlugin(catalogoPlugin);
-
   // Herramienta de BigQuery, en la esquina superior izquierda.
   mapajs.addPlugin(new M.plugin.miPlugin_bigqueryLayer({
     position: 'TL',

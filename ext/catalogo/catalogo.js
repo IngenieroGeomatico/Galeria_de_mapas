@@ -3734,6 +3734,50 @@ _vistaActualEnGrados() {
       this._destruirColocacion();
       cont.innerHTML = '';
 
+      // --- BigQuery: formulario propio --------------------------------------
+      if (info && info.tipo === 'BigQuery') {
+        const bloque = document.createElement('div');
+        bloque.className = 'catalogo__opciones';
+        const titulo = document.createElement('p');
+        titulo.className = 'catalogo__aviso';
+        titulo.textContent = 'BigQuery: conecta con tu cuenta de Google para listar proyectos, datasets y tablas.';
+        bloque.appendChild(titulo);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'catalogo__url-boton';
+        btn.textContent = 'Abrir BigQuery';
+        btn.addEventListener('click', function () {
+          // Si el plugin BigQuery está en el mapa, abre su panel.
+          const mapa = self._mapa;
+          let plugin = null;
+          try {
+            const plugins = (mapa && typeof mapa.getPlugins === 'function') ? mapa.getPlugins() : [];
+            plugin = plugins.filter(function (p) { return p && p.name === 'miPlugin_bigqueryLayer'; })[0] || null;
+          } catch (e) { plugin = null; }
+          if (plugin) {
+            const panel = document.querySelector('.m-panel.g-herrimpse_bigquery');
+            if (panel && !panel.classList.contains('opened')) {
+              const btnPanel = panel.querySelector('button.m-panel-btn');
+              if (btnPanel) btnPanel.click();
+            }
+            self._decir('Panel de BigQuery abierto.', 'ok');
+          } else {
+            self._decir('Añade el plugin miPlugin_bigqueryLayer al mapa para usar BigQuery.', 'aviso');
+          }
+        });
+        bloque.appendChild(btn);
+
+        const nota = document.createElement('p');
+        nota.className = 'catalogo__aviso';
+        nota.style.fontSize = '11px';
+        nota.textContent = 'Tip: añade el plugin BigQuery al mapa y usa su panel para conectar, listar y cargar tablas.';
+        bloque.appendChild(nota);
+
+        cont.appendChild(bloque);
+        return;
+      }
+
       const caja = document.createElement('div');
       caja.className = 'catalogo__opciones';
 

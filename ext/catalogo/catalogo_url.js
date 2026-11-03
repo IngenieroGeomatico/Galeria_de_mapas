@@ -84,7 +84,8 @@
     // dónde van (posición o rectángulo). Ver ext/glbLayer y ext/imageLayer.
     GLB: 'GLB',
     Imagen: 'Imagen',
-    Alphanumeric: 'Alphanumeric'
+    Alphanumeric: 'Alphanumeric',
+    BigQuery: 'BigQuery'
   };
 
   /**
@@ -143,6 +144,7 @@
     GLB: 'GLB / glTF (modelo 3D)',
     Imagen: 'Imagen suelta (PNG, JPEG, WebP)',
     Alphanumeric: 'Datos (CSV, JSON, XLSX)',
+    BigQuery: 'BigQuery (tablas y SQL)',
     desconocido: 'No se ha podido reconocer'
   };
 
@@ -223,6 +225,7 @@
     // --- 3. OGC API Features -------------------------------------------
     // Se reconoce por el camino /collections/<id>/items, que es como los
     // publica el API de Features del IGN.
+    if (/bigquery/i.test(lower)) return TIPOS_API.BigQuery;
     if (/\/collections\/[^/?#]+\/items(\?|$)/i.test(lower)) return TIPOS_API.OGCAPIFeatures;
     if (/api-features|ogcapi\/features/i.test(lower)) return TIPOS_API.OGCAPIFeatures;
 
