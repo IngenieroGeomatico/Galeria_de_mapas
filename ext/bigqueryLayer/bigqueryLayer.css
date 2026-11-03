@@ -555,11 +555,23 @@
 
 /* ---- Mas aire entre el panel abierto y los botones colapsados -------- */
 .m-areas > .m-area > .m-panel.g-herramienta_bigquery.opened {
-  margin-left: 8px !important;
-  margin-right: 8px !important;
+  margin-left: 16px !important;
+  margin-right: 16px !important;
 }
 
 .bq-container {
-  margin-left: 4px;
-  margin-right: 4px;
+  margin-left: 8px;
+  margin-right: 8px;
+}
+
+/* ---- Border-radius del boton de plegado (abierto) ------------------- */
+/* El boton se ancla a un extremo del panel; las esquinas redondeadas deben
+   estar en el lado EXTERIOR (el que mira hacia la barra de botones), no
+   en el lado del panel. */
+.m-areas > .m-area.m-left > .m-panel.opened.g-herramienta_bigquery > button.m-panel-btn {
+  border-radius: 6px 0 0 6px !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-herramienta_bigquery > button.m-panel-btn {
+  border-radius: 0 6px 6px 0 !important;
 }
