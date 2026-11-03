@@ -3734,22 +3734,18 @@ _vistaActualEnGrados() {
       this._destruirColocacion();
       cont.innerHTML = '';
 
-      // --- BigQuery: formulario propio --------------------------------------
+      // --- BigQuery: se carga y abre el plugin BigQuery ---------------------
       if (info && info.tipo === 'BigQuery') {
         const bloque = document.createElement('div');
         bloque.className = 'catalogo__opciones';
         const titulo = document.createElement('p');
         titulo.className = 'catalogo__aviso';
-        titulo.textContent = 'BigQuery: conecta con tu cuenta de Google para listar proyectos, datasets y tablas.';
+        titulo.textContent = 'BigQuery: conectando...';
         bloque.appendChild(titulo);
+        cont.appendChild(bloque);
 
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'catalogo__url-boton';
-        btn.textContent = 'Abrir BigQuery';
-        btn.addEventListener('click', async function () {
+        (async function () {
           const mapa = self._mapa;
-          // Asegura que el plugin BigQuery esta cargado y registrado en el mapa.
           try {
             if (!window.miPlugin_bigqueryLayer) {
               await new Promise(function (resolve, reject) {
@@ -3770,26 +3766,17 @@ _vistaActualEnGrados() {
                 mapa.addPlugin(new window.miPlugin_bigqueryLayer({ position: 'TL', collapsible: true }));
               }
             }
+            const panel = document.querySelector('.m-panel.g-herrimpse_bigquery');
+            if (panel && !panel.classList.contains('opened')) {
+              const btnPanel = panel.querySelector('button.m-panel-btn');
+              if (btnPanel) btnPanel.click();
+            }
+            titulo.textContent = 'Panel de BigQuery abierto. Usa el panel para conectar, listar y cargar tablas.';
           } catch (e) {
-            self._decir('No se pudo cargar el plugin BigQuery: ' + (e && e.message ? e.message : e), 'error');
-            return;
+            titulo.textContent = 'No se pudo cargar BigQuery: ' + (e && e.message ? e.message : e);
+            titulo.className = 'catalogo__aviso catalogo__aviso--error';
           }
-          const panel = document.querySelector('.m-panel.g-herrimpse_bigquery');
-          if (panel && !panel.classList.contains('opened')) {
-            const btnPanel = panel.querySelector('button.m-panel-btn');
-            if (btnPanel) btnPanel.click();
-          }
-          self._decir('Panel de BigQuery abierto.', 'ok');
-        });
-        bloque.appendChild(btn);
-
-        const nota = document.createElement('p');
-        nota.className = 'catalogo__aviso';
-        nota.style.fontSize = '11px';
-        nota.textContent = 'El plugin BigQuery se carga automaticamente al pulsar el boton.';
-        bloque.appendChild(nota);
-
-        cont.appendChild(bloque);
+        })();
         return;
       }
 
