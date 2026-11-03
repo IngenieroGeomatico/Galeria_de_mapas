@@ -1,4 +1,4 @@
-.g-herramienta_layerSwitcher {
+﻿.g-herramienta_layerSwitcher {
   /* Scoped variables for base layer selector styling */
   --bl-bg: #f9f9f9;
   --bl-border: #ddd;
@@ -16,10 +16,10 @@
    parecerse. El tamano si es propio de cada sitio. */
 .ls-supra__icono::before {
   /* Icono de pila de capas (estilo QGIS/Leaflet): tres rombos apilados.
-     Se usa como MÁSCARA (mask-image) en lugar de content:url() para que
+     Se usa como MÃSCARA (mask-image) en lugar de content:url() para que
      el icono herede el color configurable (color2 / --g-plugin-icon-color)
      mediante background-color. Si fuera un data-uri con stroke fijo no
-     podría cambiar el color. */
+     podrÃ­a cambiar el color. */
   content: '';
   display: inline-block;
   width: 20px;
@@ -54,9 +54,9 @@
 
 /* Contenedor del plugin */
 .m-control.m-container.m-herramienta {
-  /* Ancho dinámico: el panel se ajusta al mayor texto de sus filas en lugar
+  /* Ancho dinÃ¡mico: el panel se ajusta al mayor texto de sus filas en lugar
      de quedar fijo en 250px. max-content deja crecer el panel hasta el ancho
-     del texto más largo; max-width impide que desborde la pantalla (los
+     del texto mÃ¡s largo; max-width impide que desborde la pantalla (los
      nombres largos entonces se recortan con elipsis en .ls-nombre). */
   width: max-content;
   max-width: min(420px, 90vw);
@@ -65,7 +65,7 @@
 }
 
 
-/* Título (fondo y color vienen del bloque con variables color1/color2) */
+/* TÃ­tulo (fondo y color vienen del bloque con variables color1/color2) */
 .m-herramienta-header {
   display: block;
   font-size: 15px;
@@ -77,8 +77,8 @@
 }
 
 /* Zona de la lista de capas: cuando hay muchas capas, el panel no debe crecer
-   indefinidamente hacia abajo. Se define una altura máxima y un scroll
-   vertical interno, de modo que la cabecera y el botón del panel quedan fijos
+   indefinidamente hacia abajo. Se define una altura mÃ¡xima y un scroll
+   vertical interno, de modo que la cabecera y el botÃ³n del panel quedan fijos
    y solo la lista de capas se desplaza si se desborda. */
 .m-herramienta-previews.layerSwitcher,
 .m-herramienta-previews {
@@ -88,7 +88,7 @@
 }
 
 /* Cabecera del panel: fondo (color1), borde (color2), icono (color3).
-   El BOTÓN del panel lo estilan las reglas genéricas (ver abajo). */
+   El BOTÃ“N del panel lo estilan las reglas genÃ©ricas (ver abajo). */
 .g-herramienta_selectorCapa .m-herramienta-header {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #ffffff) !important;
@@ -96,28 +96,28 @@
 }
 
 /* Panel abierto (opened) = estado activo: se aplican los colores "-active".
-   El BOTÓN lo estiliza la regla genérica de botón (ver abajo). */
+   El BOTÃ“N lo estiliza la regla genÃ©rica de botÃ³n (ver abajo). */
 .m-areas>div.m-area>div.m-panel.g-herramienta_selectorCapa.opened .m-herramienta-header {
   background-color: var(--g-plugin-bg-color-active, #ffffff) !important;
   color: var(--g-plugin-icon-color-active, #71A7D3) !important;
   border-color: var(--g-plugin-border-color-active, #71A7D3) !important;
 }
 
-/* BOTÓN del panel — GENÉRICO para todos los plugins.
+/* BOTÃ“N del panel â€” GENÃ‰RICO para todos los plugins.
    Base (cerrado):
      - fondo  = color1.deactive (--g-plugin-bg-color)
      - texto  = color3.deactive (--g-plugin-icon-color)
      - borde  = color2.deactive (--g-plugin-border-color)
-   Abierto (opened) — mayor especificidad gana sobre base:
+   Abierto (opened) â€” mayor especificidad gana sobre base:
      - fondo  = color1.active  (--g-plugin-bg-color-active)
      - texto  = color2.active  (--g-plugin-border-color-active)
      - borde  = color2.active  (--g-plugin-border-color-active) */
 /* El selector tiene que llevar la clase del panel (.g-herramienta_selectorCapa).
-   Con el genérico `.m-areas>div.m-area>div.m-panel>button.m-panel-btn` la regla
-   NO gana: medido, el botón sale en el azul de la API (rgb 113,167,211) aunque la
-   variable valga orangered, porque su regla es más específica; en cuanto se le
-   añade la clase del panel, gana el color del constructor. Es el mismo motivo por
-   el que el plugin de calidad del aire escribe su selector así. */
+   Con el genÃ©rico `.m-areas>div.m-area>div.m-panel>button.m-panel-btn` la regla
+   NO gana: medido, el botÃ³n sale en el azul de la API (rgb 113,167,211) aunque la
+   variable valga orangered, porque su regla es mÃ¡s especÃ­fica; en cuanto se le
+   aÃ±ade la clase del panel, gana el color del constructor. Es el mismo motivo por
+   el que el plugin de calidad del aire escribe su selector asÃ­. */
 .m-areas>div.m-area>div.m-panel.g-herramienta_selectorCapa>button.m-panel-btn {
   background-color: var(--g-plugin-bg-color, orangered) !important;
   color: var(--g-plugin-icon-color, #fff) !important;
@@ -153,11 +153,11 @@
   margin: 0;
 }
 
-/* ── Barra de acciones rápidas ───────────────────────────────────────
+/* â”€â”€ Barra de acciones rÃ¡pidas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Dos botones-pastilla en la cabecera del selector: mostrar/ocultar todas
    las capas y plegar/desplegar todos los grupos. Se queda pegada al borde
    superior de la lista (position: sticky) para que siga a mano cuando hay
-   muchas capas y la zona de scroll se ha desplazado; los márgenes
+   muchas capas y la zona de scroll se ha desplazado; los mÃ¡rgenes
    negativos la pegan a los bordes del contenedor y el fondo tapa la lista
    que pasa por debajo. */
 .overlay-layer-selector .ls-toolbar {
@@ -220,7 +220,7 @@
 }
 
 .overlay-layer-selector li {
-  /* Elimina cualquier viñeta/marcador heredado (list-style) que Mapea o los
+  /* Elimina cualquier viÃ±eta/marcador heredado (list-style) que Mapea o los
      estilos del navegador puedan inyectar a la izquierda de cada fila. */
   list-style: none;
   list-style-type: none;
@@ -260,8 +260,8 @@
   color: #0078d4;
 }
 
-/* ── Ojito de visibilidad por capa ────────────────────────────────── */
-/* Botón que muestra si la capa esta visible (abierto) u oculta (cerrado)
+/* â”€â”€ Ojito de visibilidad por capa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* BotÃ³n que muestra si la capa esta visible (abierto) u oculta (cerrado)
    y permite alternarla. Colocado al final de cada fila. */
 .overlay-layer-selector .ls-eye {
   flex-shrink: 0;
@@ -299,18 +299,18 @@
   border: 1px solid #d3e4f5;
 }
 
-/* Capa oculta: el ojo se atenúa para señalar que no se ve */
+/* Capa oculta: el ojo se atenÃºa para seÃ±alar que no se ve */
 .overlay-layer-selector .ls-eye-off {
   opacity: 0.55;
   background: transparent;
 }
 
-/* ── Tercer estado: encendida, pero ahora mismo no se pinta ────────── */
-/* La capa está visible para la API y el usuario no la ha apagado, pero no
+/* â”€â”€ Tercer estado: encendida, pero ahora mismo no se pinta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* La capa estÃ¡ visible para la API y el usuario no la ha apagado, pero no
    se ve: el zoom actual queda fuera de su minZoom/maxZoom o su cobertura
-   no cae en la vista. No es "oculta", así que no se tacha el ojo: se deja
-   abierto y se avisa en ámbar con una insignia, sin cambiar lo que hace el
-   botón al pulsarlo (sigue alternando la visibilidad). */
+   no cae en la vista. No es "oculta", asÃ­ que no se tacha el ojo: se deja
+   abierto y se avisa en Ã¡mbar con una insignia, sin cambiar lo que hace el
+   botÃ³n al pulsarlo (sigue alternando la visibilidad). */
 .overlay-layer-selector .ls-eye-fuera {
   color: #b26a00;
   background: #fff4e0;
@@ -337,10 +337,10 @@
   pointer-events: none;
 }
 
-/* ── Modo "una capa a la vez": el ojito pasa a ser un radio ─────────── */
-/* Grupo de radios: solo una capa del grupo puede estar visible, así que el
-   control tiene que decirlo de un vistazo. El botón conserva el tamaño del
-   ojito (la fila no se mueve) y dentro se pinta el círculo. */
+/* â”€â”€ Modo "una capa a la vez": el ojito pasa a ser un radio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Grupo de radios: solo una capa del grupo puede estar visible, asÃ­ que el
+   control tiene que decirlo de un vistazo. El botÃ³n conserva el tamaÃ±o del
+   ojito (la fila no se mueve) y dentro se pinta el cÃ­rculo. */
 .overlay-layer-selector .ls-radio {
   opacity: 1;
 }
@@ -369,7 +369,7 @@
   border: 1px solid #d3e4f5;
 }
 
-/* Capa apagada dentro del grupo: círculo vacío y atenuado */
+/* Capa apagada dentro del grupo: cÃ­rculo vacÃ­o y atenuado */
 .overlay-layer-selector .ls-radio-off {
   opacity: 0.75;
   background: transparent;
@@ -379,7 +379,7 @@
   background: transparent;
 }
 
-/* ── Botón de opciones (desplegable) ─────────────────────────────── */
+/* â”€â”€ BotÃ³n de opciones (desplegable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /* Chevron/flecha hacia abajo: abre el panel de opciones de la capa. */
 .overlay-layer-selector .ls-options {
   flex-shrink: 0;
@@ -411,7 +411,7 @@
   background: #eaf3fc;
 }
 
-/* ── Panel desplegable de opciones de la capa ────────────────────── */
+/* â”€â”€ Panel desplegable de opciones de la capa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /* Colapsado por defecto (altura 0, oculto); con .open se expande. */
 .overlay-layer-selector .ls-options-panel {
   max-height: 0;
@@ -531,7 +531,7 @@
   text-align: right;
 }
 
-/* ── Fila de acciones por capa (tabla / borrar) ──────────────────────
+/* â”€â”€ Fila de acciones por capa (tabla / borrar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Aparece bajo el slider de transparencia dentro del desplegable. */
 .overlay-layer-selector .ls-actions-row {
   display: flex;
@@ -539,10 +539,10 @@
   margin-top: 0.4em;
 }
 
-/* ── Objetos geográficos por BBOX (WFS y OGC API Features) ─────────────
-   Ya no vive aquí: los controles de "objetos geográficos" (todas / la vista,
-   límite y paginado) están en la ventana de información, sobre la tabla de
-   atributos. Ver .ls-objetos más abajo. */
+/* â”€â”€ Objetos geogrÃ¡ficos por BBOX (WFS y OGC API Features) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   Ya no vive aquÃ­: los controles de "objetos geogrÃ¡ficos" (todas / la vista,
+   lÃ­mite y paginado) estÃ¡n en la ventana de informaciÃ³n, sobre la tabla de
+   atributos. Ver .ls-objetos mÃ¡s abajo. */
 
 .overlay-layer-selector .ls-action {
   width: 28px;
@@ -575,7 +575,7 @@
   color: #0078d4;
 }
 
-/* Botón de borrar: tono rojo al pasar el ratón para advertir del efecto */
+/* BotÃ³n de borrar: tono rojo al pasar el ratÃ³n para advertir del efecto */
 .overlay-layer-selector .ls-action-delete:hover {
   color: #d9534f;
   background: #fdf0ef;
@@ -592,7 +592,7 @@
 }
 
 /* Segunda fila del desplegable: mover en la pila, duplicar, recargar y
-   aislar. Se separa con una línea discontinua porque son acciones de otro
+   aislar. Se separa con una lÃ­nea discontinua porque son acciones de otro
    orden que las de arriba (que miran la capa, no la mueven). */
 .overlay-layer-selector .ls-actions-row-gestion {
   margin-top: 0.25em;
@@ -612,15 +612,15 @@
   color: #0078d4;
 }
 
-/* Capa aislada: el botón se queda marcado mientras dura el aislamiento, para
-   que se vea que hay un estado que deshacer y no un botón que "no hace nada". */
+/* Capa aislada: el botÃ³n se queda marcado mientras dura el aislamiento, para
+   que se vea que hay un estado que deshacer y no un botÃ³n que "no hace nada". */
 .overlay-layer-selector .ls-action-activo,
 .overlay-layer-selector .ls-action-activo:hover {
   color: #0078d4;
   background: #eef6fd;
 }
 
-/* ── Modal de la ficha de una capa ────────────────────────────────────
+/* â”€â”€ Modal de la ficha de una capa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Centrado, con el mapa detras y sin interactividad: a diferencia del panel
    inferior, esto bloquea el raton y hay que cerrarlo para seguir. */
 .ls-ficha-overlay {
@@ -809,9 +809,9 @@
   overflow: auto;
 }
 
-/* ── Editor de parámetros de la ficha ─────────────────────────────────
+/* â”€â”€ Editor de parÃ¡metros de la ficha â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    El formulario va arriba de la columna izquierda y la tabla de solo
-   lectura queda plegada debajo. Los controles son nativos a propósito:
+   lectura queda plegada debajo. Los controles son nativos a propÃ³sito:
    el modal vive fuera del panel de la API y no hereda sus estilos. */
 
 .ls-ficha-editor-wrap {
@@ -965,7 +965,7 @@
   margin-top: 12px;
   padding: 10px 0;
   border-top: 1px solid #eef0f3;
-  /* El formulario puede ser más alto que el modal: el pie con «Aplicar»
+  /* El formulario puede ser mÃ¡s alto que el modal: el pie con Â«AplicarÂ»
      se queda pegado abajo para no obligar a bajar hasta el final. */
   position: sticky;
   bottom: 0;
@@ -984,7 +984,7 @@
 .ls-ficha-editor-estado--error { color: #c0392b; }
 .ls-ficha-editor-estado--aviso { color: #b26a00; }
 
-/* Parámetros de construcción: plegados bajo el formulario. */
+/* ParÃ¡metros de construcciÃ³n: plegados bajo el formulario. */
 .ls-ficha-params {
   margin-top: 4px;
 }
@@ -993,7 +993,7 @@
   margin-top: 8px;
 }
 
-/* ── Colocación (GLB / Imagen / IFC) ────────────────────────────────── */
+/* â”€â”€ ColocaciÃ³n (GLB / Imagen / IFC) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .ls-ficha-coloc {
   margin-top: 2px;
@@ -1050,7 +1050,7 @@
   margin-bottom: 2px;
 }
 
-/* Marco de la marquesina mientras se dibuja el rectángulo. Va colgado del
+/* Marco de la marquesina mientras se dibuja el rectÃ¡ngulo. Va colgado del
    body y en coordenadas de pantalla, por eso el z-index tan alto. */
 .ls-ficha-marco {
   position: fixed;
@@ -1061,7 +1061,7 @@
   border-radius: 2px;
 }
 
-/* Modo pinchazo: el modal deja pasar el ratón al mapa y se aparta a la
+/* Modo pinchazo: el modal deja pasar el ratÃ³n al mapa y se aparta a la
    izquierda para no taparlo. El panel sigue siendo interactivo. */
 .ls-ficha-overlay.ls-ficha--pick {
   background: transparent;
@@ -1080,14 +1080,14 @@
   grid-template-columns: 1fr;
 }
 
-/* En modo pinchazo el panel se atenúa un poco para no confundirse con el
+/* En modo pinchazo el panel se atenÃºa un poco para no confundirse con el
    mapa, pero sin dejar de leerse. */
 .ls-ficha-overlay.ls-ficha--pick .ls-ficha {
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.3);
 }
 
 
-/* ── Panel inferior (bottom sheet) de informacion / tabla de atributos ──
+/* â”€â”€ Panel inferior (bottom sheet) de informacion / tabla de atributos â”€â”€
    Anclado a la parte baja de la pantalla, ocupa TODO el ancho y se despliega
    hacia arriba (tipo "sidenav" horizontal desde abajo). El mapa queda
    interactivo (el overlay NO bloquea el raton): se puede mover el mapa y
@@ -1224,9 +1224,9 @@
   background: rgba(0, 0, 0, 0.08);
 }
 
-/* Acciones de copiado de la ventana de información (URL y código). Van en el
-   header, a la izquierda del botón de cerrar: son de la capa que se está
-   mirando y no deben competir con el título. */
+/* Acciones de copiado de la ventana de informaciÃ³n (URL y cÃ³digo). Van en el
+   header, a la izquierda del botÃ³n de cerrar: son de la capa que se estÃ¡
+   mirando y no deben competir con el tÃ­tulo. */
 .ls-sheet-header-right {
   display: flex;
   align-items: center;
@@ -1258,8 +1258,8 @@
   background: #e6e9ee;
 }
 
-/* En pantallas estrechas las acciones de copiado bajan a una segunda línea:
-   el selector de capas y el título necesitan el ancho completo o el título se
+/* En pantallas estrechas las acciones de copiado bajan a una segunda lÃ­nea:
+   el selector de capas y el tÃ­tulo necesitan el ancho completo o el tÃ­tulo se
    queda en unas pocas letras (medido a 360 px: 85 px de los 360). */
 @media (max-width: 480px) {
   .ls-sheet-header {
@@ -1277,7 +1277,7 @@
   }
 }
 
-/* Confirmación en el propio botón: dice que se ha copiado sin abrir nada. */
+/* ConfirmaciÃ³n en el propio botÃ³n: dice que se ha copiado sin abrir nada. */
 .ls-sheet-copiar.ls-copiado {
   color: #fff;
   background: #2e8b57;
@@ -1301,12 +1301,12 @@
   margin: 0.4em 0 0.6em;
 }
 
-/* ── Objetos geográficos: barra sobre la tabla de atributos ───────────
-   Solo en las capas que se pueden pedir por páginas (WFS y OGC API
-   Features, ver ext/bboxFeatures): qué se pide al servicio ("Todas" / "La
-   vista"), cuántos objetos por página (límite, 100 por defecto) y el
-   paginado. El paginado se resuelve en el servidor, así que el mapa y la
-   tabla muestran siempre la misma página de objetos. */
+/* â”€â”€ Objetos geogrÃ¡ficos: barra sobre la tabla de atributos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   Solo en las capas que se pueden pedir por pÃ¡ginas (WFS y OGC API
+   Features, ver ext/bboxFeatures): quÃ© se pide al servicio ("Todas" / "La
+   vista"), cuÃ¡ntos objetos por pÃ¡gina (lÃ­mite, 100 por defecto) y el
+   paginado. El paginado se resuelve en el servidor, asÃ­ que el mapa y la
+   tabla muestran siempre la misma pÃ¡gina de objetos. */
 .ls-objetos {
   display: flex;
   flex-wrap: wrap;
@@ -1348,7 +1348,7 @@
   color: #0078d4;
 }
 
-/* Elegido: azul de la API, el mismo de los demás controles activos. */
+/* Elegido: azul de la API, el mismo de los demÃ¡s controles activos. */
 .ls-objetos__btn-on,
 .ls-objetos__btn-on:hover {
   background: #0078d4;
@@ -1361,7 +1361,7 @@
   transform: scale(0.96);
 }
 
-/* Límite de objetos por página: a la derecha, separado del modo. */
+/* LÃ­mite de objetos por pÃ¡gina: a la derecha, separado del modo. */
 .ls-objetos__limite {
   display: inline-flex;
   align-items: center;
@@ -1419,7 +1419,7 @@
   cursor: default;
 }
 
-/* Lista de estadisticas (ráster) */
+/* Lista de estadisticas (rÃ¡ster) */
 .ls-stat-list {
   list-style: none;
   margin: 0;
@@ -1496,10 +1496,10 @@
   outline-offset: -2px;
 }
 
-/* ── Dropdown secundario de sub-capas en el sidenav ─────────────────
+/* â”€â”€ Dropdown secundario de sub-capas en el sidenav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Aparece junto al dropdown de capas cuando la capa activa expone
-   sub-capas (p.ej. BTN via MapLibre). Se inserta dinámicamente en el
-   header-left antes del título. */
+   sub-capas (p.ej. BTN via MapLibre). Se inserta dinÃ¡micamente en el
+   header-left antes del tÃ­tulo. */
 .ls-sheet-sublayer-picker {
   flex-shrink: 0;
   max-width: 35%;
@@ -1524,7 +1524,7 @@
   cursor: default;
 }
 
-/* ── Grupos de capas (arbol) ─────────────────────────────────────────
+/* â”€â”€ Grupos de capas (arbol) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Un grupo (IDEE.layer.LayerGroup) se muestra como nodo padre con sus
    capas hijas (y subgrupos) indentadas debajo. Se conserva el estado
    colapsado/expandido entre re-renders. */
@@ -1576,7 +1576,7 @@
   font-weight: 400;
 }
 
-/* ── Botón de renombrar (lápiz) ──────────────────────────────────────
+/* â”€â”€ BotÃ³n de renombrar (lÃ¡piz) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Edita el nombre de la capa/grupo en linea: al pulsarlo, el nombre deja
    paso a un input. Enter/blur guarda; Escape cancela. Vive en el panel de
    opciones (junto a tabla de atributos y borrado), no en la fila. */
@@ -1611,9 +1611,9 @@
   box-shadow: 0 0 0 2px rgba(217, 83, 79, 0.2);
 }
 
-/* ── Drag & drop para reordenar capas ────────────────────────────────
+/* â”€â”€ Drag & drop para reordenar capas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Las filas arrastrables muestran cursor de "agarrar". Durante el arrastre
-   la fila fuente se atenua y se marca el punto exacto de inserción con una
+   la fila fuente se atenua y se marca el punto exacto de inserciÃ³n con una
    linea (el elemento sobre el que se suelta). */
 .overlay-layer-selector li[draggable='true'] {
   cursor: grab;
@@ -1651,16 +1651,16 @@
   background: rgba(0, 0, 0, 0.08);
 }
 
-/* Fila que se está arrastrando: atenuada para indicar que "está cogida". */
+/* Fila que se estÃ¡ arrastrando: atenuada para indicar que "estÃ¡ cogida". */
 .overlay-layer-selector li.ls-dragging {
   opacity: 0.45;
   border: 1px dashed #b0c4d8;
   border-radius: 6px;
 }
 
-/* Zona de inserción: la fila sobre la que se suelta se resalta con una
-   linea azul en la parte superior (la capa soltada quedará por encima) o
-   inferior (quedará por debajo), segun la mitad de la fila recorrida. */
+/* Zona de inserciÃ³n: la fila sobre la que se suelta se resalta con una
+   linea azul en la parte superior (la capa soltada quedarÃ¡ por encima) o
+   inferior (quedarÃ¡ por debajo), segun la mitad de la fila recorrida. */
 .overlay-layer-selector li.ls-drop-above {
   box-shadow: 0 -3px 0 0 #0078d4;
 }
@@ -1697,42 +1697,42 @@
 /* ====================================================================
    PANEL EN LA ESQUINA TR
    --------------------------------------------------------------------
-   En TL el botón de plegado queda FUERA del panel, a un lado, y el panel
-   mide lo que mide su contenido. En TR eso no pasa: el botón es un item más
-   del flex del panel, así que el panel crece 40 px para incluirlo y la
-   cabecera (que es el ancho del panel) le pasa por encima. El botón se ve
+   En TL el botÃ³n de plegado queda FUERA del panel, a un lado, y el panel
+   mide lo que mide su contenido. En TR eso no pasa: el botÃ³n es un item mÃ¡s
+   del flex del panel, asÃ­ que el panel crece 40 px para incluirlo y la
+   cabecera (que es el ancho del panel) le pasa por encima. El botÃ³n se ve
    metido dentro del panel y su sombra se come el borde.
 
    Medido, con el baseLayer que el API coloca en TL y otro panel en TR:
 
-     TL   panel x10..430    raíz x10..430    botón x430..470   (fuera)
-     TR   panel x910..1370  raíz x950..1370  botón x910..950   (dentro)
+     TL   panel x10..430    raÃ­z x10..430    botÃ³n x430..470   (fuera)
+     TR   panel x910..1370  raÃ­z x950..1370  botÃ³n x910..950   (dentro)
 
    La diferencia es que el API solo invierte el panel en m-left
-   (flex-direction: row-reverse), y solo para m-left el botón se sale de la
-   caja. Antes esto se tapaba con una compensación en la cabecera
-   (margin-left: -40px y un calc() de +40 px), que tapaba el botón pero
-   dejaba el panel 40 px más ancho que su contenido, con la sombra por
+   (flex-direction: row-reverse), y solo para m-left el botÃ³n se sale de la
+   caja. Antes esto se tapaba con una compensaciÃ³n en la cabecera
+   (margin-left: -40px y un calc() de +40 px), que tapaba el botÃ³n pero
+   dejaba el panel 40 px mÃ¡s ancho que su contenido, con la sombra por
    encima de una franja sin pintar. Ahora se reproduce lo de TL sacando el
-   botón de flujo: absolute a la izquierda del panel. El panel vuelve a medir
-   lo que mide su contenido, su sombra envuelve justo el blanco de la raíz y
+   botÃ³n de flujo: absolute a la izquierda del panel. El panel vuelve a medir
+   lo que mide su contenido, su sombra envuelve justo el blanco de la raÃ­z y
    la cabecera ya no lo pisa.
 
    Y la cabecera lleva box-sizing porque el API la deja en content-box con
-   padding: 5px: sin eso se sale 10 px por la derecha, más allá del panel y
+   padding: 5px: sin eso se sale 10 px por la derecha, mÃ¡s allÃ¡ del panel y
    de su sombra.
 
-   El botón se saca de flujo solo con el panel ABIERTO: plegado, el panel es
-   el botón y tiene que seguir midiendo 40x40.
+   El botÃ³n se saca de flujo solo con el panel ABIERTO: plegado, el panel es
+   el botÃ³n y tiene que seguir midiendo 40x40.
 
-   Todo esto va scopeado a la esquina TR por la clase que el API pone al área
-   (m-top m-right), así que en TL no toca nada.
+   Todo esto va scopeado a la esquina TR por la clase que el API pone al Ã¡rea
+   (m-top m-right), asÃ­ que en TL no toca nada.
 
-   OJO: el selector del contenedor de controles es GENÉRICO y este bloque está
-   repetido en la hoja de cada plugin, así que entre hojas con el mismo selector
-   gana la ÚLTIMA que se carga, no la más específica. Cualquier variación para
+   OJO: el selector del contenedor de controles es GENÃ‰RICO y este bloque estÃ¡
+   repetido en la hoja de cada plugin, asÃ­ que entre hojas con el mismo selector
+   gana la ÃšLTIMA que se carga, no la mÃ¡s especÃ­fica. Cualquier variaciÃ³n para
    un plugin concreto (un fondo transparente, por ejemplo) tiene que ir en SU
-   selector, con más especificidad, nunca dejando el genérico con otro valor.
+   selector, con mÃ¡s especificidad, nunca dejando el genÃ©rico con otro valor.
    Es lo que hace ext/cambioImpl/cambioImpl.css con su panel.
    ==================================================================== */
 
@@ -1750,12 +1750,12 @@
   background-color: #fdfdfd00 !important;
 }
 
-/* La compensación se scopea a la esquina TR por la clase que el API pone
-   al área (m-top m-right): así solo actúa ahí y no en TL, donde el botón va
+/* La compensaciÃ³n se scopea a la esquina TR por la clase que el API pone
+   al Ã¡rea (m-top m-right): asÃ­ solo actÃºa ahÃ­ y no en TL, donde el botÃ³n va
    fuera del panel y la cabecera ya es a todo ancho. */
-/* Estado vacío del selector: no hay ninguna capa que|superponga al mapa y por
-   tanto nada que gestionar desde aquí. Sin esto quedaba un <ul> vacío, que en
-   el panel parecía un hueco roto. */
+/* Estado vacÃ­o del selector: no hay ninguna capa que|superponga al mapa y por
+   tanto nada que gestionar desde aquÃ­. Sin esto quedaba un <ul> vacÃ­o, que en
+   el panel parecÃ­a un hueco roto. */
 .overlay-layer-selector .ls-vacio {
   display: block;
   margin: 0;
@@ -1768,9 +1768,9 @@
   cursor: default;
 }
 
-/* El botón sale de la caja del panel, que es lo que el API hace por su
+/* El botÃ³n sale de la caja del panel, que es lo que el API hace por su
    cuenta en TL. El selector lleva la clase del panel porque, si no,
-   alcanzaría a cualquier panel del área TR. */
+   alcanzarÃ­a a cualquier panel del Ã¡rea TR. */
 .m-areas > .m-top.m-right > .m-panel.g-herramienta_selectorCapa.opened > button.m-panel-btn {
   position: absolute;
   left: -40px;
@@ -1778,12 +1778,12 @@
 }
 
 /* La cabecera va con box-sizing porque el API la deja en content-box con
-   padding: 5px: sin eso se sale 10 px por la derecha, más allá del panel. */
+   padding: 5px: sin eso se sale 10 px por la derecha, mÃ¡s allÃ¡ del panel. */
 .m-areas > .m-top.m-right > .m-panel > .m-panel-controls .m-herramienta-header {
   box-sizing: border-box;
 }
 
-/* ── Item del supraplugin ───────────────────────────────────────────────
+/* â”€â”€ Item del supraplugin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    El boton de la barra reutiliza las clases .supra-bar__boton de la barra
    (asi hereda el tema y el color de marca por las variables --supra-*). El
    icono NO se declara aqui: lo pone la regla compartida de mas arriba, que
@@ -1791,9 +1791,9 @@
 .ls-supra__icono::before {
   width: 19px;
   height: 19px;
-  /* La máscara compartida se pinta con --g-plugin-icon-color, que es cosa del
-     panel del mapa; en la barra el color es el del texto del botón, para que
-     siga al tema y se ponga blanco cuando el botón queda activo. */
+  /* La mÃ¡scara compartida se pinta con --g-plugin-icon-color, que es cosa del
+     panel del mapa; en la barra el color es el del texto del botÃ³n, para que
+     siga al tema y se ponga blanco cuando el botÃ³n queda activo. */
   background-color: currentColor;
 }
 

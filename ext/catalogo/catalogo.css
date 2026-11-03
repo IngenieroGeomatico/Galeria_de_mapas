@@ -1744,3 +1744,20 @@
     max-width: 100%;
   }
 }
+
+/* ---- Aire horizontal del panel abierto y border-radius del boton de plegado (aplicado a todos los plugins) ---- */
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
+  transform: translateX(16px);
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
+  transform: translateX(-16px);
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  border-radius: 6px 0 0 6px !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  border-radius: 0 6px 6px 0 !important;
+}
