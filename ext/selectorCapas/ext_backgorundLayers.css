@@ -11,7 +11,8 @@
 .bl-supra__icono::before {
   content: '';
   display: inline-block;
-  width: 32px;\n  height: 32px;
+  width: 32px;
+  height: 32px;
   background-color: var(--g-plugin-icon-color, #ffffff);
   -webkit-mask-image: url('../../img/iconos/continents.svg');
   mask-image: url('../../img/iconos/continents.svg');
