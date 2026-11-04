@@ -108,17 +108,29 @@ Cada carpeta de `ext/` contiene 1-2 clases `miPlugin_*` (una clase por plugin):
 | `FiltroCapasPuntosHistoricos` | `miPlugin_filtroCapas`, `miPlugin_leyenda` | `miPlugin_filtroCapas`, `miPlugin_leyenda` |
 | `comparacionVistas` | `miPlugin_comparacionVistas` | `miPlugin_comparacionVistas` |
 | `vueloFotogrametrico` | `miPlugin_vueloFotogrametrico` | `miPlugin_vueloFotogrametrico` |
+| `plantilla_plugin` | `miPlugin_plantilla` (hereda de `miPlugin_base`) | `miPlugin_plantilla` |
+| `plantilla_supraplugin` | `miPlugin_plantillaItem` | `miPlugin_plantillaItem` |
+| `pluginBase` | `miPlugin_base` (clase base transversal con estilos y contratos) | `miPlugin_base` |
 | `layergroup_cesium` | NO registrado en el mapa (solo agrupa capas Cesium) | — |
 
-### Estructura de un plugin
+### Estructura de un plugin con `miPlugin_base`
 
 ```js
-class miPlugin_ejemplo {
-  constructor(opciones) { this.name = 'miPlugin_ejemplo'; this.opciones = opciones; }
-  add(map) { /* construir UI, colgar listeners, guardar this._map = map */ }
-  destroy() { /* limpiar UI y listeners */ }
-  // Contrato de estado (opcional): getState()/setState(state, map)
+class miPlugin_ejemplo extends miPlugin_base {
+  constructor(options) {
+    super(options);
+    this.name = 'miPlugin_ejemplo';
+  }
+  addTo(map) {
+    this._addToBase(map, 'tools_ejemplo', 'control_ejemplo', 'g-herramienta_ejemplo');
+    this._control.createView = (html) => this._buildUI(html);
+  }
+  destroy() { super.destroy(); /* limpiar especificos */ }
+  // Contrato de estado específico (el panel colapsado lo gestiona la base)
+  getCustomState() { return { ... }; }
+  setCustomState(state, map) { ... }
 }
+miPlugin_base.registrar(miPlugin_ejemplo, 'miPlugin_ejemplo');
 ```
 
 Se registran en el mapa del visor con `mapajs.addPlugin(new IDEE.plugin.miPlugin_ejemplo({...}))`.

@@ -1,0 +1,177 @@
+/* =====================================================================
+   HOJA DE ESTILOS TRANSVERSAL: PLUGIN BASE
+   Repositorio: Galeria_de_mapas (API-IDEE / API-CNIG)
+   =====================================================================
+
+   Centraliza las reglas CSS comunes a todos los plugins:
+     1. Variables de esquema de color y máscara de icono.
+     2. Botón colapsado e icono como máscara SVG (`mask-image`).
+     3. Icono por defecto (engranaje/rueda dentada) si no se especifica icono.
+     4. Corrección de panel en esquina TR (evitar que el botón quede dentro del panel).
+     5. Panel lateral (`.g-panel-lateral`): no empuja a otros paneles en flex column.
+     6. Ocultación del botón de la API cuando el plugin vive en Supraplugin (`.g-panel-en-barra`).
+     7. Estilos base del botón para la barra de supraplugin (`.g-supra-item__*`).
+   ===================================================================== */
+
+/* ── 1. Variables y contenedor base ──────────────────────────────────── */
+.g-plugin-base {
+  --g-plugin-bg-color: #ffffff;
+  --g-plugin-bg-color-active: #ffffff;
+  --g-plugin-border-color: #ffffff;
+  --g-plugin-border-color-active: #71A7D3;
+  --g-plugin-icon-color: #71A7D3;
+  --g-plugin-icon-color-active: #71A7D3;
+  --g-plugin-icon-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'/></svg>");
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  color: #333333;
+}
+
+/* ── 2. Icono del botón como máscara SVG ─────────────────────────────── */
+.g-plugin-base .m-tools:before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background-color: var(--g-plugin-icon-color, #ffffff);
+  -webkit-mask-image: var(--g-plugin-icon-mask);
+  mask-image: var(--g-plugin-icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.g-plugin-base.opened .m-tools:before {
+  background-color: var(--g-plugin-icon-color-active, #71A7D3);
+}
+
+/* ── 3. Corrección de panel en esquina TR ────────────────────────────── */
+.m-areas > .m-top.m-right > .m-panel.g-plugin-base.opened > button.m-panel-btn {
+  position: absolute;
+  left: -40px;
+  top: 0;
+}
+
+.m-areas > .m-top.m-right > .m-panel.g-plugin-base > .m-panel-controls .m-herramienta-header {
+  box-sizing: border-box;
+}
+
+/* ── 4. Panel Lateral (g-panel-lateral) ──────────────────────────────── */
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  background-color: transparent !important;
+  overflow: visible !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  z-index: 2;
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  left: 0 !important;
+  right: auto !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  right: 0 !important;
+  left: auto !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  position: absolute !important;
+  top: 0 !important;
+  z-index: 1;
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  left: 100% !important;
+  right: auto !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  right: 100% !important;
+  left: auto !important;
+}
+
+.m-areas > .m-area.m-bottom > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+  bottom: 0 !important;
+  top: auto !important;
+}
+
+.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
+  position: static !important;
+}
+
+@media (max-width: 768px) {
+  .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
+    max-width: calc(100vw - 60px);
+  }
+
+  .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
+    max-width: 100%;
+  }
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
+  transform: translateX(16px);
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
+  transform: translateX(-16px);
+}
+
+.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  border-radius: 6px 0 0 6px !important;
+}
+
+.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
+  border-radius: 0 6px 6px 0 !important;
+}
+
+/* ── 5. Integración con Supraplugin ─────────────────────────────────── */
+.m-panel.g-panel-en-barra > button.m-panel-btn {
+  display: none !important;
+}
+
+.m-panel.g-panel-en-barra {
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+.g-supra-item__wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.g-supra-item__icono {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background-color: currentColor;
+  -webkit-mask-image: var(--g-plugin-icon-mask);
+  mask-image: var(--g-plugin-icon-mask);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}

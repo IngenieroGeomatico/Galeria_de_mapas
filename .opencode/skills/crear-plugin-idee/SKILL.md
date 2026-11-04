@@ -39,85 +39,68 @@ Cuando el usuario activa el cambio de implementación:
 
 ---
 
-## 3. Plantilla de Plugin Estándar (`ext/plantilla_plugin/`)
+## 3. Plantilla de Plugin Estándar (`ext/plantilla_plugin/` y `ext/pluginBase/`)
 
-Cada plugin estándar sigue una estructura de clase ES6 específica que garantiza su correcta instanciación, acoplamiento al mapa y destrucción.
+Todos los plugins estándar heredan de la clase base transversal **`miPlugin_base`** (`ext/pluginBase/pluginBase.js`), lo que evita duplicar constructor, normalizadores, helpers de capas, montaje de panel lateral, supraplugin, ayuda y ciclo de vida.
 
-### Estructura de la Clase
-El esquema real del repo (ver `ext/plantilla_plugin/plantilla_plugin.js`) usa **`IDEE.ui.Panel` con identificador + opciones**, un **control con `createView`** y el registro con `panel.addControls(control)` + `map.addPanels(panel)`:
+### Estructura de la Clase con Herencia
 
 ```js
-class miPlugin_miNombre {
-  constructor(options) {
-    this.name = 'miPlugin_miNombre';
-    this.options = options || {};
-    this._map = null;
-    this._panel = null;
-    this._control = null;
-  }
+(function () {
+  "use strict";
 
-  getHelp() {
-    const IDEE = api();
-    return {
-      title: 'Mi Herramienta',
-      content: new Promise((resolve) => {
-        let html = '<div><p>Descripción de la funcionalidad.</p></div>';
-        if (IDEE && IDEE.utils && typeof IDEE.utils.stringToHtml === 'function') {
-          html = IDEE.utils.stringToHtml(html);
-        }
-        resolve(html);
-      }),
-    };
-  }
+  const BaseClass = window.miPlugin_base || (window.IDEE && window.IDEE.plugin && window.IDEE.plugin.miPlugin_base) || class {};
 
-  addTo(map) {
-    this._map = map;
-    const IDEE = api();
+  class miPlugin_miHerramienta extends BaseClass {
+    constructor(options = {}) {
+      super(options);
+      this.name = 'miPlugin_miHerramienta';
+      // Variables específicas...
+    }
 
-    // 1) Construcción del panel con identificador + opciones
-    this._panel = new IDEE.ui.Panel('tools_miNombre', {
-      collapsible: true,
-      className: 'g-herramienta_miNombre g-panel-lateral',
-      collapsedButtonClass: 'm-tools',
-      position: IDEE.ui.position.TL,
-    });
+    addTo(map) {
+      // 1) Montaje base de panel (con g-panel-lateral, order, colores e icono)
+      this._addToBase(map, 'tools_miHerramienta', 'control_miHerramienta', 'g-herramienta_miHerramienta');
 
-    // 2) Creación del control y su vista (DOM)
-    this._control = new IDEE.Control(new IDEE.impl.Control(), 'control_miNombre');
-    this._control.createView = () => {
+      // 2) Creación de la vista específica (DOM)
+      this._control.createView = (html) => this._buildUI(html);
+    }
+
+    _buildUI(html) {
       const container = document.createElement('div');
-      container.className = 'm-control m-container m-herramienta';
+      container.className = 'mi-herramienta__container';
       container.innerHTML = '<header class="m-herramienta-header">Mi Herramienta</header>';
       // AQUÍ VA LA UI DEL PLUGIN
       return container;
-    };
-
-    // 3) Registro del control en el panel y el panel en el mapa
-    this._panel.addControls(this._control);
-    map.addPanels(this._panel);
-
-    // 4) Activación defensiva del control
-    try { this._control.activate(); } catch (e) { /* ignora */ }
-  }
-
-  destroy() {
-    if (this._panel && typeof this._panel.close === 'function') {
-      try { this._panel.close(); } catch (e) { /* ignora */ }
     }
-    this._panel = null;
-    this._control = null;
-    this._map = null;
+
+    // Contrato de Estado específico (el panel colapsado lo gestiona la base)
+    getCustomState() {
+      return {
+        // Propiedades de estado serializables de la UI
+      };
+    }
+
+    setCustomState(state, map) {
+      if (!state || typeof state !== 'object') return;
+      // Restauración de propiedades específicas con helpers _findLayer(map, ...)
+    }
   }
 
-  // Contrato de Estado para el cambio 2D/3D
-  getState() {
-    return {
-      // Añadir propiedades de estado serializables de la UI (filtros, selecciones, etc.)
-    };
+  // Registro global triple automático
+  if (typeof miPlugin_base !== 'undefined' && miPlugin_base.registrar) {
+    miPlugin_base.registrar(miPlugin_miHerramienta, 'miPlugin_miHerramienta');
+  } else {
+    window.miPlugin_miHerramienta = miPlugin_miHerramienta;
+    window.IDEE = window.IDEE || {};
+    window.IDEE.plugin = window.IDEE.plugin || {};
+    window.IDEE.plugin.miPlugin_miHerramienta = miPlugin_miHerramienta;
+    window.M = window.M || {};
+    window.M.plugin = window.M.plugin || {};
+    window.M.plugin.miPlugin_miHerramienta = miPlugin_miHerramienta;
   }
-
-  setState(state, map) {
-    if (!state || typeof state !== 'object') return;
+})();
+```
     // Rehidrata la instancia YA montada (addTo ya se ejecutó tras el swap);
     // no vuelvas a construir la UI aquí.
   }
