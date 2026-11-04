@@ -1224,9 +1224,8 @@
   background: rgba(0, 0, 0, 0.08);
 }
 
-/* Acciones de copiado de la ventana de informaciÃ³n (URL y cÃ³digo). Van en el
-   header, a la izquierda del botÃ³n de cerrar: son de la capa que se estÃ¡
-   mirando y no deben competir con el tÃ­tulo. */
+/* Boton de cerrar de la ventana de informacion (la tabla de atributos o las
+   estadisticas), alineado a la derecha del header. */
 .ls-sheet-header-right {
   display: flex;
   align-items: center;
@@ -1234,33 +1233,9 @@
   flex-shrink: 0;
 }
 
-.ls-sheet-copiar-grupo {
-  display: flex;
-  align-items: center;
-  gap: 0.35em;
-}
-
-.ls-sheet-copiar {
-  appearance: none;
-  padding: 4px 9px;
-  font-size: 0.78em;
-  font-family: inherit;
-  font-weight: 600;
-  color: #1f2937;
-  background: #f1f3f6;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.ls-sheet-copiar:hover {
-  background: #e6e9ee;
-}
-
-/* En pantallas estrechas las acciones de copiado bajan a una segunda lÃ­nea:
-   el selector de capas y el tÃ­tulo necesitan el ancho completo o el tÃ­tulo se
-   queda en unas pocas letras (medido a 360 px: 85 px de los 360). */
+/* En pantallas estrechas el selector de capas baja a una segunda fila:
+   el selector y el titulo necesitan el ancho completo o el titulo se queda en
+   unas pocas letras (medido a 360 px: 85 px de los 360). */
 @media (max-width: 480px) {
   .ls-sheet-header {
     flex-wrap: wrap;
@@ -1275,19 +1250,6 @@
     flex: 1 1 100%;
     justify-content: flex-end;
   }
-}
-
-/* ConfirmaciÃ³n en el propio botÃ³n: dice que se ha copiado sin abrir nada. */
-.ls-sheet-copiar.ls-copiado {
-  color: #fff;
-  background: #2e8b57;
-  border-color: #2e8b57;
-}
-
-.ls-sheet-copiar.ls-copiado-error {
-  color: #fff;
-  background: #d9534f;
-  border-color: #d9534f;
 }
 
 .ls-sheet-body {

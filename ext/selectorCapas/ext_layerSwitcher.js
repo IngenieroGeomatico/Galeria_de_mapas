@@ -1334,10 +1334,13 @@ class miPlugin_layerSwitcher {
       // Capas alfanumericas: datos tabulares sin geometria. No tienen z-index
       // ni renderizado en el mapa, pero se listan en el selector como capas de
       // datos para que el usuario pueda verlas, renombrarlas y borrarlas.
+      // Se respeta `displayInLayerSwitcher`: cuando el catálogo crea además la
+      // capa GeoJSON visible, marca la alfanumérica con false para que no
+      // salgan dos entradas de la misma carga.
       let alfanumericas = [];
       try {
         if (typeof map.getAlphanumericLayers === 'function') {
-          alfanumericas = map.getAlphanumericLayers() || [];
+          alfanumericas = (map.getAlphanumericLayers() || []).filter(l => l && l.displayInLayerSwitcher !== false);
         }
       } catch (e) { alfanumericas = []; }
       const combinado = result.concat(alfanumericas);
@@ -1879,10 +1882,12 @@ class miPlugin_layerSwitcher {
       try { if (layer.getOpacity !== undefined) opacity = layer.getOpacity() || 0; } catch (e) { /* ignorar */ }
       const transpPct = Math.round((1 - opacity) * 100);
       const optionsOpen = self._optionsOpen === index;
-      // Solo las capas VECTORIALES tienen tabla de atributos: las raster
-      // (y los grupos) no aportan nada, asi que se omite el boton de tabla.
+      // Solo las capas VECTORIALES y las de DATOS (alfanuméricas) tienen
+      // tabla de atributos: las raster (y los grupos) no aportan nada, así que
+      // se omite el botón de tabla. Las alfanuméricas se listan en el selector
+      // precisamente para poder abrir su tabla, así que el botón es obligatorio.
       const layerKind = window.getLayerKind(layer);
-      const tableBtnHtml = layerKind === 'vector'
+      const tableBtnHtml = (layerKind === 'vector' || layerKind === 'alfanumerico')
         ? `<button type="button" class="ls-action ls-action-info" data-id="${index}" title="Ver tabla de atributos / estadísticas de la capa" onclick="openLayerInfo('${index}')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg></button>`
         : '';
       // Gradiente del track del slider: representa la OPACIDAD (lo que
@@ -3193,197 +3198,6 @@ class miPlugin_layerSwitcher {
         if (!c || typeof c.setVisible !== 'function') return;
         try { c.setVisible(!!p.visible); } catch (e) { /* nada */ }
       });
-    }
-
-    // ── Copiar la URL y el código de la capa ──────────────────────────
-    // Estas dos viven en la ventana de información (la hoja de la tabla de
-    // atributos / estadísticas) y no en el desplegable de la fila: allí es
-    // donde se mira cómo está hecha la capa, y el botón no se pierde entre
-    // los demás.
-    window.copyLayerUrl = function (index, boton) {
-      const capa = findLayerById(index);
-      if (!capa) return;
-      const url = _urlDeCapa(capa);
-      if (!url) {
-        _confirmarEnBoton(boton, 'Sin URL', false);
-        _avisar('Esta capa no tiene URL: sus datos van dentro de la propia capa.');
-        return;
-      }
-      _copiarTexto(url).then(function (ok) {
-        _confirmarEnBoton(boton, ok ? 'Copiada' : 'Error', ok);
-      });
-    };
-
-    window.copyLayerCode = function (index, boton) {
-      const capa = findLayerById(index);
-      if (!capa) return;
-      _copiarTexto(_codigoDeCapa(capa)).then(function (ok) {
-        _confirmarEnBoton(boton, ok ? 'Copiado' : 'Error', ok);
-      });
-    };
-
-    /** URL del servicio de la capa, o null si sus datos van dentro. */
-    function _urlDeCapa(capa) {
-      if (!capa) return null;
-      try {
-        if (capa.url !== undefined && capa.url !== null && String(capa.url).trim() !== '') {
-          return String(capa.url);
-        }
-      } catch (e) { /* capa sin url */ }
-      const cp = capa.constructorParameters || {};
-      const params = cp.userParameters || cp.parameters || {};
-      if (params && params.url) return String(params.url);
-      return null;
-    }
-
-    // Tamaño máximo de una fuente en línea que se copia dentro del código.
-    // Por encima se sustituye por un aviso: un GeoJSON de miles de objetos
-    // pegado en el portapapeles no ayuda a nadie.
-    const LIMITE_FUENTE_CODIGO = 40000;
-
-    /**
-     * Reconstruye el código de creación de la capa a partir de los parámetros
-     * que la API guardó al construirla (`constructorParameters`).
-     *
-     * OJO con las claves: las capas de servicio (WMS, WMTS, TMS, GeoTIFF...)
-     * los guardan en `userParameters` y las de datos (GeoJSON, MVT...) en
-     * `parameters` (medido). Se leen las dos, como en la ficha.
-     *
-     * @param {Object} capa
-     * @returns {string} Código listo para pegar en el `mapa.js` del visualizador.
-     */
-    function _codigoDeCapa(capa) {
-      const tipo = String(capa.type || 'Layer');
-      const cp = capa.constructorParameters || {};
-      const params = cp.userParameters || cp.parameters || {};
-      const opciones = cp.options || {};
-      const vendor = cp.vendorOptions || {};
-      const notas = [];
-
-      const limpios = _parametrosParaCodigo(params, notas);
-      const partes = [_jsObjeto(limpios)];
-      const opcionesLimpias = _parametrosParaCodigo(opciones, notas);
-      if (Object.keys(opcionesLimpias).length) partes.push(_jsObjeto(opcionesLimpias));
-      const vendorLimpio = _parametrosParaCodigo(vendor, notas);
-      if (Object.keys(vendorLimpio).length) partes.push(_jsObjeto(vendorLimpio));
-
-      if (typeof M !== 'undefined' && M.layer && typeof M.layer[tipo] !== 'function') {
-        notas.unshift('La API no expone M.layer.' + tipo + ': ajusta la clase del constructor.');
-      }
-
-      const lineas = [
-        'const capa = new M.layer.' + tipo + '(' + partes.join(', ') + ');',
-        'mapajs.addLayers([capa]);',
-      ];
-      if (notas.length) {
-        lineas.push('');
-        notas.forEach((n) => lineas.push('// ' + n));
-      }
-      return lineas.join('\n');
-    }
-
-    /**
-     * Copia los parámetros quitando lo que no se puede escribir como código:
-     * funciones y fuentes en línea demasiado grandes.
-     * @param {Object} obj
-     * @param {Array<string>} notas Se rellena con lo que se ha omitido.
-     * @returns {Object}
-     */
-    function _parametrosParaCodigo(obj, notas) {
-      const salida = {};
-      if (!obj || typeof obj !== 'object') return salida;
-      Object.keys(obj).forEach((k) => {
-        const v = obj[k];
-        if (v === undefined) return;
-        if (typeof v === 'function') {
-          notas.push('El parámetro "' + k + '" era una función y se ha omitido.');
-          return;
-        }
-        if (k === 'source' && v && typeof v === 'object') {
-          let texto = '';
-          try { texto = JSON.stringify(v); } catch (e) { texto = ''; }
-          if (texto.length > LIMITE_FUENTE_CODIGO) {
-            salida[k] = null;
-            const cuantos = (v.features && v.features.length) ? v.features.length : '?';
-            notas.push('La fuente va en línea (' + cuantos + ' objetos) y se ha omitido por tamaño: pon ahí tu URL o tu objeto GeoJSON.');
-          } else {
-            salida[k] = v;
-          }
-          return;
-        }
-        salida[k] = v;
-      });
-      return salida;
-    }
-
-    /**
-     * Objeto a literal JavaScript con sangría. `JSON.stringify` vale tal cual
-     * para los valores que guarda la API (texto, número, booleano, null,
-     * objeto, array); las referencias circulares se marcan en vez de romper.
-     */
-    function _jsObjeto(obj) {
-      try {
-        const visto = new WeakSet();
-        return JSON.stringify(obj, function (k, v) {
-          if (typeof v === 'object' && v !== null) {
-            if (visto.has(v)) return '[circular]';
-            visto.add(v);
-          }
-          if (typeof v === 'function') return undefined;
-          return v;
-        }, 2);
-      } catch (e) {
-        return '{}';
-      }
-    }
-
-    /**
-     * Copia texto al portapapeles. `navigator.clipboard` solo existe en
-     * contextos seguros (https o localhost); en el resto se cae al
-     * `textarea` + `execCommand`, que los navegadores siguen aceptando.
-     * @param {string} texto
-     * @returns {Promise<boolean>} true si se ha copiado.
-     */
-    function _copiarTexto(texto) {
-      return new Promise(function (resolver) {
-        const porFallback = function () {
-          let ok = false;
-          try {
-            const ta = document.createElement('textarea');
-            ta.value = texto;
-            ta.setAttribute('readonly', '');
-            ta.style.position = 'fixed';
-            ta.style.top = '-1000px';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            ok = document.execCommand('copy');
-            document.body.removeChild(ta);
-          } catch (e) {
-            ok = false;
-          }
-          resolver(ok);
-        };
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-          navigator.clipboard.writeText(texto).then(function () { resolver(true); }, porFallback);
-        } else {
-          porFallback();
-        }
-      });
-    }
-
-    /** Rótulo temporal en el botón que ha copiado ("Copiado", "Error"...). */
-    function _confirmarEnBoton(boton, texto, ok) {
-      if (!boton) return;
-      if (!boton.dataset.rotuloOriginal) boton.dataset.rotuloOriginal = boton.textContent;
-      boton.textContent = texto;
-      boton.classList.toggle('ls-copiado', ok === true);
-      boton.classList.toggle('ls-copiado-error', ok === false);
-      setTimeout(function () {
-        boton.textContent = boton.dataset.rotuloOriginal;
-        boton.classList.remove('ls-copiado');
-        boton.classList.remove('ls-copiado-error');
-      }, 1400);
     }
 
     // ── Zoom a la capa ────────────────────────────────────────────────
@@ -4845,20 +4659,6 @@ class miPlugin_layerSwitcher {
              ${selectableLayers.map(L => `<option value="${L.idLayer}" ${String(L.idLayer) === String(currentIndex) ? 'selected' : ''}>${L.legend || L.name || 'Sin nombre'}</option>`).join('')}
            </select>`
         : '';
-      // Copiar URL y código: van aquí, en la ventana de información, porque es
-      // donde se mira cómo está hecha la capa y de dónde salen sus datos. Solo
-      // aparecen cuando la hoja sabe de qué capa habla (`currentIndex`), que es
-      // el caso de `openLayerInfo`; una hoja sin capa no tiene nada que copiar.
-      let copiarHtml = '';
-      if (currentIndex !== undefined && currentIndex !== null) {
-        const capaHoja = findLayerById(currentIndex);
-        if (capaHoja) {
-          copiarHtml = `<div class="ls-sheet-copiar-grupo">
-              <button type="button" class="ls-sheet-copiar" title="Copiar la URL del servicio" onclick="copyLayerUrl('${capaHoja.idLayer}', this)">URL</button>
-              <button type="button" class="ls-sheet-copiar" title="Copiar el código de creación de la capa" onclick="copyLayerCode('${capaHoja.idLayer}', this)">Código</button>
-            </div>`;
-        }
-      }
       panel.innerHTML =
         `<div class="ls-sheet__handle" title="Arrastra para cambiar la altura del panel"></div>
          <div class="ls-sheet-header">
@@ -4867,7 +4667,6 @@ class miPlugin_layerSwitcher {
              <span class="ls-sheet-title"></span>
            </div>
            <div class="ls-sheet-header-right">
-             ${copiarHtml}
              <button type="button" class="ls-sheet-close" title="Cerrar" onclick="closeSheet()">✕</button>
            </div>
          </div>
@@ -8111,12 +7910,15 @@ class miPlugin_layerSwitcher {
       if (fromPicker && window._lsPickerLayers) {
         finish(window._lsPickerLayers);
       } else {
-        // El dropdown del sidenav SOLO lista capas vectoriales: las raster no
-        // tienen tabla de atributos y no aportan nada en el selector.
+        // El dropdown del sidenav lista capas con tabla: vectoriales y de
+        // datos (alfanuméricas). Las raster no aportan nada en el selector.
         getSelectableLayers().then(ls => {
-          const vectorLayers = (ls || []).filter(l => window.getLayerKind(l) === 'vector');
-          window._lsPickerLayers = vectorLayers;
-          finish(vectorLayers);
+          const conTabla = (ls || []).filter(l => {
+            const k = window.getLayerKind(l);
+            return k === 'vector' || k === 'alfanumerico';
+          });
+          window._lsPickerLayers = conTabla;
+          finish(conTabla);
         });
       }
     };
@@ -8219,7 +8021,6 @@ class miPlugin_layerSwitcher {
       'setLayerStyle', 'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo',
       'openLayerFicha', '_lsPickerLayers', 'setBBoxModo', 'setBBoxLimite', 'setBBoxPagina',
       'layerToFront', 'layerToBack', 'layerUp', 'layerDown', 'duplicateLayer', 'reloadLayer', 'isolateLayer',
-      'copyLayerUrl', 'copyLayerCode',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {
