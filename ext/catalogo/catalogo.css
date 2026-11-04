@@ -1274,6 +1274,42 @@
   color: #b3261e;
 }
 
+/* ---- Geometría de un fichero tabular ----------------------------------- */
+/* Solo sale con los tipos Alphanumeric (CSV, Excel, JSON, TSV...): el resto
+   de capas ya trae su geometría. */
+.catalogo__geo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--cat-linea);
+  border-radius: var(--cat-radio-s);
+  background: var(--cat-fondo-2);
+}
+
+.catalogo__geo-campos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Sin selectores de columna no ocupa sitio. */
+.catalogo__geo-campos:empty { display: none; }
+
+/* El aviso va dentro del bloque, que ya tiene su caja: sin fondo propio.
+   Lleva clase propia (no catalogo__aviso) para que el estado de error no
+   pierda su color al combinarse con la regla del aviso. */
+.catalogo__geo-aviso {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--cat-fg-tenue);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.catalogo__geo-aviso--error { color: #b3261e; }
+
 /* ---- Alta de catálogos nuevos ------------------------------------------ */
 /* Va al final de la pestaña, separado del resto con una línea. */
 .catalogo__nuevo {

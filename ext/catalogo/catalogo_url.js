@@ -545,6 +545,75 @@
    * @param {Object} opciones.mapa
    * @returns {Array<Object>} Las capas añadidas (puede ser más de una).
    */
+  /**
+   * Aplica a una capa alfanumérica la geometría elegida en el formulario.
+   *
+   * No materializa __idee_geojson en cada registro (eso duplicaría los datos de
+   * un fichero grande): solo deja puestas las columnas de las que sale la
+   * geometría, y toGeoJSON() las resuelve cuando se piden.
+   *
+   * @param {Object} capa Capa alfanumérica (AlphanumericLayer).
+   * @param {Object} [geometria]
+   * @param {string} [geometria.modo] 'auto' | 'xy' | 'wkt' | 'geojson' | 'ninguna'.
+   * @param {string} [geometria.xField] Campo X (longitud), para 'xy'.
+   * @param {string} [geometria.yField] Campo Y (latitud), para 'xy'.
+   * @param {string} [geometria.field] Campo de origen, para 'wkt' y 'geojson'.
+   * @returns {Object} La capa.
+   */
+  function aplicarGeometria(capa, geometria) {
+    if (!capa || typeof capa.setGeoFields !== 'function') return capa;
+    const g = geometria || {};
+    const modo = g.modo || 'auto';
+    // Se limpian las columnas antes de poner las nuevas: si el usuario cambia
+    // de criterio, no se quedan las de la vez anterior.
+    capa.setGeoFields({
+      latField: null, lonField: null, xField: null, yField: null,
+      wktField: null, geometryField: null, crs: null
+    });
+    if (modo === 'ninguna') return capa;
+    const crs = g.crs || null;
+    if (modo === 'auto') {
+      const det = (typeof capa.detectarCamposGeo === 'function') ? capa.detectarCamposGeo() : {};
+      if (det.geometryField) return capa.setGeoFields({ geometryField: det.geometryField, crs: crs });
+      if (det.wktField) return capa.setGeoFields({ wktField: det.wktField, crs: crs });
+      if (det.xField && det.yField) return capa.setGeoFields({ xField: det.xField, yField: det.yField, crs: crs });
+      if (det.latField && det.lonField) return capa.setGeoFields({ lonField: det.lonField, latField: det.latField, crs: crs });
+      return capa;
+    }
+    if (modo === 'xy') return capa.setGeoFields({ xField: g.xField || null, yField: g.yField || null, crs: crs });
+    if (modo === 'wkt') return capa.setGeoFields({ wktField: g.field || null, crs: crs });
+    if (modo === 'geojson') return capa.setGeoFields({ geometryField: g.field || null, crs: crs });
+    return capa;
+  }
+
+  /**
+   * Ensancha la extensión de una capa cuya geometría es un único punto (o una
+   * línea vertical/horizontal): la API devuelve una caja de área cero y
+   * "zoom a la capa" no tendría a dónde ir. Se envuelve `getMaxExtent()` para
+   * devolver esa misma caja con un margen de 100 unidades.
+   *
+   * La capa TIENE que estar ya añadida al mapa: `getMaxExtent()` necesita el
+   * mapa del impl para proyectar.
+   *
+   * @param {Object} capa Capa GeoJSON ya añadida al mapa.
+   */
+  function _extenderPuntoUnico(capa) {
+    if (!capa || typeof capa.getMaxExtent !== 'function') return;
+    const original = capa.getMaxExtent;
+    capa.getMaxExtent = function () {
+      let extOriginal = null;
+      try { extOriginal = original.apply(capa, arguments); } catch (e) { return null; }
+      if (!Array.isArray(extOriginal) || extOriginal.length < 4) return extOriginal;
+      const n = extOriginal.slice(0, 4).map(Number);
+      if (!n.every(isFinite)) return extOriginal;
+      let x0 = n[0], y0 = n[1], x1 = n[2], y1 = n[3];
+      if (x0 === x1) { x0 -= 100; x1 += 100; }
+      if (y0 === y1) { y0 -= 100; y1 += 100; }
+      if (x0 >= x1 || y0 >= y1) return extOriginal;
+      return [x0, y0, x1, y1];
+    };
+  }
+
   function cargar(opciones) {
     const IDEE = window.IDEE || window.M;
     const mapa = opciones.mapa;
@@ -574,9 +643,66 @@
       return asegurarAlphanumeric().then(function (AL) {
         if (!AL) throw new Error('Falta ext/alphanumericLayer/alphanumericLayer.js');
         AL.instalar();
-        return AL.fromURL(url, { name: nombre || url.split('/').pop() });
+        // El formulario puede traer la capa ya leída (solo para poder elegir
+        // las columnas de geometría): entonces no se descarga dos veces.
+        return opciones.capa ? opciones.capa : AL.fromURL(url, { name: nombre || url.split('/').pop() });
       }).then(function (c) {
+        // El nombre se fija aquí y no en fromURL: la capa puede venir ya
+        // construida y el usuario puede haberlo cambiado después.
+        if (nombre) { c.name = nombre; c.legend = nombre; }
+        aplicarGeometria(c, opciones.geometria);
+        const modoGeo = (opciones.geometria && opciones.geometria.modo) || 'auto';
+        const esVistaPrevia = !!(opciones.parametros && opciones.parametros.displayInLayerSwitcher === false);
+
+        // La FeatureCollection se construye ANTES de decidir si se oculta la
+        // capa alfanumérica: si al final no sale ninguna geometría (por
+        // ejemplo, un CSV con X/Y en un CRS que no se ha indicado), la capa
+        // de datos se queda visible, con su entrada y su tabla de atributos.
+        let fc = null;
+        if (!esVistaPrevia && modoGeo !== 'ninguna' && typeof c.hasGeometry === 'function' && c.hasGeometry()) {
+          try { fc = (typeof c.toGeoJSON === 'function') ? c.toGeoJSON() : null; } catch (e) { fc = null; }
+        }
+        const vaAAnadirGeo = !!(fc && Array.isArray(fc.features) && fc.features.length
+          && IDEE && IDEE.layer && typeof IDEE.layer.GeoJSON === 'function');
+
+        // Si se va a añadir la capa visible, la alfanumérica (que no se pinta)
+        // se oculta del selector para que solo aparezca una entrada.
+        if (vaAAnadirGeo) c.displayInLayerSwitcher = false;
         c.addTo(mapa);
+
+        // Una capa alfanumérica no se pinta en el mapa (es tabular), pero si
+        // trae geometría asignada se añade también una capa GeoJSON con los
+        // registros convertidos, para que se vea en el mapa (puntos, líneas
+        // o polígonos). Así el selector muestra una sola entrada visible.
+        // Si el usuario eligió "ninguna" geometría, o es una vista previa
+        // (displayInLayerSwitcher:false), no se añade.
+        if (vaAAnadirGeo) {
+          let capaGeo = null;
+          try {
+            const leyendaGeo = nombre ? (nombre + ' (mapa)') : (c.legend + ' (mapa)');
+            capaGeo = new IDEE.layer.GeoJSON({
+              name: leyendaGeo,
+              legend: leyendaGeo,
+              source: fc,
+              extract: true,
+              visible: true
+            }, {});
+            // Se añade ANTES de pedir la extensión. `getMaxExtent()` de la API
+            // proyecta con el mapa del impl y, recién construida (sin mapa),
+            // lanzaba "Cannot read properties of null (reading 'getProjection')":
+            // el error se tragaba el try/catch y la capa no llegaba a añadirse.
+            mapa.addLayers([capaGeo]);
+            _extenderPuntoUnico(capaGeo);
+          } catch (e) {
+            console.warn('[catalogo] no se ha podido crear la capa GeoJSON de la capa alfanumérica:', e);
+            // Si la capa GeoJSON no ha entrado, la de datos vuelve al selector
+            // para no dejar al usuario sin ninguna entrada (ni su tabla).
+            try { if (capaGeo) mapa.removeLayers(capaGeo); } catch (e2) { /* noop */ }
+            c.displayInLayerSwitcher = true;
+            try { if (typeof window.renderLayerList === 'function') window.renderLayerList(); } catch (e3) { /* noop */ }
+          }
+        }
+
         return [c];
       });
     }
@@ -702,6 +828,7 @@
     pedir: pedir,
     parsearJson: parsearJson,
     nombreDeUrl: nombreDeUrl,
-    cargar: cargar
+    cargar: cargar,
+    aplicarGeometria: aplicarGeometria
   };
 })();
