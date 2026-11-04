@@ -127,7 +127,8 @@
     { global: 'ifcLayer', fichero: '../ifcLayer/ifcLayer.js' },
     { global: 'pmtilesLayer', fichero: '../pmtilesLayer/pmtilesLayer.js' },
     { global: 'glbLayer', fichero: '../glbLayer/glbLayer.js' },
-    { global: 'imageLayer', fichero: '../imageLayer/imageLayer.js' }
+    { global: 'imageLayer', fichero: '../imageLayer/imageLayer.js' },
+    { global: 'JoinLayer', fichero: '../joinLayer/joinLayer.js' }
   ];
 
   /** Promesa de la carga, para no volver a pedir los scripts por cada mapa. */

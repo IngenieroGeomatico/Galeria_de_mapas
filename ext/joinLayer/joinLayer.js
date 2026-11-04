@@ -426,7 +426,14 @@
   var baseGeoJSON = null;
 
   function crearClase(IDEE) {
-    var BaseLayer = (IDEE.layer && (IDEE.layer.Vector || IDEE.layer.GeoJSON)) || Object;
+    // La base es `GeoJSON` y no `Vector` a propósito: la capa resultante se
+    // rellena con `setSource(featureCollection)`, que es el único camino que
+    // pinta features en las dos implementaciones (medido: en `Vector`, el
+    // `source` del constructor se ignora y `addFeatures` de la fachada no
+    // puebla la fuente OpenLayers, así que no se dibuja nada). `GeoJSON`
+    // reproyecta de EPSG:4326 a la proyección del mapa, que es lo que esperan
+    // los atributos y las geometrías que salen de un join.
+    var BaseLayer = (IDEE.layer && (IDEE.layer.GeoJSON || IDEE.layer.Vector)) || Object;
 
     const JoinLayer = class extends BaseLayer {
       /**
@@ -447,10 +454,18 @@
         if (joinType === 'left_semi' || joinType === 'exists') joinType = 'semi';
         if (joinType === 'left_anti' || joinType === 'not_exists') joinType = 'anti';
 
-        // Parámetros limpios para la capa base nativa de la API
+        // Una `source` que ya sea un FeatureCollection es el dato inicial de la
+        // capa resultante; si no lo es, se interpreta como la capa 2 del join.
+        var sourceEsColeccion = !!(opts.source && opts.source.type === 'FeatureCollection');
+        var capa2 = opts.layer2 || opts.sourceLayer || opts.joinLayer ||
+          (sourceEsColeccion ? null : opts.source) || null;
+
+        // Parámetros limpios para la capa base nativa de la API.
+        // Se quitan TODAS las claves propias del join para que `M.format.layer`
+        // no confunda `type: 'left'` con el tipo de capa de la API.
         var baseParams = Object.assign({}, opts);
         var CLAVES_JOIN = [
-          'type', 'joinType', 'layer1', 'layer2', 'target', 'source', 'targetLayer',
+          'type', 'joinType', 'layer1', 'layer2', 'target', 'targetLayer',
           'sourceLayer', 'joinLayer', 'key1', 'key2', 'field1', 'field2', 'targetField',
           'sourceField', 'spatial', 'spatialPredicate', 'distance', 'maxDistance', 'mode',
           'fields', 'fields2', 'columns', 'exclude', 'exclude2', 'prefix', 'prefix2',
@@ -461,7 +476,7 @@
 
         baseParams.name = name;
         baseParams.legend = legend;
-        if (!baseParams.source) {
+        if (!sourceEsColeccion) {
           baseParams.source = { type: 'FeatureCollection', features: [] };
         }
 
@@ -469,12 +484,15 @@
 
         this.name = name;
         this.legend = legend;
+        // NO se toca `this.type`: la API lo valida de forma diferida contra el
+        // tipo real de la capa base (GeoJSON) y renombrarlo hace saltar
+        // "El tipo de capa debe ser 'GeoJSON' pero se ha especificado ...".
         this._isJoinLayer = true;
         this._joinType = joinType;
 
         // Capas de entrada
         this._layer1 = opts.layer1 || opts.targetLayer || opts.target || null;
-        this._layer2 = opts.layer2 || opts.sourceLayer || opts.joinLayer || opts.source || null;
+        this._layer2 = capa2;
 
         // Campos clave
         this._key1 = opts.key1 || opts.field1 || opts.targetField || null;
@@ -516,6 +534,7 @@
         this._unmatched1 = [];
         this._unmatched2 = [];
         this._joinedFeatures = [];
+        this._resultadoOriginal = null;
         this._iniciado = false;
         this._mapa = null;
         this._targetBackup = new WeakMap();
@@ -535,7 +554,17 @@
           try { super.addTo(map); } catch (e) { /* noop */ }
         }
         this._conectarEventosMapa(map);
-        this.recalculate();
+        var self = this;
+        // `setSource` peta si se llama sincrónicamente en `addTo` (impl aún
+        // no está listo: "Cannot read properties of null (reading 'write')").
+        // Se difiere para que la fuente se pueble una vez el impl esté vivo.
+        setTimeout(function () {
+          if (self._resultadoOriginal && self._resultadoOriginal.length) {
+            self._aplicarFeaturesAlMapa(self._resultadoOriginal);
+          }
+          self.recalculate();
+        }, 0);
+        return this;
       }
 
       /** Escucha la carga asíncrona de capas vectoriales (WFS, BBoxFeatures, etc.). */
@@ -886,33 +915,93 @@
         return res;
       }
 
-      _aplicarFeaturesAlMapa(features) {
+      /**
+       * Vuelca el resultado en la capa. `setSource` es el camino bueno (lo usa
+       * ext/flatgeobufLayer con el mismo problema): rehace la fuente de la capa
+       * y se ve al instante. Solo se puede llamar cuando la capa ya está en el
+       * mapa, así que antes de eso el resultado se guarda para `addTo`.
+       */
+      _reproyectarGeomParaGeoJSON(geom, esOL) {
+        if (!geom || !esOL) return geom;
         var IDEE = api();
-        if (!IDEE) return;
+        if (!IDEE || !IDEE.utils || typeof IDEE.utils.reproject !== 'function') return geom;
+        var t = geom.type;
+        var rep = function (p) {
+          try {
+            var c = IDEE.utils.reproject([p[0], p[1]], 'EPSG:3857', 'EPSG:4326');
+            return [c[0], c[1]];
+          } catch (e) { return [p[0], p[1]]; }
+        };
+        if (t === 'Point') {
+          var c = rep(geom.coordinates);
+          return { type: t, coordinates: [c[0], c[1]] };
+        }
+        if (t === 'MultiPoint' || t === 'LineString') {
+          return { type: t, coordinates: (geom.coordinates || []).map(rep) };
+        }
+        if (t === 'MultiLineString' || t === 'Polygon') {
+          return { type: t, coordinates: (geom.coordinates || []).map(function (ring) {
+            return (ring || []).map(rep);
+          }) };
+        }
+        if (t === 'MultiPolygon') {
+          return { type: t, coordinates: (geom.coordinates || []).map(function (poly) {
+            return (poly || []).map(function (ring) { return (ring || []).map(rep); });
+          }) };
+        }
+        if (t === 'GeometryCollection') {
+          return { type: t, geometries: (geom.geometries || []).map(function (g) {
+            return this._reproyectarGeomParaGeoJSON(g, esOL);
+          }, this) };
+        }
+        return geom;
+      }
+
+      _aplicarFeaturesAlMapa(features) {
+        var impl = null;
+        try { impl = (typeof this.getImpl === 'function') ? this.getImpl() : null; } catch (e) { impl = null; }
+        // En 2D (OpenLayers) la geometría nativa viene en EPSG:3857 y la capa
+        // GeoJSON espera EPSG:4326; en 3D (Cesium) ya viene en 4326.
+        // Heurística robusta: si las coordenadas están fuera del rango lon/lat,
+        // vienen en metros (EPSG:3857, típico de OpenLayers) y hay que
+        // reproyectarlas a EPSG:4326 para la capa GeoJSON.
+        var esOL = false;
+        try {
+          var c0 = (features && features[0] && features[0].geometry && features[0].geometry.coordinates) || null;
+          var x0 = Array.isArray(c0) ? (Array.isArray(c0[0]) ? c0[0][0] : c0[0]) : null;
+          if (typeof x0 === 'number' && (Math.abs(x0) > 180)) esOL = true;
+        } catch (e) { esOL = false; }
+
+        // Guardamos los originales para poder re-volcarlos desde `addTo` sin
+        // re-proyectar dos veces.
+        this._resultadoOriginal = (features || []).slice();
+
+        var featuresGeoJSON = (features || []).map(function (f) {
+          var copia = Object.assign({}, f);
+          if (f.geometry) copia.geometry = this._reproyectarGeomParaGeoJSON(f.geometry, esOL);
+          return copia;
+        }, this);
+
+        var fc = { type: 'FeatureCollection', features: featuresGeoJSON };
+
+        // Sin impl completo (fuente OL viva) `setSource` peta. Se aplicará
+        // desde `addTo`/`setTimeout`, donde el impl ya está listo.
+        var fuenteOL = null;
+        try { fuenteOL = impl && impl.olLayer ? impl.olLayer.getSource() : null; } catch (e) { fuenteOL = null; }
+        if (!fuenteOL) return;
+
+        try {
+          if (typeof this.setSource === 'function') {
+            this.setSource(fc);
+            return;
+          }
+        } catch (e) {
+          console.warn('joinLayer: no se pudo volcar el resultado con setSource', e);
+        }
 
         try {
           if (typeof this.clear === 'function') this.clear();
-          else if (typeof this.removeFeatures === 'function' && typeof this.getFeatures === 'function') {
-            var existentes = this.getFeatures() || [];
-            if (existentes.length) this.removeFeatures(existentes);
-          }
-        } catch (e) { /* noop */ }
-
-        try {
-          var fc = { type: 'FeatureCollection', features: features };
-          if (typeof this.addFeatures === 'function') {
-            var featObjects = features.map(function (f, idx) {
-              return new IDEE.Feature(f.id || ('feat_' + idx), f);
-            });
-            this.addFeatures(featObjects);
-          } else if (this.options && this.options.source) {
-            this.options.source = fc;
-          }
-        } catch (e) {
-          try {
-            if (typeof this.setData === 'function') this.setData(fc);
-          } catch (ex) { /* noop */ }
-        }
+        } catch (e2) { /* noop */ }
       }
 
       /* ---------------- Métodos públicos ---------------- */
@@ -1069,15 +1158,14 @@
     // Global en window
     window.JoinLayer = claseJoin;
     window.miPlugin_joinLayer = claseJoin;
+    window.instalarJoinLayer = instalar;
+    claseJoin.instalar = instalar;
 
     return true;
   }
 
   instalar();
-  var intentos = 0;
-  var temporizador = setInterval(function () {
-    if (instalar() || ++intentos > 200) clearInterval(temporizador);
-  }, 10);
+  setInterval(instalar, 10);
 
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('load', function (e) {

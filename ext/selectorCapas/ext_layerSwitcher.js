@@ -4727,23 +4727,44 @@ class miPlugin_layerSwitcher {
 
       panel.innerHTML =
         `<div class="ls-ficha-header">
-            <div class="ls-ficha-title">${_escaparHtml(nombre)}</div>
-            <div class="ls-ficha-tipo">${tipo}</div>
+            <div class="ls-ficha-header-main">
+              <div class="ls-ficha-icon-box">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="11" x2="12" y2="16"></line><circle cx="12" cy="7.6" r="0.4" fill="currentColor"></circle></svg>
+              </div>
+              <div class="ls-ficha-title-wrap">
+                <h2 class="ls-ficha-title">${_escaparHtml(nombre)}</h2>
+                <span class="ls-ficha-tipo">${tipo}</span>
+              </div>
+            </div>
             <button type="button" class="ls-sheet-close" title="Cerrar" onclick="cerrarFicha()">✕</button>
           </div>
+          <div class="ls-ficha-tabs-nav" role="tablist">
+            <button type="button" class="ls-ficha-tab-btn active" data-tab="params" onclick="window._fichaCambiarTab('params', this)">Parámetros</button>
+            <button type="button" class="ls-ficha-tab-btn" data-tab="join" onclick="window._fichaCambiarTab('join', this)">Unión de capas (Join)</button>
+            <button type="button" class="ls-ficha-tab-btn" data-tab="doc" onclick="window._fichaCambiarTab('doc', this)">Documento del servicio</button>
+          </div>
           <div class="ls-ficha-body">
-            <div class="ls-ficha-col">
-              <div class="ls-ficha-seccion-titulo">Editar parámetros</div>
-              <div class="ls-ficha-editor-wrap"></div>
-              <details class="ls-ficha-detalle ls-ficha-params">
-                <summary>Parámetros de construcción</summary>
-                <div class="ls-ficha-params-cuerpo">${parametrosHtml}</div>
-              </details>
-              ${barraObjetosHtml ? `<div class="ls-ficha-seccion-titulo" style="margin-top:14px">Objetos geográficos</div><div class="ls-ficha-objetos-wrap">${barraObjetosHtml}</div>` : ''}
+            <div class="ls-ficha-tab-pane active" data-tab="params">
+              <div class="ls-ficha-card">
+                <div class="ls-ficha-seccion-titulo">Editar parámetros</div>
+                <div class="ls-ficha-editor-wrap"></div>
+                <details class="ls-ficha-detalle ls-ficha-params">
+                  <summary>Parámetros de construcción</summary>
+                  <div class="ls-ficha-params-cuerpo">${parametrosHtml}</div>
+                </details>
+                ${barraObjetosHtml ? `<div class="ls-ficha-seccion-titulo ls-ficha-seccion-titulo--sub">Objetos geográficos</div><div class="ls-ficha-objetos-wrap">${barraObjetosHtml}</div>` : ''}
+              </div>
             </div>
-            <div class="ls-ficha-col">
-              <div class="ls-ficha-seccion-titulo">Documento del servicio</div>
-              <div class="ls-ficha-doc">Cargando…</div>
+            <div class="ls-ficha-tab-pane" data-tab="join">
+              <div class="ls-join-container" id="ls-join-container">
+                <p class="ls-ficha-aviso">Cargando el módulo de unión de capas…</p>
+              </div>
+            </div>
+            <div class="ls-ficha-tab-pane" data-tab="doc">
+              <div class="ls-ficha-card">
+                <div class="ls-ficha-seccion-titulo">Documento del servicio</div>
+                <div class="ls-ficha-doc">Cargando…</div>
+              </div>
             </div>
           </div>`;
 
@@ -4753,8 +4774,6 @@ class miPlugin_layerSwitcher {
 
       let alEscapeCerrar = null;
       const cerrar = function () {
-        // Si se estaba pinchando o dibujando sobre el mapa, se sueltan los
-        // manejadores antes de desmontar el modal.
         if (typeof _cancelarPickFicha === 'function') {
           try { _cancelarPickFicha(); } catch (e) { /* nada */ }
           _cancelarPickFicha = null;
@@ -4774,10 +4793,7 @@ class miPlugin_layerSwitcher {
           try { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); } catch (e) { /* nada */ }
         }, 260);
       };
-      // Su propio global, en el mismo estilo que el resto del plugin: el cierre
-      // del panel inferior es `closeSheet` y este no puede tocarlo.
       window.cerrarFicha = cerrar;
-      // Clic fuera de la caja y Escape: las dos cierran.
       overlay.addEventListener('mousedown', function (ev) { if (ev.target === overlay) cerrar(); });
       alEscapeCerrar = function (ev) {
         if (ev.key !== 'Escape') return;
@@ -4785,19 +4801,27 @@ class miPlugin_layerSwitcher {
       };
       document.addEventListener('keydown', alEscapeCerrar);
 
-      // El editor de parámetros se monta con la capa viva: al aplicar cambios
-      // que obligan a reconstruirla, la ficha se queda abierta apuntando a la
-      // capa nueva.
+      // Cambio de pestaña de la ficha.
+      window._fichaCambiarTab = function (tab, btn) {
+        try {
+          const nav = btn ? btn.parentElement : document.querySelector('.ls-ficha-tabs-nav');
+          if (nav) nav.querySelectorAll('.ls-ficha-tab-btn').forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-tab') === tab);
+          });
+          const body = document.querySelector('.ls-ficha-body');
+          if (body) body.querySelectorAll('.ls-ficha-tab-pane').forEach(function (p) {
+            p.classList.toggle('active', p.getAttribute('data-tab') === tab);
+          });
+        } catch (e) { /* nada */ }
+      };
+
+      // Montar el editor en la pestaña de Parámetros (igual que antes).
       _montarEditorFicha(panel.querySelector('.ls-ficha-editor-wrap'), capa, overlay, function (nueva) {
         fichaVectorLayer = nueva;
-        // La cabecera también apunta a la capa nueva: leyenda y tipo pueden
-        // haber cambiado en el propio editor.
         const titulo = panel.querySelector('.ls-ficha-title');
         if (titulo) titulo.textContent = nueva.legend || nueva.name || 'Sin nombre';
         const tipo = panel.querySelector('.ls-ficha-tipo');
         if (tipo) tipo.textContent = _tipoDeCapa(nueva);
-        // Si se ha cambiado la URL o el nombre del servicio, el documento que
-        // se está enseñando ya no es el suyo: se vuelve a pedir.
         const doc = panel.querySelector('.ls-ficha-doc');
         if (doc) {
           const urlNueva = (typeof nueva.url !== 'undefined' && nueva.url) ? nueva.url : null;
@@ -4807,7 +4831,16 @@ class miPlugin_layerSwitcher {
         }
       });
 
-      // El documento se trae aparte: puede tardar, y si no hay se dice.
+      // Montar la pestaña de Unión (Join) de forma perezosa.
+      (window.cargarJoinLayer ? window.cargarJoinLayer() : Promise.resolve()).then(function () {
+        try { _montarJoinFicha(panel, capa, overlay); } catch (e) {
+          console.warn('layerSwitcher: error montando el panel de join', e);
+          const cont = panel.querySelector('#ls-join-container');
+          if (cont) cont.innerHTML = '<p class="ls-ficha-aviso">No se pudo cargar el módulo de unión de capas.</p>';
+        }
+      });
+
+      // El documento se trae aparte.
       _rellenarDocumento(panel.querySelector('.ls-ficha-doc'), capa, url).catch(function (e) {
         panel.querySelector('.ls-ficha-doc').innerHTML =
           '<p class="ls-ficha-aviso">No se pudo leer el documento del servicio.</p>';
@@ -7823,6 +7856,41 @@ class miPlugin_layerSwitcher {
         </ul>`;
     }
 
+    // ── Carga perezosa de ext/joinLayer/joinLayer.js ────────────────────
+    // El selector deja hacer joins desde la ventana de información de la
+    // capa. El script se pide una sola vez y se reinstala con el cambio de
+    // bundle (2D/3D) gracias a su setInterval de instalación.
+    window.cargarJoinLayer = window.cargarJoinLayer || function () {
+      return new Promise(function (resolver) {
+        if (window.JoinLayer && typeof window.JoinLayer.instalar === 'function') {
+          try { window.JoinLayer.instalar(); } catch (e) { /* nada */ }
+          resolver(window.JoinLayer);
+          return;
+        }
+        var base = null;
+        var lista = document.getElementsByTagName('script');
+        for (var i = lista.length - 1; i >= 0; i--) {
+          var src = lista[i].src || '';
+          if (/selectorCapas\/ext_layerSwitcher\.js/.test(src)) { base = src; break; }
+        }
+        if (!base) base = document.baseURI;
+        var s = document.createElement('script');
+        s.src = new URL('../joinLayer/joinLayer.js', base).href;
+        s.async = false;
+        s.onload = function () {
+          if (window.JoinLayer && typeof window.JoinLayer.instalar === 'function') {
+            try { window.JoinLayer.instalar(); } catch (e) { /* nada */ }
+          }
+          resolver(window.JoinLayer);
+        };
+        s.onerror = function () {
+          console.warn('layerSwitcher: no se pudo cargar ext/joinLayer/joinLayer.js');
+          resolver(null);
+        };
+        document.head.appendChild(s);
+      });
+    };
+
     // ── Abrir informacion de la capa ───────────────────────────────────
     // Abre el panel inferior (sidenav) con la tabla de atributos (vectorial) o
     // las estadisticas (raster). En su header se incluye un dropdown con todas
@@ -8042,6 +8110,19 @@ if (typeof window !== 'undefined') {
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_layerSwitcher = miPlugin_layerSwitcher;
+  // ── Pestaña de Unión (Join) en la ficha ────────────────────────────
+  // (definida aquí para tener acceso al scope del plugin: map, findLayerById,
+  //  getSelectableLayers, _escaparHtml, etc.)
+  window._montarJoinFicha = function (panel, capa, overlay) {
+    // Implementación en ext/joinLayer/joinUI.js (cargado aparte) o inline:
+    // para evitar duplicar el código, se delega a la función global si existe.
+    if (typeof window.__montarJoinFichaImpl === 'function') {
+      return window.__montarJoinFichaImpl(panel, capa, overlay, (typeof mapajs !== 'undefined' ? mapajs : null));
+    }
+    const cont = panel.querySelector('#ls-join-container');
+    if (cont) cont.innerHTML = '<p class="ls-ficha-aviso">Módulo de join no disponible.</p>';
+  };
+
   window.M = window.M || {};
   window.M.plugin = window.M.plugin || {};
   window.M.plugin.miPlugin_layerSwitcher = miPlugin_layerSwitcher;
