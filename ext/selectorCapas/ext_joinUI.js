@@ -56,6 +56,10 @@
     const esc = escHtml;
     const cont = panel.querySelector('#ls-join-container');
     if (!cont) return;
+    if (!capa) {
+      cont.innerHTML = '<p class="ls-ficha-aviso">No hay capa seleccionada.</p>';
+      return;
+    }
     const capaId = capa.idLayer;
     // FlatGeobuf arranca en modo "vista": se fuerza la carga completa del
     // fichero para que la ficha y el join vean TODAS las features.
@@ -114,7 +118,7 @@
       candidatos.forEach(function (l) {
         const nm = esc(l.legend || l.name || 'Sin nombre');
         const kind = (window.getLayerKind ? window.getLayerKind(l) : '');
-        html += `<option value="${esc(l.idLayer)}">${nm} (${kind})</option>`;
+        html += `<option value="${esc(l.idLayer)}">${nm} (${esc(kind)})</option>`;
       });
       html += '</select>';
 
@@ -235,10 +239,11 @@
         if (!srcLayer) { if (status) status.textContent = 'Capa de origen no encontrada.'; return; }
 
         if (status) status.textContent = 'Ejecutando unión…';
+        if (runBtn) { runBtn.disabled = true; runBtn.textContent = 'Calculando…'; }
 
         try { await (window.cargarJoinLayer ? window.cargarJoinLayer() : Promise.resolve()); } catch (e) {}
         const JoinClass = window.JoinLayer;
-        if (!JoinClass) { if (status) status.textContent = 'Módulo JoinLayer no disponible.'; return; }
+        if (!JoinClass) { if (status) status.textContent = 'Módulo JoinLayer no disponible.'; if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Ejecutar unión'; } return; }
 
         const mode = panel._joinState.selectedMode;
         const type = panel._joinState.selectedType;
@@ -288,6 +293,8 @@
         } catch (e) {
           console.warn('join ficha:', e);
           if (status) status.textContent = 'Error: ' + (e && e.message ? e.message : e);
+        } finally {
+          if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Ejecutar unión'; }
         }
       });
 

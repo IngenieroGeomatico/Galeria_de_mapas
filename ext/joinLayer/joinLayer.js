@@ -584,6 +584,7 @@
         this._joinedFeatures = [];
         this._resultadoOriginal = null;
         this._iniciado = false;
+        this._recalcTimer = null;
         this._mapa = null;
         this._targetBackup = new WeakMap();
 
@@ -621,10 +622,11 @@
         this._eventosConectados = true;
         var self = this;
 
-        // Escuchar capas añadidas al mapa
+        // Escuchar capas añadidas al mapa (con debounce para evitar recálculos
+        // masivos en capas teeladas que emiten change en cada movimiento).
         if (typeof map.on === 'function') {
           map.on('addLayer', function () {
-            self.recalculate();
+            self._programarRecalculo();
           });
         }
 
@@ -643,9 +645,9 @@
           if (olLayer && typeof olLayer.getSource === 'function' && olLayer.getSource()) {
             var src = olLayer.getSource();
             if (typeof src.on === 'function') {
-              src.on('featuresloadend', function () { self.recalculate(); });
+              src.on('featuresloadend', function () { self._programarRecalculo(); });
               src.on('change', function () {
-                if (src.getState && src.getState() === 'ready') self.recalculate();
+                if (src.getState && src.getState() === 'ready') self._programarRecalculo();
               });
             }
           }
@@ -663,7 +665,17 @@
        * Recalcula la unión de las dos capas a partir de las fuentes configuradas.
        * @returns {Promise<Array<Object>>} Features resultantes del join.
        */
+      _programarRecalculo() {
+        if (this._recalcTimer) { try { clearTimeout(this._recalcTimer); } catch (e) { /* noop */ } }
+        var self = this;
+        this._recalcTimer = setTimeout(function () {
+          self._recalcTimer = null;
+          try { self.recalculate(); } catch (e) { console.warn('joinLayer: recálculo programado falló', e); }
+        }, 300);
+      }
+
       async recalculate() {
+        if (this._recalcTimer) { try { clearTimeout(this._recalcTimer); } catch (e) { /* noop */ } this._recalcTimer = null; }
         var t0 = Date.now();
         var mapRef = this._mapa || (this.map_ || null);
 
@@ -1147,12 +1159,55 @@
 
       /* ---------------- Contrato de Estado (Cambio 2D / 3D) ---------------- */
 
+      _identificadorEstableCapa(capaOrId) {
+        if (capaOrId === null || capaOrId === undefined) return null;
+        if (typeof capaOrId === 'string') return capaOrId;
+        if (typeof capaOrId === 'object') {
+          try {
+            if (capaOrId.legend && String(capaOrId.legend) !== String(capaOrId.idLayer)) return capaOrId.legend;
+          } catch (e) { /* noop */ }
+          try { if (capaOrId.name) return capaOrId.name; } catch (e) { /* noop */ }
+          try { if (capaOrId.idLayer) return capaOrId.idLayer; } catch (e) { /* noop */ }
+        }
+        return null;
+      }
+
+      _resolverCapaEnMapaNuevo(map, capaOrId) {
+        if (!capaOrId) return capaOrId;
+        if (typeof capaOrId === 'string') {
+          try {
+            var res = resolverCapaEnMapa(map, capaOrId);
+            if (res) return res;
+          } catch (e) { /* noop */ }
+          return capaOrId;
+        }
+        if (typeof capaOrId === 'object') {
+          var ident = this._identificadorEstableCapa(capaOrId);
+          if (ident) {
+            try {
+              var res2 = resolverCapaEnMapa(map, ident);
+              if (res2) return res2;
+            } catch (e) { /* noop */ }
+          }
+          try {
+            if (capaOrId.idLayer) {
+              var res3 = resolverCapaEnMapa(map, capaOrId.idLayer);
+              if (res3) return res3;
+            }
+          } catch (e) { /* noop */ }
+        }
+        return capaOrId;
+      }
+
       getState() {
+        var opts = this.getJoinOptions();
         return {
           name: this.name,
           legend: this.legend,
           visible: (typeof this.isVisible === 'function') ? this.isVisible() : true,
-          options: this.getJoinOptions()
+          options: opts,
+          layer1Ident: this._identificadorEstableCapa(this._layer1),
+          layer2Ident: this._identificadorEstableCapa(this._layer2)
         };
       }
 
@@ -1160,6 +1215,22 @@
         if (!state || typeof state !== 'object') return;
         if (state.options) {
           this.setJoinOptions(state.options);
+        }
+        if (state.layer1Ident && map) {
+          try {
+            var c1 = resolverCapaEnMapa(map, state.layer1Ident);
+            if (c1) this._layer1 = c1;
+          } catch (e) { /* noop */ }
+        }
+        if (state.layer2Ident && map) {
+          try {
+            var c2 = resolverCapaEnMapa(map, state.layer2Ident);
+            if (c2) this._layer2 = c2;
+          } catch (e) { /* noop */ }
+        }
+        if (map) {
+          this._layer1 = this._resolverCapaEnMapaNuevo(map, this._layer1);
+          this._layer2 = this._resolverCapaEnMapaNuevo(map, this._layer2);
         }
         if (map) this.addTo(map);
       }

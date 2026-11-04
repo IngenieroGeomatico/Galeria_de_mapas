@@ -4739,9 +4739,9 @@ class miPlugin_layerSwitcher {
             <button type="button" class="ls-sheet-close" title="Cerrar" onclick="cerrarFicha()">✕</button>
           </div>
           <div class="ls-ficha-tabs-nav" role="tablist">
-            <button type="button" class="ls-ficha-tab-btn active" data-tab="params" onclick="window._fichaCambiarTab('params', this)">Parámetros</button>
-            <button type="button" class="ls-ficha-tab-btn" data-tab="join" onclick="window._fichaCambiarTab('join', this)">Unión de capas (Join)</button>
-            <button type="button" class="ls-ficha-tab-btn" data-tab="doc" onclick="window._fichaCambiarTab('doc', this)">Documento del servicio</button>
+            <button type="button" class="ls-ficha-tab-btn active" data-tab="params" aria-selected="true" onclick="window._fichaCambiarTab('params', this)">Parámetros</button>
+            ${window.getLayerKind && window.getLayerKind(capa) !== 'raster' ? '<button type="button" class="ls-ficha-tab-btn" data-tab="join" aria-selected="false" onclick="window._fichaCambiarTab(\'join\', this)">Unión de capas (Join)</button>' : ''}
+            <button type="button" class="ls-ficha-tab-btn" data-tab="doc" aria-selected="false" onclick="window._fichaCambiarTab('doc', this)">Documento del servicio</button>
           </div>
           <div class="ls-ficha-body">
             <div class="ls-ficha-tab-pane active" data-tab="params">
@@ -4806,7 +4806,9 @@ class miPlugin_layerSwitcher {
         try {
           const nav = btn ? btn.parentElement : document.querySelector('.ls-ficha-tabs-nav');
           if (nav) nav.querySelectorAll('.ls-ficha-tab-btn').forEach(function (b) {
-            b.classList.toggle('active', b.getAttribute('data-tab') === tab);
+            const isActive = b.getAttribute('data-tab') === tab;
+            b.classList.toggle('active', isActive);
+            b.setAttribute('aria-selected', isActive ? 'true' : 'false');
           });
           const body = document.querySelector('.ls-ficha-body');
           if (body) body.querySelectorAll('.ls-ficha-tab-pane').forEach(function (p) {
