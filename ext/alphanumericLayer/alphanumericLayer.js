@@ -144,7 +144,155 @@
    * @returns {boolean}
    */
   function esWKT(v) {
-    return typeof v === 'string' && /^\s*(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*\(/i.test(v);
+    if (typeof v !== 'string') return false;
+    const t = v.trim().replace(/^SRID\s*=\s*\d+\s*;\s*/i, '');
+    return /^\s*(POINT|LINESTRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION)\s*\(/i.test(t);
+  }
+
+  // -------------------------------------------------------------------
+  // CRS y reproyección
+  // -------------------------------------------------------------------
+
+  function normalizarCRS(crs) {
+    if (!crs) return 'EPSG:4326';
+    let c = String(crs).trim();
+    if (!c) return 'EPSG:4326';
+    if (/^(ogc:)?crs84$/i.test(c)) return 'EPSG:4326';
+    if (/urn:ogc:def:crs:OGC:(1\.3:)?CRS84/i.test(c)) return 'EPSG:4326';
+    if (/CRS84$/i.test(c) && /opengis\.net/i.test(c)) return 'EPSG:4326';
+    const urn = /urn:ogc:def:crs:([^:]+):[^:]*:([^:]+)$/i.exec(c);
+    if (urn) return urn[1].toUpperCase() + ':' + urn[2];
+    const uri = /opengis\.net\/def\/crs\/([^\/]+)\/[^\/]*\/([^\/]+)$/i.exec(c);
+    if (uri) {
+      const fam = uri[1].toUpperCase();
+      const code = uri[2];
+      if (fam === 'OGC' && /crs84/i.test(code)) return 'EPSG:4326';
+      return fam + ':' + code;
+    }
+    if (/^\d+$/.test(c)) return 'EPSG:' + c;
+    if (/^epsg:\d+$/i.test(c)) return 'EPSG:' + c.split(':')[1];
+    return c;
+  }
+
+  function reproyectarPunto(xy, desde, hasta) {
+    if (!Array.isArray(xy) || xy.length < 2) return null;
+    const d = normalizarCRS(desde);
+    const h = normalizarCRS(hasta || 'EPSG:4326');
+    if (d === h) return [Number(xy[0]), Number(xy[1])];
+    if (typeof window !== 'undefined' && typeof window.proj4 === 'function') {
+      try {
+        if (!window.proj4.defs('EPSG:3035')) {
+          window.proj4.defs('EPSG:3035', '+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+        }
+      } catch (e) { /* noop */ }
+    }
+    let r = null;
+    try {
+      const api = (typeof window !== 'undefined') ? (window.IDEE || window.M) : null;
+      if (api && api.utils && typeof api.utils.reproject === 'function') {
+        const out = api.utils.reproject([xy[0], xy[1]], d, h);
+        if (Array.isArray(out) && isFinite(out[0]) && isFinite(out[1])) r = out;
+      }
+    } catch (e) { r = null; }
+    if (!r && typeof window !== 'undefined' && typeof window.proj4 === 'function') {
+      try {
+        const out = window.proj4(d, h, [xy[0], xy[1]]);
+        if (Array.isArray(out) && isFinite(out[0]) && isFinite(out[1])) r = out;
+      } catch (e) { r = null; }
+    }
+    if (!r) return null;
+    return xy.length > 2 ? [r[0], r[1], xy[2]] : [r[0], r[1]];
+  }
+
+  function reproyectarGeometria(geom, desde, hasta) {
+    if (!geom || typeof geom !== 'object' || typeof geom.type !== 'string') return null;
+    const d = normalizarCRS(desde);
+    const h = normalizarCRS(hasta || 'EPSG:4326');
+    if (geom.type === 'GeometryCollection') {
+      const geoms = (geom.geometries || []).map(function (g) { return reproyectarGeometria(g, d, h); });
+      if (geoms.some(function (g) { return !g; })) return null;
+      return { type: 'GeometryCollection', geometries: geoms };
+    }
+    if (!Array.isArray(geom.coordinates)) return geom;
+    function rec(coords) {
+      if (typeof coords[0] === 'number') {
+        const r = reproyectarPunto(coords, d, h);
+        if (!r) return null;
+        return coords.length > 2 ? [r[0], r[1], coords[2]] : [r[0], r[1]];
+      }
+      const salida = [];
+      for (let i = 0; i < coords.length; i++) {
+        const c = rec(coords[i]);
+        if (c === null) return null;
+        salida.push(c);
+      }
+      return salida;
+    }
+    const nuevas = rec(geom.coordinates);
+    if (nuevas === null) return null;
+    return { type: geom.type, coordinates: nuevas };
+  }
+
+  function crsDeCoordRefSys(v) {
+    if (!v) return null;
+    if (Array.isArray(v)) return v.length ? crsDeCoordRefSys(v[0]) : null;
+    if (typeof v === 'string') return normalizarCRS(v);
+    if (typeof v === 'object' && v.id) return normalizarCRS(v.id);
+    return null;
+  }
+
+  function parsearWKTConCRS(wkt) {
+    if (typeof wkt !== 'string') return null;
+    let t = wkt.trim();
+    let crs = null;
+    const m = /^SRID\s*=\s*(\d+)\s*;\s*(.*)$/i.exec(t);
+    if (m) { crs = 'EPSG:' + m[1]; t = m[2].trim(); }
+    const g = wktAGeoJSON(t);
+    if (!g) return null;
+    return { geometry: g, crs: crs };
+  }
+
+  /**
+   * Extrae una geometría GeoJSON de un valor que puede ser un objeto
+   * GeoJSON (geometría, Feature o FeatureCollection) o su texto. Devuelve
+   * la geometría en EPSG:4326, reprojectando si hace falta.
+   * @param {*} valor Valor del campo.
+   * @param {string} [crsPorDefecto] CRS por defecto para `place`/coordenadas.
+   * @returns {Object|null}
+   */
+  function geometriaDeValor(valor, crsPorDefecto) {
+    let obj = valor;
+    if (typeof obj === 'string') {
+      const t = obj.trim();
+      if (!t) return null;
+      try { obj = JSON.parse(t); } catch (e) { return null; }
+    }
+    if (!obj || typeof obj !== 'object') return null;
+    // FeatureCollection: toma la primera geometría que se pueda resolver.
+    if (obj.type === 'FeatureCollection') {
+      const crs = crsDeCoordRefSys(obj.coordRefSys) || crsPorDefecto || 'EPSG:4326';
+      const feats = Array.isArray(obj.features) ? obj.features : [];
+      for (let i = 0; i < feats.length; i++) {
+        const g = geometriaDeValor(feats[i], crs);
+        if (g) return g;
+      }
+      return null;
+    }
+    // Feature: `geometry` (CRS84) tiene prioridad; si no, `place` (CRS del coordRefSys).
+    if (obj.type === 'Feature') {
+      const crs = crsDeCoordRefSys(obj.coordRefSys) || crsPorDefecto || 'EPSG:4326';
+      if (obj.geometry && typeof obj.geometry.type === 'string') {
+        return reproyectarGeometria(obj.geometry, 'EPSG:4326', 'EPSG:4326') || obj.geometry;
+      }
+      if (obj.place && typeof obj.place.type === 'string') {
+        const r = reproyectarGeometria(obj.place, crs, 'EPSG:4326');
+        return r || obj.place;
+      }
+      return null;
+    }
+    // Geometría suelta (posible FG con coordRefSys).
+    const crs = crsDeCoordRefSys(obj.coordRefSys) || crsPorDefecto || 'EPSG:4326';
+    return reproyectarGeometria(obj, crs, 'EPSG:4326');
   }
   let contador = 0;
 
@@ -713,7 +861,7 @@
      * @returns {boolean}
      */
     hasGeometry() {
-      return !!(this._geometryField || (this._latField && this._lonField));
+      return !!(this._geometryField || this._wktField || this._xField || this._yField || (this._latField && this._lonField));
     }
 
     /**
@@ -737,6 +885,7 @@
       if (c.yField !== undefined) this._yField = c.yField || null;
       if (c.wktField !== undefined) this._wktField = c.wktField || null;
       if (c.geometryField !== undefined) this._geometryField = c.geometryField || null;
+      if (c.crs !== undefined) this._crs = c.crs || this._crs || 'EPSG:4326';
       return this;
     }
 
@@ -822,12 +971,21 @@
       const xf = this._xField;
       const yf = this._yField;
       if (!xf || !yf) return this;
+      const crs = o.crs || this._crs || 'EPSG:4326';
+      this._crs = crs;
       this._records.forEach(function (r) {
         const x = Number(r[xf]);
         const y = Number(r[yf]);
-        if (isFinite(x) && isFinite(y) && Math.abs(x) <= 180 && Math.abs(y) <= 90) {
-          r.__idee_geojson = JSON.stringify({ type: 'Point', coordinates: [x, y] });
+        if (!isFinite(x) || !isFinite(y)) return;
+        let lon = x, lat = y;
+        if (normalizarCRS(crs) !== 'EPSG:4326') {
+          const p = reproyectarPunto([x, y], crs, 'EPSG:4326');
+          if (!p) return;
+          lon = p[0]; lat = p[1];
+        } else if (!(Math.abs(x) <= 180 && Math.abs(y) <= 90)) {
+          return;
         }
+        r.__idee_geojson = JSON.stringify({ type: 'Point', coordinates: [lon, lat] });
       });
       if (!this._geometryField) this._geometryField = '__idee_geojson';
       this._fields = inferirCampos(this._records);
@@ -839,11 +997,17 @@
      * @param {string} campo Campo con texto WKT.
      * @returns {AlphanumericLayer}
      */
-    anadirGeometriaDesdeWKT(campo) {
+    anadirGeometriaDesdeWKT(campo, opciones) {
+      const o = opciones || {};
       if (!campo) return this;
       this._wktField = campo;
+      const crsPorDefecto = o.crs || this._crs || 'EPSG:4326';
+      this._crs = crsPorDefecto;
       this._records.forEach(function (r) {
-        const g = wktAGeoJSON(r[campo]);
+        const parsed = parsearWKTConCRS(r[campo]);
+        if (!parsed) return;
+        const origen = parsed.crs || crsPorDefecto;
+        const g = reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
         if (g) r.__idee_geojson = JSON.stringify(g);
       });
       if (!this._geometryField) this._geometryField = '__idee_geojson';
@@ -857,10 +1021,13 @@
      * @param {string} campo Campo con GeoJSON.
      * @returns {AlphanumericLayer}
      */
-    anadirGeometriaDesdeGeoJSON(campo) {
+    anadirGeometriaDesdeGeoJSON(campo, opciones) {
+      const o = opciones || {};
       if (!campo) return this;
+      const crsPorDefecto = o.crs || this._crs || 'EPSG:4326';
+      this._crs = crsPorDefecto;
       this._records.forEach(function (r) {
-        const g = normalizarGeometria(r[campo]);
+        const g = geometriaDeValor(r[campo], crsPorDefecto);
         if (g) r.__idee_geojson = JSON.stringify(g);
       });
       if (!this._geometryField) this._geometryField = '__idee_geojson';
@@ -880,20 +1047,20 @@
     convertirCampoAGeometria(formato, opciones) {
       const o = opciones || {};
       if (formato === 'xy') {
-        return this.anadirGeometriaDesdeXY(o.xField, o.yField);
+        return this.anadirGeometriaDesdeXY(o.xField, o.yField, { crs: o.crs });
       }
       if (formato === 'wkt') {
-        return this.anadirGeometriaDesdeWKT(o.field);
+        return this.anadirGeometriaDesdeWKT(o.field, { crs: o.crs });
       }
       if (formato === 'geojson') {
-        return this.anadirGeometriaDesdeGeoJSON(o.field);
+        return this.anadirGeometriaDesdeGeoJSON(o.field, { crs: o.crs });
       }
       if (formato === 'auto') {
         const det = this.detectarCamposGeo();
-        if (det.geometryField) return this.anadirGeometriaDesdeGeoJSON(det.geometryField);
-        if (det.wktField) return this.anadirGeometriaDesdeWKT(det.wktField);
-        if (det.xField && det.yField) return this.anadirGeometriaDesdeXY(det.xField, det.yField);
-        if (det.latField && det.lonField) return this.anadirGeometriaDesdeXY(det.lonField, det.latField);
+        if (det.geometryField) return this.anadirGeometriaDesdeGeoJSON(det.geometryField, { crs: o.crs });
+        if (det.wktField) return this.anadirGeometriaDesdeWKT(det.wktField, { crs: o.crs });
+        if (det.xField && det.yField) return this.anadirGeometriaDesdeXY(det.xField, det.yField, { crs: o.crs });
+        if (det.latField && det.lonField) return this.anadirGeometriaDesdeXY(det.lonField, det.latField, { crs: o.crs });
         return this;
       }
       return this;
@@ -915,6 +1082,10 @@
         latField: this._latField,
         lonField: this._lonField,
         geometryField: this._geometryField,
+        xField: this._xField,
+        yField: this._yField,
+        wktField: this._wktField,
+        crs: this._crs,
         source: this._source,
         metadata: this._metadata,
       });
@@ -940,23 +1111,45 @@
       const campoLon = o.lonField || this._lonField || o.xField || this._xField || null;
       const campoWKT = o.wktField || this._wktField || null;
       const idField = o.idField || this._idField;
+      const crsPorDefecto = o.crs || this._crs || 'EPSG:4326';
+      const crsXY = o.crs || this._crs || 'EPSG:4326';
       const features = [];
 
       this._records.forEach(function (r) {
-        let geometria = normalizarGeometria(r[campoGeo]);
-        // WKT: se parsea a GeoJSON.
+        // 1) GeoJSON (o GeoJSON-FG) en el campo de geometría.
+        let geometria = geometriaDeValor(r[campoGeo], crsPorDefecto);
+        // 2) WKT (incluido EWKT con SRID=).
         if (!geometria && campoWKT && r[campoWKT]) {
-          geometria = wktAGeoJSON(r[campoWKT]);
+          const parsed = parsearWKTConCRS(r[campoWKT]);
+          if (parsed) {
+            const origen = parsed.crs || crsPorDefecto;
+            geometria = reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
+          }
         }
-        // Si el campo indicado es un string WKT, también se intenta.
+        // 3) Si el campo indicado es un string WKT.
         if (!geometria && r[campoGeo] && esWKT(r[campoGeo])) {
-          geometria = wktAGeoJSON(r[campoGeo]);
+          const parsed = parsearWKTConCRS(r[campoGeo]);
+          if (parsed) {
+            const origen = parsed.crs || crsPorDefecto;
+            geometria = reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
+          }
         }
+        // 4) Lat/lon (EPSG:4326) o X/Y (CRS elegido).
         if (!geometria && campoLat && campoLon) {
-          const lat = Number(r[campoLat]);
-          const lon = Number(r[campoLon]);
-          if (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-            geometria = { type: 'Point', coordinates: [lon, lat] };
+          const a = Number(r[campoLat]);
+          const b = Number(r[campoLon]);
+          // Distingue lat/lon (rango pequeño) de X/Y proyectadas.
+          if (isFinite(a) && isFinite(b)) {
+            if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
+              geometria = { type: 'Point', coordinates: [b, a] };
+            } else if (normalizarCRS(crsXY) !== 'EPSG:4326') {
+              const p = reproyectarPunto([b, a], crsXY, 'EPSG:4326');
+              if (p) geometria = { type: 'Point', coordinates: [p[0], p[1]] };
+            }
+            // Si el CRS es EPSG:4326 y los valores se salen del rango, no se
+            // inventa un punto en una latitud imposible: el registro se
+            // descarta. Antes se devolvía la pareja tal cual, y una X/Y en
+            // metros (p. ej. 440000/4470000) acababa pintada fuera del mundo.
           }
         }
         if (!geometria) return;
@@ -1039,6 +1232,10 @@
         latField: this._latField,
         lonField: this._lonField,
         geometryField: this._geometryField,
+        xField: this._xField,
+        yField: this._yField,
+        wktField: this._wktField,
+        crs: this._crs,
         source: this._source,
         metadata: this._metadata,
       };
@@ -1067,13 +1264,17 @@
         idField: o.idField,
         latField: o.latField,
         lonField: o.lonField,
+        xField: o.xField,
+        yField: o.yField,
+        wktField: o.wktField,
         geometryField: o.geometryField,
+        crs: o.crs,
         source: o.source,
       });
     }
 
     /**
-     * Crea una capa desde JSON: array de objetos, { records }, o GeoJSON.
+     * Crea una capa desde JSON:: array de objetos, { records }, o GeoJSON.
      * @param {string|Object} datos JSON o texto.
      * @param {Object} [opciones]
      * @returns {AlphanumericLayer}
@@ -1091,7 +1292,12 @@
         geometryField = geometryField || '__idee_geojson';
         registros = obj.features.map(function (f) {
           const props = Object.assign({}, f.properties || {});
-          if (f.geometry) props.__idee_geojson = JSON.stringify(f.geometry);
+          if (f.geometry && typeof f.geometry.type === 'string') props.__idee_geojson = JSON.stringify(f.geometry);
+          else if (f.place && typeof f.place.type === 'string') {
+            const crsFC = crsDeCoordRefSys(obj.coordRefSys) || o.crs || 'EPSG:4326';
+            const gg = reproyectarGeometria(f.place, crsDeCoordRefSys(f.coordRefSys) || crsFC, 'EPSG:4326');
+            if (gg) props.__idee_geojson = JSON.stringify(gg);
+          }
           if (f.id !== undefined) props.__idee_id = f.id;
           return props;
         });
@@ -1110,6 +1316,10 @@
         latField: o.latField,
         lonField: o.lonField,
         geometryField: geometryField,
+        xField: o.xField,
+        yField: o.yField,
+        wktField: o.wktField,
+        crs: o.crs,
         source: o.source,
       });
     }
@@ -1193,6 +1403,10 @@
           latField: o.latField,
           lonField: o.lonField,
           geometryField: o.geometryField,
+          xField: o.xField,
+          yField: o.yField,
+          wktField: o.wktField,
+          crs: o.crs,
           source: o.source,
         });
       });
