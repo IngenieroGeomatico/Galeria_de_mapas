@@ -13,6 +13,7 @@ Plugin con panel que ofrece los servicios ya escritos de varios catálogos (IDEE
 - **Catálogos consultados con árbol**: navegación por colecciones e items de un STAC (con migas y botón Volver), paginación de `/items` con el enlace `rel="next"`, búsqueda por zona (rectángulo de la vista, solo 2D) y por fechas.
 - **Huella de elementos STAC**: botón `Huella` que dibuja en el mapa el `bbox`/`geometry` de una escena (con previsualización al pasar el ratón), para verla antes de descargarla.
 - **Detección de tipo por URL** con tabla ordenada (ficheros → plantillas de teselas → parámetros OGC → WMS por defecto) y lectura del documento de capacidades (WMS 1.1.1/1.3.0, WMTS, WFS 1.x/2.0) sin depender de prefijos de espacio de nombres.
+- **Geometría de los ficheros tabulares** (CSV, Excel, JSON, TSV...): la pestaña «Añadir capa» deja elegir de qué columna sale la geometría (detección automática, X/Y, WKT, GeoJSON o ninguna). El fichero se lee al elegir el modo para poder listar sus columnas y se reutiliza al cargar, sin descargarlo dos veces.
 - **Aviso explícito de CORS**: los tipos que se cargan sin consultar nada se comprueban antes con `urlEsLegible()` (HEAD y, si falla, GET con `Range: bytes=0-0`).
 - **Comprobación de CORS/`s3://`**: las direcciones `s3://cubo/ruta` se reescriben a la forma HTTPS *virtual-hosted* de S3.
 - **Carga automática de las extensiones de capa de `ext/`**: el propio plugin inyecta los JS que la API no trae y los registra en el mapa una sola vez por mapa (`WeakMap`). Son dos familias:
@@ -21,7 +22,7 @@ Plugin con panel que ofrece los servicios ya escritos de varios catálogos (IDEE
   - Los *vendor* grandes (`copcesium`, `web-ifc`, `pmtiles`, `hyparquet`, el lector de FlatGeobuf) los pide cada extensión solo cuando hacen falta.
 - **Colocación de recursos no georreferenciados** (GLB e Imagen): formulario con punto (longitud, latitud, cota) o rectángulo, tomados del centro del mapa, pinchando en el mapa, de la vista actual o dibujando el rectángulo (solo 2D), más giro, inclinación, alabeo, escala, tamaño de la imagen y vista previa en el mapa.
 - **Contrato de estado 2D/3D** (`getState`/`setState`): conserva catálogo elegido, URL escrita, mensaje de estado, pestaña, sección de servicio, grupos abiertos, filtro, análisis pendiente, **la colocación del formulario** y estado del panel.
-- **Persistencia de la selección**: recuerda en `localStorage` el catálogo (`galeria_catalogo_seleccion`) y el tipo de servicio (`galeria_catalogo_seccion`).
+- **Persistencia de la selección**: recuerda en `localStorage` el tipo de servicio de la IDEE (`galeria_catalogo_seccion`). El catálogo **no** se recuerda: el panel abre sin ninguno elegido y no consulta ningún portal hasta que se elige uno.
 - **Paginación de 50 en 50** con paginador arriba y abajo y botón «Ver los N»; el filtro mira nombre y organismo, y solo la URL a partir de 6 caracteres.
 - **Icono como máscara** (`--g-plugin-icon-mask`) y colores por variables CSS (`color1/color2/color3`), sin colores escritos en la hoja.
 - **Integración con el supraplugin**: `getSupraElement()` añade el botón a la barra, oculta el botón propio de la API (`g-panel-en-barra`) y sincroniza el estado abierto/plegado.
@@ -71,11 +72,11 @@ Las dependencias de formato (`MVTLayer`, `geotiffLayer`, `copcLayer`, `flatgeobu
 | `tituloBarra` | `string` | `'Catalogo'` | Texto y `title` del botón de la barra del supraplugin (`getSupraElement()`). |
 | `catalogos` | `Array\|Object` | `null` | Catálogos del visualizador. Cada entrada puede ser un catálogo ya hecho (con `listar()`), sus datos planos (`{nombre, modo, servicios[], nodos[], secciones[]}`) o el contenedor `IDEE.catalog.propios`. Los ids se suman a los de serie y, si coinciden, los pisan. Se admite también la forma antigua de objeto con un catálogo por clave. |
 | `soloCatalogos` | `boolean` | `false` | Con `catalogos` presente, deja **solo** los del visualizador y quita los tres de serie. |
-| `catalogoPorDefecto` | `string` | — | Id del catálogo con el que se abre el panel. Orden de resolución: `catalogoPorDefecto` → selección guardada → primero disponible. |
+| `catalogoPorDefecto` | `string` | — | Id del catálogo con el que se abre el panel. Sin esta opción el panel abre **sin ningún catálogo elegido**: no se consulta ningún portal hasta que el usuario elige uno en el desplegable. |
 | `seccion` | `string` | — | Id del tipo de servicio (sección) que se abre en el catálogo de la IDEE. Si no se pasa, se usa el de `localStorage`. |
 | `filtro` | `string` | `''` | Texto inicial del buscador. |
 | `grupos` | `Array<string>` | `['disponibles','nuevo']` | Grupos plegables que arrancan abiertos en la pestaña de catálogos. |
-| `pestana` | `string` | `'catalogos'` | Pestaña activa al abrir (`'catalogos'` o `'capa'`). |
+| `pestana` | `string` | `'capa'` | Pestaña activa al abrir (`'capa'` o `'catalogos'`). Las pestañas van en ese orden: "Añadir capa" primero y "Catálogos" después. |
 
 ## 🚀 Ejemplo de uso
 
@@ -186,7 +187,8 @@ Catálogo de la IDEE, en modo `secciones`. Por defecto `id: 'idee'`, `nombre: 'C
 | `urlCapabilities(url, tipo)` | Monta la URL de GetCapabilities respetando los parámetros ya presentes. |
 | `pedir(url)` / `parsearJson(texto, url)` | `fetch` directo y `JSON.parse` con mensajes de error legibles. |
 | `nombreDeUrl(url)` | Nombre deducido del final de la URL. |
-| `cargar({url, mapa, tipo, capas, nombre, colocacion, parametros})` | Crea y añade las capas con `mapa.addLayers(capas)` y devuelve el array de capas creadas. `colocacion` es el objeto de `CatalogoColocacion.getValor()` (punto o bbox, giro, escala…); `parametros` son opciones extra del constructor (la vista previa pide `displayInLayerSwitcher:false`). Los valores vacíos se filtran para no pisar los defectos de la extensión. Iguala el `wrapX` de las fuentes con `window.miWrapX` si está disponible. |
+| `aplicarGeometria(capa, geometria)` | Deja puestas en una capa alfanumérica las columnas de las que sale la geometría (`setGeoFields`), sin materializar `__idee_geojson` en cada registro. |
+| `cargar({url, mapa, tipo, capas, nombre, colocacion, parametros, geometria, capa})` | Crea y añade las capas con `mapa.addLayers(capas)` y devuelve el array de capas creadas. `colocacion` es el objeto de `CatalogoColocacion.getValor()` (punto o bbox, giro, escala…); `parametros` son opciones extra del constructor (la vista previa pide `displayInLayerSwitcher:false`). Los valores vacíos se filtran para no pisar los defectos de la extensión. En las capas alfanuméricas, `geometria` (`{modo:'auto'|'xy'|'wkt'|'geojson'|'ninguna', xField, yField, field}`) elige las columnas de las que sale la geometría, y `capa` permite pasar una capa ya leída para no descargar el fichero otra vez. Iguala el `wrapX` de las fuentes con `window.miWrapX` si está disponible. |
 
 ### `window.CatalogoColocacion`
 

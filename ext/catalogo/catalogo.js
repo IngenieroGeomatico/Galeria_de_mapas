@@ -253,6 +253,40 @@
     return _cargaBigQuery;
   }
 
+  /** Promesa de la carga de ext/alphanumericLayer/alphanumericLayer.js. */
+  let _cargaAlfanumerico = null;
+
+  /**
+   * Carga la capa alfanumérica si no está ya.
+   *
+   * El formulario la necesita para leer las columnas de un CSV/Excel/JSON y
+   * ofrecer la asignación de geometría antes de cargarlo.
+   *
+   * @returns {Promise<Function>} La clase AlphanumericLayer.
+   */
+  function cargarModuloAlfanumerico() {
+    if (window.AlphanumericLayer) return Promise.resolve(window.AlphanumericLayer);
+    if (_cargaAlfanumerico) return _cargaAlfanumerico;
+    _cargaAlfanumerico = new Promise(function (resolver, rechazar) {
+      const base = RUTA_PROPIA || document.baseURI;
+      const s = document.createElement('script');
+      s.src = new URL('../alphanumericLayer/alphanumericLayer.js', base).href;
+      s.async = false;
+      s.onload = function () {
+        if (window.AlphanumericLayer && typeof window.AlphanumericLayer.instalar === 'function') {
+          window.AlphanumericLayer.instalar();
+        }
+        resolver(window.AlphanumericLayer);
+      };
+      s.onerror = function () {
+        _cargaAlfanumerico = null;
+        rechazar(new Error('No se pudo cargar ext/alphanumericLayer/alphanumericLayer.js'));
+      };
+      document.head.appendChild(s);
+    });
+    return _cargaAlfanumerico;
+  }
+
   /**
    * Envuelve contenido suelto de un SVG en un `<svg>` de 24x24, que es la medida
    * en la que vienen dibujados casi todos los iconos.
@@ -498,12 +532,6 @@
   }
 
   /**
-   * Clave de localStorage donde se recuerda con qué catálogo se quedó abierto
-   * el panel, para que al volver al visualizador siga por el mismo.
-   */
-  const CLAVE_SELECCION = 'galeria_catalogo_seleccion';
-
-  /**
    * Clave de localStorage donde se recuerda con qué TIPO DE SERVICIO se quedó el
    * catálogo de la IDEE, para que al volver al visualizador siga por el mismo
    * y no haya que volver a elegirlo.
@@ -535,25 +563,6 @@
       window.localStorage.setItem(CLAVE_SECCION, String(id));
     } catch (e) {
       /* sin localStorage se sigue funcionando, pero no se recuerda */
-    }
-  }
-
-  /** Último catálogo elegido, o null si nunca se eligió o no hay localStorage. */
-  function leerSeleccion() {
-    try {
-      return window.localStorage.getItem(CLAVE_SELECCION) || null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /** Recuerda el catálogo elegido. */
-  function guardarSeleccion(id) {
-    try {
-      window.localStorage.setItem(CLAVE_SELECCION, String(id));
-    } catch (e) {
-      // Sin localStorage (modo privado, permisos) se sigue funcionando, pero
-      // no se recuerda entre recargas.
     }
   }
 
@@ -981,7 +990,7 @@
       this._esTR = (this.options.position === 'TR');
 
       // Estado interno
-      this._tipoSeleccionado = 'idee';
+      this._tipoSeleccionado = null;
       this._urlIntroducida = '';
 
       // Catálogos de esta instancia: los de serie más los que declare el
@@ -1003,12 +1012,12 @@
         }, this);
       }
 
-      // Catálogo con el que se abre el panel. Por orden: el que pida el
-      // visualizador con catalogoPorDefecto, el que se eligió la última vez
-      // (queda en localStorage, para que al volver al visualizador siga por
-      // el mismo) o el primero que haya.
-      const ids = Object.keys(this._catalogos);
-      const guardado = leerSeleccion();
+      // Catálogo con el que se abre el panel: NINGUNO. El catálogo se elige a
+      // mano en el desplegable, y hasta entonces no se pide nada al portal ni
+      // se pinta ninguna lista (la sección WMS de la IDEE son más de mil
+      // servicios: abrir con uno ya cargado gasta peticiones y llena el panel
+      // sin que nadie lo haya pedido). `catalogoPorDefecto` sigue sirviendo
+      // para que un visualizador abra por uno concreto.
       const existe = function (id) {
         if (!id) return false;
         if (this._catalogos[id]) return true;
@@ -1019,14 +1028,11 @@
 
       if (existe(options.catalogoPorDefecto)) {
         this._tipoSeleccionado = options.catalogoPorDefecto;
-      } else if (existe(guardado)) {
-        this._tipoSeleccionado = guardado;
-      } else if (ids.length) {
-        this._tipoSeleccionado = ids[0];
       }
       this._ultimoMensaje = null;
-      // Pestaña activa del panel ('catalogos' o 'capa').
-      this._pestanaActiva = options.pestana || 'catalogos';
+      // Pestaña activa del panel ('capa' o 'catalogos'). Se abre por "Añadir
+      // capa", que es la primera pestaña y la que se usa el 99% de las veces.
+      this._pestanaActiva = options.pestana || 'capa';
       this._pestanas = {};
       this._panelCatalogos = null;
       this._panelCapa = null;
@@ -1064,6 +1070,10 @@
       // 2D/3D, cuando el panel se reconstruye entero.
       this._bigquery = null;
       this._bigqueryEstado = null;
+      // Fichero tabular leído para poder elegir sus columnas de geometría y
+      // su carga en curso (no se serializa: es una instancia de capa).
+      this._alfanumLeida = null;
+      this._alfanumPromesa = null;
 
       // Referencias a la interfaz (se rellenan en _construirUI).
       this._gestorEl = null;
@@ -1283,14 +1293,17 @@
       contents.className = 'm-herramienta-contents catalogo__contenido';
       container.appendChild(contents);
 
-      // --- Pestañas: "Gestión de catálogos" y "Añadir nueva capa" -------
+      // --- Pestañas: "Añadir capa" y "Gestión de catálogos" --------------
+      // "Añadir capa" va primero: es lo que se hace casi siempre (pegar una
+      // URL y cargarla); los catálogos son la otra mitad del plugin y quedan
+      // en segundo lugar.
       const tabs = document.createElement('div');
       tabs.className = 'catalogo__pestanas';
       tabs.setAttribute('role', 'tablist');
       this._pestanas = {};
       [
-        { id: 'catalogos', nombre: 'Catálogos' },
-        { id: 'capa', nombre: 'Añadir capa' }
+        { id: 'capa', nombre: 'Añadir capa' },
+        { id: 'catalogos', nombre: 'Catálogos' }
       ].forEach(function (p) {
         const b = document.createElement('button');
         b.type = 'button';
@@ -1306,6 +1319,7 @@
       contents.appendChild(tabs);
 
       // --- Pestaña 1: selector de catálogo + su sección de gestión --------
+      // (ahora es la segunda pestaña: "Catálogos")
       // El selector arriba y, DEBAJO, la sección donde se gestiona el
       // catálogo elegido: el acordeón de secciones (IDEE) o la lista fija.
       const panelCatalogos = document.createElement('div');
@@ -1325,7 +1339,13 @@
       selector.className = 'catalogo__selector';
       selector.setAttribute('aria-label', 'Tipo de catálogo');
       // Primero los de serie y después los que ha dado de alta el usuario, que
-      // se marcan para que se distinguan de un vistazo.
+      // se marcan para que se distingan de un vistazo. Al principio no hay
+      // ninguno elegido: la opción vacía es la que se ve hasta que se elige
+      // uno, que es lo que evita que el panel arranque consultando un catálogo.
+      const opVacia = document.createElement('option');
+      opVacia.value = '';
+      opVacia.textContent = 'Elige un catálogo…';
+      selector.appendChild(opVacia);
       const opcionesCatalogo = Object.keys(self._catalogos).map(function (id) {
         return { id: id, nombre: self._catalogos[id].nombre, propio: false };
       });
@@ -1339,10 +1359,9 @@
         if (op.id === self._tipoSeleccionado) el.selected = true;
         selector.appendChild(el);
       });
+      if (!self._tipoSeleccionado) selector.value = '';
       selector.addEventListener('change', function () {
-        self._tipoSeleccionado = this.value;
-        // Se recuerda para que al volver al visualizador siga por este.
-        guardarSeleccion(self._tipoSeleccionado);
+        self._tipoSeleccionado = this.value || null;
         // La navegación por el árbol STAC es de un catálogo: al cambiar de
         // catálogo se empieza por su raíz otra vez.
         self._resetPilaStac();
@@ -1375,6 +1394,7 @@
       this._selectorEl = selector;
 
       // --- Pestaña 2: URL + opciones de carga ----------------------------
+      // (va primero en el panel: véase el insertBefore de más abajo)
       const panelCapa = document.createElement('div');
       panelCapa.className = 'catalogo__panel';
       panelCapa.setAttribute('role', 'tabpanel');
@@ -1416,6 +1436,11 @@
 
       contents.appendChild(panelCapa);
       this._panelCapa = panelCapa;
+      // El DOM se deja en el mismo orden que las pestañas ("Añadir capa"
+      // primero) para que el recorrido con Tab y los lectores de pantalla
+      // sigan lo que se ve. Solo hay un panel visible a la vez, así que
+      // moverlo no cambia nada de lo que se pinta.
+      contents.insertBefore(panelCapa, panelCatalogos);
 
       // --- Cuadro de estado (éxitos, avisos y errores) --------------------
       const estado = document.createElement('div');
@@ -1465,7 +1490,14 @@
       cont.innerHTML = '';
 
       const tipo = this._catalogoActual();
-      if (!tipo) return;
+      if (!tipo) {
+        // Sin catálogo elegido no hay nada que pintar ni que pedir: se dice
+        // qué hacer en vez de dejar el hueco en blanco (y no se consulta
+        // ningún portal hasta que el usuario lo pide).
+        this._pintarAviso(cont,
+          'Elige un catálogo en la lista de arriba para ver los servicios que ofrece. No se consulta ninguno hasta que lo elijas.');
+        return;
+      }
 
       const desc = document.createElement('p');
       desc.className = 'catalogo__descripcion';
@@ -1862,8 +1894,6 @@
         self._refrescarSelector();
         self._pintarNuevos();
         self._pintarCatalogo();
-        // El catálogo recién creado pasa a ser el elegido y se recuerda.
-        guardarSeleccion(creado.id);
       });
 
       [['Nombre', nombre], ['Tipo', tipo], ['URL del catálogo', url]].forEach(function (campo) {
@@ -1952,6 +1982,14 @@
       const elegido = this._tipoSeleccionado;
       selector.innerHTML = '';
 
+      // La opción vacía es la de "todavía no hay catálogo elegido": sin ella,
+      // al añadir un catálogo nuevo (único sitio donde se repinta el selector)
+      // volvería a aparecer uno seleccionado por su cuenta.
+      const opVacia = document.createElement('option');
+      opVacia.value = '';
+      opVacia.textContent = 'Elige un catálogo…';
+      selector.appendChild(opVacia);
+
       const opciones = Object.keys(this._catalogos).map(function (id) {
         return { id: id, nombre: this._catalogos[id].nombre, propio: false };
       }, this);
@@ -1966,7 +2004,7 @@
         if (op.id === elegido) el.selected = true;
         selector.appendChild(el);
       });
-      selector.value = elegido;
+      selector.value = elegido || '';
     }
 
     /**
@@ -3655,6 +3693,7 @@ _vistaActualEnGrados() {
       const caja = this._listaEl;
       if (!caja) return;
       const tipo = this._catalogoActual();
+      if (!tipo) return;
       // Ojo: en un catálogo remoto listar() devuelve los servicios declarados en el
       // constructor, que están vacíos. Las entradas de verdad viven en
       // _entradasPropias, que es donde las deja _pintarCatalogoRemoto.
@@ -3712,6 +3751,9 @@ _vistaActualEnGrados() {
       }
 
       this._urlIntroducida = url;
+      // El fichero leído para el selector de geometría era de otra URL.
+      this._alfanumLeida = null;
+      this._alfanumPromesa = null;
       this._analisis = { url: url, tipo: urlTool.detectarTipo(url), capas: [], elegidas: [], nombre: '' };
       this._pintarAviso(cont, 'Analizando el servicio…');
 
@@ -3875,6 +3917,13 @@ _vistaActualEnGrados() {
       filaNombre.appendChild(inputNombre);
       caja.appendChild(filaNombre);
 
+      // --- Geometría (solo ficheros tabulares) -----------------------------
+      // Un CSV, un Excel o un JSON no dicen qué columnas son coordenadas: se
+      // eligen aquí, antes de cargar, y se aplican a la capa al añadirla.
+      if (info.tipo === 'Alphanumeric') {
+        this._pintarGeometria(caja, info);
+      }
+
       // --- Colocación (solo GLB e Imagen) ----------------------------------
       // Estos ficheros no dicen dónde van: el formulario pide el punto o el
       // rectángulo, el giro y la escala. El estado se guarda en _analisis para
@@ -4000,6 +4049,280 @@ _vistaActualEnGrados() {
       boton.disabled = (elegidas === 0);
     }
 
+    /**
+     * Pinta el bloque de geometría de un fichero tabular.
+     *
+     * El modo se guarda en info.geometria (serializable, para el cambio
+     * 2D/3D); las columnas solo se pueden elegir cuando el fichero está leído,
+     * así que se descarga en segundo plano al elegir un modo que las necesite.
+     *
+     * @param {HTMLElement} caja Contenedor de las opciones.
+     * @param {Object} info Análisis en curso.
+     */
+    _pintarGeometria(caja, info) {
+      const self = this;
+      if (!info.geometria || typeof info.geometria !== 'object') {
+        info.geometria = { modo: 'auto', crs: 'EPSG:4326' };
+      }
+      const g = info.geometria;
+
+      const bloque = document.createElement('div');
+      bloque.className = 'catalogo__geo';
+
+      if (!document.getElementById('catalogo-crs-list')) {
+        const dl = document.createElement('datalist');
+        dl.id = 'catalogo-crs-list';
+        ['EPSG:4326','EPSG:4258','EPSG:3857','EPSG:25828','EPSG:25829','EPSG:25830','EPSG:25831','EPSG:32628','EPSG:32629','EPSG:32630','EPSG:32631','EPSG:3035','EPSG:2154','EPSG:27700'].forEach(function (c) {
+          const o = document.createElement('option'); o.value = c; dl.appendChild(o);
+        });
+        document.body.appendChild(dl);
+      }
+
+      const fila = document.createElement('label');
+      fila.className = 'catalogo__campo';
+      const etiqueta = document.createElement('span');
+      etiqueta.className = 'catalogo__campo-etiqueta';
+      etiqueta.textContent = 'Geometría';
+      const sel = document.createElement('select');
+      sel.className = 'catalogo__campo-control';
+      [
+        ['auto', 'Detección automática'],
+        ['xy', 'Longitud / latitud (X/Y)'],
+        ['wkt', 'WKT'],
+        ['geojson', 'GeoJSON'],
+        ['ninguna', 'Ninguna (solo datos)']
+      ].forEach(function (o) {
+        const op = document.createElement('option');
+        op.value = o[0];
+        op.textContent = o[1];
+        if (o[0] === (g.modo || 'auto')) op.selected = true;
+        sel.appendChild(op);
+      });
+      sel.addEventListener('change', function () {
+        g.modo = this.value;
+        // Al cambiar de criterio, la columna de origen de la vez anterior no
+        // vale; las de X/Y solo se conservan si se sigue en ese modo.
+        g.field = null;
+        if (this.value === 'auto' || this.value === 'ninguna') {
+          g.xField = null;
+          g.yField = null;
+        }
+        self._pintarCamposGeometria(bloque, info);
+      });
+      fila.appendChild(etiqueta);
+      fila.appendChild(sel);
+      bloque.appendChild(fila);
+
+      const campos = document.createElement('div');
+      campos.className = 'catalogo__geo-campos';
+      campos.setAttribute('data-geo-campos', '1');
+      bloque.appendChild(campos);
+
+      const aviso = document.createElement('p');
+      aviso.className = 'catalogo__geo-aviso';
+      bloque.appendChild(aviso);
+
+      caja.appendChild(bloque);
+      this._pintarCamposGeometria(bloque, info);
+    }
+
+    /**
+     * Pinta los selectores de columnas del modo de geometría elegido.
+     * @param {HTMLElement} bloque Bloque de geometría.
+     * @param {Object} info Análisis en curso.
+     */
+    _pintarCamposGeometria(bloque, info) {
+      const self = this;
+      if (!bloque || !info) return;
+      const cont = bloque.querySelector('[data-geo-campos]');
+      const aviso = bloque.querySelector('.catalogo__geo-aviso');
+      if (!cont || !aviso) return;
+      const g = info.geometria || (info.geometria = { modo: 'auto' });
+      const modo = g.modo || 'auto';
+      cont.innerHTML = '';
+      aviso.className = 'catalogo__geo-aviso';
+
+      if (modo === 'auto') {
+        aviso.textContent = 'Se buscarán columnas GeoJSON, WKT o lat/lon en el fichero.';
+        return;
+      }
+      if (modo === 'ninguna') {
+        aviso.textContent = 'La capa se carga con los datos, sin geometría.';
+        return;
+      }
+
+      const cache = this._alfanumLeida;
+      if (!cache || cache.url !== info.url) {
+        aviso.textContent = 'Leyendo las columnas del fichero…';
+        this._leerAlfanumerica(info).then(function () {
+          if (self._analisis !== info || !bloque.isConnected) return;
+          self._pintarCamposGeometria(bloque, info);
+        }).catch(function (err) {
+          if (self._analisis !== info || !bloque.isConnected) return;
+          aviso.className = 'catalogo__geo-aviso catalogo__geo-aviso--error';
+          aviso.textContent = 'No se han podido leer las columnas: ' +
+            (err && err.message ? err.message : err) + '. Se usará la detección automática.';
+          // Sin columnas no se puede elegir: se vuelve al modo que no las pide.
+          g.modo = 'auto';
+          g.xField = null;
+          g.yField = null;
+          g.field = null;
+          const select = bloque.querySelector('select');
+          if (select) select.value = 'auto';
+        });
+        return;
+      }
+
+      const campos = (typeof cache.layer.getFieldNames === 'function')
+        ? cache.layer.getFieldNames() : [];
+      const det = (typeof cache.layer.detectarCamposGeo === 'function')
+        ? cache.layer.detectarCamposGeo() : {};
+      if (!campos.length) {
+        aviso.textContent = 'El fichero no tiene columnas que se puedan asignar.';
+        return;
+      }
+
+      const hacerSelect = function (titulo, valor, alCambiar) {
+        const fila = document.createElement('label');
+        fila.className = 'catalogo__campo';
+        const etiqueta = document.createElement('span');
+        etiqueta.className = 'catalogo__campo-etiqueta';
+        etiqueta.textContent = titulo;
+        const select = document.createElement('select');
+        select.className = 'catalogo__campo-control';
+        const vacio = document.createElement('option');
+        vacio.value = '';
+        vacio.textContent = '— elegir columna —';
+        select.appendChild(vacio);
+        campos.forEach(function (c) {
+          const op = document.createElement('option');
+          op.value = c;
+          op.textContent = c;
+          if (c === valor) op.selected = true;
+          select.appendChild(op);
+        });
+        if (valor) select.value = valor;
+        select.addEventListener('change', function () { alCambiar(this.value); });
+        fila.appendChild(etiqueta);
+        fila.appendChild(select);
+        cont.appendChild(fila);
+      };
+
+      if (modo === 'xy') {
+        g.xField = g.xField || det.lonField || det.xField || null;
+        g.yField = g.yField || det.latField || det.yField || null;
+        hacerSelect('Longitud (X)', g.xField, function (v) { g.xField = v || null; });
+        hacerSelect('Latitud (Y)', g.yField, function (v) { g.yField = v || null; });
+        if (g.crs === undefined) g.crs = 'EPSG:4326';
+        const filaCrs = document.createElement('label');
+        filaCrs.className = 'catalogo__campo';
+        const etCrs = document.createElement('span');
+        etCrs.className = 'catalogo__campo-etiqueta';
+        etCrs.textContent = 'SRC (EPSG:...)';
+        const inpCrs = document.createElement('input');
+        inpCrs.className = 'catalogo__campo-control';
+        inpCrs.type = 'text';
+        inpCrs.value = g.crs || 'EPSG:4326';
+        inpCrs.setAttribute('list', 'catalogo-crs-list');
+        inpCrs.addEventListener('change', function () { g.crs = this.value.trim() || 'EPSG:4326'; });
+        filaCrs.appendChild(etCrs);
+        filaCrs.appendChild(inpCrs);
+        cont.appendChild(filaCrs);
+      } else if (modo === 'wkt') {
+        g.field = g.field || det.wktField || null;
+        hacerSelect('Columna WKT', g.field, function (v) { g.field = v || null; });
+        if (g.crs === undefined) g.crs = 'EPSG:4326';
+        const filaCrs = document.createElement('label');
+        filaCrs.className = 'catalogo__campo';
+        const etCrs = document.createElement('span');
+        etCrs.className = 'catalogo__campo-etiqueta';
+        etCrs.textContent = 'SRC por defecto (si el WKT no trae SRID)';
+        const inpCrs = document.createElement('input');
+        inpCrs.className = 'catalogo__campo-control';
+        inpCrs.type = 'text';
+        inpCrs.value = g.crs || 'EPSG:4326';
+        inpCrs.setAttribute('list', 'catalogo-crs-list');
+        inpCrs.addEventListener('change', function () { g.crs = this.value.trim() || 'EPSG:4326'; });
+        filaCrs.appendChild(etCrs);
+        filaCrs.appendChild(inpCrs);
+        cont.appendChild(filaCrs);
+      } else if (modo === 'geojson') {
+        g.field = g.field || det.geometryField || null;
+        hacerSelect('Columna GeoJSON', g.field, function (v) { g.field = v || null; });
+        const avisoFg = document.createElement('p');
+        avisoFg.className = 'catalogo__geo-aviso';
+        avisoFg.textContent = 'GeoJSON-FG (OGC) se reproyecta según su coordRefSys; un GeoJSON clásico se asume EPSG:4326.';
+        cont.appendChild(avisoFg);
+      }
+
+      if (g.xField || g.yField || g.field) {
+        aviso.textContent = 'La geometría de cada registro sale de la columna elegida.';
+      } else {
+        aviso.textContent = 'Elige la columna (o columnas) de las que sale la geometría.';
+      }
+    }
+
+    /**
+     * Descarga y parsea el fichero tabular para poder elegir sus columnas.
+     *
+     * Se guarda en _alfanumLeida para no descargarlo otra vez al cargar.
+     *
+     * @param {Object} info Análisis en curso.
+     * @returns {Promise<Object>} La capa leída.
+     */
+    _leerAlfanumerica(info) {
+      const self = this;
+      const url = info.url;
+      if (this._alfanumLeida && this._alfanumLeida.url === url) {
+        return Promise.resolve(this._alfanumLeida.layer);
+      }
+      if (this._alfanumPromesa && this._alfanumPromesa.url === url) {
+        return this._alfanumPromesa.promesa;
+      }
+      const promesa = cargarModuloAlfanumerico().then(function (AL) {
+        if (!AL) throw new Error('Falta ext/alphanumericLayer/alphanumericLayer.js');
+        return AL.fromURL(url, { name: info.nombre || '' });
+      }).then(function (capa) {
+        self._alfanumLeida = { url: url, layer: capa };
+        self._alfanumPromesa = null;
+        return capa;
+      }).catch(function (err) {
+        self._alfanumPromesa = null;
+        throw err;
+      });
+      this._alfanumPromesa = { url: url, promesa: promesa };
+      return promesa;
+    }
+
+    /**
+     * Comprueba que la geometría elegida se puede aplicar.
+     * @param {Object} info Análisis en curso.
+     * @returns {{ok: boolean, mensaje?: string, geometria?: Object}}
+     */
+    _revisarGeometria(info) {
+      const g = (info && info.geometria) || { modo: 'auto' };
+      const modo = g.modo || 'auto';
+      if (modo === 'xy' && (!g.xField || !g.yField)) {
+        return { ok: false, mensaje: 'Elige las columnas de longitud (X) y latitud (Y) para la geometría.' };
+      }
+      if (modo === 'wkt' && !g.field) {
+        return { ok: false, mensaje: 'Elige la columna que trae el WKT.' };
+      }
+      if (modo === 'geojson' && !g.field) {
+        return { ok: false, mensaje: 'Elige la columna que trae el GeoJSON.' };
+      }
+      return {
+        ok: true,
+        geometria: {
+          modo: modo,
+          xField: g.xField || null,
+          yField: g.yField || null,
+          field: g.field || null,
+          crs: g.crs || 'EPSG:4326'
+        }
+      };
+    }
+
     /** Marca o desmarca una capa del servicio. */
     _alternarCapa(id, marcada) {
       const self = this;
@@ -4062,6 +4385,17 @@ _vistaActualEnGrados() {
         return;
       }
 
+      // Geometría de un fichero tabular: se valida antes de descargar nada.
+      let geometria = null;
+      if (info.tipo === 'Alphanumeric') {
+        const revision = this._revisarGeometria(info);
+        if (!revision.ok) {
+          this._decir(revision.mensaje, 'aviso');
+          return;
+        }
+        geometria = revision.geometria;
+      }
+
       // GLB e Imagen necesitan una colocación válida antes de tocar el mapa.
       let colocacion = null;
       if (this._colocacion) {
@@ -4088,7 +4422,12 @@ _vistaActualEnGrados() {
           tipo: info.tipo,
           capas: info.elegidas,
           nombre: info.nombre,
-          colocacion: colocacion
+          colocacion: colocacion,
+          // Fichero tabular: qué columnas son la geometría y, si ya se leyó
+          // para elegirlas, la capa ya construida (no se descarga dos veces).
+          geometria: geometria,
+          capa: (this._alfanumLeida && this._alfanumLeida.url === info.url)
+            ? this._alfanumLeida.layer : null
         });
         const cuantas = (capas && capas.length) || 0;
         this._decir('Cargada' + (cuantas > 1 ? 's ' + cuantas + ' capas' : '') + ': ' + info.nombre);
@@ -4438,6 +4777,11 @@ _vistaActualEnGrados() {
           // punto o el rectángulo que el usuario acababa de marcar.
           colocacion: this._analisis.colocacion
             ? JSON.parse(JSON.stringify(this._analisis.colocacion))
+            : null,
+          // Geometría elegida para un fichero tabular: es lo que el usuario
+          // acaba de configurar en el formulario.
+          geometria: (this._analisis.geometria && typeof this._analisis.geometria === 'object')
+            ? JSON.parse(JSON.stringify(this._analisis.geometria))
             : null
         } : null,
         bigquery: this._bigquery ? this._bigquery.getState() : (this._bigqueryEstado || null),
@@ -4478,6 +4822,8 @@ _vistaActualEnGrados() {
           aviso: state.analisis.aviso || null,
           colocacion: (state.analisis.colocacion && typeof state.analisis.colocacion === 'object')
             ? state.analisis.colocacion : null,
+          geometria: (state.analisis.geometria && typeof state.analisis.geometria === 'object')
+            ? state.analisis.geometria : null,
           error: null
         };
       }
@@ -4519,7 +4865,7 @@ _vistaActualEnGrados() {
         : null;
       if (!raiz) return;
       const selector = raiz.querySelector('.catalogo__selector');
-      if (selector) selector.value = this._tipoSeleccionado;
+      if (selector) selector.value = this._tipoSeleccionado || '';
       const input = raiz.querySelector('.catalogo__url-input');
       if (input) input.value = this._urlIntroducida;
       const buscador = raiz.querySelector('.catalogo__buscador-input');
@@ -4549,6 +4895,8 @@ _vistaActualEnGrados() {
       this._control = null;
       this._map = null;
       this._bigqueryEstado = null;
+      this._alfanumLeida = null;
+      this._alfanumPromesa = null;
       this._estadoEl = null;
       // Las referencias a la interfaz se sueltan todas: el panel se va con el
       // DOM y dejarlas puestas daría acceso a nodos huérfanos.
