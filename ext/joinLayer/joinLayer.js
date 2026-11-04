@@ -55,6 +55,13 @@
    - Compatible con 2D (OpenLayers) y 3D (Cesium).
    - Compatible con todas las capas vectoriales: WFS, OGCAPIFeatures, KML,
      GeoJSON, FlatGeobuf, GeoParquet, Shapefile, Vector, Alphanumeric, etc.
+   - FlatGeobuf: se fuerza la carga completa del fichero (modo "todas") antes del
+     join, de modo que se usan TODAS las features y no solo las del bbox visible
+     (modo "vista" por defecto).
+   - MVT: no existe un fichero unico que descargar; solo se usan las features de
+     las teselas del viewport actual. En 3D (ext/MVTLayer) getFeatures() devuelve
+     [] y el join no aporta datos. La geometria no se expone, asi que los joins
+     espaciales no tienen correspondencias.
    - Reactivo ante capas vectoriales que cargan datos de forma asíncrona
      o dinámica (WFS, BBoxFeatures, etc.).
    - Contrato de estado 2D/3D (`getState()` / `setState(state, map)`).
@@ -278,8 +285,8 @@
    * Extrae la lista de features normalizadas de cualquier fuente:
    * (WFS, OGC API Features, KML, GeoJSON, FlatGeobuf, Alphanumeric, URL, etc.).
    */
-  function extraerElementosDeFuente(fuente, mapRef) {
-    if (!fuente) return Promise.resolve([]);
+  async function extraerElementosDeFuente(fuente, mapRef) {
+    if (!fuente) return [];
 
     // 1. Si es string con URL (WFS GetFeature, GeoJSON, JSON, CSV)
     if (typeof fuente === 'string' && (/^https?:\/\//i.test(fuente) || /\.(json|geojson|csv|tsv)$/i.test(fuente) || /service=wfs/i.test(fuente))) {
@@ -351,6 +358,47 @@
         };
       });
       return Promise.resolve(elementosAlfanumericos);
+    }
+
+    // 5b. FlatGeobuf: forzar la carga COMPLETA del fichero (modo "todas") antes de
+    // extraer, para que el join use TODAS las features y no solo las del bbox
+    // visible (modo "vista" por defecto de la capa). `_recargar` devuelve promesa.
+    var esFlatGeobuf = !!(fuente && (fuente._flatgeobuf === true ||
+      String(fuente.type || fuente._type || '').toLowerCase() === 'flatgeobuf'));
+    if (esFlatGeobuf) {
+      if (typeof fuente._recargar === 'function') {
+        try {
+          await fuente._recargar('todas', mapRef, true);
+        } catch (e) {
+          console.warn('JoinLayer: no se pudo cargar el FlatGeobuf completo:', e);
+        }
+      } else {
+        console.warn('JoinLayer: capa FlatGeobuf sin _recargar; se usan las features ya cargadas (posiblemente solo el viewport).');
+      }
+      // En 3D (Cesium) setSource() carga el DataSource de forma asincrona: se
+      // espera a que getFeatures() devuelva datos antes de seguir.
+      var esperaFgb = 0;
+      while (esperaFgb < 8000) {
+        var featsFgb = obtenerFeaturesCrudasDeCapa(fuente);
+        if (featsFgb && featsFgb.length) break;
+        await new Promise(function (res) { setTimeout(res, 250); });
+        esperaFgb += 250;
+      }
+    }
+
+    // 5c. MVT: las features solo existen dentro de las teselas del viewport y no
+    // se exponen como features de la capa (ni en 2D ni en 3D). No hay un fichero
+    // unico que descargar, asi que el join NO puede cargar "todo el fichero".
+    // Se documenta la limitacion y se devuelve lo que haya (normalmente []).
+    var esMVT = !!(fuente && String(fuente.type || fuente._type || '').toLowerCase() === 'mvt');
+    if (!esMVT && fuente && fuente.getImpl) {
+      try {
+        var implMvt = fuente.getImpl();
+        if (implMvt && implMvt.lector && typeof implMvt.lector.capas !== 'undefined') esMVT = true;
+      } catch (e) { /* no es MVT */ }
+    }
+    if (esMVT) {
+      console.warn('JoinLayer: las capas MVT solo exponen las features de las teselas del viewport actual (no existe un fichero unico que descargar); el join se limita a esas features. En 3D (ext/MVTLayer) getFeatures() devuelve [] y el join no aporta datos. La geometria no se expone, por lo que los joins espaciales no tendran correspondencias.');
     }
 
     // 6. Si es una capa vectorial cualquiera de la API (WFS, OGCAPI, KML, GeoJSON, Vector, FlatGeobuf, etc.)
@@ -820,6 +868,19 @@
           if (raw.properties && typeof raw.properties === 'object') {
             Object.assign(raw.properties, props);
           }
+          // MVT del bundle (y otras features con getAttributes()): inyectar en el
+          // objeto de atributos devuelto por getAttributes().
+          try {
+            if (typeof raw.getAttributes === 'function') {
+              var attrsMvt = raw.getAttributes();
+              if (attrsMvt && typeof attrsMvt === 'object') Object.assign(attrsMvt, props);
+            }
+          } catch (e) { /* noop */ }
+          try {
+            if (typeof raw.setAttribute === 'function') {
+              for (var kk in props) { try { raw.setAttribute(kk, props[kk]); } catch (e2) {} }
+            }
+          } catch (e) { /* noop */ }
         }
         return true;
       }
@@ -1061,9 +1122,20 @@
       }
 
       toGeoJSON() {
+        // Se excluye `rawFeature` (puede ser un objeto nativo no clonable, con
+        // referencias circulares, como las features MVT del bundle) para evitar
+        // desbordamiento de pila en clonarSimple.
+        var seguros = (this._joinedFeatures || []).map(function (f) {
+          return {
+            type: f.type || 'Feature',
+            id: f.id,
+            properties: clonarSimple(f.properties || {}),
+            geometry: clonarSimple(f.geometry || null)
+          };
+        });
         return {
           type: 'FeatureCollection',
-          features: clonarSimple(this._joinedFeatures)
+          features: seguros
         };
       }
 

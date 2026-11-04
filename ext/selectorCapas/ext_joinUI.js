@@ -52,11 +52,25 @@
     if (v === null || v === undefined) return '';
     return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-  window.__montarJoinFichaImpl = function (panel, capa, overlay, map) {
+  window.__montarJoinFichaImpl = async function (panel, capa, overlay, map) {
     const esc = escHtml;
     const cont = panel.querySelector('#ls-join-container');
     if (!cont) return;
     const capaId = capa.idLayer;
+    // FlatGeobuf arranca en modo "vista": se fuerza la carga completa del
+    // fichero para que la ficha y el join vean TODAS las features.
+    if (capa && capa._flatgeobuf === true && typeof capa._recargar === 'function') {
+      try { await capa._recargar('todas', map, true); } catch (e) { /* seguir con lo disponible */ }
+      // Esperar a que las features esten disponibles (3D: carga asincrona).
+      let espera = 0;
+      while (espera < 8000) {
+        let fs = [];
+        try { fs = (typeof capa.getFeatures === 'function') ? (capa.getFeatures() || []) : []; } catch (e) { fs = []; }
+        if (fs.length) break;
+        await new Promise(function (r) { setTimeout(r, 250); });
+        espera += 250;
+      }
+    }
     const targetFields = camposDe(capa);
 
     function obtenerCapasSeleccionables() {
@@ -170,9 +184,20 @@
       cont.innerHTML = html;
 
       const srcSel = cont.querySelector('#ls-join-source');
-      srcSel.addEventListener('change', function () {
+      srcSel.addEventListener('change', async function () {
         const id = this.value;
         const srcLayer = candidatos.find(function (l) { return String(l.idLayer) === String(id); });
+        if (srcLayer && srcLayer._flatgeobuf === true && typeof srcLayer._recargar === 'function') {
+          try { await srcLayer._recargar('todas', map, true); } catch (e) { /* seguir con lo disponible */ }
+          let esperaSrc = 0;
+          while (esperaSrc < 8000) {
+            let fs = [];
+            try { fs = (typeof srcLayer.getFeatures === 'function') ? (srcLayer.getFeatures() || []) : []; } catch (e) { fs = []; }
+            if (fs.length) break;
+            await new Promise(function (r) { setTimeout(r, 250); });
+            esperaSrc += 250;
+          }
+        }
         const key2 = cont.querySelector('#ls-join-key2');
         const cols = srcLayer ? camposDe(srcLayer) : [];
         key2.innerHTML = cols.length
