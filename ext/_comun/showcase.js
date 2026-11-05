@@ -301,6 +301,25 @@
       log('No hay miPlugin_' + ext + ' (puede ser una capa o utilidad).');
     }
 
+    // MVT en 3D requiere instalar su fachada antes de crear la capa.
+    if (ext === 'MVTLayer' && api.impl && api.impl.cesium && api.plugin && api.plugin.miPlugin_MVTLayer) {
+      try { map.addPlugin(new api.plugin.miPlugin_MVTLayer()); log('miPlugin_MVTLayer instalado (3D).'); } catch (e) { log('MVTLayer plugin: ' + (e && e.message ? e.message : e)); }
+    }
+
+    // Ejecutar automáticamente el constructor para cargar la capa de ejemplo.
+    setTimeout(function () {
+      if (!map || !constructorCode) return;
+      const code = constructorCode.value;
+      if (!code || !code.trim()) return;
+      try {
+        const fn = new Function('map', 'mapajs', 'IDEE', 'M', code);
+        fn(map, map, window.IDEE, window.M);
+        log('Capa de ejemplo cargada automáticamente.');
+      } catch (err) {
+        log('Auto-carga falló: ' + (err && err.message ? err.message : err));
+      }
+    }, 500);
+
     loading.style.display = 'none';
   }
 
