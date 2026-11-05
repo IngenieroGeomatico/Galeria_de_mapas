@@ -91,7 +91,18 @@
       return 'const capa = new IDEE.layer.MVT({\n  url: ' + JSON.stringify(v.url || '') + ',\n  layers: ' + JSON.stringify(v.layers || 'municipio') + ',\n  name: ' + JSON.stringify(v.name || 'MVT') + '\n});\nmapajs.addLayers(capa);';
     }
     // Genérico: plugin miPlugin_<ext>
-    return 'const plugin = new IDEE.plugin.miPlugin_' + ext + '({ position: "TL", collapsible: true, order: 1 });\nmapajs.addPlugin(plugin);';
+    const color1 = { active: v.color1_active || '#ffffff', deactive: v.color1_deactive || 'orangered' };
+    const color2 = { active: v.color2_active || '#71A7D3', deactive: v.color2_deactive || '#ffffff' };
+    const color3 = { active: v.color3_active || '#71A7D3', deactive: v.color3_deactive || '#ffffff' };
+    const opts = {
+      position: v.position || 'TL',
+      collapsible: v.collapsible !== false,
+      order: (v.order != null ? Number(v.order) : 1),
+      color1: color1,
+      color2: color2,
+      color3: color3
+    };
+    return 'const plugin = new IDEE.plugin.miPlugin_' + ext + '(' + JSON.stringify(opts) + ');\nmapajs.addPlugin(plugin);';
   }
 
   function log(msg) {
@@ -143,8 +154,23 @@
     })
     .catch(function () { descExt.textContent = 'No se pudo leer el README.'; });
 
+  // Parámetros comunes a los plugins basados en miPlugin_base.
+  const PLUGIN_PARAMS = [
+    { name: 'position', type: 'select', default: 'TL', label: 'Posición', options: ['TL', 'TR', 'BL', 'BR'] },
+    { name: 'collapsible', type: 'boolean', default: true, label: 'Colapsable' },
+    { name: 'order', type: 'number', default: 1, label: 'Orden' },
+    { name: 'color1_active', type: 'text', default: '#ffffff', label: 'Color1 activo' },
+    { name: 'color1_deactive', type: 'text', default: 'orangered', label: 'Color1 inactivo' },
+    { name: 'color2_active', type: 'text', default: '#71A7D3', label: 'Color2 activo' },
+    { name: 'color2_deactive', type: 'text', default: '#ffffff', label: 'Color2 inactivo' }
+  ];
+
   // Renderizar formulario de parámetros si hay definición.
-  const defs = PARAMS[ext];
+  let defs = PARAMS[ext];
+  const api = window.IDEE || window.M;
+  if (!defs && api && api.plugin && typeof api.plugin['miPlugin_' + ext] === 'function') {
+    defs = PLUGIN_PARAMS;
+  }
   if (defs && formFields) {
     formFields.innerHTML = '';
     defs.forEach(function (d) {
