@@ -251,7 +251,7 @@
   s.async = false;
   s.onload = function () {
     log('Script cargado: ' + ext + '.js');
-    iniciarMapa(ext);
+    window.mapa();
   };
   s.onerror = function () {
     log('ERROR: no se pudo cargar ' + ext + '.js');
@@ -260,7 +260,7 @@
   };
   document.head.appendChild(s);
 
-  function iniciarMapa(ext) {
+  window.mapa = function () {
     const api = window.IDEE || window.M;
     if (!api) { log('API no disponible'); loading.style.display = 'none'; return; }
 
@@ -284,7 +284,7 @@
       if (typeof prepararFondo === 'function') prepararFondo();
       const apiP = window.IDEE || window.M;
       if (apiP.plugin && apiP.plugin.miPlugin_cambioImpl) {
-        map.addPlugin(new apiP.plugin.miPlugin_cambioImpl({ buttonTitle: 'Cambiar entre 2D y 3D', mapsFunction: function () { location.reload(); }, shareView: true }));
+        map.addPlugin(new apiP.plugin.miPlugin_cambioImpl({ buttonTitle: 'Cambiar entre 2D y 3D', mapsFunction: window.mapa, shareView: true }));
       }
       if (typeof crearCapasBaseTipos === 'function' && apiP.plugin && apiP.plugin.miPlugin_baseLayer) {
         map.addPlugin(new apiP.plugin.miPlugin_baseLayer({ layers: crearCapasBaseTipos(), rows: 1, title: 'Capas base', order: 0 }));
@@ -334,6 +334,7 @@
     }, 500);
 
     loading.style.display = 'none';
+    return map;
   }
 
   // Colapsar/expandir secciones.
