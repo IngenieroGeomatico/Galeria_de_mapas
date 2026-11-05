@@ -21,23 +21,33 @@
       <div id="loading" class="showcase-loading">Cargando…</div>
     </div>
     <aside class="showcase-side">
-      <h2>Extensión: <span id="nombreExt"></span></h2>
-      <p><a id="linkReadme" href="#" target="_blank" rel="noopener">📄 Ver README</a></p>
-      <h2>Descripción</h2>
-      <p id="descExt" class="aviso">Cargando metadatos…</p>
-      <h2>Ejemplo de construcción</h2>
-      <pre id="ejemplo"></pre>
-      <h2>Parámetros (editable)</h2>
-      <form id="formParams">
-        <label>Constructor (JS):</label>
-        <textarea id="constructorCode" rows="6"></textarea>
-        <div class="form-actions">
-          <button type="submit">Reconstruir</button>
-          <button type="button" id="btnReset">Restaurar ejemplo</button>
-        </div>
-      </form>
-      <h2>Consola</h2>
-      <pre id="consola"></pre>
+      <h2 class="colapsable" data-target="sec-nombre">Extensión: <span id="nombreExt"></span> <span class="flecha">▾</span></h2>
+      <div id="sec-nombre" class="seccion-contenido">
+        <p><a id="linkReadme" href="#" target="_blank" rel="noopener">📄 Ver README</a></p>
+      </div>
+      <h2 class="colapsable" data-target="sec-desc">Descripción <span class="flecha">▾</span></h2>
+      <div id="sec-desc" class="seccion-contenido">
+        <p id="descExt" class="aviso">Cargando metadatos…</p>
+      </div>
+      <h2 class="colapsable" data-target="sec-ejemplo">Ejemplo de construcción <span class="flecha">▾</span></h2>
+      <div id="sec-ejemplo" class="seccion-contenido">
+        <pre id="ejemplo"></pre>
+      </div>
+      <h2 class="colapsable" data-target="sec-params">Parámetros (editable) <span class="flecha">▾</span></h2>
+      <div id="sec-params" class="seccion-contenido">
+        <form id="formParams">
+          <label>Constructor (JS):</label>
+          <textarea id="constructorCode" rows="10"></textarea>
+          <div class="form-actions">
+            <button type="submit">Reconstruir</button>
+            <button type="button" id="btnReset">Restaurar ejemplo</button>
+          </div>
+        </form>
+      </div>
+      <h2 class="colapsable" data-target="sec-consola">Consola <span class="flecha">▾</span></h2>
+      <div id="sec-consola" class="seccion-contenido">
+        <pre id="consola"></pre>
+      </div>
     </aside>
   </div>
   <script src="./showcase.js"></script>

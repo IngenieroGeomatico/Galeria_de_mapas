@@ -118,6 +118,19 @@
     loading.style.display = 'none';
   }
 
+  // Colapsar/expandir secciones.
+  document.querySelectorAll('.colapsable').forEach(function (h) {
+    h.style.cursor = 'pointer';
+    h.addEventListener('click', function () {
+      const target = document.getElementById(h.getAttribute('data-target'));
+      if (!target) return;
+      const oculto = target.style.display === 'none';
+      target.style.display = oculto ? '' : 'none';
+      const flecha = h.querySelector('.flecha');
+      if (flecha) flecha.textContent = oculto ? '▾' : '▸';
+    });
+  });
+
   // Reconstruir a partir del código editado.
   form.addEventListener('submit', function (e) {
     e.preventDefault();
