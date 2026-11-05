@@ -129,18 +129,20 @@
         const parrafo = t.split(/\n\s*\n/)[0] || t.slice(0, 400);
         descExt.textContent = parrafo.replace(/^#+\s*/gm, '').slice(0, 600);
         descExt.classList.remove('aviso');
-        let m = t.match(/```(?:javascript|js)\n([\s\S]*?)```/);
-        if (!m) m = t.match(/```\n([\s\S]*?)```/);
-        let candidato = m ? m[1].trim() : '';
-        const pareceMarkdown = /(^|\n)#{1,6}\s|\n\|/.test(candidato) || !/[;{}()]/.test(candidato);
-        if (m && !pareceMarkdown) {
-          codigoEjemplo = candidato;
+        // Si la extensión tiene parámetros registrados, el ejemplo muestra
+        // TODOS los parámetros de construcción (no el snippet reducido del README).
+        const defsRegistrados = PARAMS[ext] || ( (window.IDEE || window.M).plugin && (window.IDEE || window.M).plugin['miPlugin_' + ext] ? PLUGIN_PARAMS : null );
+        if (defsRegistrados) {
+          const vals = {};
+          defsRegistrados.forEach(function (d) { vals[d.name] = d.default; });
+          codigoEjemplo = plantillaConstructor(ext, vals);
         } else {
-          const defs = PARAMS[ext];
-          if (defs) {
-            const vals = {};
-            defs.forEach(function (d) { vals[d.name] = d.default; });
-            codigoEjemplo = plantillaConstructor(ext, vals);
+          let m = t.match(/```(?:javascript|js)\n([\s\S]*?)```/);
+          if (!m) m = t.match(/```\n([\s\S]*?)```/);
+          let candidato = m ? m[1].trim() : '';
+          const pareceMarkdown = /(^|\n)#{1,6}\s|\n\|/.test(candidato) || !/[;{}()]/.test(candidato);
+          if (m && !pareceMarkdown) {
+            codigoEjemplo = candidato;
           } else {
             codigoEjemplo = 'const plugin = new IDEE.plugin.miPlugin_' + ext + '({ position: "TL", collapsible: true, order: 1 });\nmapajs.addPlugin(plugin);';
           }
