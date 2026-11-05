@@ -206,12 +206,28 @@
   function instalar() {
     const IDEE = api();
     if (!IDEE || !IDEE.layer) return false;
-    if (!IDEE.layer.MBTiles2) {
-      IDEE.layer.MBTiles2 = function (o, lo) { return crearCapa(Object.assign({}, o || {}, lo || {})); };
+    // Guardar la implementación nativa (si existe) antes de sobrescribirla.
+    if (IDEE.layer.MBTiles && !IDEE.layer.MBTilesNative && IDEE.layer.MBTiles !== crearCapa) {
+      IDEE.layer.MBTilesNative = IDEE.layer.MBTiles;
     }
-    IDEE.layer.MBTilesTiled = IDEE.layer.MBTiles2;
-    if (window.IDEE && window.IDEE.layer) { window.IDEE.layer.MBTiles2 = IDEE.layer.MBTiles2; window.IDEE.layer.MBTilesTiled = IDEE.layer.MBTiles2; }
-    if (window.M && window.M.layer) { window.M.layer.MBTiles2 = IDEE.layer.MBTiles2; window.M.layer.MBTilesTiled = IDEE.layer.MBTiles2; }
+    const factory = function (o, lo) { return crearCapa(Object.assign({}, o || {}, lo || {})); };
+    // Sobrescribir la capa nativa para que todos los visualizadores usen la
+    // versión teselada sin cambiar su código.
+    IDEE.layer.MBTiles = factory;
+    IDEE.layer.MBTiles2 = factory;
+    IDEE.layer.MBTilesTiled = factory;
+    if (window.IDEE && window.IDEE.layer) {
+      window.IDEE.layer.MBTiles = factory;
+      window.IDEE.layer.MBTiles2 = factory;
+      window.IDEE.layer.MBTilesTiled = factory;
+      if (!window.IDEE.layer.MBTilesNative && IDEE.layer.MBTilesNative) window.IDEE.layer.MBTilesNative = IDEE.layer.MBTilesNative;
+    }
+    if (window.M && window.M.layer) {
+      window.M.layer.MBTiles = factory;
+      window.M.layer.MBTiles2 = factory;
+      window.M.layer.MBTilesTiled = factory;
+      if (!window.M.layer.MBTilesNative && IDEE.layer.MBTilesNative) window.M.layer.MBTilesNative = IDEE.layer.MBTilesNative;
+    }
     if (!window.mbtilesLayer) window.mbtilesLayer = {};
     window.mbtilesLayer.crear = crearCapa;
     return true;
