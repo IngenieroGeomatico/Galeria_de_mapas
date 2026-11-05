@@ -59,6 +59,24 @@
     if (v === null || v === undefined) return '';
     return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+
+  function esImplCesium() {
+    try {
+      const m = window.mapajs || null;
+      const impl = m && typeof m.getMapImpl === 'function' ? m.getMapImpl() : null;
+      return !!(impl && impl.scene && impl.scene.camera);
+    } catch (e) { return false; }
+  }
+
+  function esCapaMVT(l) {
+    if (!l) return false;
+    try { if (String(l.type || l._type || '').toLowerCase() === 'mvt') return true; } catch (e) {}
+    try {
+      const impl = (typeof l.getImpl === 'function') ? l.getImpl() : null;
+      if (impl && impl.lector && typeof impl.lector.capas !== 'undefined') return true;
+    } catch (e) {}
+    return false;
+  }
   window.__montarJoinFichaImpl = async function (panel, capa, overlay, map) {
     const esc = escHtml;
     const cont = panel.querySelector('#ls-join-container');
@@ -112,6 +130,12 @@
       html += '<span class="ls-join-banner-badge">Join</span>';
       html += '<span class="ls-join-banner-texto">Combina los atributos de esta capa con los de otra capa del mapa.</span>';
       html += '</div></div>';
+
+      if (esImplCesium() && (esCapaMVT(capa) || candidatos.some(esCapaMVT))) {
+        html += '<div class="ls-ficha-aviso ls-ficha-aviso--aviso" style="margin-bottom:10px;">';
+        html += 'Aviso: una o varias capas son MVT. En 3D (Cesium) las capas MVT no exponen features y el join devolverá 0 coincidencias. Cambia a 2D para usarlas.';
+        html += '</div>';
+      }
 
       html += '<div class="ls-join-mode-pills">';
       html += '<button type="button" class="ls-join-mode-pill active" data-mode="attribute" onclick="window._joinSetMode(\'attribute\')">Por atributo</button>';

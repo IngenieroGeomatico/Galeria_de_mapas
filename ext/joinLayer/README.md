@@ -237,7 +237,19 @@ En modo `inplace` se usa **una sola** instancia (`JoinLayer.apply` crea, recalcu
 ### 8.4. FlatGeobuf y MVT
 
 - **FlatGeobuf**: se fuerza la carga completa (`_recargar('todas')`) antes del join. En 3D se espera a que `getFeatures()` devuelva datos.
-- **MVT**: solo existen las features de las teselas del viewport. En 3D `getFeatures()` devuelve `[]`, así que el join no aporta datos y los joins espaciales no encuentran correspondencias.
+- **MVT**: solo existen las features de las teselas del viewport. En 3D `getFeatures()` devuelve `[]`, así que el join no aporta datos y los joins espaciales no encuentran correspondencias. La ficha del selector muestra un aviso cuando la capa de origen (o la base) es MVT y el mapa está en 3D.
+
+### 8.6. Tabla de compatibilidad por tipo de capa
+
+| Tipo de capa | 2D (OpenLayers) | 3D (Cesium) | Modo `vista` | Modo `todas` | Notas |
+|---|---|---|---|---|---|
+| GeoJSON / Vector | Sí | Sí | n/a | n/a | Fuente síncrona; sin recálculo al mover el mapa. |
+| WFS / OGC API Features | Sí | Sí | Sí (bboxFeatures) | Sí | Recálculo al cambiar el viewport. |
+| KML | Sí | Sí | n/a | n/a | Carga completa al añadirse. |
+| FlatGeobuf | Sí | Sí | Sí (forzado a `todas`) | Sí | Se fuerza `_recargar('todas')` antes del join. |
+| GeoParquet | Sí | Sí | Sí | Sí | Carga asíncrona; reintento acotado. |
+| Alphanumeric / CSV / BigQuery | Sí | Sí | n/a | n/a | Sin geometría; solo joins por atributo. |
+| MVT | Sí (teselas del viewport) | No (`getFeatures() === []`) | Sí (teselas visibles) | No existe fichero único | La ficha avisa en 3D. |
 
 ### 8.5. El join no aparece tras el cambio 2D/3D
 

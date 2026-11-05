@@ -1090,6 +1090,21 @@
 
           var props = item.properties || {};
 
+          // Idempotencia: si este join ya se aplicó antes sobre la misma
+          // feature, se borran las claves inyectadas en la pasada anterior para
+          // que no queden columnas huérfanas si la capa 2 cambió de esquema.
+          try {
+            if (Array.isArray(raw._joinInjectedKeys)) {
+              for (var j = 0; j < raw._joinInjectedKeys.length; j++) {
+                var prev = raw._joinInjectedKeys[j];
+                try { if (typeof raw.unset === 'function') raw.unset(prev); } catch (e) { /* noop */ }
+                try { if (raw.attributes && Object.prototype.hasOwnProperty.call(raw.attributes, prev)) delete raw.attributes[prev]; } catch (e) { /* noop */ }
+                try { if (raw.properties && Object.prototype.hasOwnProperty.call(raw.properties, prev)) delete raw.properties[prev]; } catch (e) { /* noop */ }
+                try { if (typeof raw.getAttributes === 'function') { var a = raw.getAttributes(); if (a && Object.prototype.hasOwnProperty.call(a, prev)) delete a[prev]; } } catch (e) { /* noop */ }
+              }
+            }
+          } catch (e) { /* noop */ }
+
           // OpenLayers feature
           if (typeof raw.setProperties === 'function') {
             try { raw.setProperties(props); } catch (e) { /* noop */ }
@@ -1118,6 +1133,16 @@
             if (typeof raw.setAttribute === 'function') {
               for (var kk in props) { try { raw.setAttribute(kk, props[kk]); } catch (e2) {} }
             }
+          } catch (e) { /* noop */ }
+
+          // Registrar las claves inyectadas para poder limpiarlas en la siguiente
+          // pasada (idempotencia de `applyToTarget`).
+          try {
+            var clavesInyectadas = [];
+            for (var pk in props) {
+              if (Object.prototype.hasOwnProperty.call(props, pk)) clavesInyectadas.push(pk);
+            }
+            raw._joinInjectedKeys = clavesInyectadas;
           } catch (e) { /* noop */ }
         }
         return true;
