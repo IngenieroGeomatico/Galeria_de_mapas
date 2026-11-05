@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Muestra de extensión — Galería de Mapas</title>
   <link rel="stylesheet" href="./showcase.css">
-  <!-- API-IDEE (OpenLayers por defecto) -->
   <link href="../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet" />
   <script src="../../js/api-idee/browser-polyfill.js"></script>
   <script src="../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
@@ -22,10 +21,21 @@
       <div id="loading" class="showcase-loading">Cargando…</div>
     </div>
     <aside class="showcase-side">
-      <h2>Extensión</h2>
-      <p id="nombreExt"></p>
+      <h2>Extensión: <span id="nombreExt"></span></h2>
+      <p><a id="linkReadme" href="#" target="_blank" rel="noopener">📄 Ver README</a></p>
       <h2>Descripción</h2>
       <p id="descExt" class="aviso">Cargando metadatos…</p>
+      <h2>Ejemplo de construcción</h2>
+      <pre id="ejemplo"></pre>
+      <h2>Parámetros (editable)</h2>
+      <form id="formParams">
+        <label>Constructor (JS):</label>
+        <textarea id="constructorCode" rows="6"></textarea>
+        <div class="form-actions">
+          <button type="submit">Reconstruir</button>
+          <button type="button" id="btnReset">Restaurar ejemplo</button>
+        </div>
+      </form>
       <h2>Consola</h2>
       <pre id="consola"></pre>
     </aside>
