@@ -136,7 +136,6 @@
         if (m && !pareceMarkdown) {
           codigoEjemplo = candidato;
         } else {
-          // Usar plantilla si hay parámetros registrados.
           const defs = PARAMS[ext];
           if (defs) {
             const vals = {};
@@ -147,7 +146,10 @@
           }
         }
         ejemplo.textContent = codigoEjemplo;
-        constructorCode.value = codigoEjemplo;
+        // Si no hay formulario de parámetros, el textarea toma el ejemplo.
+        if (!PARAMS[ext] && !(window.IDEE || window.M).plugin?.['miPlugin_' + ext]) {
+          constructorCode.value = codigoEjemplo;
+        }
       } else {
         descExt.textContent = 'Sin README.md en la extensión.';
       }
@@ -218,6 +220,11 @@
     }
     formFields.addEventListener('input', actualizarCodigo);
     formFields.addEventListener('change', actualizarCodigo);
+    // Inicializar el textarea con TODOS los parámetros del formulario.
+    actualizarCodigo();
+  } else {
+    // Sin formulario registrado: usar el ejemplo como código editable.
+    constructorCode.value = codigoEjemplo;
   }
 
   // Cargar CSS de la extensión si existe.
