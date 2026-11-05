@@ -376,7 +376,15 @@
     const defsActuales = PARAMS[ext] || ((window.IDEE || window.M).plugin && (window.IDEE || window.M).plugin['miPlugin_' + suffix] ? PLUGIN_PARAMS : null);
     if (defsActuales) {
       const vals = {};
-      defsActuales.forEach(function (d) { vals[d.name] = d.default; });
+      defsActuales.forEach(function (d) {
+        vals[d.name] = d.default;
+        const el = formFields.querySelector('[data-param="' + d.name + '"]');
+        if (el) {
+          if (d.type === 'boolean') el.checked = !!d.default;
+          else if (d.type === 'select') el.value = (d.default == null ? '' : d.default);
+          else el.value = (d.default == null ? '' : d.default);
+        }
+      });
       constructorCode.value = plantillaConstructor(ext, vals);
     } else if (codigoEjemplo) {
       constructorCode.value = codigoEjemplo;
