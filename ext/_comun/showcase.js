@@ -309,7 +309,7 @@
     // Ejecutar automáticamente el constructor para cargar la capa de ejemplo.
     setTimeout(function () {
       if (!map || !constructorCode) return;
-      const code = constructorCode.value;
+      const code = constructorCode.value + '\\n; try { window.__showcaseInstancia = (typeof capa !== "undefined" ? capa : (typeof plugin !== "undefined" ? plugin : null)); } catch (e) {}';
       if (!code || !code.trim()) return;
       try {
         const fn = new Function('map', 'mapajs', 'IDEE', 'M', code);
@@ -336,11 +336,20 @@
     });
   });
 
-  // Reconstruir a partir del código editado.
+  // Reconstruir a partir del código editado: primero se elimina la instancia
+  // anterior (capa o plugin) para evitar duplicados.
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     if (!map) { log('Mapa no listo'); return; }
-    const code = constructorCode.value;
+    // Eliminar instancia anterior.
+    if (window.__showcaseInstancia) {
+      try { if (typeof window.__showcaseInstancia.destroy === 'function') window.__showcaseInstancia.destroy(); } catch (err) { /* noop */ }
+      try { map.removeLayers(window.__showcaseInstancia); } catch (err) { /* noop */ }
+      try { map.removePlugin(window.__showcaseInstancia); } catch (err) { /* noop */ }
+      window.__showcaseInstancia = null;
+      log('Instancia anterior eliminada.');
+    }
+    const code = constructorCode.value + '\\n; try { window.__showcaseInstancia = (typeof capa !== "undefined" ? capa : (typeof plugin !== "undefined" ? plugin : null)); } catch (e) {}';
     try {
       const fn = new Function('map', 'mapajs', 'IDEE', 'M', code);
       fn(map, map, window.IDEE, window.M);
