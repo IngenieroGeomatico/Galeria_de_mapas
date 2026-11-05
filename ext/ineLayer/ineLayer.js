@@ -41,6 +41,59 @@
   const BASE_URL = 'https://servicios.ine.es/wstempus/js/es';
 
   /**
+   * Filtra las series devueltas por el INE según un criterio del usuario.
+   * `criterio` puede ser:
+   *   - null/undefined: devuelve todas.
+   *   - string o RegExp: se aplica sobre el campo `Nombre` de la serie.
+   *   - array de strings/RegExp: se mantiene la serie si coincide con alguno.
+   *   - función: recibe la serie y devuelve boolean.
+   * @param {*} data Respuesta del INE.
+   * @param {*} criterio
+   * @returns {Array}
+   */
+  function filtrarSeries(data, criterio) {
+    if (!Array.isArray(data)) return data;
+    if (criterio == null || criterio === '') return data;
+    let fn;
+    if (typeof criterio === 'function') {
+      fn = criterio;
+    } else {
+      const lista = Array.isArray(criterio) ? criterio : [criterio];
+      fn = function (serie) {
+        const nombre = (serie && serie.Nombre) ? String(serie.Nombre) : '';
+        return lista.some(function (c) {
+          if (c instanceof RegExp) return c.test(nombre);
+          if (typeof c === 'string') return nombre.toLowerCase().indexOf(c.toLowerCase()) !== -1;
+          return false;
+        });
+      };
+    }
+    return data.filter(fn);
+  }
+
+  /**
+   * Mantiene solo las columnas indicadas en cada registro (además de las
+   * obligatorias). `columnas` es un array de nombres de campo.
+   * @param {Array<Object>} registros
+   * @param {Array<string>|null} columnas
+   * @returns {Array<Object>}
+   */
+  function filtrarColumnas(registros, columnas) {
+    if (!Array.isArray(columnas) || !columnas.length) return registros;
+    const permitidas = {};
+    columnas.forEach(function (c) { permitidas[String(c)] = true; });
+    // Siempre se conservan los campos identificadores básicos si existen.
+    ['serie', 'periodo', 'valor', 'secreto'].forEach(function (c) { permitidas[c] = true; });
+    return registros.map(function (r) {
+      const out = {};
+      for (const k in r) {
+        if (Object.prototype.hasOwnProperty.call(r, k) && permitidas[k]) out[k] = r[k];
+      }
+      return out;
+    });
+  }
+
+  /**
    * Descarga una tabla de INEbase y la convierte en una capa Alphanumeric.
    * @param {string|number} tablaId Identificador de la tabla (ej. '67301').
    * @param {Object} [opciones]
@@ -55,9 +108,17 @@
     if (!id) throw new Error('INE: falta el identificador de tabla');
 
     let url = BASE_URL + '/DATOS_TABLA/' + encodeURIComponent(id);
-    if (o.nult != null && o.nult !== '') {
-      url += '?nult=' + encodeURIComponent(o.nult);
+    const params = [];
+    if (o.nult != null && o.nult !== '') params.push('nult=' + encodeURIComponent(o.nult));
+    if (o.date) params.push('date=' + encodeURIComponent(o.date));
+    if (o.tip) params.push('tip=' + encodeURIComponent(o.tip));
+    if (o.det != null && o.det !== '') params.push('det=' + encodeURIComponent(o.det));
+    if (o.tv) {
+      const tvs = Array.isArray(o.tv) ? o.tv : String(o.tv).split(',');
+      tvs.forEach(function (t) { if (t) params.push('tv=' + encodeURIComponent(String(t).trim())); });
     }
+    if (o.gv) params.push('gv=' + encodeURIComponent(o.gv));
+    if (params.length) url += '?' + params.join('&');
 
     const res = await fetch(url, { method: 'GET' });
     if (!res.ok) throw new Error('INE: error HTTP ' + res.status + ' al pedir ' + url);
@@ -69,10 +130,11 @@
     }
 
     const registros = [];
-    if (Array.isArray(data)) {
+    const seriesFuente = filtrarSeries(data, o.series);
+    if (Array.isArray(seriesFuente)) {
       if (o.pivot) {
         // Un registro por serie, con una columna por periodo.
-        for (const serie of data) {
+        for (const serie of seriesFuente) {
           if (!serie || !Array.isArray(serie.Data)) continue;
           const rec = { serie: serie.Nombre };
           for (const dp of serie.Data) {
@@ -84,7 +146,7 @@
         }
       } else {
         // Forma larga: un registro por (serie, periodo).
-        for (const serie of data) {
+        for (const serie of seriesFuente) {
           if (!serie || !Array.isArray(serie.Data)) continue;
           for (const dp of serie.Data) {
             if (!dp) continue;
@@ -109,11 +171,13 @@
       throw new Error('INE: la tabla ' + id + ' no devolvió datos');
     }
 
+    const registrosFinales = filtrarColumnas(registros, o.columnas);
+
     const nombre = o.name || o.legend || ('INE tabla ' + id);
     const capa = new IDEE.layer.Alphanumeric({
       name: nombre,
       legend: o.legend || nombre,
-      records: registros,
+      records: registrosFinales,
       idField: o.idField || null,
       source: { tipo: 'INE', tabla: id, url: url }
     });
