@@ -43,14 +43,17 @@
         const parrafo = t.split(/\n\s*\n/)[0] || t.slice(0, 400);
         descExt.textContent = parrafo.replace(/^#+\s*/gm, '').slice(0, 600);
         descExt.classList.remove('aviso');
-        // Extraer primer bloque de código cercado.
-        const m = t.match(/```(?:javascript|js)?\n([\s\S]*?)```/);
-        if (m) {
-          codigoEjemplo = m[1].trim();
+        // Extraer un bloque de código JS (preferir los marcados javascript/js).
+        let m = t.match(/```(?:javascript|js)\n([\s\S]*?)```/);
+        if (!m) m = t.match(/```\n([\s\S]*?)```/);
+        let candidato = m ? m[1].trim() : '';
+        const pareceMarkdown = /(^|\n)#{1,6}\s|\n\|/.test(candidato) || !/[;{}()]/.test(candidato);
+        if (m && !pareceMarkdown) {
+          codigoEjemplo = candidato;
           ejemplo.textContent = codigoEjemplo;
           constructorCode.value = codigoEjemplo;
         } else {
-          codigoEjemplo = 'const capa = new IDEE.layer.' + ext + '({\n  // parámetros\n});\nmapajs.addLayers(capa);';
+          codigoEjemplo = 'const capa = new IDEE.layer.' + ext + '({\n  url: "",\n  name: "' + ext + '",\n  legend: "' + ext + '"\n});\nmapajs.addLayers(capa);';
           ejemplo.textContent = codigoEjemplo;
           constructorCode.value = codigoEjemplo;
         }
