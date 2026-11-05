@@ -279,27 +279,14 @@
     window.mapajs = map;
     log('Mapa creado.');
 
-    // Plugins comunes (selector de capas, cambio 2D/3D, info).
+    // Plugins comunes (selector de capas base, cambio 2D/3D, layerSwitcher, mapInfo, information).
     try {
-      if (api.plugin && api.plugin.miPlugin_cambioImpl) {
-        map.addPlugin(new api.plugin.miPlugin_cambioImpl({ buttonTitle: 'Cambiar entre 2D y 3D', mapsFunction: function () { location.reload(); }, shareView: true }));
+      if (typeof prepararFondo === 'function') prepararFondo();
+      if (typeof anadirPluginsTipos === 'function') {
+        anadirPluginsTipos(map, function () { location.reload(); }, {});
+        log('Plugins comunes añadidos (baseLayer, cambioImpl, layerSwitcher, mapInfo, information).');
       }
-    } catch (e) { log('cambioImpl: ' + (e && e.message ? e.message : e)); }
-    try {
-      if (api.plugin && api.plugin.miPlugin_layerSwitcher) {
-        map.addPlugin(new api.plugin.miPlugin_layerSwitcher({ order: 1 }));
-      }
-    } catch (e) { log('layerSwitcher: ' + (e && e.message ? e.message : e)); }
-    try {
-      if (api.plugin && api.plugin.miPlugin_mapInfo) {
-        map.addPlugin(new api.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
-      }
-    } catch (e) { log('mapInfo: ' + (e && e.message ? e.message : e)); }
-    try {
-      if (api.plugin && api.plugin.miPlugin_information) {
-        map.addPlugin(new api.plugin.miPlugin_information({ position: 'TL', order: 2 }));
-      }
-    } catch (e) { log('information: ' + (e && e.message ? e.message : e)); }
+    } catch (e) { log('Plugins comunes: ' + (e && e.message ? e.message : e)); }
 
     const clasePlugin = api.plugin && api.plugin['miPlugin_' + suffix];
     if (typeof clasePlugin === 'function') {
