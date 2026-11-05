@@ -1620,4 +1620,24 @@
     window.M.layer.BigQuery = BigQueryLayer;
     window.M.layer.bigQuery = BigQueryLayer;
   }
+
+  if (typeof window !== 'undefined') {
+    window.AlphanumericTestables = window.AlphanumericTestables || {};
+    Object.assign(window.AlphanumericTestables, {
+      wktAGeoJSON: (typeof wktAGeoJSON === 'function') ? wktAGeoJSON : undefined,
+      esWKT: (typeof esWKT === 'function') ? esWKT : undefined,
+      normalizarCRS: (typeof normalizarCRS === 'function') ? normalizarCRS : undefined,
+      reproyectarPunto: (typeof reproyectarPunto === 'function') ? reproyectarPunto : undefined,
+      geometriaDeValor: (typeof geometriaDeValor === 'function') ? geometriaDeValor : undefined,
+      inferirTipo: (typeof inferirTipo === 'function') ? inferirTipo : undefined,
+      inferirCampos: (typeof inferirCampos === 'function') ? inferirCampos : undefined,
+      normalizarRegistros: (typeof normalizarRegistros === 'function') ? normalizarRegistros : undefined,
+      detectarSeparador: (typeof detectarSeparador === 'function') ? detectarSeparador : undefined,
+      parsearCSV: (typeof parsearCSV === 'function') ? parsearCSV : undefined,
+      matrizARegistros: (typeof matrizARegistros === 'function') ? matrizARegistros : undefined,
+      convertirValor: (typeof convertirValor === 'function') ? convertirValor : undefined,
+      normalizarGeometria: (typeof normalizarGeometria === 'function') ? normalizarGeometria : undefined,
+      crsDeCoordRefSys: (typeof crsDeCoordRefSys === 'function') ? crsDeCoordRefSys : undefined
+    });
+  }
 })();

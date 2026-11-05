@@ -324,4 +324,11 @@
       if (obj && obj.tagName === 'SCRIPT' && /apiidee.*\.js/i.test(obj.src || '')) instalar();
     }, true);
   }
+
+  if (typeof window !== 'undefined') {
+    window.MadridTestables = window.MadridTestables || {};
+    Object.assign(window.MadridTestables, {
+      filtrarFilas: (typeof filtrarFilas === 'function') ? filtrarFilas : undefined
+    });
+  }
 })();

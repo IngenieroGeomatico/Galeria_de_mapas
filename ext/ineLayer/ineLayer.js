@@ -291,4 +291,12 @@
       }
     }, true);
   }
+
+  if (typeof window !== 'undefined') {
+    window.INETestables = window.INETestables || {};
+    Object.assign(window.INETestables, {
+      filtrarSeries: (typeof filtrarSeries === 'function') ? filtrarSeries : undefined,
+      filtrarColumnas: (typeof filtrarColumnas === 'function') ? filtrarColumnas : undefined
+    });
+  }
 })();

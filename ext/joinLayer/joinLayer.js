@@ -1653,4 +1653,21 @@
       }
     }, true);
   }
+
+  if (typeof window !== 'undefined') {
+    window.JoinLayerTestables = window.JoinLayerTestables || {};
+    Object.assign(window.JoinLayerTestables, {
+      normalizarClave: (typeof normalizarClave === 'function') ? normalizarClave : undefined,
+      clonarSimple: (typeof clonarSimple === 'function') ? clonarSimple : undefined,
+      calcularBBoxGeometria: (typeof calcularBBoxGeometria === 'function') ? calcularBBoxGeometria : undefined,
+      bboxesSeTocan: (typeof bboxesSeTocan === 'function') ? bboxesSeTocan : undefined,
+      centroideBBox: (typeof centroideBBox === 'function') ? centroideBBox : undefined,
+      distanciaPuntos: (typeof distanciaPuntos === 'function') ? distanciaPuntos : undefined,
+      puntoEnAnillo: (typeof puntoEnAnillo === 'function') ? puntoEnAnillo : undefined,
+      evaluarPredicadoEspacial: (typeof evaluarPredicadoEspacial === 'function') ? evaluarPredicadoEspacial : undefined,
+      calcularAgregacion: (typeof calcularAgregacion === 'function') ? calcularAgregacion : undefined,
+      resolverCapaEnMapa: (typeof resolverCapaEnMapa === 'function') ? resolverCapaEnMapa : undefined,
+      camposDeCapa: (typeof camposDeCapa === 'function') ? camposDeCapa : undefined
+    });
+  }
 })();

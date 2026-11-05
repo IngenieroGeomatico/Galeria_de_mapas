@@ -1217,4 +1217,15 @@
     window.M.plugin = window.M.plugin || {};
     window.M.plugin.miPlugin_MVTLayer = miPlugin_MVTLayer;
   }
+
+  if (typeof window !== 'undefined') {
+    window.MVTTestables = window.MVTTestables || {};
+    Object.assign(window.MVTTestables, {
+      areaConSigno: (typeof areaConSigno === 'function') ? areaConSigno : undefined,
+      puntoALonLat: (typeof puntoALonLat === 'function') ? puntoALonLat : undefined,
+      puntoEnAnillo: (typeof puntoEnAnillo === 'function') ? puntoEnAnillo : undefined,
+      puntoEnPoligono: (typeof puntoEnPoligono === 'function') ? puntoEnPoligono : undefined,
+      LectorMVT: (typeof LectorMVT !== 'undefined') ? LectorMVT : undefined
+    });
+  }
 })();
