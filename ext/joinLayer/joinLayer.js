@@ -261,10 +261,22 @@
       if (typeof f.getGeometry === 'function') {
         var g = f.getGeometry();
         if (g && typeof g.getCoordinates === 'function' && typeof g.getType === 'function') {
+          // Geometría nativa de OpenLayers.
           geom = { type: g.getType(), coordinates: g.getCoordinates() };
+        } else if (g && g.type && Array.isArray(g.coordinates)) {
+          // Fachada de la API (Cesium, y también OL en algunas versiones):
+          // `getGeometry()` ya devuelve un GeoJSON `{ type, coordinates }`.
+          geom = { type: g.type, coordinates: g.coordinates };
         }
       } else if (f.geometry) {
         geom = f.geometry;
+      }
+      // Último respaldo: la propia feature sabe darse como GeoJSON.
+      if (!geom && typeof f.getGeoJSON === 'function') {
+        var gj = f.getGeoJSON();
+        if (gj && gj.geometry && gj.geometry.type) {
+          geom = { type: gj.geometry.type, coordinates: gj.geometry.coordinates };
+        }
       }
     } catch (e) { geom = null; }
 
@@ -279,6 +291,50 @@
       properties: cleanProps,
       geometry: geom
     };
+  }
+
+  /**
+   * Lista de campos (columnas) de una capa, reutilizada por el core y por la
+   * pestaña de Join de la ficha del selector. Antes habia dos extracciones
+   * distintas (la UI recorria `getProperties()`/`getAttributes()` a mano);
+   * ahora las dos pasan por `normalizarFeatureNativa`, que entiende features
+   * de OpenLayers, Cesium y de la fachada de la API.
+   *
+   * @param {Object} capa Capa de la API (vectorial o alfanumerica).
+   * @returns {string[]} Nombres de campo estables (sin claves internas ni
+   *   valores objeto, que no son columnas de atributos).
+   */
+  function camposDeCapa(capa) {
+    if (!capa) return [];
+
+    // 1) La propia capa puede conocer sus columnas (WFS/OGCAPI/Alphanumeric).
+    try {
+      if (typeof capa.getFieldNames === 'function') {
+        var nombres = capa.getFieldNames();
+        if (Array.isArray(nombres) && nombres.length) return nombres;
+      }
+    } catch (e) { /* se sigue con las features */ }
+
+    // 2) Si no, se deducen de las primeras features.
+    var feats = obtenerFeaturesCrudasDeCapa(capa) || [];
+    var cols = [];
+    var vistos = {};
+    var max = Math.min(feats.length, 50);
+    for (var i = 0; i < max; i++) {
+      var norm = normalizarFeatureNativa(feats[i], i);
+      if (!norm) continue;
+      var props = norm.properties || {};
+      for (var k in props) {
+        if (!Object.prototype.hasOwnProperty.call(props, k)) continue;
+        if (typeof k === 'string' && k.charAt(0) === '_') continue;
+        if (props[k] !== null && typeof props[k] === 'object') continue;
+        if (!vistos[k]) {
+          vistos[k] = true;
+          cols.push(k);
+        }
+      }
+    }
+    return cols;
   }
 
   /**
@@ -585,6 +641,24 @@
         this._resultadoOriginal = null;
         this._iniciado = false;
         this._recalcTimer = null;
+        // Reintento acotado mientras las capas de entrada aún no han cargado
+        // (típico al recrear la capa tras el cambio 2D/3D). No es un sondeo
+        // infinito: `_programarReintentoCarga` limita los intentos.
+        this._reintentoTimer = null;
+        this._reintentosCarga = 0;
+        // Reintento de volcado: `getImpl()` puede no estar listo justo cuando
+        // termina el cálculo (transición 2D/3D), así que el resultado se
+        // reintenta pintar sin repetir el join.
+        this._reintentoAplicacionTimer = null;
+        this._reintentosAplicacion = 0;
+        // Serialización de recálculos: `_recalculando` evita que dos
+        // ejecuciones concurrentes (evento de carga + botón de la ficha, por
+        // ejemplo) se pisen escribiendo `_joinedFeatures` a la vez. Si llega
+        // otra petición mientras hay una en curso, se marca `pendiente` y se
+        // relanza una sola vez al terminar.
+        this._recalculando = false;
+        this._recalculoPendiente = false;
+        this._recalculoPromesa = null;
         this._mapa = null;
         this._targetBackup = new WeakMap();
 
@@ -635,9 +709,25 @@
       }
 
       _engancharEventosCapaVectorial(capa) {
-        if (!capa || capa._joinListenerHooked) return;
+        // Mientras una capa de entrada es solo un identificador (legend/name)
+        // no se puede marcar ni escuchar: se resolverá en el siguiente cálculo,
+        // cuando el mapa ya esté disponible.
+        if (!capa || typeof capa !== 'object' || capa._joinListenerHooked) return;
         capa._joinListenerHooked = true;
         var self = this;
+        var yaCargada = false;
+
+        // Evento de carga de la propia capa de la API (`evt.LOAD`): llega igual
+        // en 2D y en 3D. En Cesium no hay fuente OpenLayers que escuchar y las
+        // capas de entrada se recargan de forma asíncrona al recrearlas tras el
+        // cambio de implementación.
+        try {
+          var IDEE = api();
+          var evtLoad = (IDEE && IDEE.evt && IDEE.evt.LOAD) || 'load';
+          if (typeof capa.on === 'function') {
+            capa.on(evtLoad, function () { self._programarRecalculo(); });
+          }
+        } catch (e) { /* noop */ }
 
         try {
           var impl = (typeof capa.getImpl === 'function') ? capa.getImpl() : null;
@@ -650,13 +740,92 @@
                 if (src.getState && src.getState() === 'ready') self._programarRecalculo();
               });
             }
+            // Fuente ya lista al enganchar (GeoJSON con `source` síncrono o
+            // capa recreada por el cambio 2D/3D): no habrá evento futuro, así
+            // que se programa un único recálculo.
+            if (typeof src.getState === 'function') {
+              if (src.getState() === 'ready') yaCargada = true;
+            } else if (typeof src.getFeatures === 'function' && src.getFeatures().length) {
+              yaCargada = true;
+            }
+          }
+          // Impl Cesium: `isLoaded()` evita esperar un evento que ya pasó.
+          if (impl && typeof impl.isLoaded === 'function' && impl.isLoaded()) {
+            yaCargada = true;
           }
         } catch (e) { /* noop */ }
+
+        if (yaCargada) self._programarRecalculo();
+      }
+
+      /**
+       * Comprueba si las dos entradas han terminado de cargar (aunque no
+       * tengan features: una capa vacía no debe reintentar para siempre).
+       */
+      _entradasCargadas(capa1, capa2) {
+        function cargada(capa) {
+          if (!capa || typeof capa !== 'object') return false;
+          try {
+            var impl = (typeof capa.getImpl === 'function') ? capa.getImpl() : null;
+            if (impl && typeof impl.isLoaded === 'function') return impl.isLoaded() === true;
+            var olLayer = (impl && impl.olLayer) ? impl.olLayer : (capa.olLayer || impl);
+            var src = (olLayer && typeof olLayer.getSource === 'function') ? olLayer.getSource() : null;
+            if (src && typeof src.getState === 'function') return src.getState() === 'ready';
+          } catch (e) { /* noop */ }
+          return false;
+        }
+        return cargada(capa1) && cargada(capa2);
+      }
+
+      /**
+       * Reintenta volcar el resultado sobre el impl cuando aún no estaba listo
+       * (transición 2D/3D). No repite el cálculo del join: solo el pintado.
+       */
+      _programarReintentoAplicacion() {
+        var MAX = 10;
+        if (this._reintentoAplicacionTimer) return;
+        if ((this._reintentosAplicacion || 0) >= MAX) return;
+        this._reintentosAplicacion = (this._reintentosAplicacion || 0) + 1;
+        var self = this;
+        this._reintentoAplicacionTimer = setTimeout(function () {
+          self._reintentoAplicacionTimer = null;
+          var datos = (self._resultadoOriginal && self._resultadoOriginal.length)
+            ? self._resultadoOriginal
+            : self._joinedFeatures;
+          if (!datos || !datos.length) return;
+          try {
+            if (!self._aplicarFeaturesAlMapa(datos)) self._programarReintentoAplicacion();
+          } catch (e) {
+            console.warn('joinLayer: reintento de volcado falló', e);
+          }
+        }, 300);
+      }
+
+      /**
+       * Reintenta el cálculo cuando las entradas todavía no están disponibles.
+       * Acotado a 12 intentos (~4 s): cubre la carga asíncrona de Cesium tras
+       * el cambio 2D/3D sin dejar un sondeo vivo.
+       */
+      _programarReintentoCarga() {
+        var MAX = 12;
+        if (this._reintentoTimer) return;
+        if ((this._reintentosCarga || 0) >= MAX) return;
+        this._reintentosCarga = (this._reintentosCarga || 0) + 1;
+        var self = this;
+        this._reintentoTimer = setTimeout(function () {
+          self._reintentoTimer = null;
+          try {
+            self.recalculate().catch(function (e) {
+              console.warn('joinLayer: reintento de carga falló', e);
+            });
+          } catch (e) { /* noop */ }
+        }, 350);
       }
 
       _resolverCapa(capaOrId) {
-        if (typeof capaOrId === 'string' && this._mapa) {
-          return resolverCapaEnMapa(this._mapa, capaOrId);
+        var mapa = this._mapa || this.map_ || null;
+        if (typeof capaOrId === 'string' && mapa) {
+          return resolverCapaEnMapa(mapa, capaOrId);
         }
         return capaOrId;
       }
@@ -675,9 +844,49 @@
       }
 
       async recalculate() {
+        // Un solo cálculo a la vez. Las llamadas concurrentes no se descartan:
+        // esperan al que está en curso y dejan marcado un reintento para que el
+        // resultado refleje el último estado de las capas de entrada.
+        if (this._recalculando) {
+          this._recalculoPendiente = true;
+          try { return await this._recalculoPromesa; } catch (e) { return this._joinedFeatures; }
+        }
         if (this._recalcTimer) { try { clearTimeout(this._recalcTimer); } catch (e) { /* noop */ } this._recalcTimer = null; }
+        if (this._reintentoTimer) { try { clearTimeout(this._reintentoTimer); } catch (e) { /* noop */ } this._reintentoTimer = null; }
+        if (this._reintentoAplicacionTimer) { try { clearTimeout(this._reintentoAplicacionTimer); } catch (e) { /* noop */ } this._reintentoAplicacionTimer = null; }
+
+        this._recalculando = true;
+        this._recalculoPendiente = false;
+        var self = this;
+        this._recalculoPromesa = this._ejecutarRecalculo();
+        try {
+          return await this._recalculoPromesa;
+        } finally {
+          this._recalculando = false;
+          this._recalculoPromesa = null;
+          if (this._recalculoPendiente) {
+            this._recalculoPendiente = false;
+            setTimeout(function () {
+              try {
+                self.recalculate().catch(function (e) {
+                  console.warn('joinLayer: reintento de recálculo falló', e);
+                });
+              } catch (e) { /* noop */ }
+            }, 0);
+          }
+        }
+      }
+
+      async _ejecutarRecalculo() {
         var t0 = Date.now();
+        // Una capa recreada por el cambio 2D/3D puede no haber recibido
+        // `addTo` (la API la añade con `addLayers`, que deja `map_`), así que
+        // se toma de ahí como respaldo.
+        if (!this._mapa && this.map_) this._mapa = this.map_;
         var mapRef = this._mapa || (this.map_ || null);
+        if (this._mapa && !this._eventosConectados) {
+          try { this._conectarEventosMapa(this._mapa); } catch (e) { /* noop */ }
+        }
 
         var capa1Obj = this._resolverCapa(this._layer1);
         var capa2Obj = this._resolverCapa(this._layer2);
@@ -692,6 +901,18 @@
 
         var count1 = elem1.length;
         var count2 = elem2.length;
+
+        // Las entradas pueden no estar listas en el primer cálculo tras el
+        // cambio 2D/3D (la capa se recrea antes de que sus fuentes carguen y no
+        // siempre llega un evento posterior). Se reintenta de forma acotada
+        // mientras no haya ni una sola feature o quede algún identificador sin
+        // resolver; si ya cargaron (aunque estén vacías) no se insiste.
+        if (count1 + count2 > 0) {
+          this._reintentosCarga = 0;
+        } else if (typeof capa1Obj === 'string' || typeof capa2Obj === 'string' ||
+                   !this._entradasCargadas(capa1Obj, capa2Obj)) {
+          this._programarReintentoCarga();
+        }
         var matchedCount = 0;
         var unmatched1 = [];
         var unmatched2 = [];
@@ -844,7 +1065,12 @@
         }
 
         // Aplicar a la capa resultante independiente
-        this._aplicarFeaturesAlMapa(resultado);
+        var aplicado = this._aplicarFeaturesAlMapa(resultado);
+        if (aplicado) {
+          this._reintentosAplicacion = 0;
+        } else if (resultado.length) {
+          this._programarReintentoAplicacion();
+        }
 
         return resultado;
       }
@@ -1057,16 +1283,36 @@
 
         var fc = { type: 'FeatureCollection', features: featuresGeoJSON };
 
-        // Sin impl completo (fuente OL viva) `setSource` peta. Se aplicará
-        // desde `addTo`/`setTimeout`, donde el impl ya está listo.
+        // Sin impl completo `setSource` peta. Se aplicará desde
+        // `addTo`/`setTimeout`, donde el impl ya está listo. En Cesium no hay
+        // `olLayer`, pero el impl sí existe y `setSource` rellena
+        // `features_`/`cesiumLayer.entities`; sin esto la capa reaparecía
+        // vacía tras el cambio a 3D.
         var fuenteOL = null;
         try { fuenteOL = impl && impl.olLayer ? impl.olLayer.getSource() : null; } catch (e) { fuenteOL = null; }
-        if (!fuenteOL) return;
+        var esCesium = !!(impl && (impl.cesiumLayer || (impl.map && impl.map.scene)));
+        if (!impl || (!fuenteOL && !esCesium)) return false;
+
+        try {
+          // Cesium: `setSource` NO invalida `loadFeaturesPromise_` (ya resuelta
+          // en el primer `addTo`), así que el DataSource se quedaría con las
+          // features anteriores (vacías al recrear la capa). `refresh(fc)`
+          // reinicia esa promesa y recarga desde el FeatureCollection nuevo.
+          if (esCesium && impl && typeof impl.refresh === 'function') {
+            try {
+              impl.refresh(fc);
+              return true;
+            } catch (eRefresh) {
+              console.warn('joinLayer: refresh en Cesium falló, se reintenta con setSource', eRefresh);
+              try { impl.loadFeaturesPromise_ = null; } catch (eCache) { /* noop */ }
+            }
+          }
+        } catch (e) { /* noop */ }
 
         try {
           if (typeof this.setSource === 'function') {
             this.setSource(fc);
-            return;
+            return true;
           }
         } catch (e) {
           console.warn('joinLayer: no se pudo volcar el resultado con setSource', e);
@@ -1074,7 +1320,9 @@
 
         try {
           if (typeof this.clear === 'function') this.clear();
+          return true;
         } catch (e2) { /* noop */ }
+        return false;
       }
 
       /* ---------------- Métodos públicos ---------------- */
@@ -1107,6 +1355,11 @@
 
       setJoinOptions(newOptions) {
         if (!newOptions || typeof newOptions !== 'object') return;
+        if (newOptions.layer1 !== undefined || newOptions.layer2 !== undefined) {
+          // Entradas nuevas: presupuesto de reintentos desde cero.
+          this._reintentosCarga = 0;
+          this._reintentosAplicacion = 0;
+        }
         if (newOptions.layer1 !== undefined) this._layer1 = newOptions.layer1;
         if (newOptions.layer2 !== undefined) this._layer2 = newOptions.layer2;
         if (newOptions.key1 !== undefined) this._key1 = newOptions.key1;
@@ -1213,26 +1466,53 @@
 
       setState(state, map) {
         if (!state || typeof state !== 'object') return;
-        if (state.options) {
-          this.setJoinOptions(state.options);
+
+        // Las capas de entrada se restauran por identificador estable
+        // (legend/name), nunca por referencia al objeto del mapa viejo. Si aún
+        // no hay mapa se dejan como string y se resuelven en `addTo`.
+        var opts = Object.assign({}, state.options || {});
+        delete opts.layer1;
+        delete opts.layer2;
+        if (state.layer1Ident) opts.layer1 = state.layer1Ident;
+        if (state.layer2Ident) opts.layer2 = state.layer2Ident;
+        if (Object.keys(opts).length) {
+          this.setJoinOptions(opts);
         }
-        if (state.layer1Ident && map) {
-          try {
-            var c1 = resolverCapaEnMapa(map, state.layer1Ident);
-            if (c1) this._layer1 = c1;
-          } catch (e) { /* noop */ }
-        }
-        if (state.layer2Ident && map) {
-          try {
-            var c2 = resolverCapaEnMapa(map, state.layer2Ident);
-            if (c2) this._layer2 = c2;
-          } catch (e) { /* noop */ }
-        }
+
         if (map) {
           this._layer1 = this._resolverCapaEnMapaNuevo(map, this._layer1);
           this._layer2 = this._resolverCapaEnMapaNuevo(map, this._layer2);
         }
-        if (map) this.addTo(map);
+
+        if (state.name) this.name = state.name;
+        if (state.legend) this.legend = state.legend;
+
+        // La visibilidad viaja en el estado y se aplica al rehidratar: si la
+        // capa estaba oculta antes del cambio 2D/3D, sigue oculta después.
+        if (state.visible !== undefined) {
+          try {
+            if (typeof this.setVisible === 'function') this.setVisible(state.visible !== false);
+          } catch (e) { /* noop */ }
+        }
+
+        if (map) {
+          this.addTo(map);
+        } else {
+          // La capa aún no está en el mapa nuevo: `addLayers` la añadirá y
+          // dejará `this.map_`. Se espera un instante y se recalcula con ese
+          // mapa, además de enganchar los eventos de carga de las fuentes.
+          var self = this;
+          setTimeout(function () {
+            if (!self._mapa && self.map_) self._mapa = self.map_;
+            if (!self._mapa) return;
+            try { self._conectarEventosMapa(self._mapa); } catch (e) { /* noop */ }
+            try {
+              self.recalculate().catch(function (e) {
+                console.warn('joinLayer: recálculo tras rehidratar falló', e);
+              });
+            } catch (e) { /* noop */ }
+          }, 400);
+        }
       }
     }
 
@@ -1250,7 +1530,12 @@
         inplace: true
       });
       var join = new JoinLayer(opts);
-      return join.recalculate().then(function () {
+      // El constructor ya lanza el primer cálculo si tiene las dos capas. Se
+      // reutiliza esa promesa en vez de pedir otro recálculo (pedirlo marcaría
+      // un reintento pendiente y haría el trabajo dos veces).
+      var enCurso = join._recalculoPromesa;
+      var promesa = enCurso ? enCurso : join.recalculate();
+      return Promise.resolve(promesa).then(function () {
         return join;
       });
     };
@@ -1298,17 +1583,42 @@
     IDEE.plugin.miPlugin_joinLayer = claseJoin;
     if (window.M && window.M.plugin) window.M.plugin.miPlugin_joinLayer = claseJoin;
 
+    // Extracción de campos compartida con la UI de la ficha del selector
+    // (`ext_joinUI.js`). Se cuelga de la clase y de la factoría para que
+    // sobreviva a la reinstalación tras el cambio 2D/3D.
+    claseJoin.camposDeCapa = camposDeCapa;
+    FactoriaJoin.camposDeCapa = camposDeCapa;
+
     // Global en window
     window.JoinLayer = claseJoin;
     window.miPlugin_joinLayer = claseJoin;
     window.instalarJoinLayer = instalar;
     claseJoin.instalar = instalar;
 
+    // Fachada que sobrevive al swap del bundle y que `cambioImpl` usa para
+    // reinstalar la extensión antes de recrear una capa Join (ver
+    // CAPAS_CON_ESTADO en ext/cambioImpl/cambioImpl.js).
+    if (!window.joinLayer || typeof window.joinLayer !== 'object') window.joinLayer = {};
+    window.joinLayer.instalar = instalar;
+    window.joinLayer.camposDeCapa = camposDeCapa;
+
     return true;
   }
 
   instalar();
-  setInterval(instalar, 10);
+
+  // Reinstalación sin sondeo infinito: el bundle de la API puede cargarse
+  // DESPUÉS de esta extensión (y recargarse entero al cambiar 2D/3D). El
+  // evento `load` de los <script> se captura en fase de captura, así que
+  // también llega para los scripts insertados por JS (cambioImpl). El sondeo
+  // corto de respaldo (máx. 5 s) cubre el caso de que el evento se pierda.
+  var reintentos = 0;
+  var vigilante = setInterval(function () {
+    reintentos += 1;
+    if (instalar() || reintentos >= 100) {
+      try { clearInterval(vigilante); } catch (e) { /* noop */ }
+    }
+  }, 50);
 
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('load', function (e) {

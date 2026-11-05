@@ -199,3 +199,96 @@ mapajs.addLayers(joinZonas);
 ## 7. Contrato de Estado 2D/3D
 
 `JoinLayer` implementa los métodos `getState()` y `setState(state, map)`. Al cambiar entre la implementación 2D (OpenLayers) y 3D (Cesium) mediante el plugin `cambioImpl`, la configuración del join, sus campos, prefijos y capas de entrada se restauran fielmente sin pérdida de datos.
+
+El estado guarda las capas de entrada por **identificador estable** (`legend`/`name`), nunca por `idLayer` (que se regenera en cada reinicio del mapa) ni por referencia al objeto de la capa vieja. `setState` aplica además la **visibilidad** y, si hay mapa nuevo, resuelve las capas y las vuelve a enganchar.
+
+### 7.1. Cómo sobrevive la capa al cambio 2D/3D
+
+`JoinLayer` está registrada en `CAPAS_CON_ESTADO` de `ext/cambioImpl/cambioImpl.js`:
+
+| Marca | Constructor | Fachada |
+|---|---|---|
+| `_isJoinLayer` | `IDEE.layer.join` | `window.joinLayer` |
+
+Al cambiar de implementación, `transferOverlayLayers` detecta la marca, pide `getState()`, construye una capa nueva con las capas de entrada ya como identificadores y llama a `setState`. Como el join **no tiene URL**, su entrada en la tabla usa `sinUrl: true`: si se exigiera `url` (como a GLB/Imagen/IFC) la capa se descartaría.
+
+`ext/joinLayer/joinLayer.js` expone `window.joinLayer = { instalar, camposDeCapa }` para que `cambioImpl` pueda reinstalar la extensión sobre el bundle nuevo antes de recrear la capa. La reinstalación se dispara con el evento `load` del `<script>` de la API (capturado en fase de captura, así que también llega a los scripts insertados por JS) y con un sondeo corto de respaldo.
+
+> **Riesgo conocido**: si la capa de origen no se transfiere al mapa nuevo o cambia de `legend`, `setState` no encuentra el identificador y el join se queda sin datos (las estadísticas salen a 0). En ese caso hay que usar `legend` estables y únicas en el visualizador. La capa resultado del join se vuelve a calcular de forma asíncrona al añadirse al mapa nuevo (`addTo` + `recálculo programado`).
+
+Tras la rehidratación, el join se recalcula en cuanto las dos capas de entrada están disponibles: se escucha `evt.LOAD` de cada capa y, sobre todo, se reintenta el cálculo de forma **acotada** (12 intentos, ~4 s) mientras no haya ni una feature o quede algún identificador sin resolver. En 3D el volcado usa `impl.refresh(featureCollection)` y no `setSource`: este último conserva `loadFeaturesPromise_` ya resuelta y el `DataSource` de Cesium se quedaba con las features anteriores (vacías).
+
+---
+
+## 8. Recomendaciones y troubleshooting
+
+### 8.1. Claves que no existen
+
+`key1`/`key2` deben existir en las features de cada capa. La pestaña de Join de la ficha avisa y **no ejecuta** la unión si la clave elegida no aparece en los campos de la capa (o si no se ha elegido ninguna), en lugar de devolver un resultado con todas las filas sin correspondencia. El aviso se apoya en `JoinLayer.camposDeCapa(capa)`, que es la misma extracción que usa el core.
+
+### 8.2. Recálculos concurrentes
+
+`recalculate()` está serializado: si llega una petición mientras hay un cálculo en curso, no se solapa; se espera al actual y se programa **un** reintento con el último estado. Esto evita que el evento de carga de una WFS y el botón de la ficha escriban `_joinedFeatures` a la vez.
+
+### 8.3. Modo in-situ
+
+En modo `inplace` se usa **una sola** instancia (`JoinLayer.apply` crea, recalcula y aplica). No hay que crear otra capa ni volver a llamar a `recalculate()` desde la UI: eso duplicaba el trabajo.
+
+### 8.4. FlatGeobuf y MVT
+
+- **FlatGeobuf**: se fuerza la carga completa (`_recargar('todas')`) antes del join. En 3D se espera a que `getFeatures()` devuelva datos.
+- **MVT**: solo existen las features de las teselas del viewport. En 3D `getFeatures()` devuelve `[]`, así que el join no aporta datos y los joins espaciales no encuentran correspondencias.
+
+### 8.5. El join no aparece tras el cambio 2D/3D
+
+Comprobar, en este orden:
+
+1. `window.joinLayer` existe y `IDEE.layer.join` está definido tras el swap.
+2. `window.JoinLayer.camposDeCapa` está disponible (extensión reinstalada).
+3. La capa de entrada conserva su `legend` en el mapa nuevo.
+4. La consola no muestra `cambioImpl: IDEE.layer.join no esta instalada`.
+
+---
+
+## 9. Ejemplos adicionales de `inplace`
+
+### 9.1. Enriquecer una WFS con un CSV y conservar la simbología
+
+```javascript
+const join = new IDEE.layer.join({
+  layer1: capaMunicipios,          // WFS ya en el mapa
+  layer2: 'renta_2024',            // Alphanumeric / CSV ya en el mapa
+  key1: 'nationalCode',
+  key2: 'cod_ine',
+  type: 'left',
+  prefix: 'renta_',
+  inplace: true                    // inyecta en las features de capaMunicipios
+});
+await join.recalculate();
+// La tabla de atributos y los popups de capaMunicipios ya muestran renta_*
+```
+
+### 9.2. Join in-situ con agregación espacial
+
+```javascript
+// Suma las ventas de las tiendas (puntos) dentro de cada zona (polígonos).
+await IDEE.layer.Join.apply(capaZonas, capaTiendas, {
+  mode: 'spatial',
+  spatialPredicate: 'contains',
+  cardinality: 'aggregate',
+  aggregations: { ventas: 'sum', empleados: 'sum', id: 'count' },
+  prefix: 'tot_'
+});
+```
+
+### 9.3. Filtro semi/anti sin crear capa nueva
+
+```javascript
+// Deja en la capa base solo los municipios que NO están en la tabla de bajas.
+await IDEE.layer.Join.apply(capaMunicipios, capaBajas, {
+  key1: 'codigo_ine',
+  key2: 'cod_mun',
+  type: 'anti',
+  inplace: true
+});
+```

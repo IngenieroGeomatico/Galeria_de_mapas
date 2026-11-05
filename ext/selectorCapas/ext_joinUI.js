@@ -9,6 +9,13 @@
 
   function camposDe(capa) {
     if (!capa) return [];
+    // Fuente única: la misma extracción que usa el core del join
+    // (`normalizarFeatureNativa`), expuesta como `JoinLayer.camposDeCapa`.
+    try {
+      if (window.JoinLayer && typeof window.JoinLayer.camposDeCapa === 'function') {
+        return window.JoinLayer.camposDeCapa(capa);
+      }
+    } catch (e) { /* se usa el respaldo local */ }
     if (typeof capa.getFieldNames === 'function') {
       try { const f = capa.getFieldNames(); if (Array.isArray(f) && f.length) return f; } catch (e) {}
     }
@@ -33,14 +40,14 @@
   function pintarStats(cont, st) {
     if (!cont) return;
     let html = '<div class="ls-join-results-card ' + (st.matchedCount > 0 ? 'ls-join-results-card--ok' : '') + '">';
-    html += '<div style="font-size:13px;font-weight:700;color:#0f172a;">Resultado del join</div>';
+    html += '<div class="ls-join-results-titulo">Resultado del join</div>';
     html += '<div class="ls-join-stats-grid">';
     html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.layer1Count}</div><div class="ls-join-stat-label">Capa 1</div></div>`;
     html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.layer2Count}</div><div class="ls-join-stat-label">Capa 2</div></div>`;
     html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.matchedCount}</div><div class="ls-join-stat-label">Coincidencias</div></div>`;
     html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.resultCount}</div><div class="ls-join-stat-label">Resultado</div></div>`;
     html += '</div>';
-    html += '<div style="margin-top:8px;font-size:11px;color:#64748b;">';
+    html += '<div class="ls-join-results-pie">';
     html += 'Sin correspondencia en capa 1: ' + st.unmatched1Count + ' · en capa 2: ' + st.unmatched2Count +
             ' · ' + st.executionTimeMs + ' ms';
     html += '</div>';
@@ -103,7 +110,7 @@
       let html = '';
       html += '<div class="ls-join-banner"><div class="ls-join-banner-info">';
       html += '<span class="ls-join-banner-badge">Join</span>';
-      html += '<span style="font-size:12px;color:#0369a1;">Combina los atributos de esta capa con los de otra capa del mapa.</span>';
+      html += '<span class="ls-join-banner-texto">Combina los atributos de esta capa con los de otra capa del mapa.</span>';
       html += '</div></div>';
 
       html += '<div class="ls-join-mode-pills">';
@@ -233,66 +240,108 @@
       runBtn.addEventListener('click', async function () {
         const status = cont.querySelector('#ls-join-status');
         const results = cont.querySelector('#ls-join-results');
-        const srcId = cont.querySelector('#ls-join-source').value;
-        if (!srcId) { if (status) status.textContent = 'Elige una capa de origen.'; return; }
-        const srcLayer = candidatos.find(function (l) { return String(l.idLayer) === String(srcId); });
-        if (!srcLayer) { if (status) status.textContent = 'Capa de origen no encontrada.'; return; }
 
-        if (status) status.textContent = 'Ejecutando unión…';
-        if (runBtn) { runBtn.disabled = true; runBtn.textContent = 'Calculando…'; }
+        // Mensajes con estado semántico (clases del CSS de la ficha).
+        const aviso = function (texto, tipo) {
+          if (!status) return;
+          status.className = 'ls-ficha-editor-estado' +
+            (tipo === 'error' ? ' ls-ficha-editor-estado--error' :
+              tipo === 'ok' ? ' ls-ficha-editor-estado--ok' :
+                tipo === 'aviso' ? ' ls-ficha-editor-estado--aviso' : '');
+          status.textContent = texto;
+        };
+
+        const srcId = cont.querySelector('#ls-join-source').value;
+        if (!srcId) { aviso('Elige una capa de origen.', 'aviso'); return; }
+        const srcLayer = candidatos.find(function (l) { return String(l.idLayer) === String(srcId); });
+        if (!srcLayer) { aviso('Capa de origen no encontrada.', 'error'); return; }
+
+        const modo = panel._joinState.selectedMode;
+        const tipoJoin = panel._joinState.selectedType;
+        const prefijo = (cont.querySelector('#ls-join-prefix').value || '').trim();
+        const sobrescribir = cont.querySelector('#ls-join-overwrite').value === 'true';
+        const modoResultado = cont.querySelector('#ls-join-result').value;
+
+        // Las claves se leen ANTES de validar y ejecutar.
+        let clave1 = null;
+        let clave2 = null;
+        if (modo === 'attribute') {
+          clave1 = cont.querySelector('#ls-join-key1').value;
+          clave2 = cont.querySelector('#ls-join-key2').value;
+        }
 
         try { await (window.cargarJoinLayer ? window.cargarJoinLayer() : Promise.resolve()); } catch (e) {}
         const JoinClass = window.JoinLayer;
-        if (!JoinClass) { if (status) status.textContent = 'Módulo JoinLayer no disponible.'; if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Ejecutar unión'; } return; }
+        if (!JoinClass) { aviso('Módulo JoinLayer no disponible.', 'error'); return; }
 
-        const mode = panel._joinState.selectedMode;
-        const type = panel._joinState.selectedType;
-        const prefix = (cont.querySelector('#ls-join-prefix').value || '').trim();
-        const overwrite = cont.querySelector('#ls-join-overwrite').value === 'true';
-        const resultMode = cont.querySelector('#ls-join-result').value;
+        // Validación de claves: avisa si no existen en las capas de origen (o
+        // si no se ha elegido ninguna). Sin esto el join se ejecutaba con
+        // todas las filas sin correspondencia y el resultado parecía correcto.
+        if (modo === 'attribute') {
+          if (!clave1 || !clave2) {
+            aviso('Elige la clave de esta capa (key1) y la de la capa de origen (key2).', 'aviso');
+            return;
+          }
+          const campos1 = camposDe(capa);
+          const campos2 = camposDe(srcLayer);
+          const problemas = [];
+          if (campos1.length && campos1.indexOf(clave1) === -1) {
+            problemas.push('«' + clave1 + '» no existe en «' + (capa.legend || capa.name || 'esta capa') + '»');
+          }
+          if (campos2.length && campos2.indexOf(clave2) === -1) {
+            problemas.push('«' + clave2 + '» no existe en «' + (srcLayer.legend || srcLayer.name || 'la capa de origen') + '»');
+          }
+          if (problemas.length) {
+            aviso('No se ejecuta la unión: ' + problemas.join('; ') + '.', 'error');
+            return;
+          }
+        }
 
         const opts = {
           layer1: capa,
           layer2: srcLayer,
-          type: type,
-          mode: mode,
-          prefix: prefix,
-          overwrite: overwrite
+          type: tipoJoin,
+          mode: modo,
+          prefix: prefijo,
+          overwrite: sobrescribir
         };
-        if (mode === 'attribute') {
-          opts.key1 = cont.querySelector('#ls-join-key1').value;
-          opts.key2 = cont.querySelector('#ls-join-key2').value;
+        if (modo === 'attribute') {
+          opts.key1 = clave1;
+          opts.key2 = clave2;
         } else {
           opts.spatialPredicate = cont.querySelector('#ls-join-pred').value;
           const dist = cont.querySelector('#ls-join-dist').value;
           if (dist) opts.maxDistance = Number(dist);
         }
 
+        aviso('Ejecutando unión…');
+        if (runBtn) { runBtn.disabled = true; runBtn.textContent = 'Calculando…'; }
+
         try {
-          if (resultMode === 'inplace') {
-            await JoinClass.apply(capa, srcLayer, opts);
-            const join = new JoinClass(opts);
-            await join.recalculate();
-            const st = join.getJoinStats();
-            pintarStats(results, st);
-            if (status) status.textContent = 'Unión aplicada sobre la capa actual.';
+          if (modoResultado === 'inplace') {
+            // `JoinClass.apply` ya crea el JoinClass, recalcula y aplica
+            // in-situ: no se instancia un segundo objeto (antes se hacía y se
+            // recalculaba dos veces el mismo join).
+            const join = await JoinClass.apply(capa, srcLayer, opts);
+            pintarStats(results, join.getJoinStats());
+            aviso('Unión aplicada sobre la capa actual.', 'ok');
           } else {
             const join = new JoinClass(opts);
             await join.recalculate();
             const st = join.getJoinStats();
             try {
-              try { join.addTo(mapajs); } catch (e) { /* nada */ }
-              try { mapajs.addLayers(join); } catch (e2) { /* nada */ }
+              try { join.addTo(window.mapajs || map); } catch (e) { /* nada */ }
+              try { (window.mapajs || map).addLayers(join); } catch (e2) { /* nada */ }
             } catch (e) {
               try { map.addLayers(join); } catch (e2) { /* nada */ }
             }
             pintarStats(results, st);
-            if (status) status.textContent = 'Nueva capa creada: ' + (join.legend || join.name);
+            aviso('Nueva capa creada: ' + (join.legend || join.name), 'ok');
             try { if (typeof window.renderLayerList === 'function') window.renderLayerList(); } catch (e) {}
           }
         } catch (e) {
           console.warn('join ficha:', e);
-          if (status) status.textContent = 'Error: ' + (e && e.message ? e.message : e);
+          aviso('Error: ' + (e && e.message ? e.message : e), 'error');
         } finally {
           if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Ejecutar unión'; }
         }

@@ -4739,9 +4739,9 @@ class miPlugin_layerSwitcher {
             <button type="button" class="ls-sheet-close" title="Cerrar" onclick="cerrarFicha()">✕</button>
           </div>
           <div class="ls-ficha-tabs-nav" role="tablist">
-            <button type="button" class="ls-ficha-tab-btn active" data-tab="params" aria-selected="true" onclick="window._fichaCambiarTab('params', this)">Parámetros</button>
-            ${window.getLayerKind && window.getLayerKind(capa) !== 'raster' ? '<button type="button" class="ls-ficha-tab-btn" data-tab="join" aria-selected="false" onclick="window._fichaCambiarTab(\'join\', this)">Unión de capas (Join)</button>' : ''}
-            <button type="button" class="ls-ficha-tab-btn" data-tab="doc" aria-selected="false" onclick="window._fichaCambiarTab('doc', this)">Documento del servicio</button>
+            <button type="button" role="tab" class="ls-ficha-tab-btn active" data-tab="params" aria-selected="true" onclick="window._fichaCambiarTab('params', this)">Parámetros</button>
+            ${window.getLayerKind && window.getLayerKind(capa) !== 'raster' ? '<button type="button" role="tab" class="ls-ficha-tab-btn" data-tab="join" aria-selected="false" onclick="window._fichaCambiarTab(\'join\', this)">Unión de capas (Join)</button>' : ''}
+            <button type="button" role="tab" class="ls-ficha-tab-btn" data-tab="doc" aria-selected="false" onclick="window._fichaCambiarTab('doc', this)">Documento del servicio</button>
           </div>
           <div class="ls-ficha-body">
             <div class="ls-ficha-tab-pane active" data-tab="params">
@@ -4809,11 +4809,30 @@ class miPlugin_layerSwitcher {
             const isActive = b.getAttribute('data-tab') === tab;
             b.classList.toggle('active', isActive);
             b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            b.setAttribute('tabindex', isActive ? '0' : '-1');
           });
           const body = document.querySelector('.ls-ficha-body');
           if (body) body.querySelectorAll('.ls-ficha-tab-pane').forEach(function (p) {
             p.classList.toggle('active', p.getAttribute('data-tab') === tab);
           });
+          // Flechas izquierda/derecha en el grupo de pestañas (patrón tablist).
+          // Se engancha una sola vez por nav; el elemento nuevo de cada ficha
+          // abre una nav nueva, así que no se acumulan escuchas.
+          if (nav && !nav._lsNavTeclado) {
+            nav._lsNavTeclado = true;
+            nav.addEventListener('keydown', function (ev) {
+              if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+              const botones = Array.prototype.slice.call(nav.querySelectorAll('.ls-ficha-tab-btn'));
+              const actual = botones.indexOf(document.activeElement);
+              if (actual === -1) return;
+              ev.preventDefault();
+              const paso = (ev.key === 'ArrowRight') ? 1 : -1;
+              const destino = botones[(actual + paso + botones.length) % botones.length];
+              if (!destino) return;
+              window._fichaCambiarTab(destino.getAttribute('data-tab'), destino);
+              try { destino.focus(); } catch (e) { /* nada */ }
+            });
+          }
         } catch (e) { /* nada */ }
       };
 
@@ -8091,6 +8110,7 @@ class miPlugin_layerSwitcher {
       'setLayerStyle', 'zoomToLayer', 'closeSheet', 'locateFeature', 'openLayerInfo',
       'openLayerFicha', '_lsPickerLayers', 'setBBoxModo', 'setBBoxLimite', 'setBBoxPagina',
       'layerToFront', 'layerToBack', 'layerUp', 'layerDown', 'duplicateLayer', 'reloadLayer', 'isolateLayer',
+      '_joinSetMode', '_joinSetType',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {

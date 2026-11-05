@@ -747,7 +747,12 @@ class miPlugin_cambioImpl {
         // constelaciones o satelites), el botón debe empezar "activado":
         // así el primer click conmuta directamente a OL sin duplicar la
         // inicialización en Cesium.
-        if (IDEE.impl && IDEE.impl.cesium) {
+        //
+        // El flag en `window` es necesario porque este plugin se recrea al
+        // recargar el bundle: al volver a 3D, el botón nace sin la clase y el
+        // siguiente click volvería a llamar a `activate()` en vez de a
+        // `deactivate()`. `window` sí sobrevive al cambio de implementación.
+        if (window.__cambioImplActivo === true || (IDEE.impl && IDEE.impl.cesium)) {
             btn.classList.add('activated');
         }
 
@@ -803,7 +808,28 @@ class miPlugin_cambioImpl {
         const CAPAS_CON_ESTADO = [
             { marca: '_glb', constructor: 'glb', fachada: 'glbLayer' },
             { marca: '_img', constructor: 'image', fachada: 'imageLayer' },
-            { marca: '_ifc', constructor: 'IFC', fachada: 'ifcLayer' }
+            { marca: '_ifc', constructor: 'IFC', fachada: 'ifcLayer' },
+            // JoinLayer (ext/joinLayer) no tiene URL: su estado son las dos
+            // capas de entrada (por legend/name) y las opciones del join. Si se
+            // dejara caer en la rama `type === "Vector"` se convertiría en un
+            // GeoJSON con la huella del resultado, perdiendo el join vivo.
+            {
+                marca: '_isJoinLayer',
+                constructor: 'join',
+                fachada: 'joinLayer',
+                sinUrl: true,
+                construirDesdeEstado: function (estado) {
+                    // El constructor de JoinLayer espera las opciones planas.
+                    // Se descartan las referencias del mapa viejo y se usan los
+                    // identificadores estables (legend/name) que guarda getState.
+                    var opts = Object.assign({}, (estado && estado.options) || {});
+                    delete opts.layer1;
+                    delete opts.layer2;
+                    if (estado && estado.layer1Ident) opts.layer1 = estado.layer1Ident;
+                    if (estado && estado.layer2Ident) opts.layer2 = estado.layer2Ident;
+                    return opts;
+                }
+            }
         ];
 
         /**
@@ -864,12 +890,21 @@ class miPlugin_cambioImpl {
 
             var estado = null;
             try { estado = original.getState(); } catch (e) { estado = null; }
-            if (!estado || !estado.url) return null;
+            if (!estado) return null;
+            // GLB/Imagen/IFC se construyen desde su URL; las capas que ya
+            // llevan el dato en el estado (Join) se marcan con `sinUrl`.
+            if (!estado.url && !def.sinUrl) return null;
 
-            var parametros = Object.assign({}, estado, {
+            var base = (typeof def.construirDesdeEstado === 'function')
+                ? def.construirDesdeEstado(estado, original)
+                : estado;
+            var visible = (estado.visible !== undefined)
+                ? (estado.visible !== false)
+                : (original.visible !== false);
+            var parametros = Object.assign({}, base, {
                 name: original.name,
                 legend: original.legend,
-                visible: original.visible !== false
+                visible: visible
             });
             var nueva = new Ctor(parametros);
             if (typeof nueva.setState === 'function') {
@@ -1125,6 +1160,7 @@ class miPlugin_cambioImpl {
                 // visualizador no las ha anadido en su mapa(), se anaden aqui.
                 anadirPluginsCapas3D(newMap);
                 btn = await document.getElementById('APIIDEE-herramienta-button');
+                window.__cambioImplActivo = true;
                 await btn.classList.add("activated");
 
                 await applyShareViewState(newMap, shareStateBefore, 'activate');
@@ -1190,6 +1226,7 @@ class miPlugin_cambioImpl {
                 var newMap = await reiniciarMapa(tipo);
 
                 btn = await document.getElementById('APIIDEE-herramienta-button');
+                window.__cambioImplActivo = false;
                 await btn.classList.remove("activated");
 
                 await applyShareViewState(newMap, shareStateBefore, 'deactivate');
