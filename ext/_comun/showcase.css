@@ -1,0 +1,14 @@
+/* Estilos comunes para la página de muestra de una extensión */
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #f5f6f8; color: #222; }
+.showcase-header { background: #1f3864; color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 16px; }
+.showcase-header a { color: #fff; text-decoration: none; font-weight: 600; }
+.showcase-header h1 { margin: 0; font-size: 18px; }
+.showcase-body { display: flex; height: calc(100vh - 56px); }
+.showcase-map { flex: 1; position: relative; }
+.showcase-map #mapaDIV { width: 100%; height: 100%; }
+.showcase-side { width: 340px; background: #fff; border-left: 1px solid #ddd; padding: 16px; overflow: auto; }
+.showcase-side h2 { margin-top: 0; font-size: 16px; }
+.showcase-side pre { background: #f0f0f0; padding: 10px; border-radius: 6px; font-size: 12px; overflow: auto; max-height: 300px; }
+.showcase-side .aviso { background: #fff3cd; border: 1px solid #ffeeba; padding: 10px; border-radius: 6px; font-size: 13px; }
+.showcase-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.7); font-size: 16px; }

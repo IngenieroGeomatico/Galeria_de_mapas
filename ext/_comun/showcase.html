@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muestra de extensión — Galería de Mapas</title>
+  <link rel="stylesheet" href="./showcase.css">
+  <!-- API-IDEE (OpenLayers por defecto) -->
+  <link href="../../js/api-idee/apiidee-1.1.0.ol.min.css" rel="stylesheet" />
+  <script src="../../js/api-idee/browser-polyfill.js"></script>
+  <script src="../../js/api-idee/apiidee-1.1.0.ol.min.js"></script>
+  <script src="../../js/api-idee/configuration-1.1.0.js"></script>
+</head>
+<body>
+  <header class="showcase-header">
+    <a href="../../ext/index.html">← Catálogo de extensiones</a>
+    <h1 id="titulo">Muestra de extensión</h1>
+  </header>
+  <div class="showcase-body">
+    <div class="showcase-map">
+      <div id="mapaDIV"></div>
+      <div id="loading" class="showcase-loading">Cargando…</div>
+    </div>
+    <aside class="showcase-side">
+      <h2>Extensión</h2>
+      <p id="nombreExt"></p>
+      <h2>Descripción</h2>
+      <p id="descExt" class="aviso">Cargando metadatos…</p>
+      <h2>Consola</h2>
+      <pre id="consola"></pre>
+    </aside>
+  </div>
+  <script src="./showcase.js"></script>
+</body>
+</html>
