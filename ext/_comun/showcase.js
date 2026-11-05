@@ -61,9 +61,11 @@
       { name: 'legend', type: 'text', default: 'Datos', label: 'Leyenda' }
     ],
     MVTLayer: [
-      { name: 'url', type: 'text', default: '', label: 'URL de teselas MVT' },
+      { name: 'url', type: 'text', default: 'https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf', label: 'URL de teselas MVT' },
       { name: 'layers', type: 'text', default: 'municipio', label: 'Capa en la tesela' },
-      { name: 'name', type: 'text', default: 'MVT', label: 'Nombre' }
+      { name: 'extract', type: 'boolean', default: false, label: 'Extraer atributos' },
+      { name: 'name', type: 'text', default: 'Municipios (MVT)', label: 'Nombre' },
+      { name: 'legend', type: 'text', default: 'Municipios (MVT)', label: 'Leyenda' }
     ]
   };
 
@@ -95,7 +97,7 @@
       return 'const capa = new IDEE.layer.Join(' + JSON.stringify(opts) + ');\nmapajs.addLayers(capa);';
     }
     if (ext === 'MVTLayer') {
-      return 'const capa = new IDEE.layer.MVT({\n  url: ' + JSON.stringify(v.url || '') + ',\n  layers: ' + JSON.stringify(v.layers || 'municipio') + ',\n  name: ' + JSON.stringify(v.name || 'MVT') + '\n});\nmapajs.addLayers(capa);';
+      return 'const capa = new IDEE.layer.MVT({\n  url: ' + JSON.stringify(v.url || '') + ',\n  layers: ' + JSON.stringify(v.layers || 'municipio') + ',\n  extract: ' + (v.extract ? 'true' : 'false') + ',\n  name: ' + JSON.stringify(v.name || 'MVT') + ',\n  legend: ' + JSON.stringify(v.legend || 'MVT') + '\n}, {});\nmapajs.addLayers(capa);';
     }
     // Genérico: plugin miPlugin_<ext>
     const color1 = { active: v.color1_active || '#ffffff', deactive: v.color1_deactive || 'orangered' };
@@ -276,6 +278,28 @@
 
     window.mapajs = map;
     log('Mapa creado.');
+
+    // Plugins comunes (selector de capas, cambio 2D/3D, info).
+    try {
+      if (api.plugin && api.plugin.miPlugin_cambioImpl) {
+        map.addPlugin(new api.plugin.miPlugin_cambioImpl({ buttonTitle: 'Cambiar entre 2D y 3D', mapsFunction: function () { location.reload(); }, shareView: true }));
+      }
+    } catch (e) { log('cambioImpl: ' + (e && e.message ? e.message : e)); }
+    try {
+      if (api.plugin && api.plugin.miPlugin_layerSwitcher) {
+        map.addPlugin(new api.plugin.miPlugin_layerSwitcher({ order: 1 }));
+      }
+    } catch (e) { log('layerSwitcher: ' + (e && e.message ? e.message : e)); }
+    try {
+      if (api.plugin && api.plugin.miPlugin_mapInfo) {
+        map.addPlugin(new api.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
+      }
+    } catch (e) { log('mapInfo: ' + (e && e.message ? e.message : e)); }
+    try {
+      if (api.plugin && api.plugin.miPlugin_information) {
+        map.addPlugin(new api.plugin.miPlugin_information({ position: 'TL', order: 2 }));
+      }
+    } catch (e) { log('information: ' + (e && e.message ? e.message : e)); }
 
     const clasePlugin = api.plugin && api.plugin['miPlugin_' + suffix];
     if (typeof clasePlugin === 'function') {
