@@ -351,6 +351,14 @@
   });
 
   btnReset.addEventListener('click', function () {
-    constructorCode.value = codigoEjemplo;
+    const defsActuales = PARAMS[ext] || ((window.IDEE || window.M).plugin && (window.IDEE || window.M).plugin['miPlugin_' + suffix] ? PLUGIN_PARAMS : null);
+    if (defsActuales) {
+      const vals = {};
+      defsActuales.forEach(function (d) { vals[d.name] = d.default; });
+      constructorCode.value = plantillaConstructor(ext, vals);
+    } else if (codigoEjemplo) {
+      constructorCode.value = codigoEjemplo;
+    }
+    log('Ejemplo restaurado.');
   });
 })();
