@@ -15,12 +15,11 @@ function mapa() {
     center: { x: -412000, y: 4928000 },
   });
 
-  const capa = new IDEE.layer.MBTiles({
+  const capa = new IDEE.layer.MBTiles2({
     url: 'https://raw.githubusercontent.com/mapbox/node-mbtiles/master/test/fixtures/plain_1.mbtiles',
     name: 'MBTiles',
     legend: 'MBTiles de ejemplo (z0-4)',
-    maxZoomLevel: 4,
-  }, {});
+  });
 
   mapajs.addLayers(capa);
 

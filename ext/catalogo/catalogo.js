@@ -130,7 +130,8 @@
     { global: 'imageLayer', fichero: '../imageLayer/imageLayer.js' },
     { global: 'JoinLayer', fichero: '../joinLayer/joinLayer.js' },
 { global: 'INE', fichero: '../ineLayer/ineLayer.js' },
-{ global: 'Madrid', fichero: '../madridOpenDataLayer/madridOpenDataLayer.js' }
+{ global: 'Madrid', fichero: '../madridOpenDataLayer/madridOpenDataLayer.js' },
+{ global: 'mbtilesLayer', fichero: '../mbtilesLayer/mbtilesLayer.js' }
   ];
 
   /** Promesa de la carga, para no volver a pedir los scripts por cada mapa. */

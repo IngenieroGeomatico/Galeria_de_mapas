@@ -36,6 +36,8 @@
   <!-- Codigo de la capa -->
   <link rel="stylesheet" href="../../../../ext/modal/modal.css">
   <script src="../../../../ext/modal/modal.js"></script>
+  <!-- MBTiles teselado -->
+  <script src="../../../../ext/mbtilesLayer/mbtilesLayer.js"></script>
   <!-- Informacion del punto -->
   <link rel="stylesheet" href="../../../../ext/information/information.css">
   <script src="../../../../ext/information/information.js"></script>
@@ -70,12 +72,11 @@
     <p>
       El MBTiles apunta a un fichero <code>.mbtiles</code>. Este de ejemplo es el del proyecto <code>node-mbtiles</code>: el mundo entero entre los niveles 0 y 4.
     </p>
-    <pre class="codigo"><code>const capa = new IDEE.layer.MBTiles({
+    <pre class="codigo"><code>const capa = new IDEE.layer.MBTiles2({
   url: 'https://raw.githubusercontent.com/mapbox/node-mbtiles/master/test/fixtures/plain_1.mbtiles',
   name: 'MBTiles',
   legend: 'MBTiles de ejemplo (z0-4)',
-  maxZoomLevel: 4,
-}, {});
+});
 
 mapajs.addLayers(capa);</code></pre>
     <p>El zoom máximo lo pone el propio contenedor: por eso la capa declara <code>maxZoomLevel: 4</code> y el mapa se queda en ese nivel.</p>

@@ -7964,6 +7964,31 @@ class miPlugin_layerSwitcher {
     });
   };
 
+  window.cargarMBTiles = window.cargarMBTiles || function () {
+    return new Promise(function (resolver) {
+      if (window.mbtilesLayer && typeof window.mbtilesLayer.crear === 'function') {
+        resolver(window.mbtilesLayer);
+        return;
+      }
+      var base = null;
+      var lista = document.getElementsByTagName('script');
+      for (var i = lista.length - 1; i >= 0; i--) {
+        var src = lista[i].src || '';
+        if (/selectorCapas\/ext_layerSwitcher\.js/.test(src)) { base = src; break; }
+      }
+      if (!base) base = document.baseURI;
+      var s = document.createElement('script');
+      s.src = new URL('../mbtilesLayer/mbtilesLayer.js', base).href;
+      s.async = false;
+      s.onload = function () { resolver(window.mbtilesLayer || null); };
+      s.onerror = function () {
+        console.warn('layerSwitcher: no se pudo cargar ext/mbtilesLayer/mbtilesLayer.js');
+        resolver(null);
+      };
+      document.head.appendChild(s);
+    });
+  };
+
     // ── Abrir informacion de la capa ───────────────────────────────────
     // Abre el panel inferior (sidenav) con la tabla de atributos (vectorial) o
     // las estadisticas (raster). En su header se incluye un dropdown con todas
