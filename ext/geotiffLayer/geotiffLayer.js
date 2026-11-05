@@ -548,7 +548,7 @@
         if (typeof mod.fromUrl !== 'function') {
           throw new Error('geotiff.js no trae fromUrl, no se puede leer por URL');
         }
-        return await mod.fromUrl(this.url);
+        return await mod.fromUrl(this.url, { allowFullFile: true });
       }
       throw new Error('El GeoTIFF no tiene ni blob ni url');
     }
