@@ -3,6 +3,13 @@
 
   const params = new URLSearchParams(window.location.search);
   const ext = params.get('ext') || params.get('plugin') || '';
+
+  // Algunas extensiones registran el plugin con un nombre distinto al de la carpeta.
+  const EXT_TO_PLUGIN = {
+    'CalidadAireMadridTiempoReal': 'calidadAire',
+    'FiltroCapasPuntosHistoricos': 'filtroCapasPuntosHistoricos'
+  };
+  function pluginSuffix(e) { return EXT_TO_PLUGIN[e] || e; }
   const titulo = document.getElementById('titulo');
   const nombreExt = document.getElementById('nombreExt');
   const descExt = document.getElementById('descExt');
@@ -102,7 +109,7 @@
       color2: color2,
       color3: color3
     };
-    return 'const plugin = new IDEE.plugin.miPlugin_' + ext + '(' + JSON.stringify(opts) + ');\nmapajs.addPlugin(plugin);';
+    return 'const plugin = new IDEE.plugin.miPlugin_' + suffix + '(' + JSON.stringify(opts) + ');\nmapajs.addPlugin(plugin);';
   }
 
   function log(msg) {
@@ -131,7 +138,7 @@
         descExt.classList.remove('aviso');
         // Si la extensión tiene parámetros registrados, el ejemplo muestra
         // TODOS los parámetros de construcción (no el snippet reducido del README).
-        const defsRegistrados = PARAMS[ext] || ( (window.IDEE || window.M).plugin && (window.IDEE || window.M).plugin['miPlugin_' + ext] ? PLUGIN_PARAMS : null );
+        const defsRegistrados = PARAMS[ext] || ( (window.IDEE || window.M).plugin && (window.IDEE || window.M).plugin['miPlugin_' + suffix] ? PLUGIN_PARAMS : null );
         if (defsRegistrados) {
           const vals = {};
           defsRegistrados.forEach(function (d) { vals[d.name] = d.default; });
@@ -144,12 +151,12 @@
           if (m && !pareceMarkdown) {
             codigoEjemplo = candidato;
           } else {
-            codigoEjemplo = 'const plugin = new IDEE.plugin.miPlugin_' + ext + '({ position: "TL", collapsible: true, order: 1 });\nmapajs.addPlugin(plugin);';
+            codigoEjemplo = 'const plugin = new IDEE.plugin.miPlugin_' + suffix + '({ position: "TL", collapsible: true, order: 1 });\nmapajs.addPlugin(plugin);';
           }
         }
         ejemplo.textContent = codigoEjemplo;
         // Si no hay formulario de parámetros, el textarea toma el ejemplo.
-        if (!PARAMS[ext] && !(window.IDEE || window.M).plugin?.['miPlugin_' + ext]) {
+        if (!PARAMS[ext] && !(window.IDEE || window.M).plugin?.['miPlugin_' + suffix]) {
           constructorCode.value = codigoEjemplo;
         }
       } else {
@@ -172,7 +179,8 @@
   // Renderizar formulario de parámetros si hay definición.
   let defs = PARAMS[ext];
   const api = window.IDEE || window.M;
-  if (!defs && api && api.plugin && typeof api.plugin['miPlugin_' + ext] === 'function') {
+  const suffix = pluginSuffix(ext);
+  if (!defs && api && api.plugin && typeof api.plugin['miPlugin_' + suffix] === 'function') {
     defs = PLUGIN_PARAMS;
   }
   if (defs && formFields) {
@@ -269,7 +277,7 @@
     window.mapajs = map;
     log('Mapa creado.');
 
-    const clasePlugin = api.plugin && api.plugin['miPlugin_' + ext];
+    const clasePlugin = api.plugin && api.plugin['miPlugin_' + suffix];
     if (typeof clasePlugin === 'function') {
       try {
         const plugin = new clasePlugin({ position: 'TL', collapsible: true, order: 1 });
