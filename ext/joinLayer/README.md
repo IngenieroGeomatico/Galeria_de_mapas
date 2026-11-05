@@ -237,7 +237,7 @@ En modo `inplace` se usa **una sola** instancia (`JoinLayer.apply` crea, recalcu
 ### 8.4. FlatGeobuf y MVT
 
 - **FlatGeobuf**: se fuerza la carga completa (`_recargar('todas')`) antes del join. En 3D se espera a que `getFeatures()` devuelva datos.
-- **MVT**: solo existen las features de las teselas del viewport. En 3D `getFeatures()` devuelve `[]`, así que el join no aporta datos y los joins espaciales no encuentran correspondencias. La ficha del selector muestra un aviso cuando la capa de origen (o la base) es MVT y el mapa está en 3D.
+- **MVT**: solo existen las features de las teselas del viewport. En 2D se usan las features del viewport. En 3D (ext/MVTLayer) se exponen como GeoJSON fragmentos por tesela (solo viewport, posibles duplicados) para que el join pueda consumirlas, pero los joins espaciales pueden no encontrar correspondencias completas. La ficha del selector muestra un aviso.
 
 ### 8.6. Tabla de compatibilidad por tipo de capa
 
@@ -249,7 +249,7 @@ En modo `inplace` se usa **una sola** instancia (`JoinLayer.apply` crea, recalcu
 | FlatGeobuf | Sí | Sí | Sí (forzado a `todas`) | Sí | Se fuerza `_recargar('todas')` antes del join. |
 | GeoParquet | Sí | Sí | Sí | Sí | Carga asíncrona; reintento acotado. |
 | Alphanumeric / CSV / BigQuery | Sí | Sí | n/a | n/a | Sin geometría; solo joins por atributo. |
-| MVT | Sí (teselas del viewport) | No (`getFeatures() === []`) | Sí (teselas visibles) | No existe fichero único | La ficha avisa en 3D. |
+| MVT | Sí (teselas del viewport) | Sí (fragmentos por tesela, solo viewport) | Sí (teselas visibles) | No existe fichero único | En 3D los resultados pueden duplicar municipios; aviso en la ficha. |
 
 ### 8.5. El join no aparece tras el cambio 2D/3D
 

@@ -133,7 +133,7 @@
 
       if (esImplCesium() && (esCapaMVT(capa) || candidatos.some(esCapaMVT))) {
         html += '<div class="ls-ficha-aviso ls-ficha-aviso--aviso" style="margin-bottom:10px;">';
-        html += 'Aviso: una o varias capas son MVT. En 3D (Cesium) las capas MVT no exponen features y el join devolverá 0 coincidencias. Cambia a 2D para usarlas.';
+        html += 'Aviso: una o varias capas son MVT. En 3D (Cesium) las features MVT son fragmentos por tesela (solo viewport, posibles duplicados); el join puede dar resultados parciales. Para joins completos usa 2D o una capa WFS/GeoJSON.';
         html += '</div>';
       }
 

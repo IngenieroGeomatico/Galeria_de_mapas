@@ -447,6 +447,73 @@
     }
 
     /**
+     * Expone las features leídas de las teselas cacheadas como GeoJSON, para
+     * que otras extensiones (p. ej. el join) puedan consumirlas en 3D.
+     *
+     * IMPORTANTE: son fragmentos por tesela (la geometría de un municipio que
+     * ocupa varias teselas queda partida en varias features) y solo incluye las
+     * teselas que ya se han leído (depende del viewport). Se marcan con
+     * `_fragmento: true` y `_tesela` para que el consumidor sepa que NO son
+     * features completas ni deduplicadas.
+     * @returns {Array<Object>} Features GeoJSON (Polygon/MultiPolygon).
+     */
+    getFeaturesGeoJSON() {
+      const out = [];
+      if (!this._cache) return out;
+      for (const [clave, tileFeatures] of this._cache.entries()) {
+        const parts = String(clave).split('/');
+        const z = Number(parts[0]);
+        const x = Number(parts[1]);
+        const y = Number(parts[2]);
+        if (!Array.isArray(tileFeatures)) continue;
+        for (const f of tileFeatures) {
+          if (!f || !Array.isArray(f.poligonos) || !f.poligonos.length) continue;
+          const extent = (typeof f.extent === 'number') ? f.extent : this.extent;
+          const polygons = [];
+          for (const poli of f.poligonos) {
+            if (!poli || !Array.isArray(poli.exterior) || poli.exterior.length < 3) continue;
+            const ring = poli.exterior.map(function (p) {
+              return puntoALonLat(p.x, p.y, z, x, y, extent);
+            });
+            if (ring.length && (ring[0][0] !== ring[ring.length - 1][0] ||
+                ring[0][1] !== ring[ring.length - 1][1])) {
+              ring.push([ring[0][0], ring[0][1]]);
+            }
+            const holes = (Array.isArray(poli.huecos) ? poli.huecos : []).map(function (h) {
+              const r = h.map(function (p) {
+                return puntoALonLat(p.x, p.y, z, x, y, extent);
+              });
+              if (r.length && (r[0][0] !== r[r.length - 1][0] ||
+                  r[0][1] !== r[r.length - 1][1])) {
+                r.push([r[0][0], r[0][1]]);
+              }
+              return r;
+            });
+            polygons.push([ring].concat(holes));
+          }
+          if (!polygons.length) continue;
+          const geometry = polygons.length === 1
+            ? { type: 'Polygon', coordinates: polygons[0] }
+            : { type: 'MultiPolygon', coordinates: polygons };
+          out.push({
+            type: 'Feature',
+            id: (f.codigoNacional || f.codigo || 'mvt') + '_' + clave + '_' + out.length,
+            properties: {
+              codigo: f.codigo,
+              codigoNacional: f.codigoNacional,
+              nombre: f.nombre,
+              color: f.color,
+              _tesela: clave,
+              _fragmento: true
+            },
+            geometry: geometry
+          });
+        }
+      }
+      return out;
+    }
+
+    /**
      * Qué municipio hay en un punto. Es lo que necesita el click en 3D.
      *
      * Va al zoom alto (ZOOM_MAX) a propósito: la geometría del MVT se generaliza
@@ -974,6 +1041,19 @@
       }
 
       /**
+       * Expone las features leídas (cacheadas) como GeoJSON para consumidores
+       * externos (p. ej. el join). Son fragmentos por tesela, solo viewport.
+       */
+      getFeatures() {
+        try {
+          if (this.lector && typeof this.lector.getFeaturesGeoJSON === 'function') {
+            return this.lector.getFeaturesGeoJSON();
+          }
+        } catch (e) { /* noop */ }
+        return [];
+      }
+
+      /**
        * Municipios de la última tesela leída, solo para depurar desde la consola.
        * El dibujado va por `ImageryProvider` y no lleva la cuenta, así que esto
        * NO es el número de municipios en pantalla.
@@ -996,9 +1076,14 @@
         this.maxZoom = parameters && parameters.maxZoom;
       }
 
-      // Sin render no hay entidades de la API que devolver. Cuando se retome el
-      // dibujado, aquí habrá que mapear las features de la tesela.
+      // Expone las features cacheadas como GeoJSON (fragmentos por tesela, solo
+      // viewport) para consumidores externos (p. ej. el join). No son features
+      // completas ni deduplicadas: ver LectorMVT.getFeaturesGeoJSON().
       getFeatures() {
+        try {
+          const impl = (typeof this.getImpl === 'function') ? this.getImpl() : null;
+          if (impl && typeof impl.getFeatures === 'function') return impl.getFeatures();
+        } catch (e) { /* noop */ }
         return [];
       }
 

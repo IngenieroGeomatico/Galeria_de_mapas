@@ -454,7 +454,7 @@
       } catch (e) { /* no es MVT */ }
     }
     if (esMVT) {
-      console.warn('JoinLayer: las capas MVT solo exponen las features de las teselas del viewport actual (no existe un fichero unico que descargar); el join se limita a esas features. En 3D (ext/MVTLayer) getFeatures() devuelve [] y el join no aporta datos. La geometria no se expone, por lo que los joins espaciales no tendran correspondencias.');
+      console.warn('JoinLayer: las capas MVT solo exponen las features de las teselas del viewport actual (no existe un fichero unico que descargar); el join se limita a esas features. En 3D (ext/MVTLayer) las features son fragmentos por tesela (solo viewport, posibles duplicados) y los joins espaciales pueden no encontrar correspondencias completas.');
     }
 
     // 6. Si es una capa vectorial cualquiera de la API (WFS, OGCAPI, KML, GeoJSON, Vector, FlatGeobuf, etc.)
