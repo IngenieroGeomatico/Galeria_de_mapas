@@ -282,10 +282,23 @@
     // Plugins comunes (selector de capas base, cambio 2D/3D, layerSwitcher, mapInfo, information).
     try {
       if (typeof prepararFondo === 'function') prepararFondo();
-      if (typeof anadirPluginsTipos === 'function') {
-        anadirPluginsTipos(map, function () { location.reload(); }, {});
-        log('Plugins comunes añadidos (baseLayer, cambioImpl, layerSwitcher, mapInfo, information).');
+      const apiP = window.IDEE || window.M;
+      if (apiP.plugin && apiP.plugin.miPlugin_cambioImpl) {
+        map.addPlugin(new apiP.plugin.miPlugin_cambioImpl({ buttonTitle: 'Cambiar entre 2D y 3D', mapsFunction: function () { location.reload(); }, shareView: true }));
       }
+      if (typeof crearCapasBaseTipos === 'function' && apiP.plugin && apiP.plugin.miPlugin_baseLayer) {
+        map.addPlugin(new apiP.plugin.miPlugin_baseLayer({ layers: crearCapasBaseTipos(), rows: 1, title: 'Capas base', order: 0 }));
+      }
+      if (apiP.plugin && apiP.plugin.miPlugin_layerSwitcher) {
+        map.addPlugin(new apiP.plugin.miPlugin_layerSwitcher({ order: 1 }));
+      }
+      if (apiP.plugin && apiP.plugin.miPlugin_mapInfo) {
+        map.addPlugin(new apiP.plugin.miPlugin_mapInfo({ order: 0, openPosition: 'bottom' }));
+      }
+      if (apiP.plugin && apiP.plugin.miPlugin_information) {
+        map.addPlugin(new apiP.plugin.miPlugin_information({ position: 'TL', order: 2 }));
+      }
+      log('Plugins comunes añadidos (baseLayer, cambioImpl, layerSwitcher, mapInfo, information).');
     } catch (e) { log('Plugins comunes: ' + (e && e.message ? e.message : e)); }
 
     const clasePlugin = api.plugin && api.plugin['miPlugin_' + suffix];
@@ -309,7 +322,7 @@
     // Ejecutar automáticamente el constructor para cargar la capa de ejemplo.
     setTimeout(function () {
       if (!map || !constructorCode) return;
-      const code = constructorCode.value + '\\n; try { window.__showcaseInstancia = (typeof capa !== "undefined" ? capa : (typeof plugin !== "undefined" ? plugin : null)); } catch (e) {}';
+      const code = constructorCode.value + '\n; try { window.__showcaseInstancia = (typeof capa !== "undefined" ? capa : (typeof plugin !== "undefined" ? plugin : null)); } catch (e) {}';
       if (!code || !code.trim()) return;
       try {
         const fn = new Function('map', 'mapajs', 'IDEE', 'M', code);
@@ -349,7 +362,7 @@
       window.__showcaseInstancia = null;
       log('Instancia anterior eliminada.');
     }
-    const code = constructorCode.value + '\\n; try { window.__showcaseInstancia = (typeof capa !== "undefined" ? capa : (typeof plugin !== "undefined" ? plugin : null)); } catch (e) {}';
+    const code = constructorCode.value + '\n; try { window.__showcaseInstancia = (typeof capa !== "undefined" ? capa : (typeof plugin !== "undefined" ? plugin : null)); } catch (e) {}';
     try {
       const fn = new Function('map', 'mapajs', 'IDEE', 'M', code);
       fn(map, map, window.IDEE, window.M);
