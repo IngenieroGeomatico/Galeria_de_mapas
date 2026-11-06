@@ -1082,7 +1082,28 @@
       getFeatures() {
         try {
           const impl = (typeof this.getImpl === 'function') ? this.getImpl() : null;
-          if (impl && typeof impl.getFeatures === 'function') return impl.getFeatures();
+          if (impl && typeof impl.getFeatures === 'function') {
+            const raw = impl.getFeatures() || [];
+            // Se envuelven las features GeoJSON en objetos con la interfaz de
+            // feature de la API (getProperties/getGeometry/getId) para que el
+            // plugin de información y el join puedan leerlas en 3D.
+            return raw.map(function (f) {
+              const props = (f && f.properties) ? f.properties : {};
+              const geom = (f && f.geometry) ? f.geometry : null;
+              const id = (f && f.id) != null ? f.id : null;
+              const wrapper = {
+                type: 'Feature',
+                id: id,
+                properties: props,
+                geometry: geom,
+                getProperties: function () { return props; },
+                getGeometry: function () { return geom; },
+                getId: function () { return id; },
+                getAttributes: function () { return props; }
+              };
+              return wrapper;
+            });
+          }
         } catch (e) { /* noop */ }
         return [];
       }

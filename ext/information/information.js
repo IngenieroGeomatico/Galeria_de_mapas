@@ -3666,6 +3666,26 @@
 
     async _consultarVector(capa, punto, pixel, cartesiano, mpp, generacion) {
       var esCesium = this._esCesium();
+      // MVT en 3D (ext/MVTLayer): no crea entidades de Cesium. Se consulta
+      // directamente al lector, que devuelve el municipio del clic, para que
+      // el panel de información muestre los mismos atributos que en 2D.
+      var implMvt = null;
+      try { implMvt = (capa && typeof capa.getImpl === 'function') ? capa.getImpl() : null; } catch (e) { implMvt = null; }
+      if (esCesium && implMvt && implMvt.lector && typeof implMvt.lector.municipioEn === 'function'
+          && punto && punto.lon != null && punto.lat != null) {
+        try {
+          var elemento = await implMvt.lector.municipioEn(punto.lon, punto.lat);
+          if (elemento) {
+            var propsMvt = {};
+            if (elemento.codigo != null) propsMvt.codigo = elemento.codigo;
+            if (elemento.codigoNacional != null) propsMvt.codigoNacional = elemento.codigoNacional;
+            if (elemento.nombre != null) propsMvt.nombre = elemento.nombre;
+            var featureMvt = { getProperties: function () { return propsMvt; }, getGeometry: function () { return null; }, getId: function () { return elemento.codigo; } };
+            var normalizadoMvt = this._normalizarFeatureOL(featureMvt, capa);
+            if (normalizadoMvt) return [normalizadoMvt];
+          }
+        } catch (e) { /* se sigue con el flujo normal */ }
+      }
       var esCapaMapaLibre = String(capa && capa.type || '').toUpperCase() === 'MAPLIBRE';
       // Al restaurar el estado tras el cambio 2D/3D la escena de Cesium aún
       // puede estar colocándose: el drillPick devuelve vacío aunque el punto
