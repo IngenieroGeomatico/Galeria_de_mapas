@@ -98,11 +98,13 @@
 .m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
   left: 100% !important;
   right: auto !important;
+  margin-left: 10px !important;
 }
 
 .m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
   right: 100% !important;
   left: auto !important;
+  margin-right: 10px !important;
 }
 
 .m-areas > .m-area.m-bottom > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
@@ -117,6 +119,8 @@
 @media (max-width: 768px) {
   .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls {
     max-width: calc(100vw - 60px);
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
 
   .m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > .m-panel-controls > div {
