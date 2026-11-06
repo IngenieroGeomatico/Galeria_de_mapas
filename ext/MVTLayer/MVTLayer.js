@@ -371,7 +371,56 @@
 
       for (let i = 0; i < capa.length; i++) {
         const feature = capa.feature(i);
-        if (feature.type !== 3) continue;   // 3 = polígono
+        const tipoMVT = feature.type; // 1=Point, 2=LineString, 3=Polygon
+        if (tipoMVT !== 1 && tipoMVT !== 2 && tipoMVT !== 3) continue;
+
+        // Puntos y líneas: se procesan por separado (no son polígonos).
+        if (tipoMVT === 1 || tipoMVT === 2) {
+          const geometrias = feature.loadGeometry();
+          if (!geometrias || !geometrias.length) continue;
+
+          const propiedadesOriginales = (feature.properties && typeof feature.properties === 'object')
+            ? Object.assign({}, feature.properties) : {};
+          const codigoNacional = feature.properties && feature.properties.nationalcode;
+          const codigoCompleto = codigoNacional ? String(codigoNacional) : null;
+          const codigo = codigoCompleto ? codigoCompleto.slice(-5) : null;
+          const nombre = feature.properties && feature.properties.nameunit;
+
+          const base = (tipoMVT === 1) ? 'Point' : 'LineString';
+          const partes = [];
+          for (const geom of geometrias) {
+            if (!geom || !geom.length) continue;
+            const pts = [];
+            for (const p of geom) {
+              const cx = Math.max(0, Math.min(extent, p.x));
+              const cy = Math.max(0, Math.min(extent, p.y));
+              pts.push(puntoALonLat(cx, cy, z, x, y, extent));
+            }
+            if (pts.length) partes.push(pts);
+          }
+          if (!partes.length) continue;
+
+          const esMulti = partes.length > 1;
+          const tipoGeometria = esMulti ? ('Multi' + base) : base;
+          const geometry = esMulti
+            ? { type: 'Multi' + base, coordinates: (base === 'Point') ? partes.map(function (p) { return p[0]; }) : partes }
+            : { type: base, coordinates: (base === 'Point') ? partes[0][0] : partes[0] };
+
+          features.push({
+            codigo: codigo,
+            codigoNacional: codigoCompleto,
+            nombre: nombre,
+            color: this._colorDe(codigo, nombre),
+            z: z, x: x, y: y,
+            extent: extent,
+            poligonos: [],
+            propiedades: propiedadesOriginales,
+            tipoMVT: tipoMVT,
+            tipoGeometria: tipoGeometria,
+            geometry: geometry
+          });
+          continue;
+        }
 
         const anillos = feature.loadGeometry();
         if (!anillos || !anillos.length) continue;
@@ -478,8 +527,27 @@
         const y = Number(parts[2]);
         if (!Array.isArray(tileFeatures)) continue;
         for (const f of tileFeatures) {
-          if (!f || !Array.isArray(f.poligonos) || !f.poligonos.length) continue;
+          if (!f) continue;
           const extent = (typeof f.extent === 'number') ? f.extent : this.extent;
+          // Features sin polígonos (puntos/líneas) traen su geometría ya
+          // calculada en lon/lat; se usa tal cual.
+          if (f.geometry && f.tipoGeometria) {
+            out.push({
+              type: 'Feature',
+              id: (f.codigoNacional || f.codigo || 'mvt') + '_' + clave + '_' + out.length,
+              properties: Object.assign({
+                codigo: f.codigo,
+                codigoNacional: f.codigoNacional,
+                nombre: f.nombre,
+                color: f.color,
+                _tesela: clave,
+                _fragmento: true
+              }, f.propiedades || {}),
+              geometry: f.geometry
+            });
+            continue;
+          }
+          if (!Array.isArray(f.poligonos) || !f.poligonos.length) continue;
           const polygons = [];
           for (const poli of f.poligonos) {
             if (!poli || !Array.isArray(poli.exterior) || poli.exterior.length < 3) continue;
@@ -503,9 +571,7 @@
             polygons.push([ring].concat(holes));
           }
           if (!polygons.length) continue;
-          const geometry = polygons.length === 1
-            ? { type: 'Polygon', coordinates: polygons[0] }
-            : { type: 'MultiPolygon', coordinates: polygons };
+          const geometry = { type: (f.tipoGeometria || (polygons.length === 1 ? 'Polygon' : 'MultiPolygon')), coordinates: (polygons.length === 1 ? polygons[0] : polygons) };
           out.push({
             type: 'Feature',
             id: (f.codigoNacional || f.codigo || 'mvt') + '_' + clave + '_' + out.length,
