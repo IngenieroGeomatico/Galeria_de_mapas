@@ -3684,9 +3684,15 @@
             if (elemento.codigo != null && propsMvt.codigo === undefined && propsMvt.nationalcode === undefined) propsMvt.codigo = elemento.codigo;
             if (elemento.codigoNacional != null && propsMvt.codigoNacional === undefined && propsMvt.nationalcode === undefined) propsMvt.codigoNacional = elemento.codigoNacional;
             if (elemento.nombre != null && propsMvt.nombre === undefined && propsMvt.nameunit === undefined) propsMvt.nombre = elemento.nombre;
-            // Tipo de geometría real de la tesela (no harcodeado): polígono
-            // simple o multipolígono según el número de anillos exteriores.
-            var tipoGeomMvt = (elemento.poligonos && elemento.poligonos.length > 1) ? 'MultiPolygon' : 'Polygon';
+            // Tipo de geometría real de la tesela (no harcodeado): se toma del
+            // propio feature MVT. Si no está disponible, se deriva del número
+            // de partes (Multi* si hay más de una).
+            var tipoGeomMvt = elemento.tipoGeometria;
+            if (!tipoGeomMvt) {
+              var base = (elemento.tipoMVT === 1) ? 'Point' : (elemento.tipoMVT === 2) ? 'LineString' : 'Polygon';
+              var partes = (base === 'Polygon') ? (elemento.poligonos || []).length : 1;
+              tipoGeomMvt = (partes > 1) ? ('Multi' + base) : base;
+            }
             var featureMvt = { getProperties: function () { return propsMvt; }, getGeometry: function () { return { getType: function () { return tipoGeomMvt; }, getCoordinates: function () { return null; } }; }, getId: function () { return elemento.codigo; } };
             var normalizadoMvt = this._normalizarFeatureOL(featureMvt, capa);
             if (normalizadoMvt) {

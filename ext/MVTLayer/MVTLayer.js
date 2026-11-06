@@ -447,7 +447,11 @@
           z: z, x: x, y: y,
           extent: extent,
           poligonos: poligonos,
-          propiedades: propiedadesOriginales
+          propiedades: propiedadesOriginales,
+          // Tipo de geometría real de la tesela, derivado del feature MVT
+          // (1=Point, 2=LineString, 3=Polygon) y del número de partes.
+          tipoMVT: feature.type,
+          tipoGeometria: (poligonos.length > 1) ? 'MultiPolygon' : 'Polygon'
         });
       }
       return features;
