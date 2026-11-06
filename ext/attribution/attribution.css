@@ -1,3 +1,4 @@
+@import "../pluginBase/pluginBase.css";
 /* Estilos del plugin de atribución local para API-IDEE (2D y 3D).
    Patrón "g-herramienta": misma estructura que el resto de plugins del
    visualizador (vuelo, selectorCapas): botón © colapsado + panel con
