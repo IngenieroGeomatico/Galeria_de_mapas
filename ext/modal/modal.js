@@ -426,6 +426,44 @@ class miPlugin_modal {
   }
 
   /**
+   * Captura el estado serializable del modal para preservarlo entre cambios 2D/3D.
+   * @returns {Object}
+   */
+  getState() {
+    let collapsed = this.collapsed_;
+    if (this.panel && typeof this.panel.isCollapsed === 'function') {
+      collapsed = this.panel.isCollapsed();
+    }
+    return {
+      collapsed: collapsed
+    };
+  }
+
+  /**
+   * Restaura el estado previamente capturado tras el swap 2D/3D.
+   * @param {Object} state
+   * @param {Object} [map]
+   */
+  setState(state, map) {
+    if (!state || typeof state !== 'object') return;
+    if (map) {
+      this.map = map;
+      this.map_ = map;
+    }
+    if (state.collapsed !== undefined && this.panel) {
+      try {
+        if (state.collapsed && typeof this.panel.collapse === 'function') {
+          this.panel.collapse();
+        } else if (!state.collapsed && typeof this.panel.open === 'function') {
+          this.panel.open();
+        }
+      } catch (e) {
+        console.warn('miPlugin_modal: error al restaurar estado del panel:', e);
+      }
+    }
+  }
+
+  /**
    * Limpia controles y referencias asociadas al mapa.
    */
   destroy() {

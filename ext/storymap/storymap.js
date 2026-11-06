@@ -1402,8 +1402,7 @@ if (typeof window !== 'undefined') {
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_storymap = miPlugin_storymap;
-  if (window.M) {
-    window.M.plugin = window.M.plugin || {};
-    window.M.plugin.miPlugin_storymap = miPlugin_storymap;
-  }
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_storymap = miPlugin_storymap;
 }

@@ -1606,7 +1606,12 @@
     // Instalación como plugin en IDEE.plugin y M.plugin
     if (!IDEE.plugin) IDEE.plugin = {};
     IDEE.plugin.miPlugin_joinLayer = claseJoin;
-    if (window.M && window.M.plugin) window.M.plugin.miPlugin_joinLayer = claseJoin;
+    window.IDEE = window.IDEE || {};
+    window.IDEE.plugin = window.IDEE.plugin || {};
+    window.IDEE.plugin.miPlugin_joinLayer = claseJoin;
+    window.M = window.M || {};
+    window.M.plugin = window.M.plugin || {};
+    window.M.plugin.miPlugin_joinLayer = claseJoin;
 
     // Extracción de campos compartida con la UI de la ficha del selector
     // (`ext_joinUI.js`). Se cuelga de la clase y de la factoría para que

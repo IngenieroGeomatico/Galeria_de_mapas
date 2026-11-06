@@ -673,8 +673,7 @@ if (typeof window !== 'undefined') {
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_attribution = miPlugin_attribution;
-  if (window.M) {
-    window.M.plugin = window.M.plugin || {};
-    window.M.plugin.miPlugin_attribution = miPlugin_attribution;
-  }
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_attribution = miPlugin_attribution;
 }

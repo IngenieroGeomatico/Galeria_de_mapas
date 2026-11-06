@@ -5617,11 +5617,10 @@
   miPlugin_information.plantillasPorDefecto = PLANTILLAS_POR_DEFECTO;
 
   global.miPlugin_information = miPlugin_information;
-
-  if (global.IDEE && global.IDEE.plugin) {
-    global.IDEE.plugin.miPlugin_information = miPlugin_information;
-  }
-  if (global.M && global.M.plugin) {
-    global.M.plugin.miPlugin_information = miPlugin_information;
-  }
+  global.IDEE = global.IDEE || {};
+  global.IDEE.plugin = global.IDEE.plugin || {};
+  global.IDEE.plugin.miPlugin_information = miPlugin_information;
+  global.M = global.M || {};
+  global.M.plugin = global.M.plugin || {};
+  global.M.plugin.miPlugin_information = miPlugin_information;
 })(window);

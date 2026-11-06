@@ -297,11 +297,18 @@
     const IDEE = api();
     if (!IDEE) return false;
     instalarFactory();
-    if (IDEE.plugin && !IDEE.plugin.miPlugin_madridOpenDataLayer) {
-      try { IDEE.plugin.miPlugin_madridOpenDataLayer = crearPlugin(IDEE); } catch (e) { /* noop */ }
+    const pluginClass = IDEE.plugin && IDEE.plugin.miPlugin_madridOpenDataLayer ? IDEE.plugin.miPlugin_madridOpenDataLayer : crearPlugin(IDEE);
+    if (pluginClass) {
+      if (typeof window !== 'undefined') {
+        window.miPlugin_madridOpenDataLayer = pluginClass;
+        window.IDEE = window.IDEE || {};
+        window.IDEE.plugin = window.IDEE.plugin || {};
+        window.IDEE.plugin.miPlugin_madridOpenDataLayer = pluginClass;
+        window.M = window.M || {};
+        window.M.plugin = window.M.plugin || {};
+        window.M.plugin.miPlugin_madridOpenDataLayer = pluginClass;
+      }
     }
-    try { if (window.IDEE && window.IDEE.plugin && IDEE.plugin.miPlugin_madridOpenDataLayer) window.IDEE.plugin.miPlugin_madridOpenDataLayer = IDEE.plugin.miPlugin_madridOpenDataLayer; } catch (e) {}
-    try { if (window.M && window.M.plugin && IDEE.plugin.miPlugin_madridOpenDataLayer) window.M.plugin.miPlugin_madridOpenDataLayer = IDEE.plugin.miPlugin_madridOpenDataLayer; } catch (e) {}
     if (!window.Madrid) window.Madrid = {};
     window.Madrid.buscarDatasets = buscarDatasets;
     window.Madrid.obtenerDataset = obtenerDataset;

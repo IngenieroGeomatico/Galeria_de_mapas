@@ -253,19 +253,18 @@
     const IDEE = api();
     if (!IDEE) return false;
     instalarFactory();
-    if (IDEE.plugin && !IDEE.plugin.miPlugin_ineLayer) {
-      try { IDEE.plugin.miPlugin_ineLayer = crearPlugin(IDEE); } catch (e) { /* noop */ }
+    const pluginClass = IDEE.plugin && IDEE.plugin.miPlugin_ineLayer ? IDEE.plugin.miPlugin_ineLayer : crearPlugin(IDEE);
+    if (pluginClass) {
+      if (typeof window !== 'undefined') {
+        window.miPlugin_ineLayer = pluginClass;
+        window.IDEE = window.IDEE || {};
+        window.IDEE.plugin = window.IDEE.plugin || {};
+        window.IDEE.plugin.miPlugin_ineLayer = pluginClass;
+        window.M = window.M || {};
+        window.M.plugin = window.M.plugin || {};
+        window.M.plugin.miPlugin_ineLayer = pluginClass;
+      }
     }
-    try {
-      if (window.IDEE && window.IDEE.plugin && IDEE.plugin.miPlugin_ineLayer) {
-        window.IDEE.plugin.miPlugin_ineLayer = IDEE.plugin.miPlugin_ineLayer;
-      }
-    } catch (e) { /* noop */ }
-    try {
-      if (window.M && window.M.plugin && IDEE.plugin.miPlugin_ineLayer) {
-        window.M.plugin.miPlugin_ineLayer = IDEE.plugin.miPlugin_ineLayer;
-      }
-    } catch (e) { /* noop */ }
     if (!window.INE) window.INE = {};
     window.INE.cargarTabla = cargarTabla;
     window.INE.BASE_URL = BASE_URL;

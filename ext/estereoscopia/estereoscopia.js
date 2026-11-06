@@ -705,10 +705,9 @@
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_estereoscopia = miPlugin_estereoscopia;
-  if (window.M) {
-    window.M.plugin = window.M.plugin || {};
-    window.M.plugin.miPlugin_estereoscopia = miPlugin_estereoscopia;
-  }
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_estereoscopia = miPlugin_estereoscopia;
 
   // Exponer helpers a los motores (definidos en archivos/segmentos siguientes
   // dentro de este mismo IIFE).

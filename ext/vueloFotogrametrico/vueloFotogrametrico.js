@@ -4771,8 +4771,7 @@
   window.IDEE = window.IDEE || {};
   window.IDEE.plugin = window.IDEE.plugin || {};
   window.IDEE.plugin.miPlugin_vueloFotogrametrico = miPlugin_vueloFotogrametrico;
-  if (window.M) {
-    window.M.plugin = window.M.plugin || {};
-    window.M.plugin.miPlugin_vueloFotogrametrico = miPlugin_vueloFotogrametrico;
-  }
+  window.M = window.M || {};
+  window.M.plugin = window.M.plugin || {};
+  window.M.plugin.miPlugin_vueloFotogrametrico = miPlugin_vueloFotogrametrico;
 })();

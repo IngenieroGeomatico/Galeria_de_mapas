@@ -230,6 +230,15 @@
     }
     if (!window.mbtilesLayer) window.mbtilesLayer = {};
     window.mbtilesLayer.crear = crearCapa;
+    if (typeof window !== 'undefined') {
+      window.miPlugin_mbtilesLayer = factory;
+      window.IDEE = window.IDEE || {};
+      window.IDEE.plugin = window.IDEE.plugin || {};
+      window.IDEE.plugin.miPlugin_mbtilesLayer = factory;
+      window.M = window.M || {};
+      window.M.plugin = window.M.plugin || {};
+      window.M.plugin.miPlugin_mbtilesLayer = factory;
+    }
     return true;
   }
 

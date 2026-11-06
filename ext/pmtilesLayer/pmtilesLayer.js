@@ -944,5 +944,12 @@
     };
     window.pmtilesLayer = extension;
     window.miPMTiles = extension;
+    window.miPlugin_pmtilesLayer = PMTiles;
+    window.IDEE = window.IDEE || {};
+    window.IDEE.plugin = window.IDEE.plugin || {};
+    window.IDEE.plugin.miPlugin_pmtilesLayer = PMTiles;
+    window.M = window.M || {};
+    window.M.plugin = window.M.plugin || {};
+    window.M.plugin.miPlugin_pmtilesLayer = PMTiles;
   }
 })();
