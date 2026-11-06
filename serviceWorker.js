@@ -3,7 +3,7 @@
 // el service worker instalado seguirían recibiendo para siempre el index.html,
 // el CSS y el JS antiguos. Hay que tocarlo en cada despliegue que cambie
 // alguno de los tres ficheros de la lista "assets".
-const staticGalMAps = "galeria-mapas-v2"
+const staticGalMAps = "galeria-mapas-v3"
 const assets = [
   "/",
   "/index.html",
