@@ -4711,6 +4711,8 @@ class miPlugin_layerSwitcher {
       try { url = (typeof capa.url !== 'undefined' && capa.url !== null) ? capa.url : null; } catch (e) { url = null; }
 
       closeSheet();
+      const prevOverlay = document.querySelector('.ls-ficha-overlay');
+      if (prevOverlay && prevOverlay.parentNode) prevOverlay.parentNode.removeChild(prevOverlay);
 
       const overlay = document.createElement('div');
       overlay.className = 'ls-ficha-overlay';
@@ -4736,35 +4738,101 @@ class miPlugin_layerSwitcher {
                 <span class="ls-ficha-tipo">${tipo}</span>
               </div>
             </div>
-            <button type="button" class="ls-sheet-close" title="Cerrar" onclick="cerrarFicha()">✕</button>
+            <button type="button" class="ls-sheet-close" title="Cerrar ventana" onclick="cerrarFicha()">✕</button>
           </div>
           <div class="ls-ficha-tabs-nav" role="tablist">
-            <button type="button" role="tab" class="ls-ficha-tab-btn active" data-tab="params" aria-selected="true" onclick="window._fichaCambiarTab('params', this)">Parámetros</button>
-            ${window.getLayerKind && window.getLayerKind(capa) !== 'raster' ? '<button type="button" role="tab" class="ls-ficha-tab-btn" data-tab="join" aria-selected="false" onclick="window._fichaCambiarTab(\'join\', this)">Unión de capas (Join)</button>' : ''}
-            <button type="button" role="tab" class="ls-ficha-tab-btn" data-tab="doc" aria-selected="false" onclick="window._fichaCambiarTab('doc', this)">Documento del servicio</button>
+            <button type="button" role="tab" class="ls-ficha-tab-btn active" data-tab="params" aria-selected="true" onclick="window._fichaCambiarTab('params', this)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              Parámetros
+            </button>
+            ${window.getLayerKind && window.getLayerKind(capa) !== 'raster' ? '<button type="button" role="tab" class="ls-ficha-tab-btn" data-tab="join" aria-selected="false" onclick="window._fichaCambiarTab(\'join\', this)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>Unión de capas (Join)</button>' : ''}
+            <button type="button" role="tab" class="ls-ficha-tab-btn" data-tab="doc" aria-selected="false" onclick="window._fichaCambiarTab('doc', this)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+              Documento del servicio
+            </button>
           </div>
           <div class="ls-ficha-body">
             <div class="ls-ficha-tab-pane active" data-tab="params">
-              <div class="ls-ficha-card">
-                <div class="ls-ficha-seccion-titulo">Editar parámetros</div>
-                <div class="ls-ficha-editor-wrap"></div>
-                <details class="ls-ficha-detalle ls-ficha-params">
-                  <summary>Parámetros de construcción</summary>
-                  <div class="ls-ficha-params-cuerpo">${parametrosHtml}</div>
-                </details>
-                ${barraObjetosHtml ? `<div class="ls-ficha-seccion-titulo ls-ficha-seccion-titulo--sub">Objetos geográficos</div><div class="ls-ficha-objetos-wrap">${barraObjetosHtml}</div>` : ''}
-              </div>
+              <details class="ls-ficha-seccion" open>
+                <summary class="ls-ficha-seccion-header">
+                  <div class="ls-ficha-seccion-header-main">
+                    <span class="ls-ficha-seccion-icon">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                    </span>
+                    <div class="ls-ficha-seccion-textos">
+                      <span class="ls-ficha-seccion-titulo">Editar parámetros</span>
+                      <span class="ls-ficha-seccion-sub">Modifica la configuración de la capa en vivo</span>
+                    </div>
+                  </div>
+                  <span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                </summary>
+                <div class="ls-ficha-seccion-cuerpo">
+                  <div class="ls-ficha-editor-wrap"></div>
+                </div>
+              </details>
+
+              <details class="ls-ficha-seccion">
+                <summary class="ls-ficha-seccion-header">
+                  <div class="ls-ficha-seccion-header-main">
+                    <span class="ls-ficha-seccion-icon">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                    </span>
+                    <div class="ls-ficha-seccion-textos">
+                      <span class="ls-ficha-seccion-titulo">Parámetros de construcción</span>
+                      <span class="ls-ficha-seccion-sub">Parámetros originales del constructor y opciones técnicas</span>
+                    </div>
+                  </div>
+                  <span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                </summary>
+                <div class="ls-ficha-seccion-cuerpo ls-ficha-params-cuerpo">
+                  ${parametrosHtml}
+                </div>
+              </details>
+
+              ${barraObjetosHtml ? `
+              <details class="ls-ficha-seccion" open>
+                <summary class="ls-ficha-seccion-header">
+                  <div class="ls-ficha-seccion-header-main">
+                    <span class="ls-ficha-seccion-icon">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                    </span>
+                    <div class="ls-ficha-seccion-textos">
+                      <span class="ls-ficha-seccion-titulo">Objetos geográficos</span>
+                      <span class="ls-ficha-seccion-sub">Paginación, límites y filtro por ventana de mapa</span>
+                    </div>
+                  </div>
+                  <span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                </summary>
+                <div class="ls-ficha-seccion-cuerpo">
+                  <div class="ls-ficha-objetos-wrap">${barraObjetosHtml}</div>
+                </div>
+              </details>` : ''}
             </div>
+
             <div class="ls-ficha-tab-pane" data-tab="join">
               <div class="ls-join-container" id="ls-join-container">
                 <p class="ls-ficha-aviso">Cargando el módulo de unión de capas…</p>
               </div>
             </div>
+
             <div class="ls-ficha-tab-pane" data-tab="doc">
-              <div class="ls-ficha-card">
-                <div class="ls-ficha-seccion-titulo">Documento del servicio</div>
-                <div class="ls-ficha-doc">Cargando…</div>
-              </div>
+              <details class="ls-ficha-seccion" open>
+                <summary class="ls-ficha-seccion-header">
+                  <div class="ls-ficha-seccion-header-main">
+                    <span class="ls-ficha-seccion-icon">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                    </span>
+                    <div class="ls-ficha-seccion-textos">
+                      <span class="ls-ficha-seccion-titulo">Documento del servicio</span>
+                      <span class="ls-ficha-seccion-sub">GetCapabilities, TileJSON o metadatos asociados</span>
+                    </div>
+                  </div>
+                  <span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                </summary>
+                <div class="ls-ficha-seccion-cuerpo">
+                  <div class="ls-ficha-doc">Cargando…</div>
+                </div>
+              </details>
             </div>
           </div>`;
 
@@ -7895,20 +7963,47 @@ class miPlugin_layerSwitcher {
           if (/selectorCapas\/ext_layerSwitcher\.js/.test(src)) { base = src; break; }
         }
         if (!base) base = document.baseURI;
-        var s = document.createElement('script');
-        s.src = new URL('../joinLayer/joinLayer.js', base).href;
-        s.async = false;
-        s.onload = function () {
+        var pJoin = new Promise(function (res) {
           if (window.JoinLayer && typeof window.JoinLayer.instalar === 'function') {
-            try { window.JoinLayer.instalar(); } catch (e) { /* nada */ }
+            try { window.JoinLayer.instalar(); } catch (e) {}
+            res(window.JoinLayer);
+            return;
           }
-          resolver(window.JoinLayer);
-        };
-        s.onerror = function () {
-          console.warn('layerSwitcher: no se pudo cargar ext/joinLayer/joinLayer.js');
-          resolver(null);
-        };
-        document.head.appendChild(s);
+          var s = document.createElement('script');
+          s.src = new URL('../joinLayer/joinLayer.js', base).href;
+          s.async = false;
+          s.onload = function () {
+            if (window.JoinLayer && typeof window.JoinLayer.instalar === 'function') {
+              try { window.JoinLayer.instalar(); } catch (e) {}
+            }
+            res(window.JoinLayer);
+          };
+          s.onerror = function () {
+            console.warn('layerSwitcher: no se pudo cargar ext/joinLayer/joinLayer.js');
+            res(null);
+          };
+          document.head.appendChild(s);
+        });
+
+        var pUI = new Promise(function (res) {
+          if (typeof window.__montarJoinFichaImpl === 'function') {
+            res(true);
+            return;
+          }
+          var s = document.createElement('script');
+          s.src = new URL('ext_joinUI.js', base).href;
+          s.async = false;
+          s.onload = function () { res(true); };
+          s.onerror = function () {
+            console.warn('layerSwitcher: no se pudo cargar ext_joinUI.js');
+            res(false);
+          };
+          document.head.appendChild(s);
+        });
+
+        Promise.all([pJoin, pUI]).then(function (arr) {
+          resolver(arr[0] || window.JoinLayer || null);
+        });
       });
     };
 

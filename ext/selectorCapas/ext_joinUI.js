@@ -37,21 +37,68 @@
     return cols;
   }
 
+  const VENN_SVGS = {
+    left: `<svg class="ls-join-venn" viewBox="0 0 46 26" width="46" height="26">
+      <circle cx="17" cy="13" r="10" class="ls-venn-fill" />
+      <circle cx="17" cy="13" r="10" class="ls-venn-stroke" />
+      <circle cx="29" cy="13" r="10" class="ls-venn-stroke ls-venn-stroke--dim" />
+    </svg>`,
+    inner: `<svg class="ls-join-venn" viewBox="0 0 46 26" width="46" height="26">
+      <defs><clipPath id="ls-cl-inn"><circle cx="29" cy="13" r="10"/></clipPath></defs>
+      <circle cx="17" cy="13" r="10" clip-path="url(#ls-cl-inn)" class="ls-venn-fill" />
+      <circle cx="17" cy="13" r="10" class="ls-venn-stroke ls-venn-stroke--dim" />
+      <circle cx="29" cy="13" r="10" class="ls-venn-stroke ls-venn-stroke--dim" />
+    </svg>`,
+    right: `<svg class="ls-join-venn" viewBox="0 0 46 26" width="46" height="26">
+      <circle cx="29" cy="13" r="10" class="ls-venn-fill" />
+      <circle cx="17" cy="13" r="10" class="ls-venn-stroke ls-venn-stroke--dim" />
+      <circle cx="29" cy="13" r="10" class="ls-venn-stroke" />
+    </svg>`,
+    full: `<svg class="ls-join-venn" viewBox="0 0 46 26" width="46" height="26">
+      <circle cx="17" cy="13" r="10" class="ls-venn-fill" />
+      <circle cx="29" cy="13" r="10" class="ls-venn-fill" />
+      <circle cx="17" cy="13" r="10" class="ls-venn-stroke" />
+      <circle cx="29" cy="13" r="10" class="ls-venn-stroke" />
+    </svg>`,
+    semi: `<svg class="ls-join-venn" viewBox="0 0 46 26" width="46" height="26">
+      <defs><clipPath id="ls-cl-semi"><circle cx="29" cy="13" r="10"/></clipPath></defs>
+      <circle cx="17" cy="13" r="10" clip-path="url(#ls-cl-semi)" class="ls-venn-fill" />
+      <circle cx="17" cy="13" r="10" class="ls-venn-stroke" />
+      <circle cx="29" cy="13" r="10" class="ls-venn-stroke ls-venn-stroke--dash" stroke-dasharray="2,2" />
+    </svg>`,
+    anti: `<svg class="ls-join-venn" viewBox="0 0 46 26" width="46" height="26">
+      <path d="M 23 4.9 A 10 10 0 1 0 23 21.1 A 10 10 0 0 0 23 4.9 Z" class="ls-venn-fill" />
+      <circle cx="17" cy="13" r="10" class="ls-venn-stroke" />
+      <circle cx="29" cy="13" r="10" class="ls-venn-stroke ls-venn-stroke--dash" stroke-dasharray="2,2" />
+    </svg>`
+  };
+
   function pintarStats(cont, st) {
     if (!cont) return;
-    let html = '<div class="ls-join-results-card ' + (st.matchedCount > 0 ? 'ls-join-results-card--ok' : '') + '">';
-    html += '<div class="ls-join-results-titulo">Resultado del join</div>';
+    let html = '<details class="ls-ficha-seccion ls-join-seccion-stats" open>';
+    html += '<summary class="ls-ficha-seccion-header">';
+    html += '<div class="ls-ficha-seccion-header-main">';
+    html += '<span class="ls-ficha-seccion-icon" style="background:var(--ls-ok-fondo, #f0fdf4);color:var(--ls-exito, #16a34a);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>';
+    html += '<div class="ls-ficha-seccion-textos">';
+    html += '<span class="ls-ficha-seccion-titulo">4. Resultado y estadísticas del Join</span>';
+    html += '<span class="ls-ficha-seccion-sub">' + (st.matchedCount > 0 ? (st.matchedCount + ' coincidencias encontradas en ' + st.executionTimeMs + ' ms') : 'Sin coincidencias') + '</span>';
+    html += '</div></div>';
+    html += '<span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>';
+    html += '</summary>';
+    html += '<div class="ls-ficha-seccion-cuerpo">';
+    html += '<div class="ls-join-results-card ' + (st.matchedCount > 0 ? 'ls-join-results-card--ok' : '') + '">';
     html += '<div class="ls-join-stats-grid">';
-    html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.layer1Count}</div><div class="ls-join-stat-label">Capa 1</div></div>`;
-    html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.layer2Count}</div><div class="ls-join-stat-label">Capa 2</div></div>`;
-    html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.matchedCount}</div><div class="ls-join-stat-label">Coincidencias</div></div>`;
-    html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.resultCount}</div><div class="ls-join-stat-label">Resultado</div></div>`;
+    html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.layer1Count}</div><div class="ls-join-stat-label">Capa activa</div></div>`;
+    html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num">${st.layer2Count}</div><div class="ls-join-stat-label">Capa origen</div></div>`;
+    html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num" style="color:var(--ls-exito, #16a34a);">${st.matchedCount}</div><div class="ls-join-stat-label">Coincidencias</div></div>`;
+    html += `<div class="ls-join-stat-box"><div class="ls-join-stat-num" style="color:var(--ls-primario, #0078d4);">${st.resultCount}</div><div class="ls-join-stat-label">Resultado final</div></div>`;
     html += '</div>';
     html += '<div class="ls-join-results-pie">';
-    html += 'Sin correspondencia en capa 1: ' + st.unmatched1Count + ' · en capa 2: ' + st.unmatched2Count +
-            ' · ' + st.executionTimeMs + ' ms';
+    html += 'Sin correspondencia en capa 1: ' + st.unmatched1Count + ' · en capa origen: ' + st.unmatched2Count +
+            ' · Tiempo de cálculo: ' + st.executionTimeMs + ' ms';
     html += '</div>';
     html += '</div>';
+    html += '</div></details>';
     cont.innerHTML = html;
   }
 
@@ -127,34 +174,55 @@
 
       let html = '';
       html += '<div class="ls-join-banner"><div class="ls-join-banner-info">';
-      html += '<span class="ls-join-banner-badge">Join</span>';
-      html += '<span class="ls-join-banner-texto">Combina los atributos de esta capa con los de otra capa del mapa.</span>';
-      html += '</div></div>';
+      html += '<span class="ls-join-banner-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></span>';
+      html += '<div>';
+      html += '<div class="ls-join-banner-badge-row"><span class="ls-join-banner-badge">JOIN</span><span class="ls-join-banner-titulo">Unión tabular y espacial de capas</span></div>';
+      html += '<div class="ls-join-banner-texto">Combina los atributos de la capa activa con otra capa vectorial o alfanumérica del mapa.</div>';
+      html += '</div></div></div>';
 
       if (esImplCesium() && (esCapaMVT(capa) || candidatos.some(esCapaMVT))) {
-        html += '<div class="ls-ficha-aviso ls-ficha-aviso--aviso" style="margin-bottom:10px;">';
+        html += '<div class="ls-ficha-aviso ls-ficha-aviso--aviso" style="margin-bottom:12px;">';
         html += 'Aviso: una o varias capas son MVT. En 3D (Cesium) las features MVT son fragmentos por tesela (solo viewport, posibles duplicados); el join puede dar resultados parciales. Para joins completos usa 2D o una capa WFS/GeoJSON.';
         html += '</div>';
       }
 
-      html += '<div class="ls-join-mode-pills">';
-      html += '<button type="button" class="ls-join-mode-pill active" data-mode="attribute" onclick="window._joinSetMode(\'attribute\')">Por atributo</button>';
-      html += '<button type="button" class="ls-join-mode-pill" data-mode="spatial" onclick="window._joinSetMode(\'spatial\')">Espacial</button>';
-      html += '</div>';
+      // Sección 1: Capas y campos
+      html += '<details class="ls-ficha-seccion" open>';
+      html += '<summary class="ls-ficha-seccion-header">';
+      html += '<div class="ls-ficha-seccion-header-main">';
+      html += '<span class="ls-ficha-seccion-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"></path></svg></span>';
+      html += '<div class="ls-ficha-seccion-textos">';
+      html += '<span class="ls-ficha-seccion-titulo">1. Capas y campos a enlazar</span>';
+      html += '<span class="ls-ficha-seccion-sub">Elige la capa origen y el criterio de correspondencia</span>';
+      html += '</div></div>';
+      html += '<span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>';
+      html += '</summary>';
+      html += '<div class="ls-ficha-seccion-cuerpo">';
 
-      html += '<div class="ls-ficha-card">';
-      html += '<div class="ls-ficha-seccion-titulo">Capa de origen (datos a unir)</div>';
-      html += '<select id="ls-join-source" class="ls-ficha-input" style="margin-bottom:10px;">';
-      html += '<option value="">— Selecciona una capa —</option>';
+      html += '<div class="ls-join-mode-wrap" style="margin-bottom:12px;">';
+      html += '<div class="ls-ficha-campo-etiqueta" style="margin-bottom:6px;">Modo de enlace</div>';
+      html += '<div class="ls-join-mode-pills">';
+      html += '<button type="button" class="ls-join-mode-pill active" data-mode="attribute" onclick="window._joinSetMode(\'attribute\')">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>';
+      html += 'Por atributo (clave común)</button>';
+      html += '<button type="button" class="ls-join-mode-pill" data-mode="spatial" onclick="window._joinSetMode(\'spatial\')">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/></svg>';
+      html += 'Espacial (geometría)</button>';
+      html += '</div></div>';
+
+      html += '<div class="ls-ficha-campo" style="margin-bottom:12px;">';
+      html += '<div class="ls-ficha-campo-etiqueta">Capa de origen (datos a unir)</div>';
+      html += '<select id="ls-join-source" class="ls-ficha-input">';
+      html += '<option value="">— Selecciona una capa de origen —</option>';
       candidatos.forEach(function (l) {
         const nm = esc(l.legend || l.name || 'Sin nombre');
         const kind = (window.getLayerKind ? window.getLayerKind(l) : '');
         html += `<option value="${esc(l.idLayer)}">${nm} (${esc(kind)})</option>`;
       });
-      html += '</select>';
+      html += '</select></div>';
 
       html += '<div id="ls-join-attr-block">';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">';
       html += '<div><div class="ls-ficha-campo-etiqueta">Clave en esta capa (key1)</div>';
       html += '<select id="ls-join-key1" class="ls-ficha-input">';
       targetFields.forEach(function (f) { html += `<option value="${esc(f)}">${esc(f)}</option>`; });
@@ -168,7 +236,7 @@
       html += '</div>';
 
       html += '<div id="ls-join-spatial-block" style="display:none;">';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">';
       html += '<div><div class="ls-ficha-campo-etiqueta">Predicado espacial</div>';
       html += '<select id="ls-join-pred" class="ls-ficha-input">';
       ['intersects','contains','within','touches','nearest'].forEach(function (p) {
@@ -180,41 +248,81 @@
       html += '</div>';
       html += '</div>';
 
-      html += '<div class="ls-ficha-seccion-titulo" style="margin-top:12px;">Tipo de join</div>';
+      html += '</div></details>';
+
+      // Sección 2: Tipo de Join
+      html += '<details class="ls-ficha-seccion" open>';
+      html += '<summary class="ls-ficha-seccion-header">';
+      html += '<div class="ls-ficha-seccion-header-main">';
+      html += '<span class="ls-ficha-seccion-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg></span>';
+      html += '<div class="ls-ficha-seccion-textos">';
+      html += '<span class="ls-ficha-seccion-titulo">2. Tipo de unión (Join)</span>';
+      html += '<span class="ls-ficha-seccion-sub">Selecciona qué entidades y atributos se conservan en el resultado</span>';
+      html += '</div></div>';
+      html += '<span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>';
+      html += '</summary>';
+      html += '<div class="ls-ficha-seccion-cuerpo">';
+
       html += '<div class="ls-join-types-grid">';
       const tipos = [
-        { id: 'left', nombre: 'Left', badge: 'LEFT', desc: 'Conserva todos los elementos de esta capa; añade atributos de la origen si hay coincidencia.' },
-        { id: 'inner', nombre: 'Inner', badge: 'INNER', desc: 'Solo los elementos con coincidencia en ambas capas.' },
-        { id: 'right', nombre: 'Right', badge: 'RIGHT', desc: 'Conserva todos los registros de la capa origen.' },
-        { id: 'full', nombre: 'Full', badge: 'FULL', desc: 'Conserva todos los elementos de ambas capas.' },
-        { id: 'semi', nombre: 'Semi', badge: 'SEMI', desc: 'Filtra esta capa por existencia en la origen (sin añadir columnas).' },
-        { id: 'anti', nombre: 'Anti', badge: 'ANTI', desc: 'Filtra esta capa por no existencia en la origen.' }
+        { id: 'left', nombre: 'Left Join', badge: 'LEFT', desc: 'Conserva todas las filas de la capa activa; añade atributos de origen si coinciden.' },
+        { id: 'inner', nombre: 'Inner Join', badge: 'INNER', desc: 'Conserva únicamente las entidades con coincidencia en ambas capas.' },
+        { id: 'right', nombre: 'Right Join', badge: 'RIGHT', desc: 'Conserva todas las filas de la capa de origen con correspondencia.' },
+        { id: 'full', nombre: 'Full Join', badge: 'FULL', desc: 'Conserva todas las entidades de ambas capas (unión completa).' },
+        { id: 'semi', nombre: 'Semi Join', badge: 'SEMI', desc: 'Filtra la capa activa por existencia en origen (sin agregar columnas).' },
+        { id: 'anti', nombre: 'Anti Join', badge: 'ANTI', desc: 'Filtra la capa activa por NO existencia en la capa de origen.' }
       ];
       tipos.forEach(function (t, i) {
         html += `<div class="ls-join-type-card ${i === 0 ? 'active' : ''}" data-type="${t.id}" onclick="window._joinSetType('${t.id}', this)">`;
-        html += `<div class="ls-join-type-name">${t.nombre} <span class="ls-join-type-badge">${t.badge}</span></div>`;
+        html += `<div class="ls-join-type-card-top">`;
+        html += `<div class="ls-join-type-card-izq">`;
+        html += (VENN_SVGS[t.id] || '');
+        html += `<span class="ls-join-type-name">${t.nombre}</span>`;
+        html += `</div>`;
+        html += `<span class="ls-join-type-badge">${t.badge}</span>`;
+        html += `</div>`;
         html += `<div class="ls-join-type-desc">${t.desc}</div>`;
         html += `</div>`;
       });
       html += '</div>';
 
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+      html += '</div></details>';
+
+      // Sección 3: Opciones y ejecución
+      html += '<details class="ls-ficha-seccion" open>';
+      html += '<summary class="ls-ficha-seccion-header">';
+      html += '<div class="ls-ficha-seccion-header-main">';
+      html += '<span class="ls-ficha-seccion-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span>';
+      html += '<div class="ls-ficha-seccion-textos">';
+      html += '<span class="ls-ficha-seccion-titulo">3. Opciones de salida y ejecución</span>';
+      html += '<span class="ls-ficha-seccion-sub">Elige el destino del resultado y ejecuta la operación</span>';
+      html += '</div></div>';
+      html += '<span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>';
+      html += '</summary>';
+      html += '<div class="ls-ficha-seccion-cuerpo">';
+
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">';
       html += '<div><div class="ls-ficha-campo-etiqueta">Modo de resultado</div>';
       html += '<select id="ls-join-result" class="ls-ficha-input">';
       html += '<option value="new">Crear nueva capa en el mapa</option>';
       html += '<option value="inplace">Aplicar a esta capa (in-situ)</option>';
       html += '</select></div>';
       html += '<div><div class="ls-ficha-campo-etiqueta">Sobrescribir campos existentes</div>';
-      html += '<select id="ls-join-overwrite" class="ls-ficha-input"><option value="false">No</option><option value="true">Sí</option></select></div>';
+      html += '<select id="ls-join-overwrite" class="ls-ficha-input"><option value="false">No (añade sufijo)</option><option value="true">Sí (reemplaza valor)</option></select></div>';
       html += '</div>';
 
-      html += '<div class="ls-ficha-editor-pie" style="position:static;border-top:none;padding:0;margin-top:8px;">';
-      html += '<button type="button" class="ls-ficha-boton ls-ficha-boton--primario" id="ls-join-run">Ejecutar unión</button>';
+      html += '<div class="ls-ficha-editor-pie" style="position:static;border-top:none;padding:0;margin-top:6px;">';
+      html += '<button type="button" class="ls-ficha-boton ls-ficha-boton--primario" id="ls-join-run">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+      html += 'Ejecutar unión</button>';
       html += '<span id="ls-join-status" class="ls-ficha-editor-estado" role="status"></span>';
       html += '</div>';
 
+      html += '</div></details>';
+
       html += '<div id="ls-join-results" style="margin-top:14px;"></div>';
-      html += '</div>';
+
+      cont.innerHTML = html;
 
       cont.innerHTML = html;
 
