@@ -85,7 +85,42 @@
       return 'const capa = await window.Madrid.cargarRecurso(' + JSON.stringify(rid) + ', ' + JSON.stringify(opts) + ');\ncapa.addTo(mapajs);';
     }
     if (ext === 'alphanumericLayer') {
-      return 'const capa = new IDEE.layer.Alphanumeric({\n  name: ' + JSON.stringify(v.name || 'Datos') + ',\n  legend: ' + JSON.stringify(v.legend || 'Datos') + '\n});\ncapa.addTo(mapajs);';
+      return '// 1. Capa Alfanumérica cargada con un CSV directamente en \'source\'\n' +
+        'const csvString = "id;municipio;poblacion;lat;lon\\n1;Cercedilla;7526;40.7388;-4.0628\\n2;Rascafría;1736;40.9056;-3.8781";\n\n' +
+        'const capaCSV = new IDEE.layer.Alphanumeric({\n' +
+        '  name: "capa_municipios_csv",\n' +
+        '  legend: "Municipios Sierra (CSV directo)",\n' +
+        '  source: {\n' +
+        '    data: csvString,\n' +
+        '    idField: "id",\n' +
+        '    latField: "lat",\n' +
+        '    lonField: "lon"\n' +
+        '  }\n' +
+        '});\n' +
+        'capaCSV.addTo(mapajs);\n\n' +
+        '// 2. Capa Alfanumérica cargada con un array de JSON Features directamente en \'source\'\n' +
+        'const arrayFeatures = [\n' +
+        '  {\n' +
+        '    type: "Feature",\n' +
+        '    id: "f1",\n' +
+        '    geometry: { type: "Point", coordinates: [-3.7037, 40.4167] },\n' +
+        '    properties: { nombre: "Madrid (Sol)", categoria: "Monumento", visitas: 4500 }\n' +
+        '  },\n' +
+        '  {\n' +
+        '    type: "Feature",\n' +
+        '    id: "f2",\n' +
+        '    geometry: { type: "Point", coordinates: [2.1734, 41.3851] },\n' +
+        '    properties: { nombre: "Barcelona (Ramblas)", categoria: "Paseo", visitas: 3800 }\n' +
+        '  }\n' +
+        '];\n\n' +
+        'const capaJSON = new IDEE.layer.Alphanumeric({\n' +
+        '  name: "capa_lugares_json",\n' +
+        '  legend: "Lugares Interés (JSON Features directo)",\n' +
+        '  source: arrayFeatures,\n' +
+        '  idField: "__idee_id"\n' +
+        '});\n' +
+        'capaJSON.addTo(mapajs);\n\n' +
+        'const capa = capaCSV;';
     }
     if (ext === 'mbtilesLayer') {
       return 'const capa = new IDEE.layer.MBTiles({\n  url: ' + JSON.stringify(v.url || '') + ',\n  name: ' + JSON.stringify(v.name || 'MBTiles') + ',\n  legend: ' + JSON.stringify(v.legend || 'MBTiles') + '\n});\nmapajs.addLayers(capa);';
