@@ -614,13 +614,8 @@
      * @param {Object} [options]
      * @param {string} [options.name] Nombre de la capa.
      * @param {string} [options.legend] Leyenda (por defecto el nombre).
-     * @param {Array<Object>} [options.records] Registros.
-     * @param {Array<Object>} [options.fields] Campos [{ name, type }].
-     * @param {string} [options.idField] Campo identificador.
-     * @param {string} [options.latField] Campo de latitud (EPSG:4326).
-     * @param {string} [options.lonField] Campo de longitud (EPSG:4326).
-     * @param {string} [options.geometryField] Campo con geometría GeoJSON.
-     * @param {Object} [options.source] Origen de los datos (informativo).
+     * @param {string|Object} [options.source] Origen de los datos (CSV en string, FeatureCollection o configuración { data, idField, ... }).
+     * @param {string} [options.url] URL remota de origen de los datos (CSV, JSON, GeoJSON, XLSX).
      * @param {Object} [options.metadata] Metadatos libres.
      */
     constructor(options) {
@@ -633,22 +628,126 @@
       this.idLayer = this.id;
       this.isBase = false;
       this.displayInLayerSwitcher = true;
-      this._records = normalizarRegistros(o.records || o.data || []);
-      this._fields = Array.isArray(o.fields) && o.fields.length
-        ? o.fields.map(function (f) { return { name: f.name, type: f.type || 'string' }; })
+
+      // Determinación de registros, campos y geometría
+      let records = [];
+      let geometryField = null;
+      let fields = null;
+      let idField = null;
+      let latField = null;
+      let lonField = null;
+      let xField = null;
+      let yField = null;
+      let wktField = null;
+      let crs = 'EPSG:4326';
+
+      let config = o;
+
+      // Si se pasa 'source' en el constructor (CSV en string, array, FeatureCollection o config de source)
+      if (o.source !== undefined && o.source !== null) {
+        let src = o.source;
+
+        // Si source es un objeto de configuración que envuelve la propiedad 'data'
+        if (typeof src === 'object' && !Array.isArray(src) && src.type !== 'FeatureCollection' && src.data !== undefined) {
+          config = Object.assign({}, o, src);
+          src = src.data;
+        }
+
+        if (typeof src === 'string') {
+          try {
+            const parsed = JSON.parse(src);
+            const resJSON = AlphanumericLayer._parseJSONData(parsed, config);
+            records = resJSON.records;
+            if (resJSON.geometryField) geometryField = resJSON.geometryField;
+          } catch (e) {
+            const resCSV = AlphanumericLayer._parseCSVData(src, config);
+            records = resCSV.records;
+            if (resCSV.fields) fields = fields || resCSV.fields;
+          }
+        } else if (Array.isArray(src)) {
+          records = src;
+        } else if (typeof src === 'object') {
+          const resJSON = AlphanumericLayer._parseJSONData(src, config);
+          records = resJSON.records;
+          if (resJSON.geometryField) geometryField = resJSON.geometryField;
+        }
+      } else {
+        // Fallback clásico: si no se usa source sino direct options
+        records = o.records || o.data || [];
+        geometryField = o.geometryField || null;
+        fields = o.fields || null;
+      }
+
+      // Consolidar campos de configuración desde 'config'
+      idField = config.idField || null;
+      latField = config.latField || null;
+      lonField = config.lonField || null;
+      xField = config.xField || null;
+      yField = config.yField || null;
+      wktField = config.wktField || null;
+      if (config.geometryField) {
+        geometryField = config.geometryField;
+      }
+      if (config.fields) {
+        fields = config.fields;
+      }
+      crs = config.crs || 'EPSG:4326';
+
+      this._records = normalizarRegistros(records);
+      this._fields = Array.isArray(fields) && fields.length
+        ? fields.map(function (f) { return { name: f.name, type: f.type || 'string' }; })
         : inferirCampos(this._records);
-      this._idField = o.idField || null;
-      this._latField = o.latField || null;
-      this._lonField = o.lonField || null;
-      this._xField = o.xField || null;
-      this._yField = o.yField || null;
-      this._wktField = o.wktField || null;
-      this._geometryField = o.geometryField || null;
+
+      this._idField = idField;
+      this._latField = latField;
+      this._lonField = lonField;
+      this._xField = xField;
+      this._yField = yField;
+      this._wktField = wktField;
+      this._geometryField = geometryField;
       this._source = o.source || null;
       this._metadata = o.metadata || {};
-      this._crs = o.crs || 'EPSG:4326';
+      this._crs = crs;
       this._visible = o.visible !== false;
       this._map = null;
+
+      // Si se pasa 'url' en el constructor, se auto-carga e inicializa asíncronamente
+      if (o.url) {
+        this.url = o.url;
+        const self = this;
+        this.ready = fetch(o.url).then(function (r) {
+          if (!r.ok) throw new Error('No se pudo descargar ' + o.url + ' (HTTP ' + r.status + ')');
+          const ext = (o.url.split('?')[0].split('.').pop() || '').toLowerCase();
+          if (ext === 'xlsx' || ext === 'xlsm' || ext === 'ods') {
+            return r.arrayBuffer().then(function (b) {
+              return AlphanumericLayer.fromXLSX(b, o);
+            });
+          }
+          return r.text().then(function (t) {
+            if (ext === 'json' || ext === 'geojson') return AlphanumericLayer.fromJSON(t, o);
+            if (ext === 'tsv' || ext === 'txt') return AlphanumericLayer.fromCSV(t, Object.assign({}, o, { separator: '\t' }));
+            return AlphanumericLayer.fromCSV(t, o);
+          });
+        }).then(function (capaInstancia) {
+          self._records = capaInstancia.getRecords();
+          self._fields = capaInstancia.getFields();
+          if (capaInstancia.getGeometryField()) self._geometryField = capaInstancia.getGeometryField();
+          try {
+            if (self._map) {
+              self._map.fire('alphanumeric:loaded', [self]);
+              if (typeof window !== 'undefined' && typeof window.renderLayerList === 'function') {
+                window.renderLayerList();
+              }
+            }
+          } catch (e) {}
+          return self;
+        }).catch(function (e) {
+          console.error('[AlphanumericLayer] Error cargando URL:', e);
+          try {
+            if (self._map) self._map.fire('alphanumeric:error', [self, e]);
+          } catch (err) {}
+        });
+      }
     }
 
     // -------------------- contrato de capa --------------------
@@ -1241,46 +1340,22 @@
       };
     }
 
-    // -------------------- constructores estáticos --------------------
-
     /**
-     * Crea una capa desde un CSV.
-     * @param {string} texto Contenido.
-     * @param {Object} [opciones]
-     * @returns {AlphanumericLayer}
+     * @private
      */
-    static fromCSV(texto, opciones) {
-      const o = opciones || {};
+    static _parseCSVData(texto, o) {
       const filas = parsearCSV(texto, o.separator);
       const res = matrizARegistros(filas, convertirValor);
-      if (!res.registros.length) {
-        throw new Error('El CSV no contiene filas de datos');
-      }
-      return new AlphanumericLayer({
-        name: o.name,
-        legend: o.legend,
+      return {
         records: res.registros,
-        fields: res.campos,
-        idField: o.idField,
-        latField: o.latField,
-        lonField: o.lonField,
-        xField: o.xField,
-        yField: o.yField,
-        wktField: o.wktField,
-        geometryField: o.geometryField,
-        crs: o.crs,
-        source: o.source,
-      });
+        fields: res.campos
+      };
     }
 
     /**
-     * Crea una capa desde JSON:: array de objetos, { records }, o GeoJSON.
-     * @param {string|Object} datos JSON o texto.
-     * @param {Object} [opciones]
-     * @returns {AlphanumericLayer}
+     * @private
      */
-    static fromJSON(datos, opciones) {
-      const o = opciones || {};
+    static _parseJSONData(datos, o) {
       let obj = datos;
       if (typeof obj === 'string') obj = JSON.parse(obj);
       let registros = [];
@@ -1307,15 +1382,61 @@
         throw new Error('JSON no reconocido: se espera un array, un FeatureCollection o { records }');
       }
 
+      return {
+        records: registros,
+        geometryField: geometryField
+      };
+    }
+
+    // -------------------- constructores estáticos --------------------
+
+    /**
+     * Crea una capa desde un CSV.
+     * @param {string} texto Contenido.
+     * @param {Object} [opciones]
+     * @returns {AlphanumericLayer}
+     */
+    static fromCSV(texto, opciones) {
+      const o = opciones || {};
+      const res = AlphanumericLayer._parseCSVData(texto, o);
+      if (!res.records.length) {
+        throw new Error('El CSV no contiene filas de datos');
+      }
       return new AlphanumericLayer({
         name: o.name,
         legend: o.legend,
-        records: registros,
+        records: res.records,
+        fields: res.fields,
+        idField: o.idField,
+        latField: o.latField,
+        lonField: o.lonField,
+        xField: o.xField,
+        yField: o.yField,
+        wktField: o.wktField,
+        geometryField: o.geometryField,
+        crs: o.crs,
+        source: o.source,
+      });
+    }
+
+    /**
+     * Crea una capa desde JSON:: array de objetos, { records }, o GeoJSON.
+     * @param {string|Object} datos JSON o texto.
+     * @param {Object} [opciones]
+     * @returns {AlphanumericLayer}
+     */
+    static fromJSON(datos, opciones) {
+      const o = opciones || {};
+      const res = AlphanumericLayer._parseJSONData(datos, o);
+      return new AlphanumericLayer({
+        name: o.name,
+        legend: o.legend,
+        records: res.records,
         fields: o.fields,
         idField: o.idField,
         latField: o.latField,
         lonField: o.lonField,
-        geometryField: geometryField,
+        geometryField: res.geometryField,
         xField: o.xField,
         yField: o.yField,
         wktField: o.wktField,
