@@ -249,6 +249,109 @@
     }
 
     /**
+     * Devuelve la implementación activa del mapa: 'cesium' o 'ol'.
+     * @returns {string}
+     */
+    getMapImplType() {
+      const map = this._map || this.map;
+      if (!map) return 'ol';
+      try {
+        const impl = map.getMapImpl();
+        return (impl && impl.scene && impl.scene.camera && typeof Cesium !== 'undefined') ? 'cesium' : 'ol';
+      } catch (e) {
+        return 'ol';
+      }
+    }
+
+    /**
+     * Comprueba si el mapa se está ejecutando bajo la implementación 3D de Cesium.
+     * @returns {boolean}
+     */
+    isCesium() {
+      return this.getMapImplType() === 'cesium';
+    }
+
+    /**
+     * Busca una capa en el mapa activo utilizando identificadores estables (legend o name).
+     * Útil tras el swap 2D/3D cuando los idLayer se regeneran.
+     * @param {string} legend El legend o name de la capa a buscar.
+     * @returns {Object|null} La capa de la API o null si no se encuentra.
+     */
+    findLayerByLegend(legend) {
+      const map = this._map || this.map;
+      if (!map || !legend) return null;
+      try {
+        const layers = map.getLayers();
+        if (!Array.isArray(layers)) return null;
+        const target = String(legend).trim().toLowerCase();
+        return layers.find(l => {
+          if (!l) return false;
+          const leg = l.legend ? String(l.legend).trim().toLowerCase() : '';
+          const nam = l.name ? String(l.name).trim().toLowerCase() : '';
+          const id = l.idLayer ? String(l.idLayer).trim().toLowerCase() : '';
+          return leg === target || nam === target || id === target;
+        }) || null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Busca una capa en el mapa activo utilizando su idLayer, con fallback
+     * a su legend/name estable si el ID original se perdió tras el swap 2D/3D.
+     * @param {string} idLayer Identificador de la capa.
+     * @param {string} [fallbackLegend] Leyenda o nombre estable de la capa.
+     * @returns {Object|null} La capa de la API o null si no se encuentra.
+     */
+    findLayerById(idLayer, fallbackLegend) {
+      const map = this._map || this.map;
+      if (!map) return null;
+      try {
+        let l = null;
+        if (idLayer) {
+          const layers = map.getLayers();
+          if (Array.isArray(layers)) {
+            l = layers.find(layer => layer && layer.idLayer === idLayer) || null;
+          }
+        }
+        if (!l && fallbackLegend) {
+          l = this.findLayerByLegend(fallbackLegend);
+        }
+        return l;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Centra el mapa en las coordenadas especificadas, realizando la reproyección
+     * condicional síncrona a EPSG:4326 (lon/lat) si el mapa está en modo 3D (Cesium).
+     * En modo 2D (OpenLayers) asume la proyección EPSG:3857 (Web Mercator) por defecto.
+     * @param {number} x Coordenada X (EPSG:3857).
+     * @param {number} y Coordenada Y (EPSG:3857).
+     * @param {number} [zoom] Nivel de zoom opcional a aplicar.
+     */
+    centrarMapa(x, y, zoom) {
+      const map = this._map || this.map;
+      if (!map) return;
+      try {
+        let coords = [x, y];
+        if (this.isCesium()) {
+          const IDEE = this.api();
+          if (IDEE && IDEE.utils && typeof IDEE.utils.reproject === 'function') {
+            coords = IDEE.utils.reproject([x, y], 'EPSG:3857', 'EPSG:4326');
+          }
+        }
+        map.setCenter(coords);
+        if (zoom !== undefined && zoom !== null) {
+          map.setZoom(zoom);
+        }
+      } catch (e) {
+        console.error('[miPlugin_base] Error al centrar el mapa:', e);
+      }
+    }
+
+    /**
      * Retorna el elemento DOM raíz del panel.
      * @param {Object} [panelRef] Referencia opcional al panel.
      * @returns {HTMLElement|null}
