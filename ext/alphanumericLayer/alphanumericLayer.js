@@ -1564,11 +1564,15 @@
 
   // Instalación de BigQueryLayer
   function instalarBigQueryLayer() {
-    const A = (window.IDEE || window.M);
-    if (!A) return false;
-    if (!A.layer) A.layer = {};
-    A.layer.BigQuery = BigQueryLayer;
-    A.layer.bigQuery = BigQueryLayer;
+    const targets = [];
+    if (window.IDEE) targets.push(window.IDEE);
+    if (window.M && window.M !== window.IDEE) targets.push(window.M);
+    if (!targets.length) return false;
+    targets.forEach(function (A) {
+      if (!A.layer) A.layer = {};
+      A.layer.BigQuery = BigQueryLayer;
+      A.layer.bigQuery = BigQueryLayer;
+    });
     return true;
   }
   BigQueryLayer.instalar = instalarBigQueryLayer;
@@ -1585,11 +1589,15 @@
    * @returns {boolean}
    */
   function instalar() {
-    const A = api();
-    if (!A) return false;
-    if (!A.layer) A.layer = {};
-    A.layer.Alphanumeric = AlphanumericLayer;
-    A.layer.alphanumeric = AlphanumericLayer;
+    const targets = [];
+    if (window.IDEE) targets.push(window.IDEE);
+    if (window.M && window.M !== window.IDEE) targets.push(window.M);
+    if (!targets.length) return false;
+    targets.forEach(function (A) {
+      if (!A.layer) A.layer = {};
+      A.layer.Alphanumeric = AlphanumericLayer;
+      A.layer.alphanumeric = AlphanumericLayer;
+    });
     return true;
   }
 
@@ -1602,6 +1610,19 @@
   const temporizador = setInterval(function () {
     if (instalar() || ++intentos > 200) clearInterval(temporizador);
   }, 10);
+
+  // Reinstalación cuando el bundle de la API se recarga (cambio 2D/3D): el
+  // espacio de nombres IDEE/M se recrea desde cero y hay que volver a colgar
+  // la clase como IDEE.layer (y M.layer), nunca como plugin.
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('load', function (e) {
+      const obj = e && e.target;
+      if (obj && obj.tagName === 'SCRIPT' && /apiidee.*\.js/i.test(obj.src || '')) {
+        instalar();
+        instalarBigQueryLayer();
+      }
+    }, true);
+  }
 
   // Exposición triple (window + IDEE + M).
   if (typeof window !== 'undefined') {

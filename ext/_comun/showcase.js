@@ -84,6 +84,9 @@
       if (v.q) opts.q = v.q;
       return 'const capa = await window.Madrid.cargarRecurso(' + JSON.stringify(rid) + ', ' + JSON.stringify(opts) + ');\ncapa.addTo(mapajs);';
     }
+    if (ext === 'alphanumericLayer') {
+      return 'const capa = new IDEE.layer.Alphanumeric({\n  name: ' + JSON.stringify(v.name || 'Datos') + ',\n  legend: ' + JSON.stringify(v.legend || 'Datos') + '\n});\ncapa.addTo(mapajs);';
+    }
     if (ext === 'mbtilesLayer') {
       return 'const capa = new IDEE.layer.MBTiles({\n  url: ' + JSON.stringify(v.url || '') + ',\n  name: ' + JSON.stringify(v.name || 'MBTiles') + ',\n  legend: ' + JSON.stringify(v.legend || 'MBTiles') + '\n});\nmapajs.addLayers(capa);';
     }

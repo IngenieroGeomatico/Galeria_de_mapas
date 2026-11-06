@@ -186,6 +186,9 @@
   }
 
   function instalarFactory() {
+    if (window.AlphanumericLayer && typeof window.AlphanumericLayer.instalar === 'function') {
+      window.AlphanumericLayer.instalar();
+    }
     const IDEE = api();
     if (IDEE && IDEE.layer && IDEE.layer.Alphanumeric && !IDEE.layer.Alphanumeric.fromINE) {
       IDEE.layer.Alphanumeric.fromINE = function (tablaId, opciones) {

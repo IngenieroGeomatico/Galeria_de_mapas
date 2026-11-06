@@ -52,7 +52,11 @@
    * @returns {Promise<void>}
    */
   function cargarDependencias() {
-    if (_cargaDependencias) return _cargaDependencias;
+    if (_cargaDependencias) {
+      return _cargaDependencias.then(function () {
+        if (window.AlphanumericLayer && typeof window.AlphanumericLayer.instalar === 'function') window.AlphanumericLayer.instalar();
+      });
+    }
     const base = RUTA_PROPIA || document.baseURI;
     _cargaDependencias = (async function () {
       if (!window.AlphanumericLayer) {

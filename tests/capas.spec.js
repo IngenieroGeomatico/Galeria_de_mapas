@@ -18,7 +18,7 @@ const BASE = 'http://localhost:8765';
 const CAPAS = [
   'mvt', 'geotiff', 'mbtiles', 'flatgeobuf', 'geoparquet', 'pmtiles',
   'wms', 'wfs', 'wmts', 'ogcapi', 'kml', 'geojson', 'vector', 'tms', 'xyz',
-  'mbtiles', 'tiles3d', 'imagen', 'copc', 'glb', 'ifc', 'maplibre'
+  'tiles3d', 'imagen', 'copc', 'glb', 'ifc', 'maplibre'
 ];
 
 for (const capa of CAPAS) {

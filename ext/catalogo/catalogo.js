@@ -269,8 +269,16 @@
    * @returns {Promise<Function>} La clase AlphanumericLayer.
    */
   function cargarModuloAlfanumerico() {
-    if (window.AlphanumericLayer) return Promise.resolve(window.AlphanumericLayer);
-    if (_cargaAlfanumerico) return _cargaAlfanumerico;
+    if (window.AlphanumericLayer) {
+      if (typeof window.AlphanumericLayer.instalar === 'function') window.AlphanumericLayer.instalar();
+      return Promise.resolve(window.AlphanumericLayer);
+    }
+    if (_cargaAlfanumerico) {
+      return _cargaAlfanumerico.then(function (AL) {
+        if (AL && typeof AL.instalar === 'function') AL.instalar();
+        return AL;
+      });
+    }
     _cargaAlfanumerico = new Promise(function (resolver, rechazar) {
       const base = RUTA_PROPIA || document.baseURI;
       const s = document.createElement('script');
