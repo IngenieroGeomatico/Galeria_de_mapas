@@ -51,7 +51,7 @@
 /* ── 3. Corrección de panel en esquina TR ────────────────────────────── */
 .m-areas > .m-top.m-right > .m-panel.g-plugin-base.opened > button.m-panel-btn {
   position: absolute;
-  left: -40px;
+  left: -64px;
   top: 0;
 }
 
@@ -125,11 +125,11 @@
 }
 
 .m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
-  transform: translateX(52px);
+  transform: translateX(64px);
 }
 
 .m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) {
-  transform: translateX(-52px);
+  transform: translateX(-64px);
 }
 
 @media (max-width: 768px) {
