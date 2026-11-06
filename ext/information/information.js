@@ -3684,7 +3684,7 @@
             if (elemento.codigo != null && propsMvt.codigo === undefined && propsMvt.nationalcode === undefined) propsMvt.codigo = elemento.codigo;
             if (elemento.codigoNacional != null && propsMvt.codigoNacional === undefined && propsMvt.nationalcode === undefined) propsMvt.codigoNacional = elemento.codigoNacional;
             if (elemento.nombre != null && propsMvt.nombre === undefined && propsMvt.nameunit === undefined) propsMvt.nombre = elemento.nombre;
-            var featureMvt = { getProperties: function () { return propsMvt; }, getGeometry: function () { return null; }, getId: function () { return elemento.codigo; } };
+            var featureMvt = { getProperties: function () { return propsMvt; }, getGeometry: function () { return { getType: function () { return 'Polygon'; }, getCoordinates: function () { return null; } }; }, getId: function () { return elemento.codigo; } };
             var normalizadoMvt = this._normalizarFeatureOL(featureMvt, capa);
             if (normalizadoMvt) {
               return {
