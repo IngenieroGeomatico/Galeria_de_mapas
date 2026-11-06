@@ -2388,3 +2388,21 @@
 }
 
 /* === MODERN FICHA REDESIGN (appended) === */
+
+/* Inversión del border-radius de los botones de plegado del panel lateral:
+   la API redondea las esquinas del lado del float, pero el botón de plegado
+   está en el borde opuesto, así que se invierte para que coincida con el
+   contorno del panel. */
+.m-areas > .m-area > .m-panel > button.m-panel-btn.g-cartografia-flecha-izquierda {
+  border-bottom-right-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-left-radius: 4px !important;
+  border-top-left-radius: 4px !important;
+}
+
+.m-areas > .m-area > .m-panel > button.m-panel-btn.g-cartografia-flecha-derecha {
+  border-bottom-left-radius: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-right-radius: 4px !important;
+  border-top-right-radius: 4px !important;
+}

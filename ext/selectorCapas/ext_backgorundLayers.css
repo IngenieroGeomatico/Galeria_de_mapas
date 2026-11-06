@@ -389,3 +389,18 @@
     max-width: 100%;
   }
 }
+
+/* Inversión del border-radius de los botones de plegado del panel lateral. */
+.m-areas > .m-area > .m-panel > button.m-panel-btn.g-cartografia-flecha-izquierda {
+  border-bottom-right-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-left-radius: 4px !important;
+  border-top-left-radius: 4px !important;
+}
+
+.m-areas > .m-area > .m-panel > button.m-panel-btn.g-cartografia-flecha-derecha {
+  border-bottom-left-radius: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-right-radius: 4px !important;
+  border-top-right-radius: 4px !important;
+}
