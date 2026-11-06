@@ -538,27 +538,6 @@
   padding: 0 3px;
 }
 
-/* ---- Posicionamiento del boton de plegado (abierto) ----------------- */
-/* Sin estas reglas el boton de volver a plegar queda mal colocado y se ve
-   raro: se posiciona de forma absoluta a la izquierda/derecha del panel. */
-.m-areas > .m-area > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
-  position: absolute !important;
-  top: 0 !important;
-  bottom: auto !important;
-  margin: 0 !important;
-  z-index: 2;
-}
-
-.m-areas > .m-area.m-left > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
-  left: 0 !important;
-  right: auto !important;
-}
-
-.m-areas > .m-area.m-right > .m-panel.opened.g-panel-lateral:not(.no-collapsible) > button.m-panel-btn {
-  right: 0 !important;
-  left: auto !important;
-}
-
 /* ---- Mas aire entre el panel abierto y los botones colapsados -------- */
 .m-areas > .m-area.m-left > .m-panel.g-herramienta_bigquery.opened {
   transform: translateX(64px);
