@@ -68,3 +68,45 @@ test('geometriaDeValor: Point GeoJSON', () => {
   const g = T.geometriaDeValor({ type: 'Point', coordinates: [1, 2] });
   assert.deepEqual(g, { type: 'Point', coordinates: [1, 2] });
 });
+
+test('AlphanumericLayer: constructor con source conteniendo array de JSON simple', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const capa = new AlphanumericLayer({
+    name: 'prueba_array_json',
+    source: [
+      { id: 1, nombre: 'Ana', edad: 30 },
+      { id: 2, nombre: 'Pedro', edad: 25 }
+    ]
+  });
+  const records = capa.getRecords();
+  assert.equal(records.length, 2);
+  assert.equal(records[0].nombre, 'Ana');
+  assert.equal(records[1].edad, 25);
+});
+
+test('AlphanumericLayer: constructor con source conteniendo array de GeoJSON Features', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const capa = new AlphanumericLayer({
+    name: 'prueba_array_features',
+    source: [
+      {
+        type: 'Feature',
+        id: 'f1',
+        geometry: { type: 'Point', coordinates: [-3.7, 40.4] },
+        properties: { nombre: 'Madrid', poblacion: 3300000 }
+      },
+      {
+        type: 'Feature',
+        id: 'f2',
+        geometry: { type: 'Point', coordinates: [2.1, 41.3] },
+        properties: { nombre: 'Barcelona', poblacion: 1600000 }
+      }
+    ],
+    idField: '__idee_id'
+  });
+  const records = capa.getRecords();
+  assert.equal(records.length, 2);
+  assert.equal(records[0].nombre, 'Madrid');
+  assert.equal(JSON.parse(records[0].__idee_geojson).type, 'Point');
+  assert.equal(records[0].__idee_id, 'f1');
+});

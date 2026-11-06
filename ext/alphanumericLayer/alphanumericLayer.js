@@ -665,7 +665,9 @@
             if (resCSV.fields) fields = fields || resCSV.fields;
           }
         } else if (Array.isArray(src)) {
-          records = src;
+          const resJSON = AlphanumericLayer._parseJSONData(src, config);
+          records = resJSON.records;
+          if (resJSON.geometryField) geometryField = resJSON.geometryField;
         } else if (typeof src === 'object') {
           const resJSON = AlphanumericLayer._parseJSONData(src, config);
           records = resJSON.records;
@@ -1362,7 +1364,28 @@
       let geometryField = o.geometryField || null;
 
       if (Array.isArray(obj)) {
-        registros = obj;
+        // Comprobar si los elementos parecen GeoJSON Features
+        const areFeatures = obj.length > 0 && obj.every(function (f) {
+          return f && (f.type === 'Feature' || (f.properties !== undefined && f.geometry !== undefined));
+        });
+
+        if (areFeatures) {
+          geometryField = geometryField || '__idee_geojson';
+          registros = obj.map(function (f) {
+            const props = Object.assign({}, f.properties || {});
+            if (f.geometry && typeof f.geometry.type === 'string') {
+              props.__idee_geojson = JSON.stringify(f.geometry);
+            } else if (f.place && typeof f.place.type === 'string') {
+              const crsFC = o.crs || 'EPSG:4326';
+              const gg = reproyectarGeometria(f.place, crsDeCoordRefSys(f.coordRefSys) || crsFC, 'EPSG:4326');
+              if (gg) props.__idee_geojson = JSON.stringify(gg);
+            }
+            if (f.id !== undefined) props.__idee_id = f.id;
+            return props;
+          });
+        } else {
+          registros = obj;
+        }
       } else if (obj && obj.type === 'FeatureCollection' && Array.isArray(obj.features)) {
         geometryField = geometryField || '__idee_geojson';
         registros = obj.features.map(function (f) {
