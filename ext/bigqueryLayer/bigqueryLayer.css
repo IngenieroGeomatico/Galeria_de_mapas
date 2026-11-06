@@ -561,11 +561,21 @@
 
 /* ---- Mas aire entre el panel abierto y los botones colapsados -------- */
 .m-areas > .m-area.m-left > .m-panel.g-herramienta_bigquery.opened {
-  transform: translateX(16px);
+  transform: translateX(52px);
 }
 
 .m-areas > .m-area.m-right > .m-panel.g-herramienta_bigquery.opened {
-  transform: translateX(-16px);
+  transform: translateX(-52px);
+}
+
+@media (max-width: 768px) {
+  .m-areas > .m-area.m-left > .m-panel.g-herramienta_bigquery.opened {
+    transform: translateX(16px);
+  }
+
+  .m-areas > .m-area.m-right > .m-panel.g-herramienta_bigquery.opened {
+    transform: translateX(-16px);
+  }
 }
 
 .bq-container {
@@ -588,11 +598,21 @@
 
 /* ---- Aire horizontal del panel abierto y border-radius del boton de plegado ---- */
 .m-areas > .m-area.m-left > .m-panel.opened.g-herramienta_bigquery {
-  transform: translateX(16px);
+  transform: translateX(52px);
 }
 
 .m-areas > .m-area.m-right > .m-panel.opened.g-herramienta_bigquery {
-  transform: translateX(-16px);
+  transform: translateX(-52px);
+}
+
+@media (max-width: 768px) {
+  .m-areas > .m-area.m-left > .m-panel.opened.g-herramienta_bigquery {
+    transform: translateX(16px);
+  }
+
+  .m-areas > .m-area.m-right > .m-panel.opened.g-herramienta_bigquery {
+    transform: translateX(-16px);
+  }
 }
 
 .m-areas > .m-area.m-left > .m-panel.opened.g-herramienta_bigquery > button.m-panel-btn {
