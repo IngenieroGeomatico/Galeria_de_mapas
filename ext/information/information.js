@@ -2060,6 +2060,9 @@
       if (esFuncion(capa.getImplGeoTIFF)) return true;
       var impl = null;
       try { impl = capa.getImpl ? capa.getImpl() : null; } catch (e) { impl = null; }
+      // MVTLayer (ext/MVTLayer) también tiene `lector` + `render`, pero no es
+      // un GeoTIFF: se excluye para que no se intente leerlo como TIFF.
+      if (impl && impl.lector && typeof impl.lector.municipioEn === 'function') return false;
       return !!(impl && impl.lector && impl.render);
     }
 
