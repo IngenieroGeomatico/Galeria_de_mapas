@@ -430,6 +430,12 @@
         const codigo = codigoCompleto ? codigoCompleto.slice(-5) : null;
         const nombre = feature.properties && feature.properties.nameunit;
 
+        // Se conservan TODAS las propiedades originales de la tesela (gid,
+        // country, nationalcode, nameunit, codnut*, ...), no solo codigo/nombre,
+        // para que la información del feature en 3D sea idéntica a la de 2D.
+        const propiedadesOriginales = (feature.properties && typeof feature.properties === 'object')
+          ? Object.assign({}, feature.properties) : {};
+
         features.push({
           codigo: codigo,
           // El código entero, tal cual lo entrega el servicio. Lo necesita el
@@ -441,6 +447,7 @@
           z: z, x: x, y: y,
           extent: extent,
           poligonos: poligonos,
+          propiedades: propiedadesOriginales
         });
       }
       return features;

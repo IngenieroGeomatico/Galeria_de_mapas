@@ -3679,10 +3679,11 @@
         try {
           var elemento = await implMvt.lector.municipioEn(punto.lon, punto.lat);
           if (elemento) {
-            var propsMvt = {};
-            if (elemento.codigo != null) propsMvt.codigo = elemento.codigo;
-            if (elemento.codigoNacional != null) propsMvt.codigoNacional = elemento.codigoNacional;
-            if (elemento.nombre != null) propsMvt.nombre = elemento.nombre;
+            var propsMvt = (elemento.propiedades && typeof elemento.propiedades === 'object')
+              ? Object.assign({}, elemento.propiedades) : {};
+            if (elemento.codigo != null && propsMvt.codigo === undefined && propsMvt.nationalcode === undefined) propsMvt.codigo = elemento.codigo;
+            if (elemento.codigoNacional != null && propsMvt.codigoNacional === undefined && propsMvt.nationalcode === undefined) propsMvt.codigoNacional = elemento.codigoNacional;
+            if (elemento.nombre != null && propsMvt.nombre === undefined && propsMvt.nameunit === undefined) propsMvt.nombre = elemento.nombre;
             var featureMvt = { getProperties: function () { return propsMvt; }, getGeometry: function () { return null; }, getId: function () { return elemento.codigo; } };
             var normalizadoMvt = this._normalizarFeatureOL(featureMvt, capa);
             if (normalizadoMvt) {
