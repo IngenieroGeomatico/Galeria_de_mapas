@@ -3685,7 +3685,21 @@
             if (elemento.nombre != null) propsMvt.nombre = elemento.nombre;
             var featureMvt = { getProperties: function () { return propsMvt; }, getGeometry: function () { return null; }, getId: function () { return elemento.codigo; } };
             var normalizadoMvt = this._normalizarFeatureOL(featureMvt, capa);
-            if (normalizadoMvt) return [normalizadoMvt];
+            if (normalizadoMvt) {
+              return {
+                uid: '',
+                tipo: 'vector',
+                capa: capa,
+                clave: this._claveCapa(capa),
+                formatos: [],
+                formatoActual: 'vector',
+                capasInternas: [],
+                capaInternaActual: null,
+                porFormato: {
+                  vector: { estado: 'ok', tipo: 'vector', features: [normalizadoMvt] }
+                }
+              };
+            }
           }
         } catch (e) { /* se sigue con el flujo normal */ }
       }
