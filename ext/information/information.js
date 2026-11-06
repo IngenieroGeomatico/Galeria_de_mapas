@@ -3684,7 +3684,10 @@
             if (elemento.codigo != null && propsMvt.codigo === undefined && propsMvt.nationalcode === undefined) propsMvt.codigo = elemento.codigo;
             if (elemento.codigoNacional != null && propsMvt.codigoNacional === undefined && propsMvt.nationalcode === undefined) propsMvt.codigoNacional = elemento.codigoNacional;
             if (elemento.nombre != null && propsMvt.nombre === undefined && propsMvt.nameunit === undefined) propsMvt.nombre = elemento.nombre;
-            var featureMvt = { getProperties: function () { return propsMvt; }, getGeometry: function () { return { getType: function () { return 'Polygon'; }, getCoordinates: function () { return null; } }; }, getId: function () { return elemento.codigo; } };
+            // Tipo de geometría real de la tesela (no harcodeado): polígono
+            // simple o multipolígono según el número de anillos exteriores.
+            var tipoGeomMvt = (elemento.poligonos && elemento.poligonos.length > 1) ? 'MultiPolygon' : 'Polygon';
+            var featureMvt = { getProperties: function () { return propsMvt; }, getGeometry: function () { return { getType: function () { return tipoGeomMvt; }, getCoordinates: function () { return null; } }; }, getId: function () { return elemento.codigo; } };
             var normalizadoMvt = this._normalizarFeatureOL(featureMvt, capa);
             if (normalizadoMvt) {
               return {
