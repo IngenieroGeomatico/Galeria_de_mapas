@@ -110,3 +110,18 @@ test('AlphanumericLayer: constructor con source conteniendo array de GeoJSON Fea
   assert.equal(JSON.parse(records[0].__idee_geojson).type, 'Point');
   assert.equal(records[0].__idee_id, 'f1');
 });
+
+test('showcase: el ejemplo de alphanumericLayer convierte los datos y los pinta', () => {
+  // `IDEE.layer.Alphanumeric` no pinta nada: `addTo` solo registra los datos.
+  // El ejemplo del showcase tiene que dar el paso a `GeoJSON`, porque si no
+  // se abre la pagina y no aparece ninguna capa en el mapa.
+  const fuente = fs.readFileSync('./ext/_comun/showcase.js', 'utf8');
+  const inicio = fuente.indexOf("if (ext === 'alphanumericLayer') {");
+  const fin = fuente.indexOf("if (ext === 'mbtilesLayer') {");
+  assert.ok(inicio > 0 && fin > inicio, 'no se encontro el ejemplo de alphanumericLayer');
+
+  const bloque = fuente.slice(inicio, fin);
+  assert.match(bloque, /toGeoJSON\(\)/, 'el ejemplo debe convertir las capas con toGeoJSON()');
+  assert.match(bloque, /IDEE\.layer\.GeoJSON/, 'el ejemplo debe crear una capa GeoJSON visible');
+  assert.match(bloque, /addLayers\(/, 'el ejemplo debe anadir la capa visible al mapa');
+});

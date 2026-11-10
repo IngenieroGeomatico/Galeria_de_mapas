@@ -85,42 +85,73 @@
       return 'const capa = await window.Madrid.cargarRecurso(' + JSON.stringify(rid) + ', ' + JSON.stringify(opts) + ');\ncapa.addTo(mapajs);';
     }
     if (ext === 'alphanumericLayer') {
-      return '// 1. Capa Alfanumérica cargada con un CSV directamente en \'source\'\n' +
-        'const csvString = "id;municipio;poblacion;lat;lon\\n1;Cercedilla;7526;40.7388;-4.0628\\n2;Rascafría;1736;40.9056;-3.8781";\n\n' +
-        'const capaCSV = new IDEE.layer.Alphanumeric({\n' +
-        '  name: "capa_municipios_csv",\n' +
-        '  legend: "Municipios Sierra (CSV directo)",\n' +
-        '  source: {\n' +
-        '    data: csvString,\n' +
-        '    idField: "id",\n' +
-        '    latField: "lat",\n' +
-        '    lonField: "lon"\n' +
-        '  }\n' +
-        '});\n' +
-        'capaCSV.addTo(mapajs);\n\n' +
-        '// 2. Capa Alfanumérica cargada con un array de JSON Features directamente en \'source\'\n' +
-        'const arrayFeatures = [\n' +
-        '  {\n' +
-        '    type: "Feature",\n' +
-        '    id: "f1",\n' +
-        '    geometry: { type: "Point", coordinates: [-3.7037, 40.4167] },\n' +
-        '    properties: { nombre: "Madrid (Sol)", categoria: "Monumento", visitas: 4500 }\n' +
-        '  },\n' +
-        '  {\n' +
-        '    type: "Feature",\n' +
-        '    id: "f2",\n' +
-        '    geometry: { type: "Point", coordinates: [2.1734, 41.3851] },\n' +
-        '    properties: { nombre: "Barcelona (Ramblas)", categoria: "Paseo", visitas: 3800 }\n' +
-        '  }\n' +
-        '];\n\n' +
-        'const capaJSON = new IDEE.layer.Alphanumeric({\n' +
-        '  name: "capa_lugares_json",\n' +
-        '  legend: "Lugares Interés (JSON Features directo)",\n' +
-        '  source: arrayFeatures,\n' +
-        '  idField: "__idee_id"\n' +
-        '});\n' +
-        'capaJSON.addTo(mapajs);\n\n' +
-        'const capa = capaCSV;';
+      return [
+        '// Las capas alfanuméricas son CONTENEDORES DE DATOS: `addTo` las registra',
+        '// en el mapa (`getAlphanumericLayers()`) pero NO pintan nada por sí solas.',
+        '// Para verlas hay que convertirlas con `toGeoJSON()` y añadirlas como capa',
+        '// vectorial (paso 3).',
+        '',
+        '// Al reconstruir el ejemplo se quitan las capas de datos de la vez anterior.',
+        '(mapajs.getAlphanumericLayers ? mapajs.getAlphanumericLayers() : []).forEach(function (c) {',
+        '  try { c.destroy(); } catch (e) {}',
+        '});',
+        '',
+        '// 1. Capa Alfanumérica cargada con un CSV directamente en "source"',
+        'const csvString = "id;municipio;poblacion;lat;lon\\n1;Cercedilla;7526;40.7388;-4.0628\\n2;Rascafría;1736;40.9056;-3.8781";',
+        '',
+        'const capaCSV = new IDEE.layer.Alphanumeric({',
+        '  name: "capa_municipios_csv",',
+        '  legend: "Municipios Sierra (CSV directo)",',
+        '  source: {',
+        '    data: csvString,',
+        '    idField: "id",',
+        '    latField: "lat",',
+        '    lonField: "lon"',
+        '  }',
+        '});',
+        'capaCSV.addTo(mapajs);',
+        '',
+        '// 2. Capa Alfanumérica cargada con un array de JSON Features directamente en "source"',
+        'const arrayFeatures = [',
+        '  {',
+        '    type: "Feature",',
+        '    id: "f1",',
+        '    geometry: { type: "Point", coordinates: [-3.7037, 40.4167] },',
+        '    properties: { nombre: "Madrid (Sol)", categoria: "Monumento", visitas: 4500 }',
+        '  },',
+        '  {',
+        '    type: "Feature",',
+        '    id: "f2",',
+        '    geometry: { type: "Point", coordinates: [2.1734, 41.3851] },',
+        '    properties: { nombre: "Barcelona (Ramblas)", categoria: "Paseo", visitas: 3800 }',
+        '  }',
+        '];',
+        '',
+        'const capaJSON = new IDEE.layer.Alphanumeric({',
+        '  name: "capa_lugares_json",',
+        '  legend: "Lugares Interés (JSON Features directo)",',
+        '  source: arrayFeatures,',
+        '  idField: "__idee_id"',
+        '});',
+        'capaJSON.addTo(mapajs);',
+        '',
+        '// 3. Ya en el mapa: se unen las geometrías de las dos capas de datos y se',
+        '//    pintan como una capa GeoJSON normal.',
+        'const capa = new IDEE.layer.GeoJSON({',
+        '  name: "puntos_alfanumericos",',
+        '  legend: "Municipios y lugares (desde capas alfanuméricas)",',
+        '  extract: true,',
+        '  source: {',
+        '    type: "FeatureCollection",',
+        '    features: capaCSV.toGeoJSON().features.concat(capaJSON.toGeoJSON().features)',
+        '  }',
+        '}, {',
+        '  style: new IDEE.style.Generic({',
+        '    point: { radius: 7, fill: { color: "#0078d4" }, stroke: { color: "#ffffff", width: 2 } }',
+        '  })',
+        '});',
+        'mapajs.addLayers(capa);'
+      ].join('\n');
     }
     if (ext === 'mbtilesLayer') {
       return 'const capa = new IDEE.layer.MBTiles({\n  url: ' + JSON.stringify(v.url || '') + ',\n  name: ' + JSON.stringify(v.name || 'MBTiles') + ',\n  legend: ' + JSON.stringify(v.legend || 'MBTiles') + '\n});\nmapajs.addLayers(capa);';

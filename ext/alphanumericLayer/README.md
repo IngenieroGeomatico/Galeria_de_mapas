@@ -190,3 +190,37 @@ Descarga y construye de forma asíncrona devolviendo una Promesa que resuelve la
 IDEE.layer.Alphanumeric.fromURL('https://datos.es/estaciones.geojson', { name: "Estaciones" })
   .then(capa => capa.addTo(mapajs));
 ```
+
+---
+
+## Cómo verla en el mapa
+
+`IDEE.layer.Alphanumeric` es un contenedor de datos: `addTo(mapajs)` la registra en el mapa (`mapajs.getAlphanumericLayers()`) pero **no dibuja nada**, aunque los registros tengan coordenadas. Para pintarla hay que convertirla a GeoJSON y añadir una capa vectorial normal:
+
+```javascript
+const capaDatos = new IDEE.layer.Alphanumeric({
+  name: 'municipios_sierra',
+  legend: 'Municipios de la Sierra de Madrid',
+  source: {
+    data: csvString,
+    idField: 'id',
+    latField: 'latitud',
+    lonField: 'longitud'
+  }
+});
+capaDatos.addTo(mapajs); // solo registra los datos
+
+const capaMapa = new IDEE.layer.GeoJSON({
+  name: 'municipios_sierra_puntos',
+  legend: 'Municipios de la Sierra de Madrid',
+  source: capaDatos.toGeoJSON(),
+  extract: true
+}, {
+  style: new IDEE.style.Generic({
+    point: { radius: 7, fill: { color: '#0078d4' }, stroke: { color: '#ffffff', width: 2 } }
+  })
+});
+mapajs.addLayers(capaMapa); // esto es lo que se ve
+```
+
+Si no hay coordenadas ni campo de geometría, `toGeoJSON()` devuelve una colección vacía: en ese caso la capa es solo para tablas, gráficos o uniones con `joinLayer`.
