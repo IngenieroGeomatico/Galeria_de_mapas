@@ -43,3 +43,66 @@ test('LectorMVT: instancia y cache vacío', () => {
   assert.equal(lector.extent, 4096);
   assert.deepEqual(lector.getFeaturesGeoJSON(), []);
 });
+
+test('MVTLayer: opacidad en la implementacion y fachada', () => {
+  // Obtenemos las funciones constructoras desde el código cargado
+  // Como están en una clausura de MVTLayer.js, podemos extraer las funciones creadoras.
+  // Vamos a mockear la inicialización para verificar setOpacity/getOpacity.
+  const constructorMVT = global.IDEE.plugin.miPlugin_MVTLayer;
+  assert.ok(constructorMVT);
+
+  // Verificamos si podemos extraer crearImplementacion y crearFachada indirectamente
+  // o recrear un mock de la clase MVTImplVector.
+  // Como están instalados en IDEE, podemos simular la fachada y su impl si se registraran.
+  // Pero podemos simplemente probar los métodos del RenderMVT si estuviéramos en la clausura.
+  // Dado que no están todos exportados a global, si mockeamos la API IDEE:
+  const oldIDEE = global.IDEE;
+  global.IDEE = {
+    evt: { SELECT_FEATURES: 'select' },
+    layer: {
+      Vector: class MockVector {
+        constructor(p, o, v, impl) {
+          this.impl_ = impl;
+        }
+        getImpl() { return this.impl_; }
+      }
+    },
+    impl: {
+      cesium: {},
+      layer: {
+        Vector: class MockImplVector {
+          constructor() {
+            this.opacity_ = 1.0;
+          }
+          setOpacity(v) { this.opacity_ = v; }
+          getOpacity() { return this.opacity_; }
+        }
+      }
+    }
+  };
+  global.M = global.IDEE;
+
+  try {
+    // Instanciamos el plugin para registrar las clases de fachada e implementación
+    const plugin = new constructorMVT();
+    plugin.addTo({
+      getLayers() { return []; },
+      getMapImpl() { return { scene: {} }; }
+    });
+
+    const FachadaMVTClass = global.IDEE.layer.MVT;
+    assert.ok(FachadaMVTClass);
+
+    const capa = new FachadaMVTClass({ url: 'http://x/{z}/{x}/{y}.pbf', layers: 'municipio' });
+    assert.equal(capa.getOpacity(), 1.0);
+
+    capa.setOpacity(0.5);
+    assert.equal(capa.getOpacity(), 0.5);
+
+    capa.setOpacity(0.85);
+    assert.equal(capa.getOpacity(), 0.85);
+  } finally {
+    global.IDEE = oldIDEE;
+    global.M = oldIDEE;
+  }
+});

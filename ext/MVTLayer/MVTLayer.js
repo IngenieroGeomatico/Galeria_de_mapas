@@ -817,6 +817,7 @@
       this.scene = null;
       this.imageryLayer = null;
       this._visible = true;
+      this._opacity = 1.0;
       this._manejadorClic = null;
 
       this.lector.alCambiarColor = () => this.refrescar();
@@ -833,6 +834,7 @@
         hayEscena: Boolean(this.scene),
         hayCapa: Boolean(this.imageryLayer),
         visible: this.isVisible(),
+        opacity: this.getOpacity(),
         hayClic: Boolean(this._manejadorClic),
       };
     }
@@ -852,6 +854,21 @@
         return this.imageryLayer.show;
       }
       return this._visible !== false;
+    }
+
+    setOpacity(opacity) {
+      const n = Number(opacity);
+      this._opacity = isFinite(n) ? n : 1.0;
+      if (this.imageryLayer) {
+        this.imageryLayer.alpha = this._opacity;
+        if (this.scene && typeof this.scene.requestRender === 'function') {
+          this.scene.requestRender();
+        }
+      }
+    }
+
+    getOpacity() {
+      return this._opacity;
     }
 
     _esperarEscena(intentos) {
@@ -1018,6 +1035,7 @@
       });
       this.imageryLayer = this.scene.imageryLayers.addImageryProvider(provider);
       this.imageryLayer.show = (this._visible !== false);
+      this.imageryLayer.alpha = this._opacity;
       if (typeof this.scene.requestRender === 'function') {
         this.scene.requestRender();
       }
@@ -1083,6 +1101,15 @@
 
       isVisible() {
         return this.render.isVisible();
+      }
+
+      setOpacity(opacity) {
+        try { super.setOpacity(opacity); } catch (e) {}
+        this.render.setOpacity(opacity);
+      }
+
+      getOpacity() {
+        return this.render.getOpacity();
       }
 
       destroy() {
@@ -1193,7 +1220,7 @@
         return null;
       }
 
-      setVisible(visible) {
+       setVisible(visible) {
         try { super.setVisible(visible); } catch (e) {}
         const impl = this.getImpl();
         if (impl && typeof impl.setVisible === 'function') {
@@ -1207,6 +1234,22 @@
           return impl.isVisible();
         }
         return super.isVisible ? super.isVisible() : true;
+      }
+
+      setOpacity(opacity) {
+        try { super.setOpacity(opacity); } catch (e) {}
+        const impl = this.getImpl();
+        if (impl && typeof impl.setOpacity === 'function') {
+          impl.setOpacity(opacity);
+        }
+      }
+
+      getOpacity() {
+        const impl = this.getImpl();
+        if (impl && typeof impl.getOpacity === 'function') {
+          return impl.getOpacity();
+        }
+        return super.getOpacity ? super.getOpacity() : 1.0;
       }
 
       /** El lector, para iterar desde la consola. */
