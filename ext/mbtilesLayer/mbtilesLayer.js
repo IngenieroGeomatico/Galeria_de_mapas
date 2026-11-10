@@ -102,16 +102,33 @@
     const name = o.name || 'MBTiles';
     const legend = o.legend || name;
 
+    // Estado de visibilidad y opacidad. Se guarda aparte porque la capa puede
+    // recibir `setVisible`/`setOpacity` del selector ANTES de que la escena
+    // exista (el .mbtiles se descarga y se abre de forma asíncrona), y porque
+    // en 3D quien pinta es una ImageryLayer propia, no el impl de la API.
+    let opacidad = 1;
+    if (o.opacity !== undefined) {
+      const n = Number(o.opacity);
+      opacidad = isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
+    }
+    let visible = o.visible !== false;
+
     // Capa base TMS de la API (raster).
     const capa = new IDEE.layer.TMS({
       url: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
       name: name,
-      legend: legend
+      legend: legend,
+      opacity: opacidad,
+      visible: visible
     });
 
     let db = null;
     let meta = {};
     let formato = 'png';
+
+    // Escena y capa de imágenes de Cesium, cuando existan.
+    let escena3D = null;
+    let capaImagen3D = null;
 
     async function asegurarBase() {
       if (db) return db;
@@ -150,15 +167,20 @@
     }
 
     // 3D: ImageryProvider personalizado.
-    function configurar3D() {
+    //
+    // OJO: esta capa NO pinta con el impl de la API, sino con una capa de
+    // imágenes propia. Por eso el `setVisible`/`setOpacity` del impl no la
+    // tocan, y hay que llevarlos a `.show` y `.alpha` a mano (ver los envoltorios
+    // de más abajo). Si no, el botón de visibilidad y el deslizador de opacidad
+    // del selector se mueven y no pasa nada, sin error en consola.
+    function configurar3D(escena) {
       try {
         const Cesium = window.Cesium;
-        if (!Cesium) return;
-        const impl = capa.getImpl();
-        if (!impl) return;
-        // Reemplazar el ImageryLayer si existe.
-        const provider = new Cesium.UrlTemplateImageryProvider({ url: '' });
-        // Cesium exige url; usamos un provider custom mínimo.
+        if (!Cesium || !escena) return;
+        escena3D = escena;
+
+        // Cesium exige `url` en el provider, pero las teselas se piden a la
+        // base SQLite, así que no se usa.
         const customProvider = {
           _ready: false,
           ready: true,
@@ -178,21 +200,88 @@
             });
           }
         };
-        if (impl.imageryLayer && typeof impl.imageryLayer.destroy === 'function') {
-          try { impl.imageryLayer.destroy(); } catch (e) { /* noop */ }
+
+        quitarCapa3D();
+        if (escena.imageryLayers) {
+          capaImagen3D = escena.imageryLayers.addImageryProvider(customProvider);
         }
-        if (impl.map && impl.map.scene && typeof impl.map.scene.imageryLayers !== 'undefined') {
-          impl.imageryLayer = impl.map.scene.imageryLayers.addImageryProvider(customProvider);
-        }
+        aplicarEstado3D();
       } catch (e) { console.warn('MBTiles: no se pudo configurar 3D', e); }
     }
+
+    /**
+     * Lleva visibilidad y opacidad a la capa de imágenes de Cesium.
+     */
+    function aplicarEstado3D() {
+      if (!capaImagen3D) return;
+      capaImagen3D.show = visible;
+      capaImagen3D.alpha = opacidad;
+      try {
+        if (escena3D && typeof escena3D.requestRender === 'function') escena3D.requestRender();
+      } catch (e) { /* escena ya destruida */ }
+    }
+
+    /**
+     * Quita la capa de imágenes del 3D, si la hay.
+     */
+    function quitarCapa3D() {
+      if (capaImagen3D && escena3D && escena3D.imageryLayers) {
+        try { escena3D.imageryLayers.remove(capaImagen3D, true); } catch (e) { /* ya fuera */ }
+      }
+      capaImagen3D = null;
+    }
+
+    /**
+     * Escena de Cesium del mapa, o null si el mapa es 2D.
+     * La API no expone `scene` en el mapa: hay que pedir la implementación.
+     * @param {Object} map Mapa de la API.
+     * @returns {Object|null}
+     */
+    function escenaDe(map) {
+      try {
+        if (map && typeof map.getMapImpl === 'function') {
+          const impl = map.getMapImpl();
+          if (impl && impl.scene) return impl.scene;
+          return null;
+        }
+        if (map && map.scene) return map.scene;
+      } catch (e) { /* sin escena */ }
+      return null;
+    }
+
+    // Envoltorios de visibilidad y opacidad. Se guarda el original para no
+    // romper lo que haga la capa base (en 2D es su capa de teselas quien pinta).
+    const setOpacityBase = (typeof capa.setOpacity === 'function') ? capa.setOpacity.bind(capa) : null;
+    capa.setOpacity = function (valor) {
+      const n = Number(valor);
+      opacidad = isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
+      if (setOpacityBase) { try { setOpacityBase(opacidad); } catch (e) { /* impl aun sin crear */ } }
+      aplicarEstado3D();
+    };
+    capa.getOpacity = function () { return opacidad; };
+
+    const setVisibleBase = (typeof capa.setVisible === 'function') ? capa.setVisible.bind(capa) : null;
+    capa.setVisible = function (valor) {
+      visible = valor !== false;
+      if (setVisibleBase) { try { setVisibleBase(visible); } catch (e) { /* impl aun sin crear */ } }
+      aplicarEstado3D();
+    };
+    capa.isVisible = function () { return visible; };
+
+    const destroyBase = (typeof capa.destroy === 'function') ? capa.destroy.bind(capa) : null;
+    capa.destroy = function () {
+      quitarCapa3D();
+      if (destroyBase) return destroyBase();
+      return undefined;
+    };
 
     // Configurar cuando la capa se añada al mapa.
     const originalAddTo = capa.addTo.bind(capa);
     capa.addTo = function (map) {
       const r = originalAddTo(map);
       setTimeout(function () {
-        if (window.Cesium && map && map.scene) configurar3D();
+        const escena = escenaDe(map);
+        if (escena) configurar3D(escena);
         else configurar2D();
       }, 0);
       return r;

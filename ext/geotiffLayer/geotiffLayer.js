@@ -716,6 +716,7 @@
       this.scene = null;
       this.capaImagen = null;
       this._visible = true;
+      this._opacity = 1;
       this._cargando = false;
     }
 
@@ -754,6 +755,34 @@
     isVisible() {
       if (this.capaImagen) return this.capaImagen.show;
       return this._visible !== false;
+    }
+
+    /**
+     * Opacidad del ráster. Se guarda aunque la capa de imágenes todavía no
+     * exista (el GeoTIFF se lee de forma asíncrona) y se aplica al `alpha` de
+     * la ImageryLayer, que es quien la pinta.
+     *
+     * Sin esto el deslizador del selector no hacía nada en 3D y no avisaba:
+     * el selector comprueba `typeof capa.setOpacity === 'function'` y, si no
+     * está, se salta la llamada en silencio.
+     * @param {number} opacity 0..1.
+     */
+    setOpacity(opacity) {
+      const n = Number(opacity);
+      this._opacity = isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
+      if (this.capaImagen) {
+        this.capaImagen.alpha = this._opacity;
+        if (this.scene && typeof this.scene.requestRender === 'function') {
+          this.scene.requestRender();
+        }
+      }
+    }
+
+    /**
+     * @returns {number} Opacidad actual (0..1).
+     */
+    getOpacity() {
+      return this._opacity;
     }
 
     _esperarEscena(intentos) {
@@ -812,12 +841,9 @@
 
         this.capaImagen = escena.imageryLayers.addImageryProvider(proveedor);
         this.capaImagen.show = this._visible !== false;
-
-        // El ajuste de opacidad va por la capa de la API, que es quien la tiene
-        // declarada; el provider no lleva alpha.
-        if (impl.opacity !== undefined && this.capaImagen) {
-          this.capaImagen.alpha = Number(impl.opacity);
-        }
+        // La opacidad la guarda el renderizador (no el provider): el ajuste se
+        // aplica aquí al crear la capa y en cada `setOpacity` posterior.
+        this.capaImagen.alpha = this._opacity;
 
         if (typeof escena.requestRender === 'function') escena.requestRender();
         if (impl.onCargada) impl.onCargada(salida);
@@ -866,6 +892,11 @@
           url: p.url,
         });
         this.render = new RenderGeoTIFF(this);
+        // Estado inicial del constructor. Hace falta aquí y no solo en la
+        // fachada porque en 3D quien pinta es la ImageryLayer del renderizador:
+        // si la capa nace con `opacity: 0.5`, el `alpha` tiene que nacer a 0.5.
+        if (p.opacity !== undefined) this.render.setOpacity(p.opacity);
+        if (p.visible !== undefined) this.render.setVisible(p.visible !== false);
         this.onCargada = null;
       }
 
@@ -893,6 +924,15 @@
 
       isVisible() {
         return this.render.isVisible();
+      }
+
+      setOpacity(opacity) {
+        try { super.setOpacity(opacity); } catch (e) { /* la base puede no tenerlo */ }
+        this.render.setOpacity(opacity);
+      }
+
+      getOpacity() {
+        return this.render.getOpacity();
       }
 
       /** Extensión en lon/lat del fichero, una vez leido. */
@@ -959,6 +999,20 @@
       /** La implementación para iterar desde la consola. */
       getImplGeoTIFF() {
         return this.getImpl();
+      }
+
+      // La base puede no exponer estos métodos (o delegar en un impl que no
+      // conoce la ImageryLayer del renderizador), así que se fuerzan aquí.
+      setOpacity(opacity) {
+        try { if (typeof super.setOpacity === 'function') super.setOpacity(opacity); } catch (e) { /* noop */ }
+        const impl = this.getImpl();
+        if (impl && typeof impl.setOpacity === 'function') impl.setOpacity(opacity);
+      }
+
+      getOpacity() {
+        const impl = this.getImpl();
+        if (impl && typeof impl.getOpacity === 'function') return impl.getOpacity();
+        try { return typeof super.getOpacity === 'function' ? super.getOpacity() : 1; } catch (e) { return 1; }
       }
 
       getFeatures() {
@@ -1134,6 +1188,16 @@
   if (typeof window !== 'undefined') {
     window.miPlugin_geotiffLayer = miPlugin_geotiffLayer;
     window.LectorGeoTIFF = LectorGeoTIFF;
+
+    // Piezas internas para los tests unitarios de Node. No se usan en el
+    // visualizador: sirven para comprobar el contrato de opacidad/visibilidad
+    // del renderizador sin tener que montar un mapa de Cesium de verdad.
+    window.GeoTIFFTestables = window.GeoTIFFTestables || {};
+    Object.assign(window.GeoTIFFTestables, {
+      RenderGeoTIFF: RenderGeoTIFF,
+      crearImplementacion: crearImplementacion,
+      crearFachada: crearFachada
+    });
 
     /**
      * Espera a que la fachada de `IDEE.layer.GeoTIFF` esté registrada en 3D.
