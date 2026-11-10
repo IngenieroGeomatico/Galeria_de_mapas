@@ -4726,6 +4726,27 @@ class miPlugin_layerSwitcher {
       const parametrosHtml = _tablaDeParametros(construccion, opciones, vendor, url);
       const tipo = _tipoDeCapa(capa);
       const barraObjetosHtml = (typeof barraObjetos === 'function') ? barraObjetos(capa) : '';
+      // Selector de asignacion de geometria a la capa (solo capas alfanumericas).
+      // Se muestra en la ficha (boton de informacion), no en la tabla de atributos.
+      let geometriaHtml = '';
+      try {
+        if (window.getLayerKind && window.getLayerKind(capa) === 'alfanumerico') {
+          const camposGeo = (typeof capa.getFieldNames === 'function') ? capa.getFieldNames() : [];
+          const detGeo = (typeof capa.detectarCamposGeo === 'function') ? capa.detectarCamposGeo() : null;
+          let sel = '<div style="padding:8px 0;">';
+          sel += '<select id="ls-alfa-geo" style="width:100%;font-size:12px;padding:4px;" onchange="window._alfaAsignarGeo && window._alfaAsignarGeo(' + index + ', this.value)">';
+          sel += '<option value="">Ninguna</option>';
+          camposGeo.forEach(function (c) {
+            sel += '<option value="geojson:' + c + '">GeoJSON: ' + _escaparHtml(c) + '</option>';
+            sel += '<option value="wkt:' + c + '">WKT: ' + _escaparHtml(c) + '</option>';
+          });
+          if (detGeo && detGeo.latField && detGeo.lonField) {
+            sel += '<option value="xy:' + detGeo.lonField + ',' + detGeo.latField + '">X/Y: ' + _escaparHtml(detGeo.lonField) + ' + ' + _escaparHtml(detGeo.latField) + '</option>';
+          }
+          sel += '</select></div>';
+          geometriaHtml = sel;
+        }
+      } catch (e) { geometriaHtml = ''; }
 
       panel.innerHTML =
         `<div class="ls-ficha-header">
@@ -4788,6 +4809,25 @@ class miPlugin_layerSwitcher {
                   ${parametrosHtml}
                 </div>
               </details>
+
+              ${geometriaHtml ? `
+              <details class="ls-ficha-seccion" open>
+                <summary class="ls-ficha-seccion-header">
+                  <div class="ls-ficha-seccion-header-main">
+                    <span class="ls-ficha-seccion-icon">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                    </span>
+                    <div class="ls-ficha-seccion-textos">
+                      <span class="ls-ficha-seccion-titulo">Asignar geometría a la capa</span>
+                      <span class="ls-ficha-seccion-sub">Elige la columna que aporta la geometría (GeoJSON, WKT o X/Y)</span>
+                    </div>
+                  </div>
+                  <span class="ls-ficha-seccion-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                </summary>
+                <div class="ls-ficha-seccion-cuerpo">
+                  ${geometriaHtml}
+                </div>
+              </details>` : ''}
 
               ${barraObjetosHtml ? `
               <details class="ls-ficha-seccion" open>
@@ -8124,23 +8164,9 @@ class miPlugin_layerSwitcher {
           } else {
             html += '<p style="color:#6b7883;font-style:italic;">La capa no tiene registros.</p>';
           }
-          // Opción de asignar geometría a la capa.
-          html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #eee;">';
-          html += '<p style="margin:0 0 4px;font-weight:700;font-size:12px;">Asignar geometría a la capa</p>';
-          html += '<select id="ls-alfa-geo" style="width:100%;font-size:12px;padding:4px;" onchange="window._alfaAsignarGeo && window._alfaAsignarGeo(' + index + ', this.value)">';
-          html += '<option value="">Ninguna</option>';
-          campos.forEach(function (c) {
-            html += '<option value="geojson:' + c + '">GeoJSON: ' + c + '</option>';
-            html += '<option value="wkt:' + c + '">WKT: ' + c + '</option>';
-          });
-          // lat/lon
-          const det = (typeof layer.detectarCamposGeo === 'function') ? layer.detectarCamposGeo() : null;
-          if (det && det.latField && det.lonField) {
-            html += '<option value="xy:' + det.lonField + ',' + det.latField + '">X/Y: ' + det.lonField + ' + ' + det.latField + '</option>';
-          }
-          html += '</select>';
-          html += '</div>';
-          html += '</div>';
+           // El selector de asignación de geometría a la capa se ha movido
+           // a la ficha (botón de información), no a la tabla de atributos.
+           html += '</div>';
           openSheet(`Datos �� ${layerName}`, html, false, selectableLayers, index);
         } else if (kind === 'vector') {
           // Las capas MapLibre (BTN) y las MVT no tienen una fuente OL
