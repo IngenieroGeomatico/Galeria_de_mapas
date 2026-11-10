@@ -856,9 +856,12 @@
       return this._visible !== false;
     }
 
+    // El `alpha` de una capa de imágenes de Cesium solo admite 0..1, así que
+    // aquí se acota. El selector de capas de la API ya manda 0..1, pero el
+    // método es público y no conviene depender de eso.
     setOpacity(opacity) {
       const n = Number(opacity);
-      this._opacity = isFinite(n) ? n : 1.0;
+      this._opacity = isFinite(n) ? Math.min(1, Math.max(0, n)) : 1.0;
       if (this.imageryLayer) {
         this.imageryLayer.alpha = this._opacity;
         if (this.scene && typeof this.scene.requestRender === 'function') {
