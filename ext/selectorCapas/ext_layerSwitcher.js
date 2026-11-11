@@ -4689,6 +4689,64 @@ class miPlugin_layerSwitcher {
       return panel;
     }
 
+    // Genera el HTML de los selectores de atributos para la asignación de geometría.
+    function _generarCamposGeoHTML(capa, tipo, valores) {
+      const v = valores || {};
+      const campos = (typeof capa.getFieldNames === 'function') ? capa.getFieldNames() : [];
+      if (tipo === 'xy') {
+        const xSel = v.xField || capa._xField || capa._lonField || '';
+        const ySel = v.yField || capa._yField || capa._latField || '';
+        let h = '<div style="display:flex;gap:12px;width:100%;flex-wrap:wrap;">';
+        h += '<div style="flex:1;min-width:140px;">';
+        h += '<div class="ls-ficha-campo-etiqueta" style="margin-bottom:4px;font-weight:600;">Campo X (Longitud)</div>';
+        h += '<select id="ls-alfa-geo-x" class="ls-ficha-input" style="width:100%;">';
+        h += '<option value="">— Selecciona campo X —</option>';
+        campos.forEach(function (c) {
+          const sel = (c === xSel) ? ' selected' : '';
+          h += '<option value="' + _escaparHtml(c) + '"' + sel + '>' + _escaparHtml(c) + '</option>';
+        });
+        h += '</select></div>';
+        h += '<div style="flex:1;min-width:140px;">';
+        h += '<div class="ls-ficha-campo-etiqueta" style="margin-bottom:4px;font-weight:600;">Campo Y (Latitud)</div>';
+        h += '<select id="ls-alfa-geo-y" class="ls-ficha-input" style="width:100%;">';
+        h += '<option value="">— Selecciona campo Y —</option>';
+        campos.forEach(function (c) {
+          const sel = (c === ySel) ? ' selected' : '';
+          h += '<option value="' + _escaparHtml(c) + '"' + sel + '>' + _escaparHtml(c) + '</option>';
+        });
+        h += '</select></div>';
+        h += '</div>';
+        return h;
+      }
+      if (tipo === 'wkt') {
+        const wktSel = v.field || v.wktField || capa._wktField || '';
+        let h = '<div style="flex:1;min-width:200px;width:100%;">';
+        h += '<div class="ls-ficha-campo-etiqueta" style="margin-bottom:4px;font-weight:600;">Campo WKT</div>';
+        h += '<select id="ls-alfa-geo-wkt" class="ls-ficha-input" style="width:100%;">';
+        h += '<option value="">— Selecciona campo con geometría WKT —</option>';
+        campos.forEach(function (c) {
+          const sel = (c === wktSel) ? ' selected' : '';
+          h += '<option value="' + _escaparHtml(c) + '"' + sel + '>' + _escaparHtml(c) + '</option>';
+        });
+        h += '</select></div>';
+        return h;
+      }
+      if (tipo === 'geojson') {
+        const geoSel = v.field || v.geometryField || (capa._geometryField !== '__idee_geojson' ? capa._geometryField : '') || '';
+        let h = '<div style="flex:1;min-width:200px;width:100%;">';
+        h += '<div class="ls-ficha-campo-etiqueta" style="margin-bottom:4px;font-weight:600;">Campo GeoJSON</div>';
+        h += '<select id="ls-alfa-geo-geojson" class="ls-ficha-input" style="width:100%;">';
+        h += '<option value="">— Selecciona campo con geometría GeoJSON —</option>';
+        campos.forEach(function (c) {
+          const sel = (c === geoSel) ? ' selected' : '';
+          h += '<option value="' + _escaparHtml(c) + '"' + sel + '>' + _escaparHtml(c) + '</option>';
+        });
+        h += '</select></div>';
+        return h;
+      }
+      return '<div style="font-size:12px;color:var(--ls-texto-3, #666);padding:4px 0;">La capa no tiene geometría asignada ni se representará en el mapa.</div>';
+    }
+
     // ── Ficha de una capa ──────────────────────────────────────────────────
     // Un modal centrado que abre con la ventana emergente de los parámetros
     // de construcción y, si la hay, la del documento del servicio.
@@ -4727,30 +4785,68 @@ class miPlugin_layerSwitcher {
       const tipo = _tipoDeCapa(capa);
       const barraObjetosHtml = (typeof barraObjetos === 'function') ? barraObjetos(capa) : '';
       // Selector de asignacion de geometria a la capa (solo capas alfanumericas).
-      // Se muestra en la ficha (boton de informacion), no en la tabla de atributos.
+      // Permite elegir primero el tipo de geometría (X/Y, WKT, GeoJSON) y luego los atributos,
+      // con soporte para detección automática ("Auto") y botón "Aplicar".
       let geometriaHtml = '';
       try {
         if (window.getLayerKind && window.getLayerKind(capa) === 'alfanumerico') {
-          const camposGeo = (typeof capa.getFieldNames === 'function') ? capa.getFieldNames() : [];
-          const detGeo = (typeof capa.detectarCamposGeo === 'function') ? capa.detectarCamposGeo() : null;
-          let sel = '<div style="padding:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
-          sel += '<select id="ls-alfa-geo" style="flex:1;min-width:180px;font-size:12px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">';
-          sel += '<option value="">Ninguna</option>';
-          camposGeo.forEach(function (c) {
-            const esSelectedGeo = (detGeo && detGeo.geometryField === c) ? ' selected' : '';
-            const esSelectedWkt = (!esSelectedGeo && detGeo && detGeo.wktField === c) ? ' selected' : '';
-            sel += '<option value="geojson:' + c + '"' + esSelectedGeo + '>GeoJSON: ' + _escaparHtml(c) + '</option>';
-            sel += '<option value="wkt:' + c + '"' + esSelectedWkt + '>WKT: ' + _escaparHtml(c) + '</option>';
-          });
-          if (detGeo && detGeo.latField && detGeo.lonField) {
-            const esSelectedXY = (!detGeo.geometryField && !detGeo.wktField) ? ' selected' : '';
-            sel += '<option value="xy:' + detGeo.lonField + ',' + detGeo.latField + '"' + esSelectedXY + '>X/Y: ' + _escaparHtml(detGeo.lonField) + ' + ' + _escaparHtml(detGeo.latField) + '</option>';
+          let tipoInicial = 'none';
+          let valoresIniciales = {};
+          if (capa._wktField) {
+            tipoInicial = 'wkt';
+            valoresIniciales = { field: capa._wktField };
+          } else if (capa._geometryField && capa._geometryField !== '__idee_geojson') {
+            tipoInicial = 'geojson';
+            valoresIniciales = { field: capa._geometryField };
+          } else if (capa._xField || capa._yField) {
+            tipoInicial = 'xy';
+            valoresIniciales = { xField: capa._xField || capa._lonField, yField: capa._yField || capa._latField };
+          } else if (capa._latField && capa._lonField) {
+            tipoInicial = 'xy';
+            valoresIniciales = { xField: capa._lonField, yField: capa._latField };
+          } else {
+            const detGeo = (typeof capa.detectarCamposGeo === 'function') ? capa.detectarCamposGeo() : null;
+            if (detGeo) {
+              if (detGeo.geometryField) {
+                tipoInicial = 'geojson';
+                valoresIniciales = { field: detGeo.geometryField };
+              } else if (detGeo.wktField) {
+                tipoInicial = 'wkt';
+                valoresIniciales = { field: detGeo.wktField };
+              } else if ((detGeo.xField || detGeo.lonField) && (detGeo.yField || detGeo.latField)) {
+                tipoInicial = 'xy';
+                valoresIniciales = { xField: detGeo.xField || detGeo.lonField, yField: detGeo.yField || detGeo.latField };
+              }
+            }
           }
-          sel += '</select>';
-          sel += '<button type="button" class="ls-btn ls-btn-primary" style="padding:6px 14px;font-size:12px;font-weight:600;background:#0078d4;color:#fff;border:none;border-radius:4px;cursor:pointer;" onclick="const val = (document.getElementById(\'ls-alfa-geo\') || {}).value; window._alfaAsignarGeo && window._alfaAsignarGeo(' + JSON.stringify(index) + ', val);">Aplicar</button>';
-          sel += '</div>';
-          sel += '<div id="ls-alfa-geo-msg" style="font-size:11px;color:#2e7d32;display:none;margin-top:4px;font-weight:600;">✓ Geometría asignada correctamente</div>';
-          geometriaHtml = sel;
+
+          let h = '<div class="ls-alfa-geo-wrap" style="display:flex;flex-direction:column;gap:12px;padding:4px 0;">';
+          h += '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">';
+          h += '<div style="flex:1;min-width:180px;">';
+          h += '<div class="ls-ficha-campo-etiqueta" style="margin-bottom:4px;font-weight:600;">Tipo de geometría</div>';
+          h += '<select id="ls-alfa-geo" class="ls-ficha-input" style="width:100%;" onchange="window._alfaCambiarTipoGeo && window._alfaCambiarTipoGeo(' + JSON.stringify(index) + ');">';
+          h += '<option value="none"' + (tipoInicial === 'none' ? ' selected' : '') + '>Ninguna</option>';
+          h += '<option value="xy"' + (tipoInicial === 'xy' ? ' selected' : '') + '>Coordenadas X / Y</option>';
+          h += '<option value="wkt"' + (tipoInicial === 'wkt' ? ' selected' : '') + '>WKT (Well-Known Text)</option>';
+          h += '<option value="geojson"' + (tipoInicial === 'geojson' ? ' selected' : '') + '>GeoJSON</option>';
+          h += '</select>';
+          h += '</div>';
+          h += '<button type="button" class="ls-ficha-boton" id="ls-alfa-geo-auto" title="Detectar automáticamente campos de geometría" style="height:36px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;" onclick="window._alfaAutoDetectarGeo && window._alfaAutoDetectarGeo(' + JSON.stringify(index) + ');">';
+          h += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg> Auto';
+          h += '</button>';
+          h += '</div>';
+
+          h += '<div id="ls-alfa-geo-fields" style="display:flex;gap:10px;flex-wrap:wrap;">';
+          h += _generarCamposGeoHTML(capa, tipoInicial, valoresIniciales);
+          h += '</div>';
+
+          h += '<div style="display:flex;gap:12px;align-items:center;margin-top:2px;">';
+          h += '<button type="button" class="ls-ficha-boton ls-ficha-boton--primario" onclick="window._alfaAsignarGeo && window._alfaAsignarGeo(' + JSON.stringify(index) + ');">Aplicar</button>';
+          h += '<div id="ls-alfa-geo-msg" style="font-size:12px;color:var(--ls-exito, #16a34a);display:none;font-weight:600;">✓ Geometría asignada correctamente</div>';
+          h += '</div>';
+          h += '</div>';
+
+          geometriaHtml = h;
         }
       } catch (e) { geometriaHtml = ''; }
 
@@ -8216,24 +8312,126 @@ class miPlugin_layerSwitcher {
       }
     };
 
-    // Asigna geometría a una capa alfanumérica desde el modal de información.
-    window._alfaAsignarGeo = function (index, valor) {
+    // Actualiza dinámicamente los campos de la UI de asignación de geometría.
+    window._alfaActualizarCamposGeoUI = function (index, tipo, valores) {
       const layer = findLayerById(index);
-      if (!layer || typeof layer.convertirCampoAGeometria !== 'function') return;
-      if (!valor) return;
-      const partes = valor.split(':');
-      const formato = partes[0];
-      const resto = partes.slice(1).join(':');
-      if (formato === 'geojson') {
-        layer.convertirCampoAGeometria('geojson', { field: resto });
-      } else if (formato === 'wkt') {
-        layer.convertirCampoAGeometria('wkt', { field: resto });
-      } else if (formato === 'xy') {
-        const xy = resto.split(',');
-        layer.convertirCampoAGeometria('xy', { xField: xy[0], yField: xy[1] });
+      const cont = document.getElementById('ls-alfa-geo-fields');
+      if (layer && cont) {
+        cont.innerHTML = _generarCamposGeoHTML(layer, tipo, valores);
       }
+    };
+
+    // Callback al cambiar el tipo de geometría en el desplegable.
+    window._alfaCambiarTipoGeo = function (index) {
+      const selTipo = document.getElementById('ls-alfa-geo');
+      const tipo = selTipo ? selTipo.value : 'none';
+      window._alfaActualizarCamposGeoUI(index, tipo);
+    };
+
+    // Detección automática de campos de geometría ("Auto").
+    window._alfaAutoDetectarGeo = function (index) {
+      const layer = findLayerById(index);
+      if (!layer || typeof layer.detectarCamposGeo !== 'function') return;
+      const det = layer.detectarCamposGeo();
+      const selTipo = document.getElementById('ls-alfa-geo');
+      let tipo = 'none';
+      let valores = {};
+      if (det && det.geometryField) {
+        tipo = 'geojson';
+        valores = { field: det.geometryField };
+      } else if (det && det.wktField) {
+        tipo = 'wkt';
+        valores = { field: det.wktField };
+      } else if (det && (det.xField || det.lonField) && (det.yField || det.latField)) {
+        tipo = 'xy';
+        valores = { xField: det.xField || det.lonField, yField: det.yField || det.latField };
+      }
+      if (selTipo) {
+        selTipo.value = tipo;
+      }
+      window._alfaActualizarCamposGeoUI(index, tipo, valores);
       const msg = document.getElementById('ls-alfa-geo-msg');
       if (msg) {
+        msg.textContent = tipo === 'none' ? 'No se detectaron campos de geometría' : ('✓ Detectado: ' + tipo.toUpperCase());
+        msg.style.color = tipo === 'none' ? 'var(--ls-aviso, #d97706)' : 'var(--ls-exito, #16a34a)';
+        msg.style.display = 'block';
+        setTimeout(function () { if (msg) msg.style.display = 'none'; }, 3000);
+      }
+    };
+
+    // Asigna geometría a una capa alfanumérica desde el modal de información ("Aplicar").
+    window._alfaAsignarGeo = function (index, valorDirecto) {
+      const layer = findLayerById(index);
+      if (!layer || typeof layer.convertirCampoAGeometria !== 'function') return;
+
+      if (typeof valorDirecto === 'string' && valorDirecto.includes(':')) {
+        const partes = valorDirecto.split(':');
+        const formato = partes[0];
+        const resto = partes.slice(1).join(':');
+        if (formato === 'geojson') {
+          layer.convertirCampoAGeometria('geojson', { field: resto });
+        } else if (formato === 'wkt') {
+          layer.convertirCampoAGeometria('wkt', { field: resto });
+        } else if (formato === 'xy') {
+          const xy = resto.split(',');
+          layer.convertirCampoAGeometria('xy', { xField: xy[0], yField: xy[1] });
+        }
+      } else {
+        const selTipo = document.getElementById('ls-alfa-geo');
+        const tipo = selTipo ? selTipo.value : 'none';
+        if (tipo === 'xy') {
+          const xEl = document.getElementById('ls-alfa-geo-x');
+          const yEl = document.getElementById('ls-alfa-geo-y');
+          const xField = xEl ? xEl.value : null;
+          const yField = yEl ? yEl.value : null;
+          if (!xField || !yField) {
+            const msg = document.getElementById('ls-alfa-geo-msg');
+            if (msg) {
+              msg.textContent = 'Selecciona ambos campos X e Y';
+              msg.style.color = 'var(--ls-aviso, #d97706)';
+              msg.style.display = 'block';
+              setTimeout(function () { if (msg) msg.style.display = 'none'; }, 3000);
+            }
+            return;
+          }
+          layer.convertirCampoAGeometria('xy', { xField: xField, yField: yField });
+        } else if (tipo === 'wkt') {
+          const wktEl = document.getElementById('ls-alfa-geo-wkt');
+          const field = wktEl ? wktEl.value : null;
+          if (!field) {
+            const msg = document.getElementById('ls-alfa-geo-msg');
+            if (msg) {
+              msg.textContent = 'Selecciona el campo WKT';
+              msg.style.color = 'var(--ls-aviso, #d97706)';
+              msg.style.display = 'block';
+              setTimeout(function () { if (msg) msg.style.display = 'none'; }, 3000);
+            }
+            return;
+          }
+          layer.convertirCampoAGeometria('wkt', { field: field });
+        } else if (tipo === 'geojson') {
+          const geoEl = document.getElementById('ls-alfa-geo-geojson');
+          const field = geoEl ? geoEl.value : null;
+          if (!field) {
+            const msg = document.getElementById('ls-alfa-geo-msg');
+            if (msg) {
+              msg.textContent = 'Selecciona el campo GeoJSON';
+              msg.style.color = 'var(--ls-aviso, #d97706)';
+              msg.style.display = 'block';
+              setTimeout(function () { if (msg) msg.style.display = 'none'; }, 3000);
+            }
+            return;
+          }
+          layer.convertirCampoAGeometria('geojson', { field: field });
+        } else if (tipo === 'none') {
+          layer.convertirCampoAGeometria('none');
+        }
+      }
+
+      const msg = document.getElementById('ls-alfa-geo-msg');
+      if (msg) {
+        msg.textContent = '✓ Geometría asignada correctamente';
+        msg.style.color = 'var(--ls-exito, #16a34a)';
         msg.style.display = 'block';
         setTimeout(function () { if (msg) msg.style.display = 'none'; }, 3000);
       }
@@ -8320,6 +8518,7 @@ class miPlugin_layerSwitcher {
       'openLayerFicha', '_lsPickerLayers', 'setBBoxModo', 'setBBoxLimite', 'setBBoxPagina',
       'layerToFront', 'layerToBack', 'layerUp', 'layerDown', 'duplicateLayer', 'reloadLayer', 'isolateLayer',
       '_joinSetMode', '_joinSetType',
+      '_alfaActualizarCamposGeoUI', '_alfaCambiarTipoGeo', '_alfaAutoDetectarGeo', '_alfaAsignarGeo',
       '__lsDragId', '__lsDragHandleArmed'
     ];
     if (typeof window !== 'undefined') {

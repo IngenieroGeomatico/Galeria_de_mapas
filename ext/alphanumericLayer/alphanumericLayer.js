@@ -1289,7 +1289,7 @@
 
     /**
      * Convierte uno o varios campos en geometría, según el formato indicado.
-     * @param {string} formato 'xy' | 'wkt' | 'geojson' | 'auto'
+     * @param {string} formato 'xy' | 'wkt' | 'geojson' | 'auto' | 'none'
      * @param {Object} [opciones]
      * @param {string} [opciones.xField] Campo X (para 'xy').
      * @param {string} [opciones.yField] Campo Y (para 'xy').
@@ -1298,6 +1298,20 @@
      */
     convertirCampoAGeometria(formato, opciones) {
       const o = opciones || {};
+      if (formato === 'none' || formato === '') {
+        this._xField = null;
+        this._yField = null;
+        this._latField = null;
+        this._lonField = null;
+        this._wktField = null;
+        this._geometryField = null;
+        this._records.forEach(function (r) {
+          if (r.__idee_geojson) delete r.__idee_geojson;
+        });
+        this._fields = inferirCampos(this._records);
+        this._renderVectorLayer();
+        return this;
+      }
       if (formato === 'xy') {
         return this.anadirGeometriaDesdeXY(o.xField, o.yField, { crs: o.crs });
       }

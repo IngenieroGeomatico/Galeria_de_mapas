@@ -6,8 +6,10 @@ require('./setup/env');
 test('layerSwitcher: el selector de geometria de capas alfanumericas esta en la ficha (boton de informacion), no en la tabla de atributos', () => {
   const fuente = fs.readFileSync('./ext/selectorCapas/ext_layerSwitcher.js', 'utf8');
 
-  // El selector debe aparecer en la ficha con boton Aplicar.
+  // El selector debe aparecer en la ficha con boton Aplicar y boton Auto.
   assert.ok(fuente.indexOf('id="ls-alfa-geo"') > 0, 'ls-alfa-geo debe existir');
+  assert.ok(fuente.indexOf('id="ls-alfa-geo-auto"') > 0, 'ls-alfa-geo-auto debe existir');
+  assert.ok(fuente.indexOf('id="ls-alfa-geo-fields"') > 0, 'ls-alfa-geo-fields debe existir');
   assert.ok(fuente.indexOf('Aplicar') > 0, 'debe tener boton Aplicar');
 
   // Y debe estar dentro de openLayerFicha, no de openLayerInfo.
