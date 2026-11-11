@@ -725,6 +725,8 @@
       this._metadata = o.metadata || {};
       this._crs = crs;
       this._visible = o.visible !== false;
+      this._style = o.style || null;
+      this._vectorLayer = null;
       this._map = null;
 
       // Si se pasa 'url' en el constructor, se auto-carga e inicializa asíncronamente
@@ -750,6 +752,7 @@
           if (capaInstancia.getGeometryField()) self._geometryField = capaInstancia.getGeometryField();
           try {
             if (self._map) {
+              self._renderVectorLayer();
               self._map.fire('alphanumeric:loaded', [self]);
               if (typeof window !== 'undefined' && typeof window.renderLayerList === 'function') {
                 window.renderLayerList();
@@ -766,10 +769,65 @@
       }
     }
 
+    // -------------------- capa visual interna --------------------
+
+    /**
+     * @private
+     * Crea o actualiza la capa vectorial asociada en el mapa si la capa tiene geometría.
+     */
+    _renderVectorLayer() {
+      if (!this._map) return;
+      const IDEE = api();
+      if (!IDEE || !IDEE.layer || !IDEE.layer.GeoJSON) return;
+
+      if (this._vectorLayer) {
+        try {
+          if (typeof this._map.removeLayers === 'function') {
+            this._map.removeLayers(this._vectorLayer);
+          }
+        } catch (e) { /* noop */ }
+        this._vectorLayer = null;
+      }
+
+      let fc = null;
+      try {
+        fc = this.toGeoJSON();
+      } catch (e) { fc = null; }
+
+      if (!fc || !Array.isArray(fc.features) || fc.features.length === 0) {
+        return;
+      }
+
+      const estilo = this._style || (IDEE.style && IDEE.style.Generic ? new IDEE.style.Generic({
+        point: { radius: 7, fill: { color: '#0078d4' }, stroke: { color: '#ffffff', width: 2 } }
+      }) : null);
+
+      const optsGeoJSON = {
+        name: this.name + '__visual',
+        legend: this.legend,
+        displayInLayerSwitcher: false,
+        extract: true,
+        source: fc
+      };
+
+      try {
+        this._vectorLayer = new IDEE.layer.GeoJSON(optsGeoJSON, estilo ? { style: estilo } : undefined);
+        this._vectorLayer.displayInLayerSwitcher = false;
+        if (typeof this._map.addLayers === 'function') {
+          this._map.addLayers(this._vectorLayer);
+        }
+        if (this._visible === false && typeof this._vectorLayer.setVisible === 'function') {
+          this._vectorLayer.setVisible(false);
+        }
+      } catch (e) {
+        console.warn('[AlphanumericLayer] No se pudo instanciar capa vectorial interna:', e);
+      }
+    }
+
     // -------------------- contrato de capa --------------------
 
     /**
-     * Registra la capa en el mapa. No pinta nada: es una capa de datos.
+     * Registra la capa en el mapa y renderiza sus geometrías si las tiene.
      * @param {Object} map Mapa de la API-IDEE.
      * @returns {AlphanumericLayer}
      */
@@ -784,6 +842,10 @@
       try {
         map.fire('alphanumeric:added', [this]);
       } catch (e) { /* la API antigua puede no tener fire */ }
+
+      // Si tiene geometría, pintar en el mapa
+      this._renderVectorLayer();
+
       // Avisa al selector de capas para que se repinte.
       try {
         if (typeof window !== 'undefined' && typeof window.renderLayerList === 'function') {
@@ -794,11 +856,19 @@
     }
 
     /**
-     * Quita la capa del registro del mapa.
+     * Quita la capa del registro del mapa y destruye su capa visual.
      * @returns {AlphanumericLayer}
      */
     destroy() {
       if (this._map) {
+        if (this._vectorLayer) {
+          try {
+            if (typeof this._map.removeLayers === 'function') {
+              this._map.removeLayers(this._vectorLayer);
+            }
+          } catch (e) { /* noop */ }
+          this._vectorLayer = null;
+        }
         const registro = registroDe(this._map);
         const i = registro.indexOf(this);
         if (i >= 0) registro.splice(i, 1);
@@ -849,12 +919,15 @@
     }
 
     /**
-     * Visibilidad lógica (no hay nada que ocultar en el mapa).
+     * Visibilidad de la capa (y de su representación en el mapa).
      * @param {boolean} visible Visibilidad.
      * @returns {AlphanumericLayer}
      */
     setVisible(visible) {
       this._visible = visible !== false;
+      if (this._vectorLayer && typeof this._vectorLayer.setVisible === 'function') {
+        this._vectorLayer.setVisible(this._visible);
+      }
       return this;
     }
 
@@ -862,16 +935,50 @@
      * @returns {boolean}
      */
     isVisible() {
-      return this._visible;
+      return this._visible !== false;
     }
 
     /**
-     * Implementación nativa: una capa alfanumérica no tiene impl en
-     * OpenLayers ni en Cesium (no se pinta en el mapa). Devuelve null para
-     * que los selectores de capas la traten como capa de datos.
-     * @returns {null}
+     * Establece el estilo de la representación vectorial en el mapa.
+     * @param {*} style Objeto de estilo IDEE.style.*
+     * @returns {AlphanumericLayer}
+     */
+    setStyle(style) {
+      this._style = style;
+      if (this._vectorLayer && typeof this._vectorLayer.setStyle === 'function') {
+        this._vectorLayer.setStyle(style);
+      }
+      return this;
+    }
+
+    /**
+     * Estilo actual.
+     * @returns {*}
+     */
+    getStyle() {
+      return this._style;
+    }
+
+    /**
+     * Extensión de la capa.
+     * @returns {Array<number>|null}
+     */
+    getMaxExtent() {
+      if (this._vectorLayer && typeof this._vectorLayer.getMaxExtent === 'function') {
+        const e = this._vectorLayer.getMaxExtent();
+        if (e) return e;
+      }
+      return this.getGeoExtent();
+    }
+
+    /**
+     * Implementación nativa: devuelve el impl de la capa vectorial si la tiene.
+     * @returns {*|null}
      */
     getImpl() {
+      if (this._vectorLayer && typeof this._vectorLayer.getImpl === 'function') {
+        return this._vectorLayer.getImpl();
+      }
       return null;
     }
 
@@ -1001,6 +1108,7 @@
       if (c.wktField !== undefined) this._wktField = c.wktField || null;
       if (c.geometryField !== undefined) this._geometryField = c.geometryField || null;
       if (c.crs !== undefined) this._crs = c.crs || this._crs || 'EPSG:4326';
+      this._renderVectorLayer();
       return this;
     }
 
@@ -1133,6 +1241,7 @@
       });
       this._geometryField = '__idee_geojson';
       this._fields = inferirCampos(this._records);
+      this._renderVectorLayer();
       return this;
     }
 
@@ -1153,6 +1262,7 @@
       });
       this._geometryField = '__idee_geojson';
       this._fields = inferirCampos(this._records);
+      this._renderVectorLayer();
       return this;
     }
 
@@ -1173,6 +1283,7 @@
       });
       this._geometryField = '__idee_geojson';
       this._fields = inferirCampos(this._records);
+      this._renderVectorLayer();
       return this;
     }
 

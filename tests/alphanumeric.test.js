@@ -164,17 +164,15 @@ test('AlphanumericLayer: asignacion de campo a geometria con convertirCampoAGeom
   assert.deepEqual(fc.features[0].geometry.coordinates, [-5.9845, 37.3891]);
 });
 
-test('showcase: el ejemplo de alphanumericLayer convierte los datos y los pinta', () => {
-  // `IDEE.layer.Alphanumeric` no pinta nada: `addTo` solo registra los datos.
-  // El ejemplo del showcase tiene que dar el paso a `GeoJSON`, porque si no
-  // se abre la pagina y no aparece ninguna capa en el mapa.
+test('showcase: el ejemplo de alphanumericLayer añade directamente las 2 capas al mapa', () => {
   const fuente = fs.readFileSync('./ext/_comun/showcase.js', 'utf8');
   const inicio = fuente.indexOf("if (ext === 'alphanumericLayer') {");
   const fin = fuente.indexOf("if (ext === 'mbtilesLayer') {");
   assert.ok(inicio > 0 && fin > inicio, 'no se encontro el ejemplo de alphanumericLayer');
 
   const bloque = fuente.slice(inicio, fin);
-  assert.match(bloque, /toGeoJSON\(\)/, 'el ejemplo debe convertir las capas con toGeoJSON()');
-  assert.match(bloque, /IDEE\.layer\.GeoJSON/, 'el ejemplo debe crear una capa GeoJSON visible');
-  assert.match(bloque, /addLayers\(/, 'el ejemplo debe anadir la capa visible al mapa');
+  assert.match(bloque, /capaCSV\.addTo\(mapajs\)/, 'el ejemplo debe anadir capaCSV');
+  assert.match(bloque, /capaJSON\.addTo\(mapajs\)/, 'el ejemplo debe anadir capaJSON');
+  // No debe crear capas GeoJSON artificiales adicionales
+  assert.ok(!bloque.includes('new IDEE.layer.GeoJSON'), 'no debe haber capas GeoJSON duplicadas en el showcase');
 });
