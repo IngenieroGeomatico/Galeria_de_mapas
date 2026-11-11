@@ -72,10 +72,15 @@
       { name: 'color2_active', type: 'text', default: '#71A7D3', label: 'Color2 activo' },
       { name: 'color2_deactive', type: 'text', default: '#ffffff', label: 'Color2 inactivo' }
     ],
+    graphic: [
+      { name: 'title', type: 'text', default: 'Estadísticas de Tráfico', label: 'Título' },
+      { name: 'chartType', type: 'select', default: 'line', label: 'Tipo de Gráfica', options: ['line', 'bar', 'area', 'donut', 'pie'] },
+      { name: 'mode', type: 'select', default: 'floating', label: 'Modo en Visualizador', options: ['floating', 'panel'] },
+      { name: 'position', type: 'select', default: 'TR', label: 'Posición', options: ['TR', 'TL', 'BR', 'BL'] }
+    ],
     dashboard: [
       { name: 'title', type: 'text', default: 'Monitor Territorial', label: 'Título' },
-      { name: 'chartType', type: 'select', default: 'donut', label: 'Tipo de Gráfica', options: ['donut', 'bar', 'line', 'area', 'pie'] },
-      { name: 'position', type: 'select', default: 'TR', label: 'Posición Flotante', options: ['TR', 'TL', 'BR', 'BL'] }
+      { name: 'theme', type: 'select', default: 'light', label: 'Tema', options: ['light', 'dark'] }
     ],
     MVTLayer: [
       { name: 'url', type: 'text', default: 'https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf', label: 'URL de teselas MVT' },
@@ -199,30 +204,91 @@
         'mapajs.addPlugin(plugin);'
       ].join('\n');
     }
-    if (ext === 'dashboard') {
-      const chartType = v.chartType || 'donut';
+    if (ext === 'graphic') {
+      const title = v.title || 'Estadísticas de Tráfico';
+      const chartType = v.chartType || 'line';
+      const mode = v.mode || 'floating';
       const pos = v.position || 'TR';
-      const title = v.title || 'Monitor Territorial';
+
+      if (mode === 'panel') {
+        return [
+          '// Opción B: Gráfica como botón en el rail + panel colapsable de la API-IDEE',
+          'const grafica = new IDEE.graphic({',
+          '  title: ' + JSON.stringify(title) + ',',
+          '  chartType: ' + JSON.stringify(chartType) + ',',
+          '  data: [',
+          '    { name: "08:00", value: 380 },',
+          '    { name: "12:00", value: 720 },',
+          '    { name: "16:00", value: 890 },',
+          '    { name: "20:00", value: 540 }',
+          '  ]',
+          '});',
+          '',
+          '// Añadir como plugin al visualizador',
+          'mapajs.addPlugin(grafica.asPlugin({',
+          '  position: ' + JSON.stringify(pos) + ',',
+          '  collapsible: true,',
+          '  order: 1',
+          '}));'
+        ].join('\n');
+      }
 
       return [
-        '// 1. Crear ventana flotante de gráfica sobre el mapa',
-        'const chart = new IDEE.widget.Chart({',
+        '// Opción A: Gráfica como VENTANA FLOTANTE arrastrable sobre el visualizador',
+        'const grafica = new IDEE.graphic({',
         '  title: ' + JSON.stringify(title) + ',',
-        '  subtitle: "Distribución por categorías",',
+        '  subtitle: "Mediciones horarias",',
         '  chartType: ' + JSON.stringify(chartType) + ',',
         '  data: [',
-        '    { name: "Sector Norte", value: 420 },',
-        '    { name: "Sector Sur", value: 310 },',
-        '    { name: "Sector Centro", value: 580 },',
-        '    { name: "Sector Este", value: 240 },',
-        '    { name: "Sector Oeste", value: 190 }',
+        '    { label: "08:00", value: 380 },',
+        '    { label: "12:00", value: 720 },',
+        '    { label: "16:00", value: 890 },',
+        '    { label: "20:00", value: 540 }',
         '  ]',
         '});',
         '',
-        'chart.addToMap(mapajs, {',
+        'grafica.addToMap(mapajs, {',
         '  position: ' + JSON.stringify(pos) + ',',
-        '  width: 360,',
+        '  width: 380,',
         '  height: 250',
+        '});'
+      ].join('\n');
+    }
+    if (ext === 'dashboard') {
+      const title = v.title || 'Monitor Territorial';
+      const theme = v.theme || 'light';
+
+      return [
+        '// El cuadro de mandos orquesta visualizadores, gráficas, KPIs y tablas en un contenedor.',
+        '// Ejemplo de inicialización de IDEE.dashboard:',
+        'const dashboard = new IDEE.dashboard({',
+        '  container: "mapaDIV",',
+        '  theme: ' + JSON.stringify(theme) + ',',
+        '  header: {',
+        '    title: ' + JSON.stringify(title) + ',',
+        '    subtitle: "Estadísticas territoriales conectadas"',
+        '  },',
+        '  components: [',
+        '    {',
+        '      id: "kpiTotal",',
+        '      type: "kpi",',
+        '      title: "Total Sensores",',
+        '      value: "1.240",',
+        '      unit: "uds",',
+        '      trend: { direction: "up", text: "+12%" }',
+        '    },',
+        '    {',
+        '      id: "graficaDonut",',
+        '      type: "chart",',
+        '      title: "Distribución por Categorías",',
+        '      chartType: "donut",',
+        '      data: [',
+        '        { name: "Sector Norte", value: 420 },',
+        '        { name: "Sector Sur", value: 310 },',
+        '        { name: "Sector Centro", value: 580 }',
+        '      ]',
+        '    }',
+        '  ]',
         '});'
       ].join('\n');
     }

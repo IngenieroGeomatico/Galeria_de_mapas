@@ -1,0 +1,135 @@
+/**
+ * ext/graphic/graphic.css
+ * Estilos para el componente de Gráficas (IDEE.graphic) y su plugin/ventana flotante.
+ */
+
+:root {
+  --g-graphic-bg: #ffffff;
+  --g-graphic-border: #e2e8f0;
+  --g-graphic-text: #1e293b;
+  --g-graphic-text-muted: #64748b;
+  --g-graphic-primary: #0284c7;
+  --g-graphic-radius: 8px;
+}
+
+.g-graphic-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  background-color: transparent;
+  color: var(--g-graphic-text);
+  font-family: system-ui, -apple-system, sans-serif;
+  box-sizing: border-box;
+}
+
+.g-graphic-header {
+  margin-bottom: 8px;
+}
+
+.g-graphic-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--g-graphic-text);
+}
+
+.g-graphic-subtitle {
+  font-size: 0.8rem;
+  color: var(--g-graphic-text-muted);
+}
+
+.g-graphic-body {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  position: relative;
+}
+
+.g-graphic-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--g-graphic-text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+/* -------------------------------------------------------------------------
+   Ventana Flotante de Gráfica sobre el Visualizador
+   ------------------------------------------------------------------------- */
+.g-graphic-floating {
+  position: absolute;
+  z-index: 1000;
+  background-color: var(--g-graphic-bg, #ffffff);
+  border: 1px solid var(--g-graphic-border, #cbd5e1);
+  border-radius: var(--g-graphic-radius, 8px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+}
+
+.g-graphic-floating-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: #f1f5f9;
+  border-bottom: 1px solid var(--g-graphic-border, #e2e8f0);
+  cursor: move;
+  user-select: none;
+}
+
+.g-graphic-floating-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--g-graphic-text, #1e293b);
+}
+
+.g-graphic-floating-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.g-graphic-btn-icon {
+  background: transparent;
+  border: none;
+  font-size: 0.8rem;
+  color: var(--g-graphic-text-muted, #64748b);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.g-graphic-btn-icon:hover {
+  background-color: var(--g-graphic-border, #cbd5e1);
+  color: var(--g-graphic-text, #0f172a);
+}
+
+.g-graphic-floating-content {
+  flex: 1;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* -------------------------------------------------------------------------
+   Panel de Plugin (g-herramienta_graphic)
+   ------------------------------------------------------------------------- */
+.g-herramienta_graphic .m-tools:before {
+  content: "\e948"; /* Glifo de gráfica de la API */
+  font-family: g-cartografia;
+}
+
+.g-herramienta_graphic-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
