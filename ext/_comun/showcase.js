@@ -60,6 +60,18 @@
       { name: 'name', type: 'text', default: 'Datos', label: 'Nombre' },
       { name: 'legend', type: 'text', default: 'Datos', label: 'Leyenda' }
     ],
+    attribution: [
+      { name: 'mode', type: 'select', default: 'lite', label: 'Modo (lite / full)', options: ['lite', 'full'] },
+      { name: 'position', type: 'select', default: 'BR', label: 'Posición (modo full)', options: ['BR', 'BL', 'TL', 'TR'] },
+      { name: 'openPosition', type: 'select', default: 'bottom', label: 'Banda barra (modo lite)', options: ['bottom', 'top'] },
+      { name: 'collapsed', type: 'boolean', default: true, label: 'Colapsado inicial' },
+      { name: 'order', type: 'number', default: -1, label: 'Orden (CSS order)' },
+      { name: 'tooltip', type: 'text', default: 'Atribución y créditos', label: 'Tooltip' },
+      { name: 'color1_active', type: 'text', default: '#ffffff', label: 'Color1 activo' },
+      { name: 'color1_deactive', type: 'text', default: 'orangered', label: 'Color1 inactivo' },
+      { name: 'color2_active', type: 'text', default: '#71A7D3', label: 'Color2 activo' },
+      { name: 'color2_deactive', type: 'text', default: '#ffffff', label: 'Color2 inactivo' }
+    ],
     MVTLayer: [
       { name: 'url', type: 'text', default: 'https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf', label: 'URL de teselas MVT' },
       { name: 'layers', type: 'text', default: 'municipio', label: 'Capa en la tesela' },
@@ -140,6 +152,46 @@
         '  })',
         '});',
         'capaJSON.addTo(mapajs);'
+      ].join('\n');
+    }
+    if (ext === 'attribution') {
+      const mode = v.mode || 'lite';
+      const pos = v.position || 'BR';
+      const openPos = v.openPosition || 'bottom';
+      const collapsed = v.collapsed !== false;
+      const order = v.order != null ? Number(v.order) : -1;
+      const tooltip = v.tooltip || 'Atribución y créditos';
+      const color1 = { active: v.color1_active || '#ffffff', deactive: v.color1_deactive || 'orangered' };
+      const color2 = { active: v.color2_active || '#71A7D3', deactive: v.color2_deactive || '#ffffff' };
+
+      return [
+        '// =========================================================================',
+        '// Modos de presentación disponibles en miPlugin_attribution:',
+        '//   • "lite": Botón © en el rail (BL) + barra horizontal inferior de créditos.',
+        '//             Ideal para visualizadores limpios y responsivos.',
+        '//   • "full": Ventana / panel lateral colapsable y arrastrable de la API-IDEE.',
+        '// =========================================================================',
+        'const plugin = new IDEE.plugin.miPlugin_attribution({',
+        '  // Modo de presentación: "lite" (barra desplegable en la base) o "full" (panel flotante)',
+        '  mode: ' + JSON.stringify(mode) + ',',
+        '  // Posición del panel ("BR", "BL", "TL", "TR") cuando mode es "full"',
+        '  position: ' + JSON.stringify(pos) + ',',
+        '  // Banda donde se despliega la barra en modo "lite": "bottom" o "top"',
+        '  openPosition: ' + JSON.stringify(openPos) + ',',
+        '  collapsed: ' + (collapsed ? 'true' : 'false') + ',     // Estado inicial colapsado',
+        '  collapsible: true,',
+        '  order: ' + order + ',             // Orden relativo dentro del rail o la banda (-1 al principio)',
+        '  tooltip: ' + JSON.stringify(tooltip) + ',',
+        '  color1: ' + JSON.stringify(color1) + ',',
+        '  color2: ' + JSON.stringify(color2) + ',',
+        '  attributions: [',
+        '    {',
+        '      name: "Autor:",',
+        '      description: "<a style=\\"color: #0B57D0\\" href=\\"https://github.com/IngenieroGeomatico\\" target=\\"_blank\\">IngenieroGeomático</a>"',
+        '    }',
+        '  ]',
+        '});',
+        'mapajs.addPlugin(plugin);'
       ].join('\n');
     }
     if (ext === 'mbtilesLayer') {
@@ -360,7 +412,7 @@
     } catch (e) { log('Plugins comunes: ' + (e && e.message ? e.message : e)); }
 
     const clasePlugin = api.plugin && api.plugin['miPlugin_' + suffix];
-    if (typeof clasePlugin === 'function') {
+    if (typeof clasePlugin === 'function' && ext !== 'attribution') {
       try {
         const plugin = new clasePlugin({ position: 'TL', collapsible: true, order: 1 });
         map.addPlugin(plugin);
@@ -368,7 +420,7 @@
       } catch (e) {
         log('No se pudo instanciar el plugin: ' + (e && e.message ? e.message : e));
       }
-    } else {
+    } else if (ext !== 'attribution') {
       log('No hay miPlugin_' + ext + ' (puede ser una capa o utilidad).');
     }
 
