@@ -977,6 +977,10 @@
         this._vectorLayer = null;
       }
 
+      if (!this.hasGeometry()) {
+        return;
+      }
+
       let fc = null;
       try {
         fc = this.toGeoJSON();
@@ -1614,16 +1618,18 @@
       let campoLat = o.latField || this._latField || o.yField || this._yField || null;
       let campoLon = o.lonField || this._lonField || o.xField || this._xField || null;
       let campoWKT = o.wktField || this._wktField || null;
+      let campoWKB = o.wkbField || this._wkbField || null;
       const idField = o.idField || this._idField;
       const crsPorDefecto = o.crs || this._crs || 'EPSG:4326';
       const crsXY = o.crs || this._crs || 'EPSG:4326';
       const features = [];
 
       // Auto-detección si no se configuró ningún campo
-      if (!campoGeo && !campoWKT && !(campoLat && campoLon)) {
+      if (!campoGeo && !campoWKT && !campoWKB && !(campoLat && campoLon)) {
         const auto = this.detectarCamposGeo();
         if (auto.geometryField) campoGeo = auto.geometryField;
         else if (auto.wktField) campoWKT = auto.wktField;
+        else if (auto.wkbField) campoWKB = auto.wkbField;
         else if (auto.latField && auto.lonField) {
           campoLat = auto.latField;
           campoLon = auto.lonField;
@@ -1635,7 +1641,7 @@
       if (!campoGeo) campoGeo = '__idee_geojson';
 
       this._records.forEach(function (r) {
-        // 1) GeoJSON o WKT en el campo de geometría (geometriaDeValor soporta ambos).
+        // 1) GeoJSON o WKT/WKB en el campo de geometría (geometriaDeValor soporta todos).
         let geometria = geometriaDeValor(r[campoGeo], crsPorDefecto);
         // 2) Si no, comprobar propiedades directas estándar como geometry / geom / the_geom
         if (!geometria && r.geometry !== undefined) {
@@ -1650,6 +1656,13 @@
         }
         if (!geometria && r.wkt !== undefined) {
           geometria = geometriaDeValor(r.wkt, crsPorDefecto);
+        }
+        // 4) WKB
+        if (!geometria && campoWKB && r[campoWKB]) {
+          geometria = geometriaDeValor(r[campoWKB], crsPorDefecto);
+        }
+        if (!geometria && r.wkb !== undefined) {
+          geometria = geometriaDeValor(r.wkb, crsPorDefecto);
         }
         // 4) Lat/lon (EPSG:4326) o X/Y (CRS elegido).
         if (!geometria && campoLat && campoLon) {

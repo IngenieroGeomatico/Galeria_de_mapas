@@ -209,6 +209,219 @@ test('AlphanumericLayer: soporte para geometrías WKB y EWKB (HEX)', () => {
   assert.ok(Math.abs(fc.features[1].geometry.coordinates[1] - 39.4699) < 1e-4);
 });
 
+function crearMockMapa() {
+  return {
+    _capas: [],
+    _alfa: [],
+    addLayers(capa) {
+      if (Array.isArray(capa)) this._capas.push(...capa);
+      else this._capas.push(capa);
+    },
+    removeLayers(capa) {
+      const i = this._capas.indexOf(capa);
+      if (i >= 0) this._capas.splice(i, 1);
+    },
+    getLayers() { return this._capas; },
+    getAlphanumericLayers() { return this._alfa; },
+    fire() {}
+  };
+}
+
+test('AlphanumericLayer y Mapa: 1. Geometría X/Y (Lon/Lat) se muestra en el mapa', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const map = crearMockMapa();
+
+  const capa = new AlphanumericLayer({
+    name: 'capa_xy',
+    legend: 'Puntos XY',
+    records: [
+      { id: 1, nombre: 'Punto A', longitud: -3.7038, latitud: 40.4168 },
+      { id: 2, nombre: 'Punto B', longitud: 2.1734, latitud: 41.3851 }
+    ],
+    xField: 'longitud',
+    yField: 'latitud'
+  });
+
+  capa.addTo(map);
+
+  assert.equal(capa.hasGeometry(), true);
+  assert.ok(capa._vectorLayer, 'debe crear la capa vectorial interna');
+  assert.equal(map.getLayers().includes(capa._vectorLayer), true, 'debe añadirse al mapa');
+  assert.equal(capa._vectorLayer.displayInLayerSwitcher, false, 'no debe duplicarse en el selector');
+
+  const fc = capa.toGeoJSON();
+  assert.equal(fc.features.length, 2);
+  assert.equal(fc.features[0].geometry.type, 'Point');
+  assert.deepEqual(fc.features[0].geometry.coordinates, [-3.7038, 40.4168]);
+  assert.equal(fc.features[1].geometry.type, 'Point');
+  assert.deepEqual(fc.features[1].geometry.coordinates, [2.1734, 41.3851]);
+});
+
+test('AlphanumericLayer y Mapa: 2. Geometría WKT (Point, LineString, Polygon) se muestra en el mapa', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const map = crearMockMapa();
+
+  const capa = new AlphanumericLayer({
+    name: 'capa_wkt',
+    legend: 'Geometrías WKT',
+    records: [
+      { id: 1, tipo: 'Punto', geom: 'POINT(-3.7038 40.4168)' },
+      { id: 2, tipo: 'Línea', geom: 'LINESTRING(-3.7 40.4, -3.8 40.5)' },
+      { id: 3, tipo: 'Polígono', geom: 'POLYGON((-3.7 40.4, -3.6 40.4, -3.6 40.5, -3.7 40.5, -3.7 40.4))' },
+      { id: 4, tipo: 'EWKT con SRID', geom: 'SRID=4326;POINT(-0.3763 39.4699)' }
+    ],
+    wktField: 'geom'
+  });
+
+  capa.addTo(map);
+
+  assert.equal(capa.hasGeometry(), true);
+  assert.ok(capa._vectorLayer, 'debe crear capa vectorial');
+  assert.equal(map.getLayers().includes(capa._vectorLayer), true);
+
+  const fc = capa.toGeoJSON();
+  assert.equal(fc.features.length, 4);
+  assert.equal(fc.features[0].geometry.type, 'Point');
+  assert.deepEqual(fc.features[0].geometry.coordinates, [-3.7038, 40.4168]);
+  assert.equal(fc.features[1].geometry.type, 'LineString');
+  assert.equal(fc.features[1].geometry.coordinates.length, 2);
+  assert.equal(fc.features[2].geometry.type, 'Polygon');
+  assert.equal(fc.features[2].geometry.coordinates[0].length, 5);
+  assert.equal(fc.features[3].geometry.type, 'Point');
+  assert.deepEqual(fc.features[3].geometry.coordinates, [-0.3763, 39.4699]);
+});
+
+test('AlphanumericLayer y Mapa: 3. Geometría WKB y EWKB (HEX) se muestra en el mapa', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const map = crearMockMapa();
+
+  // 1. WKB Point Little Endian (-3.7038, 40.4168)
+  const bufPt = Buffer.alloc(21);
+  bufPt.writeUInt8(1, 0); // Little endian
+  bufPt.writeUInt32LE(1, 1); // Point
+  bufPt.writeDoubleLE(-3.7038, 5);
+  bufPt.writeDoubleLE(40.4168, 13);
+  const wkbPoint = bufPt.toString('hex');
+
+  // 2. WKB LineString Little Endian con 2 puntos
+  const bufLine = Buffer.alloc(41);
+  bufLine.writeUInt8(1, 0);
+  bufLine.writeUInt32LE(2, 1); // LineString
+  bufLine.writeUInt32LE(2, 5); // 2 puntos
+  bufLine.writeDoubleLE(-3.7, 9);
+  bufLine.writeDoubleLE(40.4, 17);
+  bufLine.writeDoubleLE(-3.8, 25);
+  bufLine.writeDoubleLE(40.5, 33);
+  const wkbLine = bufLine.toString('hex');
+
+  // 3. EWKB Point con SRID 4326 embebido (-0.3763, 39.4699)
+  const bufEWKB = Buffer.alloc(25);
+  bufEWKB.writeUInt8(1, 0);
+  bufEWKB.writeUInt32LE(0x20000001, 1); // Point + SRID flag
+  bufEWKB.writeUInt32LE(4326, 5);
+  bufEWKB.writeDoubleLE(-0.3763, 9);
+  bufEWKB.writeDoubleLE(39.4699, 17);
+  const ewkbPoint = bufEWKB.toString('hex');
+
+  const capa = new AlphanumericLayer({
+    name: 'capa_wkb_mapa',
+    legend: 'Geometrías WKB/EWKB',
+    records: [
+      { id: 1, tipo: 'Punto WKB', wkb: wkbPoint },
+      { id: 2, tipo: 'Línea WKB', wkb: wkbLine },
+      { id: 3, tipo: 'Punto EWKB', wkb: ewkbPoint }
+    ]
+  });
+
+  // Autodetección del campo WKB
+  const det = capa.detectarCamposGeo();
+  assert.equal(det.wkbField, 'wkb');
+
+  capa.convertirCampoAGeometria('wkb', { field: 'wkb' });
+  capa.addTo(map);
+
+  assert.equal(capa.hasGeometry(), true);
+  assert.ok(capa._vectorLayer);
+  assert.equal(map.getLayers().includes(capa._vectorLayer), true);
+
+  const fc = capa.toGeoJSON();
+  assert.equal(fc.features.length, 3);
+  assert.equal(fc.features[0].geometry.type, 'Point');
+  assert.ok(Math.abs(fc.features[0].geometry.coordinates[0] - (-3.7038)) < 1e-4);
+  assert.equal(fc.features[1].geometry.type, 'LineString');
+  assert.equal(fc.features[1].geometry.coordinates.length, 2);
+  assert.equal(fc.features[2].geometry.type, 'Point');
+  assert.ok(Math.abs(fc.features[2].geometry.coordinates[0] - (-0.3763)) < 1e-4);
+});
+
+test('AlphanumericLayer y Mapa: 4. Geometría GeoJSON (objeto, string JSON, Feature) se muestra en el mapa', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const map = crearMockMapa();
+
+  const capa = new AlphanumericLayer({
+    name: 'capa_geojson_mapa',
+    legend: 'Geometrías GeoJSON',
+    source: [
+      { id: 1, nombre: 'Objeto Point', geometry: { type: 'Point', coordinates: [-3.7038, 40.4168] } },
+      { id: 2, nombre: 'String GeoJSON', geometry: JSON.stringify({ type: 'LineString', coordinates: [[-3.7, 40.4], [-3.8, 40.5]] }) },
+      {
+        id: 3,
+        nombre: 'Feature',
+        geometry: {
+          type: 'Feature',
+          geometry: { type: 'Polygon', coordinates: [[[-3.7, 40.4], [-3.6, 40.4], [-3.6, 40.5], [-3.7, 40.5], [-3.7, 40.4]]] },
+          properties: {}
+        }
+      }
+    ]
+  });
+
+  capa.addTo(map);
+
+  assert.equal(capa.hasGeometry(), true);
+  assert.ok(capa._vectorLayer);
+  assert.equal(map.getLayers().includes(capa._vectorLayer), true);
+
+  const fc = capa.toGeoJSON();
+  assert.equal(fc.features.length, 3);
+  assert.equal(fc.features[0].geometry.type, 'Point');
+  assert.equal(fc.features[1].geometry.type, 'LineString');
+  assert.equal(fc.features[2].geometry.type, 'Polygon');
+});
+
+test('AlphanumericLayer y Mapa: 5. Sincronización de visibilidad y desasignación ("Ninguna")', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const map = crearMockMapa();
+
+  const capa = new AlphanumericLayer({
+    name: 'capa_visibilidad',
+    records: [
+      { id: 1, wkt: 'POINT(-3.7 40.4)' }
+    ],
+    wktField: 'wkt'
+  });
+
+  capa.addTo(map);
+  assert.equal(capa.isVisible(), true);
+  assert.equal(capa._vectorLayer.isVisible(), true);
+
+  // Ocultar capa
+  capa.setVisible(false);
+  assert.equal(capa.isVisible(), false);
+  assert.equal(capa._vectorLayer.isVisible(), false);
+
+  // Mostrar capa
+  capa.setVisible(true);
+  assert.equal(capa.isVisible(), true);
+  assert.equal(capa._vectorLayer.isVisible(), true);
+
+  // Desasignar geometría (cambiar a "none")
+  capa.convertirCampoAGeometria('none');
+  assert.equal(capa.hasGeometry(), false);
+  assert.equal(capa._vectorLayer, null, 'la capa vectorial debe destruirse');
+  assert.equal(map.getLayers().length, 0, 'no debe quedar capa vectorial en el mapa');
+});
+
 test('showcase: el ejemplo de alphanumericLayer añade directamente las 2 capas al mapa', () => {
   const fuente = fs.readFileSync('./ext/_comun/showcase.js', 'utf8');
   const inicio = fuente.indexOf("if (ext === 'alphanumericLayer') {");
