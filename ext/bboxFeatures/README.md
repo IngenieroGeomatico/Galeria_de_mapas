@@ -78,13 +78,19 @@ new M.layer.OGCAPIFeatures({
 });
 ```
 
-En el visor de tipos de capa se activa con una opción de `anadirPluginsTipos` (`mapas/tiposDeCapas/js/comun.js`), que ya lo registra antes del selector:
+En el visualizador de tipos de capa se activa con una opción de `anadirPluginsTipos` (`mapas/tiposDeCapas/js/comun.js`), que ya lo registra antes del selector. La opción admite `true` (valores por defecto) o un **objeto con las opciones del constructor**, que se pasa tal cual:
 
 ```js
+// Valores por defecto del plugin.
 anadirPluginsTipos(mapajs, mapa, { bboxFeatures: true });
+
+// Parametrizado para el servicio de ese visualizador.
+anadirPluginsTipos(mapajs, mapa, {
+  bboxFeatures: { retardo: 500 },
+});
 ```
 
-Los dos visores que lo usan son `mapas/tiposDeCapas/capas/wfs/` (WFS de IDENA, 1187 objetos) y `mapas/tiposDeCapas/capas/ogcapi/` (colección `falls` de `api-features.idee.es`, 251 objetos).
+Los dos visualizadores de servicios vectoriales que lo usan son `mapas/tiposDeCapas/capas/wfs/` (WFS de IDENA, 1187 objetos, `retardo: 500` porque el servicio tarda en responder) y `mapas/tiposDeCapas/capas/ogcapi/` (colección `falls` de `api-features.idee.es`, 251 objetos, `retardo: 250` porque responde rápido).
 
 ---
 

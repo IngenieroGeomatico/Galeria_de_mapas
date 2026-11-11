@@ -34,7 +34,13 @@ function mapa() {
 
   mapajs.addLayers(capa);
 
-  anadirPluginsTipos(mapajs, mapa, { bboxFeatures: true });
+  // bboxFeatures se parametriza aquí: el WFS de IDENA tarda en responder, así
+  // que se espera medio segundo desde el último movimiento del mapa antes de
+  // pedir los objetos de la vista (el plugin agrupa así la ráfaga de eventos de
+  // la rueda o de un flyTo y no lanza una petición por fotograma).
+  anadirPluginsTipos(mapajs, mapa, {
+    bboxFeatures: { retardo: 500 },
+  });
   return mapajs;
 }
 

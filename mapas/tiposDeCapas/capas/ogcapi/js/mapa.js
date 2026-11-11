@@ -36,7 +36,12 @@ function mapa() {
 
   mapajs.addLayers(capa);
 
-  anadirPluginsTipos(mapajs, mapa, { bboxFeatures: true });
+  // bboxFeatures se parametriza aquí: la API de la IDEE responde rápido, así
+  // que basta el retardo corto (250 ms) para agrupar los movimientos seguidos
+  // del mapa sin que se note al soltar la rueda.
+  anadirPluginsTipos(mapajs, mapa, {
+    bboxFeatures: { retardo: 250 },
+  });
   return mapajs;
 }
 

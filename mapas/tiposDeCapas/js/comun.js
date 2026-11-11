@@ -263,11 +263,13 @@ function prepararFondo(opciones) {
  * @param {Object} [opciones.selector] Opciones extra para el selector de capas
  *   superpuestas, mezcladas con las de siempre. El visor de XYZ lo usa para
  *   pedir el modo "una capa a la vez" (`seleccionUnica`).
- * @param {boolean} [opciones.bboxFeatures=false] Anade la extension
+ * @param {boolean|Object} [opciones.bboxFeatures=false] Anade la extension
  *   `miPlugin_bboxFeatures`, que permite pedir a las capas WFS, OGC API
  *   Features y FlatGeobuf solo los objetos geograficos de la vista (BBOX) y
  *   renovarlos al mover el mapa. El control aparece en el desplegable de
- *   opciones de esas capas.
+ *   opciones de esas capas. Con `true` se usan los valores por defecto del
+ *   plugin; con un objeto se pasa TAL CUAL a su constructor (`retardo`:
+ *   milisegundos de espera tras el ultimo movimiento antes de pedir).
  */
 function anadirPluginsTipos(map, recrear, opciones) {
   const opts = opciones || {};
@@ -300,9 +302,17 @@ function anadirPluginsTipos(map, recrear, opciones) {
   // capa filtrable. Va antes del selector para que, al restaurar el estado tras
   // un cambio 2D/3D, el modo de cada capa ya este aplicado cuando el selector
   // repinta su lista.
+  //
+  // El valor puede ser `true` (valores por defecto del plugin) o un objeto con
+  // las opciones del constructor (`retardo`), que se pasa TAL CUAL. Asi cada
+  // visualizador de servicios vectoriales (WFS, OGC API Features) ajusta el
+  // plugin a lo que responde su servicio sin tocar el codigo comun.
   if (opts.bboxFeatures) {
     if (IDEE.plugin && typeof IDEE.plugin.miPlugin_bboxFeatures === 'function') {
-      map.addPlugin(new IDEE.plugin.miPlugin_bboxFeatures({}));
+      const opcionesBbox = (typeof opts.bboxFeatures === 'object' && opts.bboxFeatures !== null)
+        ? opts.bboxFeatures
+        : {};
+      map.addPlugin(new IDEE.plugin.miPlugin_bboxFeatures(opcionesBbox));
     } else {
       console.warn('bboxFeatures: el plugin no esta cargado; se omite');
     }
