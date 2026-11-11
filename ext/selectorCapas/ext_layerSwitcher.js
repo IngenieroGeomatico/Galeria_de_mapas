@@ -4731,6 +4731,19 @@ class miPlugin_layerSwitcher {
         h += '</select></div>';
         return h;
       }
+      if (tipo === 'wkb') {
+        const wkbSel = v.field || v.wkbField || capa._wkbField || '';
+        let h = '<div style="flex:1;min-width:200px;width:100%;">';
+        h += '<div class="ls-ficha-campo-etiqueta" style="margin-bottom:4px;font-weight:600;">Campo WKB / EWKB (HEX)</div>';
+        h += '<select id="ls-alfa-geo-wkb" class="ls-ficha-input" style="width:100%;">';
+        h += '<option value="">— Selecciona campo con geometría WKB/EWKB —</option>';
+        campos.forEach(function (c) {
+          const sel = (c === wkbSel) ? ' selected' : '';
+          h += '<option value="' + _escaparHtml(c) + '"' + sel + '>' + _escaparHtml(c) + '</option>';
+        });
+        h += '</select></div>';
+        return h;
+      }
       if (tipo === 'geojson') {
         const geoSel = v.field || v.geometryField || (capa._geometryField !== '__idee_geojson' ? capa._geometryField : '') || '';
         let h = '<div style="flex:1;min-width:200px;width:100%;">';
@@ -4795,6 +4808,9 @@ class miPlugin_layerSwitcher {
           if (capa._wktField) {
             tipoInicial = 'wkt';
             valoresIniciales = { field: capa._wktField };
+          } else if (capa._wkbField) {
+            tipoInicial = 'wkb';
+            valoresIniciales = { field: capa._wkbField };
           } else if (capa._geometryField && capa._geometryField !== '__idee_geojson') {
             tipoInicial = 'geojson';
             valoresIniciales = { field: capa._geometryField };
@@ -4813,6 +4829,9 @@ class miPlugin_layerSwitcher {
               } else if (detGeo.wktField) {
                 tipoInicial = 'wkt';
                 valoresIniciales = { field: detGeo.wktField };
+              } else if (detGeo.wkbField) {
+                tipoInicial = 'wkb';
+                valoresIniciales = { field: detGeo.wkbField };
               } else if ((detGeo.xField || detGeo.lonField) && (detGeo.yField || detGeo.latField)) {
                 tipoInicial = 'xy';
                 valoresIniciales = { xField: detGeo.xField || detGeo.lonField, yField: detGeo.yField || detGeo.latField };
@@ -4828,6 +4847,7 @@ class miPlugin_layerSwitcher {
           h += '<option value="none"' + (tipoInicial === 'none' ? ' selected' : '') + '>Ninguna</option>';
           h += '<option value="xy"' + (tipoInicial === 'xy' ? ' selected' : '') + '>Coordenadas X / Y</option>';
           h += '<option value="wkt"' + (tipoInicial === 'wkt' ? ' selected' : '') + '>WKT (Well-Known Text)</option>';
+          h += '<option value="wkb"' + (tipoInicial === 'wkb' ? ' selected' : '') + '>WKB / EWKB (Hexadecimal)</option>';
           h += '<option value="geojson"' + (tipoInicial === 'geojson' ? ' selected' : '') + '>GeoJSON</option>';
           h += '</select>';
           h += '</div>';
@@ -8342,6 +8362,9 @@ class miPlugin_layerSwitcher {
       } else if (det && det.wktField) {
         tipo = 'wkt';
         valores = { field: det.wktField };
+      } else if (det && det.wkbField) {
+        tipo = 'wkb';
+        valores = { field: det.wkbField };
       } else if (det && (det.xField || det.lonField) && (det.yField || det.latField)) {
         tipo = 'xy';
         valores = { xField: det.xField || det.lonField, yField: det.yField || det.latField };
@@ -8372,6 +8395,8 @@ class miPlugin_layerSwitcher {
           layer.convertirCampoAGeometria('geojson', { field: resto });
         } else if (formato === 'wkt') {
           layer.convertirCampoAGeometria('wkt', { field: resto });
+        } else if (formato === 'wkb') {
+          layer.convertirCampoAGeometria('wkb', { field: resto });
         } else if (formato === 'xy') {
           const xy = resto.split(',');
           layer.convertirCampoAGeometria('xy', { xField: xy[0], yField: xy[1] });
@@ -8409,6 +8434,20 @@ class miPlugin_layerSwitcher {
             return;
           }
           layer.convertirCampoAGeometria('wkt', { field: field });
+        } else if (tipo === 'wkb') {
+          const wkbEl = document.getElementById('ls-alfa-geo-wkb');
+          const field = wkbEl ? wkbEl.value : null;
+          if (!field) {
+            const msg = document.getElementById('ls-alfa-geo-msg');
+            if (msg) {
+              msg.textContent = 'Selecciona el campo WKB';
+              msg.style.color = 'var(--ls-aviso, #d97706)';
+              msg.style.display = 'block';
+              setTimeout(function () { if (msg) msg.style.display = 'none'; }, 3000);
+            }
+            return;
+          }
+          layer.convertirCampoAGeometria('wkb', { field: field });
         } else if (tipo === 'geojson') {
           const geoEl = document.getElementById('ls-alfa-geo-geojson');
           const field = geoEl ? geoEl.value : null;

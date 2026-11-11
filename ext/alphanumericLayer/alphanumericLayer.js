@@ -252,10 +252,188 @@
     return { geometry: g, crs: crs };
   }
 
+  function esWKBHex(str) {
+    if (typeof str !== 'string') return false;
+    const t = str.trim();
+    if (t.length < 42 || t.length % 2 !== 0) return false;
+    if (!/^[0-9a-fA-F]+$/.test(t)) return false;
+    const primerByte = t.slice(0, 2);
+    if (primerByte !== '00' && primerByte !== '01') return false;
+    return true;
+  }
+
+  function parsearWKBBuffer(bytes) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let offset = 0;
+    let sridGlobal = null;
+
+    function leerGeometria() {
+      if (offset + 5 > view.byteLength) return null;
+      const byteOrder = view.getUint8(offset);
+      offset += 1;
+      const littleEndian = (byteOrder === 1);
+      const rawType = view.getUint32(offset, littleEndian);
+      offset += 4;
+
+      // Flags EWKB (PostGIS)
+      const hasZ = !!(rawType & 0x80000000);
+      const hasM = !!(rawType & 0x40000000);
+      const hasSRID = !!(rawType & 0x20000000);
+
+      let srid = null;
+      if (hasSRID) {
+        if (offset + 4 > view.byteLength) return null;
+        srid = view.getUint32(offset, littleEndian);
+        offset += 4;
+        if (!sridGlobal && srid) sridGlobal = 'EPSG:' + srid;
+      }
+
+      // Tipo base (limpiando flags EWKB y considerando ISO SQL/MM)
+      let baseType = rawType & 0x1FFFFFFF;
+      let dimZ = hasZ;
+      if (baseType >= 1000 && baseType < 2000) {
+        dimZ = true;
+        baseType = baseType - 1000;
+      } else if (baseType >= 2000 && baseType < 3000) {
+        baseType = baseType - 2000;
+      } else if (baseType >= 3000 && baseType < 4000) {
+        dimZ = true;
+        baseType = baseType - 3000;
+      }
+
+      const coordBytes = 16 + (dimZ ? 8 : 0) + (hasM ? 8 : 0);
+
+      function leerPunto() {
+        if (offset + coordBytes > view.byteLength) return null;
+        const x = view.getFloat64(offset, littleEndian);
+        const y = view.getFloat64(offset + 8, littleEndian);
+        offset += 16;
+        let z = null;
+        if (dimZ) {
+          z = view.getFloat64(offset, littleEndian);
+          offset += 8;
+        }
+        if (hasM) {
+          offset += 8;
+        }
+        return (dimZ && z !== null) ? [x, y, z] : [x, y];
+      }
+
+      if (baseType === 1) { // Point
+        const pt = leerPunto();
+        return pt ? { type: 'Point', coordinates: pt } : null;
+      }
+      if (baseType === 2) { // LineString
+        if (offset + 4 > view.byteLength) return null;
+        const numPoints = view.getUint32(offset, littleEndian);
+        offset += 4;
+        const pts = [];
+        for (let i = 0; i < numPoints; i++) {
+          const p = leerPunto();
+          if (!p) return null;
+          pts.push(p);
+        }
+        return { type: 'LineString', coordinates: pts };
+      }
+      if (baseType === 3) { // Polygon
+        if (offset + 4 > view.byteLength) return null;
+        const numRings = view.getUint32(offset, littleEndian);
+        offset += 4;
+        const rings = [];
+        for (let r = 0; r < numRings; r++) {
+          if (offset + 4 > view.byteLength) return null;
+          const numPoints = view.getUint32(offset, littleEndian);
+          offset += 4;
+          const pts = [];
+          for (let i = 0; i < numPoints; i++) {
+            const p = leerPunto();
+            if (!p) return null;
+            pts.push(p);
+          }
+          rings.push(pts);
+        }
+        return { type: 'Polygon', coordinates: rings };
+      }
+      if (baseType === 4) { // MultiPoint
+        if (offset + 4 > view.byteLength) return null;
+        const numGeoms = view.getUint32(offset, littleEndian);
+        offset += 4;
+        const pts = [];
+        for (let i = 0; i < numGeoms; i++) {
+          const g = leerGeometria();
+          if (!g || g.type !== 'Point') return null;
+          pts.push(g.coordinates);
+        }
+        return { type: 'MultiPoint', coordinates: pts };
+      }
+      if (baseType === 5) { // MultiLineString
+        if (offset + 4 > view.byteLength) return null;
+        const numGeoms = view.getUint32(offset, littleEndian);
+        offset += 4;
+        const lines = [];
+        for (let i = 0; i < numGeoms; i++) {
+          const g = leerGeometria();
+          if (!g || g.type !== 'LineString') return null;
+          lines.push(g.coordinates);
+        }
+        return { type: 'MultiLineString', coordinates: lines };
+      }
+      if (baseType === 6) { // MultiPolygon
+        if (offset + 4 > view.byteLength) return null;
+        const numGeoms = view.getUint32(offset, littleEndian);
+        offset += 4;
+        const polys = [];
+        for (let i = 0; i < numGeoms; i++) {
+          const g = leerGeometria();
+          if (!g || g.type !== 'Polygon') return null;
+          polys.push(g.coordinates);
+        }
+        return { type: 'MultiPolygon', coordinates: polys };
+      }
+      if (baseType === 7) { // GeometryCollection
+        if (offset + 4 > view.byteLength) return null;
+        const numGeoms = view.getUint32(offset, littleEndian);
+        offset += 4;
+        const geoms = [];
+        for (let i = 0; i < numGeoms; i++) {
+          const g = leerGeometria();
+          if (!g) return null;
+          geoms.push(g);
+        }
+        return { type: 'GeometryCollection', geometries: geoms };
+      }
+      return null;
+    }
+
+    try {
+      const geom = leerGeometria();
+      if (!geom) return null;
+      return { geometry: geom, crs: sridGlobal };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function parsearWKBConCRS(wkbInput) {
+    if (typeof wkbInput === 'string') {
+      const hex = wkbInput.trim();
+      if (!esWKBHex(hex)) return null;
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+      }
+      return parsearWKBBuffer(bytes);
+    }
+    if (wkbInput instanceof Uint8Array || (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(wkbInput))) {
+      return parsearWKBBuffer(wkbInput);
+    }
+    return null;
+  }
+
   /**
    * Extrae una geometría GeoJSON de un valor que puede ser un objeto
    * GeoJSON (geometría, Feature o FeatureCollection), su texto JSON o
-   * una cadena WKT (incluido EWKT con SRID=). Devuelve la geometría en
+   * una cadena WKT (incluido EWKT con SRID=) o WKB en HEX. Devuelve la geometría en
    * EPSG:4326, reproyectando si hace falta.
    * @param {*} valor Valor del campo.
    * @param {string} [crsPorDefecto] CRS por defecto para `place`/coordenadas.
@@ -271,6 +449,14 @@
       if (esWKT(t)) {
         const parsed = parsearWKTConCRS(t);
         if (parsed) {
+          const origen = parsed.crs || crsPorDefecto || 'EPSG:4326';
+          return reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
+        }
+      }
+      // Comprobar si parece texto WKB en HEX
+      if (esWKBHex(t)) {
+        const parsed = parsearWKBConCRS(t);
+        if (parsed && parsed.geometry) {
           const origen = parsed.crs || crsPorDefecto || 'EPSG:4326';
           return reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
         }
@@ -701,6 +887,7 @@
       xField = config.xField || null;
       yField = config.yField || null;
       wktField = config.wktField || null;
+      let wkbField = config.wkbField || null;
       if (config.geometryField) {
         geometryField = config.geometryField;
       }
@@ -720,6 +907,7 @@
       this._xField = xField;
       this._yField = yField;
       this._wktField = wktField;
+      this._wkbField = wkbField;
       this._geometryField = geometryField;
       this._source = o.source || null;
       this._metadata = o.metadata || {};
@@ -1083,7 +1271,7 @@
      * @returns {boolean}
      */
     hasGeometry() {
-      return !!(this._geometryField || this._wktField || this._xField || this._yField || (this._latField && this._lonField));
+      return !!(this._geometryField || this._wktField || this._wkbField || this._xField || this._yField || (this._latField && this._lonField));
     }
 
     /**
@@ -1096,6 +1284,7 @@
      * @param {string} [campos.xField] Campo X (longitud).
      * @param {string} [campos.yField] Campo Y (latitud).
      * @param {string} [campos.wktField] Campo con geometría en WKT.
+     * @param {string} [campos.wkbField] Campo con geometría en WKB (HEX).
      * @param {string} [campos.geometryField] Campo con geometría GeoJSON.
      * @returns {AlphanumericLayer}
      */
@@ -1106,6 +1295,7 @@
       if (c.xField !== undefined) this._xField = c.xField || null;
       if (c.yField !== undefined) this._yField = c.yField || null;
       if (c.wktField !== undefined) this._wktField = c.wktField || null;
+      if (c.wkbField !== undefined) this._wkbField = c.wkbField || null;
       if (c.geometryField !== undefined) this._geometryField = c.geometryField || null;
       if (c.crs !== undefined) this._crs = c.crs || this._crs || 'EPSG:4326';
       this._renderVectorLayer();
@@ -1132,14 +1322,15 @@
 
     /**
      * Detecta automáticamente las columnas que pueden convertirse en
-     * geometría: GeoJSON, WKT, lat/lon y X/Y.
-     * @returns {{geometryField: string|null, wktField: string|null, latField: string|null, lonField: string|null, xField: string|null, yField: string|null}}
+     * geometría: GeoJSON, WKT, WKB, lat/lon y X/Y.
+     * @returns {{geometryField: string|null, wktField: string|null, wkbField: string|null, latField: string|null, lonField: string|null, xField: string|null, yField: string|null}}
      */
     detectarCamposGeo() {
       const nombres = this.getFieldNames();
       const registros = this.getRecords();
       let geometryField = null;
       let wktField = null;
+      let wkbField = null;
 
       // 1. Prioridad por nombre estándar si existe y tiene contenido válido
       const camposGeoCandidatos = nombres.filter(function (n) {
@@ -1149,12 +1340,16 @@
         const n = camposGeoCandidatos[k];
         for (let i = 0; i < Math.min(registros.length, 5); i++) {
           const v = registros[i] && registros[i][n];
-          if (v && (typeof v === 'object' || (typeof v === 'string' && (v.trim().charAt(0) === '{' || esWKT(v))))) {
-            geometryField = n;
+          if (v && (typeof v === 'object' || (typeof v === 'string' && (v.trim().charAt(0) === '{' || esWKT(v) || esWKBHex(v))))) {
+            if (typeof v === 'string' && esWKBHex(v)) {
+              wkbField = n;
+            } else {
+              geometryField = n;
+            }
             break;
           }
         }
-        if (geometryField) break;
+        if (geometryField || wkbField) break;
       }
 
       // 2. Si no se detectó por nombre, explorar todos los campos buscando GeoJSON (objeto o string JSON)
@@ -1192,6 +1387,21 @@
         });
       }
 
+      // 4. WKB: buscar por nombre candidato (wkb, geom_wkb) o por contenido HEX WKB
+      const camposWkbCandidatos = nombres.filter(function (n) { return /^(wkb|geom_wkb|geometry_wkb|wkb_geometry)$/i.test(n); });
+      if (camposWkbCandidatos.length > 0) {
+        wkbField = camposWkbCandidatos[0];
+      }
+      if (!geometryField && !wktField && !wkbField) {
+        nombres.forEach(function (n) {
+          if (wkbField) return;
+          for (let i = 0; i < Math.min(registros.length, 5); i++) {
+            const v = registros[i] && registros[i][n];
+            if (esWKBHex(v)) { wkbField = n; return; }
+          }
+        });
+      }
+
       const latLon = this.detectarCamposLatLon();
       // X/Y por nombre.
       const x = nombres.filter(function (n) { return /^(x|coordx|coord_x|longitud_x)$/i.test(n); })[0];
@@ -1199,6 +1409,7 @@
       return {
         geometryField: geometryField,
         wktField: wktField,
+        wkbField: wkbField,
         latField: latLon.latField,
         lonField: latLon.lonField,
         xField: x || null,
@@ -1267,6 +1478,27 @@
     }
 
     /**
+     * Añade un campo calculado `__idee_geojson` a partir de un campo WKB (en formato HEX).
+     * @param {string} campo Campo con texto hexadecimal WKB.
+     * @returns {AlphanumericLayer}
+     */
+    anadirGeometriaDesdeWKB(campo, opciones) {
+      const o = opciones || {};
+      if (!campo) return this;
+      this._wkbField = campo;
+      const crsPorDefecto = o.crs || this._crs || 'EPSG:4326';
+      this._crs = crsPorDefecto;
+      this._records.forEach(function (r) {
+        const g = geometriaDeValor(r[campo], crsPorDefecto);
+        if (g) r.__idee_geojson = JSON.stringify(g);
+      });
+      this._geometryField = '__idee_geojson';
+      this._fields = inferirCampos(this._records);
+      this._renderVectorLayer();
+      return this;
+    }
+
+    /**
      * Añade un campo calculado `__idee_geojson` a partir de un campo que
      * ya contiene GeoJSON (lo normaliza si viene como objeto).
      * @param {string} campo Campo con GeoJSON.
@@ -1289,11 +1521,11 @@
 
     /**
      * Convierte uno o varios campos en geometría, según el formato indicado.
-     * @param {string} formato 'xy' | 'wkt' | 'geojson' | 'auto' | 'none'
+     * @param {string} formato 'xy' | 'wkt' | 'wkb' | 'geojson' | 'auto' | 'none'
      * @param {Object} [opciones]
      * @param {string} [opciones.xField] Campo X (para 'xy').
      * @param {string} [opciones.yField] Campo Y (para 'xy').
-     * @param {string} [opciones.field] Campo origen (para 'wkt'/'geojson').
+     * @param {string} [opciones.field] Campo origen (para 'wkt'/'wkb'/'geojson').
      * @returns {AlphanumericLayer}
      */
     convertirCampoAGeometria(formato, opciones) {
@@ -1304,6 +1536,7 @@
         this._latField = null;
         this._lonField = null;
         this._wktField = null;
+        this._wkbField = null;
         this._geometryField = null;
         this._records.forEach(function (r) {
           if (r.__idee_geojson) delete r.__idee_geojson;
@@ -1318,6 +1551,9 @@
       if (formato === 'wkt') {
         return this.anadirGeometriaDesdeWKT(o.field, { crs: o.crs });
       }
+      if (formato === 'wkb') {
+        return this.anadirGeometriaDesdeWKB(o.field, { crs: o.crs });
+      }
       if (formato === 'geojson') {
         return this.anadirGeometriaDesdeGeoJSON(o.field, { crs: o.crs });
       }
@@ -1325,6 +1561,7 @@
         const det = this.detectarCamposGeo();
         if (det.geometryField) return this.anadirGeometriaDesdeGeoJSON(det.geometryField, { crs: o.crs });
         if (det.wktField) return this.anadirGeometriaDesdeWKT(det.wktField, { crs: o.crs });
+        if (det.wkbField) return this.anadirGeometriaDesdeWKB(det.wkbField, { crs: o.crs });
         if (det.xField && det.yField) return this.anadirGeometriaDesdeXY(det.xField, det.yField, { crs: o.crs });
         if (det.latField && det.lonField) return this.anadirGeometriaDesdeXY(det.lonField, det.latField, { crs: o.crs });
         return this;

@@ -164,6 +164,51 @@ test('AlphanumericLayer: asignacion de campo a geometria con convertirCampoAGeom
   assert.deepEqual(fc.features[0].geometry.coordinates, [-5.9845, 37.3891]);
 });
 
+test('AlphanumericLayer: soporte para geometrías WKB y EWKB (HEX)', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+
+  // WKB estándar Point (-3.7038, 40.4168)
+  const bufWKB = Buffer.alloc(21);
+  bufWKB.writeUInt8(1, 0);
+  bufWKB.writeUInt32LE(1, 1);
+  bufWKB.writeDoubleLE(-3.7038, 5);
+  bufWKB.writeDoubleLE(40.4168, 13);
+  const wkbHex = bufWKB.toString('hex');
+
+  // EWKB con SRID 4326 Point (-0.3763, 39.4699)
+  const bufEWKB = Buffer.alloc(25);
+  bufEWKB.writeUInt8(1, 0);
+  bufEWKB.writeUInt32LE(0x20000001, 1); // Point + SRID flag
+  bufEWKB.writeUInt32LE(4326, 5);
+  bufEWKB.writeDoubleLE(-0.3763, 9);
+  bufEWKB.writeDoubleLE(39.4699, 17);
+  const ewkbHex = bufEWKB.toString('hex');
+
+  const capa = new AlphanumericLayer({
+    name: 'prueba_wkb_ewkb',
+    records: [
+      { id: 1, nombre: 'Madrid', geom_wkb: wkbHex },
+      { id: 2, nombre: 'Valencia', geom_wkb: ewkbHex }
+    ]
+  });
+
+  const det = capa.detectarCamposGeo();
+  assert.equal(det.wkbField, 'geom_wkb');
+
+  capa.convertirCampoAGeometria('wkb', { field: 'geom_wkb' });
+  assert.equal(capa.hasGeometry(), true);
+
+  const fc = capa.toGeoJSON();
+  assert.equal(fc.features.length, 2);
+  assert.equal(fc.features[0].geometry.type, 'Point');
+  assert.ok(Math.abs(fc.features[0].geometry.coordinates[0] - (-3.7038)) < 1e-4);
+  assert.ok(Math.abs(fc.features[0].geometry.coordinates[1] - 40.4168) < 1e-4);
+
+  assert.equal(fc.features[1].geometry.type, 'Point');
+  assert.ok(Math.abs(fc.features[1].geometry.coordinates[0] - (-0.3763)) < 1e-4);
+  assert.ok(Math.abs(fc.features[1].geometry.coordinates[1] - 39.4699) < 1e-4);
+});
+
 test('showcase: el ejemplo de alphanumericLayer añade directamente las 2 capas al mapa', () => {
   const fuente = fs.readFileSync('./ext/_comun/showcase.js', 'utf8');
   const inicio = fuente.indexOf("if (ext === 'alphanumericLayer') {");
