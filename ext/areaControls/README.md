@@ -9,6 +9,7 @@ La API-CNIG coloca los paneles en cuatro áreas de esquina (`.m-area`, cada una 
 - Área compartida: varias instancias del mismo mapa reutilizan el mismo div (y también el de un mapa anterior tras el cambio 2D/3D).
 - Banda transparente y sin panel: el mapa se ve por detrás; solo ocupa lo que miden sus hijos (`pointer-events: none` en la banda, `auto` en cada control).
 - Margen lateral automático: mide el rail de botones de la API (`.m-areas > .m-area`) y se aparta lo justo del panel de la esquina que comparta banda, con tope del 40 % del ancho. Se recalcula con `resize` y con un `MutationObserver` sobre `.m-areas` (el rail se puebla de forma asíncrona y cambia al conmutar 2D/3D).
+- Reserva vertical: mide el alto real de la banda y aparta los paneles de la API de esa misma banda (`BL`/`BR` si está abajo, `TL`/`TR` si está arriba), de modo que el botón de un plugin de la esquina queda **por encima** de la banda y no se solapan. Se recalcula al montar/desmontar controles, al cambiar la vista y con un `ResizeObserver` sobre la banda (por si su contenido pasa a dos líneas).
 - Colores por herencia: reparte las seis variables CSS del esquema en el div de la banda, de modo que **todos** los plugins colgados la heredan sin tocar sus hojas de estilo.
 - Contrato de estado 2D/3D: conserva la banda (`openPosition`) al alternar OpenLayers ↔ Cesium.
 
@@ -16,8 +17,8 @@ La API-CNIG coloca los paneles en cuatro áreas de esquina (`.m-area`, cada una 
 
 | Archivo | Descripción |
 |---|---|
-| `areaControls.js` | Clase `miPlugin_areaControls`: crea la banda, resuelve el anfitrión (`.m-api-idee-container`, igual en 2D y en 3D), calcula los márgenes laterales y expone `monta`/`desmonta`/`reordena`. |
-| `areaControls.css` | Estilos de `.g-areaControls` (flex row, `gap`, `z-index: 850`, transparencia, `pointer-events`) y los modificadores `--top` / `--bottom`, más el ajuste del panel en la esquina TR. |
+| `areaControls.js` | Clase `miPlugin_areaControls`: crea la banda, resuelve el anfitrión (`.m-api-idee-container`, igual en 2D y en 3D), calcula los márgenes laterales y el hueco vertical que hay que dejar a los paneles de la API, y expone `monta`/`desmonta`/`reordena`. |
+| `areaControls.css` | Estilos de `.g-areaControls` (flex row, `gap`, `z-index: 850`, transparencia, `pointer-events`), los modificadores `--top` / `--bottom`, la reserva que aparta los paneles de la API (`g-areaControls-reserva-*`) y el ajuste del panel en la esquina TR. |
 
 ## 🔧 Integración en un visualizador
 
@@ -111,4 +112,5 @@ El **estado de los hijos** (qué plugin está colgado y con qué `order`) no via
 - El anfitrión se busca subiendo hasta `.m-api-idee-container`, que es el único nodo que existe igual en 2D y en 3D. Anclarlo a `map.getContainer()` no vale: en OpenLayers devuelve `.ol-overlaycontainer-stopevent`, que no existe en Cesium.
 - El plugin que se cuelga debe dejar de anclarse a una esquina con `position:absolute`: al entrar en la banda se le resetea a `static`.
 - Compatibilidad con degradación: `ext/mapInfo` y `ext/attribution` comprueban `typeof window.miPlugin_areaControls === 'function'` y, si no está cargada, anclan su elemento por su cuenta.
+- **Reserva vertical**: `areaControls.js` deja en `.m-areas` las clases `g-areaControls-reserva-bottom` / `-top` y las variables `--g-areaControls-reserva-bottom` / `-top` con el alto de la banda. `areaControls.css` las usa para subir (o bajar) `.m-area.m-bottom` / `.m-area.m-top`, de modo que los paneles de las esquinas de esa banda no se cruzan con ella. El alto se mide de todas las bandas del mismo tipo visibles en el mapa, así que al desmontar la última el hueco se retira solo. Si `.m-areas` aún no existe al montar el plugin, se reintenta durante unos segundos.
 - CSS: el bloque del panel en la esquina TR es **genérico** (`.m-areas > div.m-area > div.m-panel > div.m-panel-controls > div`) y está repetido en la hoja de cada plugin, así que entre hojas con el mismo selector gana la **última** cargada. Cualquier variación para un plugin concreto tiene que ir en su propio selector, con más especificidad.

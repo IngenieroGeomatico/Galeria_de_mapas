@@ -90,6 +90,11 @@ class miPlugin_areaControls {
     this._observer = null;
     this._onResize = null;
     this._pendiente = null;
+    // Vigilancia del alto de la banda y reintentos para cuando aún no está
+    // creado el contenedor .m-areas de la API (ver _ajustarReserva).
+    this._resizeObserver = null;
+    this._reservaTimer = null;
+    this._reservaReintentos = 0;
   }
 
   /**
@@ -154,6 +159,8 @@ class miPlugin_areaControls {
       // La banda reutilizada puede venir de otra instancia (o del mapa anterior)
       // con otros colores, asi que se repintan los de esta.
       this._aplicarColores();
+      this._vigilarAlto();
+      this._programarAjuste();
       return this._area;
     }
 
@@ -205,7 +212,9 @@ class miPlugin_areaControls {
     this._area = area;
     this._aplicarColores();
     this._vigilarRail();
+    this._vigilarAlto();
     this._ajustarEspacio();
+    this._ajustarReserva();
     return this._area;
   }
 
@@ -273,6 +282,105 @@ class miPlugin_areaControls {
   }
 
   /**
+   * Devuelve el contenedor .m-areas de la API, que es el padre de las cuatro
+   * areas de esquina donde la API cuelga sus paneles.
+   *
+   * No vale buscarlo colgando de la banda: la banda vive en
+   * .m-api-idee-container y .m-areas cuelga de .ol-overlaycontainer-stopevent,
+   * que es otro hijo del mismo contenedor. Por eso se busca primero dentro del
+   * anfitrion de la banda y solo si no aparece se cae al documento.
+   * @returns {HTMLElement|null} Contenedor .m-areas.
+   */
+  _areasRaiz() {
+    const host = (this._area && this._area.parentNode) ? this._area.parentNode : null;
+    if (host && typeof host.querySelector === 'function') {
+      const propia = host.querySelector('.m-areas');
+      if (propia) return propia;
+    }
+    return document.querySelector('.m-areas');
+  }
+
+  /**
+   * Aparta los paneles de la API que comparten borde con la banda.
+   *
+   * La banda ocupa todo el ancho pegada al borde inferior (o superior), asi que
+   * un panel colapsado de la API en la esquina BL/BR (o TL/TR) quedaba justo
+   * encima y los dos se pisaban. La API posiciona esos paneles con `bottom:0`
+   * (o `top:0`) sobre .m-area.m-bottom / .m-area.m-top, de modo que aqui se le
+   * pasa al contenedor .m-areas el alto real de la banda y su CSS sube (o baja)
+   * las areas de esa banda lo justo para que el panel quede por encima.
+   *
+   * El alto se mide de TODAS las bandas del mismo tipo que hay en el DOM (no
+   * solo de la de esta instancia) porque varias extensiones comparten banda:
+   * asi, cuando una se desmonta, la cuenta sigue saliendo bien.
+   */
+  _ajustarReserva() {
+    const areas = this._areasRaiz();
+    if (!areas) {
+      this._reintentarReserva();
+      return;
+    }
+    this._reservaReintentos = 0;
+
+    const prefijo = this.className;
+    const host = (this._area && this._area.parentNode) ? this._area.parentNode : document;
+    const medir = function (selector) {
+      let alto = 0;
+      const bandas = host.querySelectorAll ? host.querySelectorAll(selector) : [];
+      Array.prototype.forEach.call(bandas, function (banda) {
+        if (!banda.parentNode) return;
+        const r = banda.getBoundingClientRect();
+        if (r && r.height > alto) alto = r.height;
+      });
+      return Math.ceil(alto);
+    };
+
+    this._aplicarReserva(areas, 'bottom', medir('.' + prefijo + '--bottom'));
+    this._aplicarReserva(areas, 'top', medir('.' + prefijo + '--top'));
+  }
+
+  /**
+   * Escribe (o retira) la reserva de un borde en el contenedor .m-areas.
+   * @param {HTMLElement} areas Contenedor .m-areas.
+   * @param {string} lado 'bottom' o 'top'.
+   * @param {number} alto Alto de la banda en pixeles (0 para retirarla).
+   */
+  _aplicarReserva(areas, lado, alto) {
+    const clase = this.className + '-reserva-' + lado;
+    const variable = '--' + clase;
+
+    if (!alto) {
+      if (areas.classList.contains(clase)) areas.classList.remove(clase);
+      if (areas.style.getPropertyValue(variable)) areas.style.removeProperty(variable);
+      return;
+    }
+
+    // El panel de la API deja 10 px de margen hacia el borde y la banda esta a
+    // otros 10 px; apartando el alto de la banda y 6 px de aire el panel queda
+    // por encima de ella sin tocarla.
+    const valor = (alto + 6) + 'px';
+    if (areas.style.getPropertyValue(variable) !== valor) {
+      areas.style.setProperty(variable, valor);
+    }
+    if (!areas.classList.contains(clase)) areas.classList.add(clase);
+  }
+
+  /**
+   * Reintenta el ajuste si .m-areas aun no existe (la API lo crea al construir
+   * el mapa y puede no estar cuando se monta el primer plugin). Se limita el
+   * numero de reintentos para no dejar un temporizador vivo sin motivo.
+   */
+  _reintentarReserva() {
+    const self = this;
+    if (this._reservaTimer || this._reservaReintentos >= 12) return;
+    this._reservaReintentos++;
+    this._reservaTimer = window.setTimeout(function () {
+      self._reservaTimer = null;
+      self._ajustarReserva();
+    }, 250);
+  }
+
+  /**
    * Mantiene el margen al dia: el rail de la API se pobla de forma asincrona
    * (y cambia al conmutar 2D/3D), asi que no basta con medirlo una vez.
    */
@@ -293,6 +401,23 @@ class miPlugin_areaControls {
   }
 
   /**
+   * Vigila el alto de la banda: el contenido de un control puede pasar a dos
+   * lineas al estrecharse la ventana (la lectura de mapInfo lo hace), y la
+   * reserva que se le pasa a .m-areas tiene que seguirlo.
+   */
+  _vigilarAlto() {
+    if (this._resizeObserver || !this._area) return;
+    if (typeof ResizeObserver === 'undefined') return;
+    const self = this;
+    try {
+      this._resizeObserver = new ResizeObserver(function () { self._programarAjuste(); });
+      this._resizeObserver.observe(this._area);
+    } catch (e) {
+      this._resizeObserver = null;
+    }
+  }
+
+  /**
    * Agrupa los ajustes en un solo frame: MutationObserver puede disparar
    * muchas veces seguidas al cambiar de implementacion.
    */
@@ -303,10 +428,12 @@ class miPlugin_areaControls {
       ? window.requestAnimationFrame(function () {
         self._pendiente = null;
         self._ajustarEspacio();
+        self._ajustarReserva();
       })
       : window.setTimeout(function () {
         self._pendiente = null;
         self._ajustarEspacio();
+        self._ajustarReserva();
       }, 80);
   }
 
@@ -451,6 +578,25 @@ class miPlugin_areaControls {
       else window.clearTimeout(this._pendiente);
       this._pendiente = null;
     }
+    if (this._resizeObserver) {
+      try {
+        this._resizeObserver.disconnect();
+      } catch (e) {
+        /* silencioso */
+      }
+      this._resizeObserver = null;
+    }
+    if (this._reservaTimer) {
+      window.clearTimeout(this._reservaTimer);
+      this._reservaTimer = null;
+    }
+    this._reservaReintentos = 0;
+    // Al desmontar, el hueco que ocupaba la banda puede dejar de hacer falta.
+    // Se recalcula aqui (y no solo en el siguiente frame) porque quien llama a
+    // destroy() suele quitar el div del DOM acto seguido.
+    this._ajustarReserva();
+    const self = this;
+    window.setTimeout(function () { self._ajustarReserva(); }, 0);
   }
 }
 

@@ -47,6 +47,30 @@
   top: 10px;
 }
 
+/* =====================================================================
+   RESERVA DE LA BANDA: paneles de la API que comparten borde
+   ---------------------------------------------------------------------
+   La banda ocupa todo el ancho pegada al borde inferior (o superior), asi
+   que un panel de la API colapsado en la esquina BL/BR (o TL/TR) quedaba
+   justo encima de ella y los dos se pisaban.
+
+   areaControls.js mide el alto real de la banda y se lo deja escrito en
+   --g-areaControls-reserva-bottom / -top sobre .m-areas. Aqui solo se le
+   dice a las areas de esquina de la API que se aparten ese alto. Se usan
+   clases en .m-areas (y no en .m-api-idee-container) porque .m-areas es
+   ancestro de las cuatro areas y las variables CSS heredan.
+
+   La especificidad supera a `.m-areas>div.m-area.m-bottom{bottom:0}` de la
+   hoja de la API, asi que no depende del orden de carga.
+   ===================================================================== */
+.m-areas.g-areaControls-reserva-bottom > div.m-area.m-bottom {
+  bottom: var(--g-areaControls-reserva-bottom, 0px);
+}
+
+.m-areas.g-areaControls-reserva-top > div.m-area.m-top {
+  top: var(--g-areaControls-reserva-top, 0px);
+}
+
 /* En pantallas estrechas se aparta un poco de los bordes. Solo el gap: tocar
    left/right descuadraría la medida del rail, que se toma del contenedor. */
 @media (max-width: 768px) {
