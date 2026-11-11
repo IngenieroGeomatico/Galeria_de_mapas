@@ -117,6 +117,7 @@ El plugin implementa el contrato **`getState()` / `setState(state, map)`** que u
 
 - El botón se pinta con una **máscara SVG** del símbolo © definida en el CSS, y hereda el color de icono del esquema.
 - En modo `lite`, la barra de créditos se cuelga en la **banda compartida de controles** (`ext/areaControls`, `miPlugin_areaControls`) si esa extensión está cargada; si no lo está, se ancla al pie del contenedor del mapa y el plugin sigue funcionando por sí solo.
+- Dentro de la banda, la barra ocupa **su propia fila a todo el ancho y por debajo del resto de controles** (la lectura de `mapInfo`, el dial…). Al desplegarse, la banda pasa a dos filas y `areaControls` vuelve a medir su alto, de modo que los paneles del rail (`BL`/`BR` o `TL`/`TR`) se apartan lo necesario y no se solapan con la barra. El `order` del constructor rige el panel del rail, no la posición de la barra.
 - En 3D (Cesium) `getMapImpl()` no expone `getViewport()` ni `getTargetElement()`, por lo que el contenedor se resuelve contra `.m-api-idee-container` (o `document.body` como último recurso).
 - El plugin escucha `ADDED_LAYER`, `ADDED_QUICK_LAYERS`, `ADDED_VECTOR_TILE`, `ADDED_WFS`, `ADDED_WMS`, `ADDED_WMTS`, `ADDED_XYZ`, `ADDED_TMS` y `REMOVED_LAYER` para refrescar el contenido.
 - Las capas sin propiedad `attribution` simplemente no aportan entradas.

@@ -208,14 +208,26 @@
 }
 
 /* Dentro de la banda compartida de controles (miPlugin_areaControls) la barra
-   deja de ser absoluta: monta() la pone en el flujo (position:static) y pasa a
-   ser un item más de la fila, ordenada por su atributo `order` junto a la
-   escala, las coordenadas o el dial. Se anula el ancho máximo heredado, que
-   estaba pensado para una franja a todo el ancho. */
+   deja de ser absoluta: monta() la pone en el flujo (position:static). Se anula
+   el ancho máximo heredado, que estaba pensado para una franja a todo el ancho.
+
+   La barra ocupa SU PROPIA FILA, a todo el ancho y POR DEBAJO del resto de
+   controles de la banda (la lectura de mapInfo, el dial...). Para eso:
+     - `flex-basis: 100%` la hace ocupar la fila entera, de modo que ningún
+       otro control quepa a su lado y empiece una línea nueva.
+     - solo se activa el `flex-wrap` cuando la barra está desplegada
+       (`:not([hidden])`), para no alterar el reparto en una sola fila del
+       resto de controles cuando está cerrada.
+   attribution.js le pone un `order` alto para que sea el ÚLTIMO item y, por
+   tanto, la fila de abajo. */
 .g-areaControls > .m-attribution-bar {
-  flex: 0 1 auto;
+  flex: 0 0 100%;
   max-width: none;
   z-index: auto;
+}
+
+.g-areaControls:has(> .m-attribution-bar:not([hidden])) {
+  flex-wrap: wrap;
 }
 
 /* El rail de botones de la API se pinta POR ENCIMA de la barra desplegada:

@@ -525,7 +525,12 @@ class miPlugin_attribution {
       try {
         this._area = new ClaseArea({ openPosition: this.openPosition_ });
         this._area.addTo(map);
-        colgada = this._area.monta(bar, { order: this.order !== null ? this.order : 0 }) !== null;
+        // La barra va la ÚLTIMA de la banda y a todo el ancho (ver
+        // attribution.css): así, al abrirse, cae en su propia fila por debajo
+        // de la lectura de mapInfo y del resto de controles, en lugar de
+        // meterse a su lado. El `order` del constructor sigue rigiendo el panel
+        // del rail, no la barra.
+        colgada = this._area.monta(bar, { order: 9999 }) !== null;
       } catch (e) {
         console.warn('miPlugin_attribution: no se pudo colgar la barra en la banda de controles.', e);
       }
