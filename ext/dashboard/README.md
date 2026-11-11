@@ -49,7 +49,7 @@ const dashboard = new IDEE.Dashboard({
         {
           id: 'mapaPrincipal',
           type: 'map',
-          title: 'Visor Territorial',
+          title: 'Visualizador Territorial',
           height: 480,
           zoom: 6,
           center: { x: -412000, y: 4928000 }
