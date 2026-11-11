@@ -72,6 +72,11 @@
       { name: 'color2_active', type: 'text', default: '#71A7D3', label: 'Color2 activo' },
       { name: 'color2_deactive', type: 'text', default: '#ffffff', label: 'Color2 inactivo' }
     ],
+    dashboard: [
+      { name: 'title', type: 'text', default: 'Monitor Territorial', label: 'Título' },
+      { name: 'chartType', type: 'select', default: 'donut', label: 'Tipo de Gráfica', options: ['donut', 'bar', 'line', 'area', 'pie'] },
+      { name: 'position', type: 'select', default: 'TR', label: 'Posición Flotante', options: ['TR', 'TL', 'BR', 'BL'] }
+    ],
     MVTLayer: [
       { name: 'url', type: 'text', default: 'https://vt-unidades-administrativas.ign.es/1.0.0/uadministrativa/{z}/{x}/{y}.pbf', label: 'URL de teselas MVT' },
       { name: 'layers', type: 'text', default: 'municipio', label: 'Capa en la tesela' },
@@ -192,6 +197,33 @@
         '  ]',
         '});',
         'mapajs.addPlugin(plugin);'
+      ].join('\n');
+    }
+    if (ext === 'dashboard') {
+      const chartType = v.chartType || 'donut';
+      const pos = v.position || 'TR';
+      const title = v.title || 'Monitor Territorial';
+
+      return [
+        '// 1. Crear ventana flotante de gráfica sobre el mapa',
+        'const chart = new IDEE.widget.Chart({',
+        '  title: ' + JSON.stringify(title) + ',',
+        '  subtitle: "Distribución por categorías",',
+        '  chartType: ' + JSON.stringify(chartType) + ',',
+        '  data: [',
+        '    { name: "Sector Norte", value: 420 },',
+        '    { name: "Sector Sur", value: 310 },',
+        '    { name: "Sector Centro", value: 580 },',
+        '    { name: "Sector Este", value: 240 },',
+        '    { name: "Sector Oeste", value: 190 }',
+        '  ]',
+        '});',
+        '',
+        'chart.addToMap(mapajs, {',
+        '  position: ' + JSON.stringify(pos) + ',',
+        '  width: 360,',
+        '  height: 250',
+        '});'
       ].join('\n');
     }
     if (ext === 'mbtilesLayer') {
@@ -412,7 +444,7 @@
     } catch (e) { log('Plugins comunes: ' + (e && e.message ? e.message : e)); }
 
     const clasePlugin = api.plugin && api.plugin['miPlugin_' + suffix];
-    if (typeof clasePlugin === 'function' && ext !== 'attribution') {
+    if (typeof clasePlugin === 'function' && ext !== 'attribution' && ext !== 'dashboard') {
       try {
         const plugin = new clasePlugin({ position: 'TL', collapsible: true, order: 1 });
         map.addPlugin(plugin);
@@ -420,7 +452,7 @@
       } catch (e) {
         log('No se pudo instanciar el plugin: ' + (e && e.message ? e.message : e));
       }
-    } else if (ext !== 'attribution') {
+    } else if (ext !== 'attribution' && ext !== 'dashboard') {
       log('No hay miPlugin_' + ext + ' (puede ser una capa o utilidad).');
     }
 

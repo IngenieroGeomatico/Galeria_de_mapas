@@ -7,13 +7,53 @@ if (!g.window) g.window = g;
 if (!g.document) {
   g.document = {
     addEventListener: function () {},
-    createElement: function () { return { style: {}, appendChild: function () {} }; },
+    createElement: function (tag) {
+      return {
+        tagName: tag,
+        style: {},
+        classList: { add: function () {}, remove: function () {}, contains: function () { return false; }, toggle: function () {} },
+        appendChild: function (c) { this._children = this._children || []; this._children.push(c); return c; },
+        setAttribute: function () {},
+        getAttribute: function () { return null; },
+        querySelector: function () { return null; },
+        querySelectorAll: function () { return []; },
+        addEventListener: function () {}
+      };
+    },
+    createElementNS: function (ns, tag) {
+      return {
+        tagName: tag,
+        style: {},
+        classList: { add: function () {}, remove: function () {}, contains: function () { return false; }, toggle: function () {} },
+        appendChild: function (c) { this._children = this._children || []; this._children.push(c); return c; },
+        setAttribute: function () {},
+        getAttribute: function () { return null; },
+        addEventListener: function () {}
+      };
+    },
     getElementsByTagName: function () { return []; },
     head: { appendChild: function () {} },
+    body: { appendChild: function () {} },
     baseURI: 'http://localhost:8765/'
   };
 }
-if (!g.IDEE) g.IDEE = { layer: {}, plugin: {} };
+if (!g.IDEE) g.IDEE = { layer: {}, plugin: {}, ui: {} };
+if (!g.IDEE.ui) g.IDEE.ui = {};
+if (!g.IDEE.ui.Panel) {
+  g.IDEE.ui.Panel = function (id, opts) {
+    this.id = id;
+    this.options = opts || {};
+    this._el = {
+      className: opts.className || '',
+      style: {},
+      classList: { add: function () {}, remove: function () {}, contains: function () { return false; }, toggle: function () {} },
+      querySelector: function () { return { appendChild: function () {} }; }
+    };
+    this.getElement = function () { return this._el; };
+    this.open = function () {};
+    this.close = function () {};
+  };
+}
 if (!g.M) g.M = g.IDEE;
 g.IDEE.layer.Alphanumeric = g.IDEE.layer.Alphanumeric || function (o) { this._records = (o && (o.records || o.data)) || []; this._fields = (o && o.fields) || []; this.name = (o && o.name) || 'x'; this.legend = (o && o.legend) || this.name; this.getRecords = function () { return this._records; }; this.getFieldNames = function () { return this._fields.map(function (f) { return (typeof f === 'string') ? f : f.name; }); }; };
 g.IDEE.layer.Alphanumeric.fromCSV = function (t, o) { return new g.IDEE.layer.Alphanumeric(Object.assign({ records: [] }, o)); };
