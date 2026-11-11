@@ -4733,17 +4733,23 @@ class miPlugin_layerSwitcher {
         if (window.getLayerKind && window.getLayerKind(capa) === 'alfanumerico') {
           const camposGeo = (typeof capa.getFieldNames === 'function') ? capa.getFieldNames() : [];
           const detGeo = (typeof capa.detectarCamposGeo === 'function') ? capa.detectarCamposGeo() : null;
-          let sel = '<div style="padding:8px 0;">';
-          sel += '<select id="ls-alfa-geo" style="width:100%;font-size:12px;padding:4px;" onchange="window._alfaAsignarGeo && window._alfaAsignarGeo(' + index + ', this.value)">';
+          let sel = '<div style="padding:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+          sel += '<select id="ls-alfa-geo" style="flex:1;min-width:180px;font-size:12px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">';
           sel += '<option value="">Ninguna</option>';
           camposGeo.forEach(function (c) {
-            sel += '<option value="geojson:' + c + '">GeoJSON: ' + _escaparHtml(c) + '</option>';
-            sel += '<option value="wkt:' + c + '">WKT: ' + _escaparHtml(c) + '</option>';
+            const esSelectedGeo = (detGeo && detGeo.geometryField === c) ? ' selected' : '';
+            const esSelectedWkt = (!esSelectedGeo && detGeo && detGeo.wktField === c) ? ' selected' : '';
+            sel += '<option value="geojson:' + c + '"' + esSelectedGeo + '>GeoJSON: ' + _escaparHtml(c) + '</option>';
+            sel += '<option value="wkt:' + c + '"' + esSelectedWkt + '>WKT: ' + _escaparHtml(c) + '</option>';
           });
           if (detGeo && detGeo.latField && detGeo.lonField) {
-            sel += '<option value="xy:' + detGeo.lonField + ',' + detGeo.latField + '">X/Y: ' + _escaparHtml(detGeo.lonField) + ' + ' + _escaparHtml(detGeo.latField) + '</option>';
+            const esSelectedXY = (!detGeo.geometryField && !detGeo.wktField) ? ' selected' : '';
+            sel += '<option value="xy:' + detGeo.lonField + ',' + detGeo.latField + '"' + esSelectedXY + '>X/Y: ' + _escaparHtml(detGeo.lonField) + ' + ' + _escaparHtml(detGeo.latField) + '</option>';
           }
-          sel += '</select></div>';
+          sel += '</select>';
+          sel += '<button type="button" class="ls-btn ls-btn-primary" style="padding:6px 14px;font-size:12px;font-weight:600;background:#0078d4;color:#fff;border:none;border-radius:4px;cursor:pointer;" onclick="const val = (document.getElementById(\'ls-alfa-geo\') || {}).value; window._alfaAsignarGeo && window._alfaAsignarGeo(' + JSON.stringify(index) + ', val);">Aplicar</button>';
+          sel += '</div>';
+          sel += '<div id="ls-alfa-geo-msg" style="font-size:11px;color:#2e7d32;display:none;margin-top:4px;font-weight:600;">✓ Geometría asignada correctamente</div>';
           geometriaHtml = sel;
         }
       } catch (e) { geometriaHtml = ''; }
@@ -8225,6 +8231,11 @@ class miPlugin_layerSwitcher {
       } else if (formato === 'xy') {
         const xy = resto.split(',');
         layer.convertirCampoAGeometria('xy', { xField: xy[0], yField: xy[1] });
+      }
+      const msg = document.getElementById('ls-alfa-geo-msg');
+      if (msg) {
+        msg.style.display = 'block';
+        setTimeout(function () { if (msg) msg.style.display = 'none'; }, 3000);
       }
       try { if (typeof window.renderLayerList === 'function') window.renderLayerList(); } catch (e) {}
     };

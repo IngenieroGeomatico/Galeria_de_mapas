@@ -106,7 +106,37 @@ const capaJSON = new IDEE.layer.Alphanumeric({
 capaJSON.addTo(mapajs);
 
 
-// B. GeoJSON FeatureCollection
+// B. Array de registros planos con propiedad `geometry` (GeoJSON o WKT)
+// Cada elemento tiene sus atributos en la raíz junto a la clave `geometry`:
+const arrayLugares = [
+  {
+    nombre: "Madrid (Sol)",
+    categoria: "Monumento",
+    visitas: 4500,
+    geometry: { type: "Point", coordinates: [-3.7037, 40.4167] }
+  },
+  {
+    nombre: "Barcelona (Ramblas)",
+    categoria: "Paseo",
+    visitas: 3800,
+    geometry: { type: "Point", coordinates: [2.1734, 41.3851] }
+  },
+  {
+    nombre: "Valencia (Artes)",
+    categoria: "Cultura",
+    visitas: 2900,
+    geometry: "POINT(-0.3547 39.4549)"
+  }
+];
+
+const capaLugares = new IDEE.layer.Alphanumeric({
+  name: 'lugares_interes',
+  legend: 'Lugares de Interés',
+  source: arrayLugares
+});
+capaLugares.addTo(mapajs);
+
+// C. GeoJSON FeatureCollection
 // Al pasar un GeoJSON en 'source.data', extrae las propiedades de cada feature automáticamente 
 // y mapea la geometría a la propiedad de atributos '__idee_geojson' para posteriores uniones y mapas temáticos.
 const geojsonSource = {

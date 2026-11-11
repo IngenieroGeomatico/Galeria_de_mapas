@@ -111,6 +111,59 @@ test('AlphanumericLayer: constructor con source conteniendo array de GeoJSON Fea
   assert.equal(records[0].__idee_id, 'f1');
 });
 
+test('AlphanumericLayer: constructor con source de formato JSON plano y campo geometry (GeoJSON)', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const capa = new AlphanumericLayer({
+    name: 'prueba_json_plano_geojson',
+    source: [
+      { nombre: 'Barcelona (Ramblas)', categoria: 'Paseo', visitas: 3800, geometry: { type: 'Point', coordinates: [2.1734, 41.3851] } },
+      { nombre: 'Madrid (Sol)', categoria: 'Monumento', visitas: 4500, geometry: { type: 'Point', coordinates: [-3.7037, 40.4167] } }
+    ]
+  });
+  const records = capa.getRecords();
+  assert.equal(records.length, 2);
+  assert.equal(records[0].nombre, 'Barcelona (Ramblas)');
+  const fc = capa.toGeoJSON();
+  assert.equal(fc.type, 'FeatureCollection');
+  assert.equal(fc.features.length, 2);
+  assert.equal(fc.features[0].geometry.type, 'Point');
+  assert.deepEqual(fc.features[0].geometry.coordinates, [2.1734, 41.3851]);
+  assert.equal(fc.features[0].properties.nombre, 'Barcelona (Ramblas)');
+  assert.equal(fc.features[0].properties.visitas, 3800);
+});
+
+test('AlphanumericLayer: constructor con source de formato JSON plano y campo geometry (WKT)', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const capa = new AlphanumericLayer({
+    name: 'prueba_json_plano_wkt',
+    source: [
+      { nombre: 'Valencia (Artes)', categoria: 'Cultura', visitas: 2900, geometry: 'POINT(-0.3547 39.4549)' }
+    ]
+  });
+  const fc = capa.toGeoJSON();
+  assert.equal(fc.features.length, 1);
+  assert.equal(fc.features[0].geometry.type, 'Point');
+  assert.deepEqual(fc.features[0].geometry.coordinates, [-0.3547, 39.4549]);
+  assert.equal(fc.features[0].properties.nombre, 'Valencia (Artes)');
+});
+
+test('AlphanumericLayer: asignacion de campo a geometria con convertirCampoAGeometria', () => {
+  const AlphanumericLayer = global.IDEE.layer.Alphanumeric;
+  const capa = new AlphanumericLayer({
+    name: 'prueba_asignar_geo',
+    records: [
+      { ciudad: 'Sevilla', coords_wkt: 'POINT(-5.9845 37.3891)', hab: 688000 }
+    ]
+  });
+  assert.equal(capa.hasGeometry(), false);
+  capa.convertirCampoAGeometria('wkt', { field: 'coords_wkt' });
+  assert.equal(capa.hasGeometry(), true);
+  const fc = capa.toGeoJSON();
+  assert.equal(fc.features.length, 1);
+  assert.equal(fc.features[0].geometry.type, 'Point');
+  assert.deepEqual(fc.features[0].geometry.coordinates, [-5.9845, 37.3891]);
+});
+
 test('showcase: el ejemplo de alphanumericLayer convierte los datos y los pinta', () => {
   // `IDEE.layer.Alphanumeric` no pinta nada: `addTo` solo registra los datos.
   // El ejemplo del showcase tiene que dar el paso a `GeoJSON`, porque si no

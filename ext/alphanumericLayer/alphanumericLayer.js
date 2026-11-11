@@ -254,17 +254,27 @@
 
   /**
    * Extrae una geometría GeoJSON de un valor que puede ser un objeto
-   * GeoJSON (geometría, Feature o FeatureCollection) o su texto. Devuelve
-   * la geometría en EPSG:4326, reprojectando si hace falta.
+   * GeoJSON (geometría, Feature o FeatureCollection), su texto JSON o
+   * una cadena WKT (incluido EWKT con SRID=). Devuelve la geometría en
+   * EPSG:4326, reproyectando si hace falta.
    * @param {*} valor Valor del campo.
    * @param {string} [crsPorDefecto] CRS por defecto para `place`/coordenadas.
    * @returns {Object|null}
    */
   function geometriaDeValor(valor, crsPorDefecto) {
+    if (valor === null || valor === undefined) return null;
     let obj = valor;
     if (typeof obj === 'string') {
       const t = obj.trim();
       if (!t) return null;
+      // Comprobar si parece texto WKT (p. ej. POINT(..), POLYGON(..), SRID=...;POINT(..))
+      if (esWKT(t)) {
+        const parsed = parsearWKTConCRS(t);
+        if (parsed) {
+          const origen = parsed.crs || crsPorDefecto || 'EPSG:4326';
+          return reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
+        }
+      }
       try { obj = JSON.parse(t); } catch (e) { return null; }
     }
     if (!obj || typeof obj !== 'object') return null;
@@ -290,7 +300,11 @@
       }
       return null;
     }
-    // Geometría suelta (posible FG con coordRefSys).
+    // Geometría suelta estándar (Point, MultiPoint, LineString, Polygon, etc.) o GeoJSON-FG.
+    if (typeof obj.type === 'string' && (Array.isArray(obj.coordinates) || Array.isArray(obj.geometries))) {
+      const crs = crsDeCoordRefSys(obj.coordRefSys) || crsPorDefecto || 'EPSG:4326';
+      return reproyectarGeometria(obj, crs, 'EPSG:4326') || obj;
+    }
     const crs = crsDeCoordRefSys(obj.coordRefSys) || crsPorDefecto || 'EPSG:4326';
     return reproyectarGeometria(obj, crs, 'EPSG:4326');
   }
@@ -1018,21 +1032,49 @@
       const registros = this.getRecords();
       let geometryField = null;
       let wktField = null;
-      // GeoJSON: un campo cuyo valor parsea como GeoJSON.
-      nombres.forEach(function (n) {
-        if (geometryField) return;
+
+      // 1. Prioridad por nombre estándar si existe y tiene contenido válido
+      const camposGeoCandidatos = nombres.filter(function (n) {
+        return /^(geometry|geom|the_geom|geojson|__idee_geojson)$/i.test(n);
+      });
+      for (let k = 0; k < camposGeoCandidatos.length; k++) {
+        const n = camposGeoCandidatos[k];
         for (let i = 0; i < Math.min(registros.length, 5); i++) {
           const v = registros[i] && registros[i][n];
-          if (typeof v === 'string' && v.trim().charAt(0) === '{') {
-            try {
-              const g = JSON.parse(v);
-              if (g && typeof g.type === 'string') { geometryField = n; return; }
-            } catch (e) { /* noop */ }
+          if (v && (typeof v === 'object' || (typeof v === 'string' && (v.trim().charAt(0) === '{' || esWKT(v))))) {
+            geometryField = n;
+            break;
           }
         }
-      });
-      // WKT: un campo cuyo valor parece WKT.
+        if (geometryField) break;
+      }
+
+      // 2. Si no se detectó por nombre, explorar todos los campos buscando GeoJSON (objeto o string JSON)
       if (!geometryField) {
+        nombres.forEach(function (n) {
+          if (geometryField) return;
+          for (let i = 0; i < Math.min(registros.length, 5); i++) {
+            const v = registros[i] && registros[i][n];
+            if (v && typeof v === 'object' && typeof v.type === 'string') {
+              geometryField = n;
+              return;
+            }
+            if (typeof v === 'string' && v.trim().charAt(0) === '{') {
+              try {
+                const g = JSON.parse(v);
+                if (g && typeof g.type === 'string') { geometryField = n; return; }
+              } catch (e) { /* noop */ }
+            }
+          }
+        });
+      }
+
+      // 3. WKT: buscar por nombre candidato (wkt) o por contenido WKT
+      const camposWktCandidatos = nombres.filter(function (n) { return /^wkt$/i.test(n); });
+      if (camposWktCandidatos.length > 0) {
+        wktField = camposWktCandidatos[0];
+      }
+      if (!geometryField && !wktField) {
         nombres.forEach(function (n) {
           if (wktField) return;
           for (let i = 0; i < Math.min(registros.length, 5); i++) {
@@ -1041,6 +1083,7 @@
           }
         });
       }
+
       const latLon = this.detectarCamposLatLon();
       // X/Y por nombre.
       const x = nombres.filter(function (n) { return /^(x|coordx|coord_x|longitud_x)$/i.test(n); })[0];
@@ -1088,7 +1131,7 @@
         }
         r.__idee_geojson = JSON.stringify({ type: 'Point', coordinates: [lon, lat] });
       });
-      if (!this._geometryField) this._geometryField = '__idee_geojson';
+      this._geometryField = '__idee_geojson';
       this._fields = inferirCampos(this._records);
       return this;
     }
@@ -1105,13 +1148,10 @@
       const crsPorDefecto = o.crs || this._crs || 'EPSG:4326';
       this._crs = crsPorDefecto;
       this._records.forEach(function (r) {
-        const parsed = parsearWKTConCRS(r[campo]);
-        if (!parsed) return;
-        const origen = parsed.crs || crsPorDefecto;
-        const g = reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
+        const g = geometriaDeValor(r[campo], crsPorDefecto);
         if (g) r.__idee_geojson = JSON.stringify(g);
       });
-      if (!this._geometryField) this._geometryField = '__idee_geojson';
+      this._geometryField = '__idee_geojson';
       this._fields = inferirCampos(this._records);
       return this;
     }
@@ -1131,7 +1171,7 @@
         const g = geometriaDeValor(r[campo], crsPorDefecto);
         if (g) r.__idee_geojson = JSON.stringify(g);
       });
-      if (!this._geometryField) this._geometryField = '__idee_geojson';
+      this._geometryField = '__idee_geojson';
       this._fields = inferirCampos(this._records);
       return this;
     }
@@ -1196,44 +1236,58 @@
      * Construye un FeatureCollection a partir de los registros.
      *
      * Orden de resolución de la geometría por registro:
-     *   1. campo GeoJSON (objeto o texto),
-     *   2. columnas lat/lon (EPSG:4326).
+     *   1. campo GeoJSON o WKT (objeto o texto),
+     *   2. columnas lat/lon o X/Y (EPSG:4326 o CRS configurado).
      *
      * @param {Object} [opciones]
-     * @param {string} [opciones.geometryField] Campo con GeoJSON.
+     * @param {string} [opciones.geometryField] Campo con GeoJSON/WKT.
+     * @param {string} [opciones.wktField] Campo con WKT.
      * @param {string} [opciones.latField] Campo de latitud.
      * @param {string} [opciones.lonField] Campo de longitud.
      * @returns {Object} FeatureCollection.
      */
     toGeoJSON(opciones) {
       const o = opciones || {};
-      const campoGeo = o.geometryField || this._geometryField || '__idee_geojson';
-      const campoLat = o.latField || this._latField || o.yField || this._yField || null;
-      const campoLon = o.lonField || this._lonField || o.xField || this._xField || null;
-      const campoWKT = o.wktField || this._wktField || null;
+      let campoGeo = o.geometryField || this._geometryField || null;
+      let campoLat = o.latField || this._latField || o.yField || this._yField || null;
+      let campoLon = o.lonField || this._lonField || o.xField || this._xField || null;
+      let campoWKT = o.wktField || this._wktField || null;
       const idField = o.idField || this._idField;
       const crsPorDefecto = o.crs || this._crs || 'EPSG:4326';
       const crsXY = o.crs || this._crs || 'EPSG:4326';
       const features = [];
 
-      this._records.forEach(function (r) {
-        // 1) GeoJSON (o GeoJSON-FG) en el campo de geometría.
-        let geometria = geometriaDeValor(r[campoGeo], crsPorDefecto);
-        // 2) WKT (incluido EWKT con SRID=).
-        if (!geometria && campoWKT && r[campoWKT]) {
-          const parsed = parsearWKTConCRS(r[campoWKT]);
-          if (parsed) {
-            const origen = parsed.crs || crsPorDefecto;
-            geometria = reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
-          }
+      // Auto-detección si no se configuró ningún campo
+      if (!campoGeo && !campoWKT && !(campoLat && campoLon)) {
+        const auto = this.detectarCamposGeo();
+        if (auto.geometryField) campoGeo = auto.geometryField;
+        else if (auto.wktField) campoWKT = auto.wktField;
+        else if (auto.latField && auto.lonField) {
+          campoLat = auto.latField;
+          campoLon = auto.lonField;
+        } else if (auto.xField && auto.yField) {
+          campoLon = auto.xField;
+          campoLat = auto.yField;
         }
-        // 3) Si el campo indicado es un string WKT.
-        if (!geometria && r[campoGeo] && esWKT(r[campoGeo])) {
-          const parsed = parsearWKTConCRS(r[campoGeo]);
-          if (parsed) {
-            const origen = parsed.crs || crsPorDefecto;
-            geometria = reproyectarGeometria(parsed.geometry, origen, 'EPSG:4326');
-          }
+      }
+      if (!campoGeo) campoGeo = '__idee_geojson';
+
+      this._records.forEach(function (r) {
+        // 1) GeoJSON o WKT en el campo de geometría (geometriaDeValor soporta ambos).
+        let geometria = geometriaDeValor(r[campoGeo], crsPorDefecto);
+        // 2) Si no, comprobar propiedades directas estándar como geometry / geom / the_geom
+        if (!geometria && r.geometry !== undefined) {
+          geometria = geometriaDeValor(r.geometry, crsPorDefecto);
+        }
+        if (!geometria && r.geom !== undefined) {
+          geometria = geometriaDeValor(r.geom, crsPorDefecto);
+        }
+        // 3) WKT
+        if (!geometria && campoWKT && r[campoWKT]) {
+          geometria = geometriaDeValor(r[campoWKT], crsPorDefecto);
+        }
+        if (!geometria && r.wkt !== undefined) {
+          geometria = geometriaDeValor(r.wkt, crsPorDefecto);
         }
         // 4) Lat/lon (EPSG:4326) o X/Y (CRS elegido).
         if (!geometria && campoLat && campoLon) {
@@ -1247,20 +1301,20 @@
               const p = reproyectarPunto([b, a], crsXY, 'EPSG:4326');
               if (p) geometria = { type: 'Point', coordinates: [p[0], p[1]] };
             }
-            // Si el CRS es EPSG:4326 y los valores se salen del rango, no se
-            // inventa un punto en una latitud imposible: el registro se
-            // descarta. Antes se devolvía la pareja tal cual, y una X/Y en
-            // metros (p. ej. 440000/4470000) acababa pintada fuera del mundo.
           }
         }
         if (!geometria) return;
         const propiedades = {};
         Object.keys(r).forEach(function (k) {
-          if (k !== campoGeo) propiedades[k] = r[k];
+          if (k !== campoGeo && k !== '__idee_geojson' && k !== '__idee_id' && k !== 'geometry' && k !== 'geom') {
+            propiedades[k] = r[k];
+          }
         });
         const f = { type: 'Feature', properties: propiedades, geometry: geometria };
         if (idField && r[idField] !== undefined && r[idField] !== null) {
           f.id = r[idField];
+        } else if (r.__idee_id !== undefined && r.__idee_id !== null) {
+          f.id = r.__idee_id;
         }
         features.push(f);
       });
@@ -1364,7 +1418,7 @@
       let geometryField = o.geometryField || null;
 
       if (Array.isArray(obj)) {
-        // Comprobar si los elementos parecen GeoJSON Features
+        // Comprobar si los elementos parecen GeoJSON Features estándar
         const areFeatures = obj.length > 0 && obj.every(function (f) {
           return f && (f.type === 'Feature' || (f.properties !== undefined && f.geometry !== undefined));
         });
@@ -1385,6 +1439,15 @@
           });
         } else {
           registros = obj;
+          // Si los registros planos traen campo geometry, geom o wkt y no se especificó geometryField
+          if (!geometryField && obj.length > 0) {
+            for (let i = 0; i < Math.min(obj.length, 5); i++) {
+              const item = obj[i];
+              if (item && item.geometry !== undefined) { geometryField = 'geometry'; break; }
+              if (item && item.geom !== undefined) { geometryField = 'geom'; break; }
+              if (item && item.wkt !== undefined) { geometryField = 'wkt'; break; }
+            }
+          }
         }
       } else if (obj && obj.type === 'FeatureCollection' && Array.isArray(obj.features)) {
         geometryField = geometryField || '__idee_geojson';
